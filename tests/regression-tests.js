@@ -198,6 +198,20 @@ assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
+// Nguồn có 2 output: chỉ cut đủ 2/2 mới được xóa input gốc.
+ui.input.value = "2d 22 10 dd 5n";
+rules.run();
+assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
+selectFirstVisibleOutput();
+await rules.cutSelectedOutput();
+assert.equal(ui.input.value, "2d 22 10 dd 5n");
+assert.equal(ui.output.value, "qn 22 10 dd 5n");
+selectFirstVisibleOutput();
+await rules.cutSelectedOutput();
+assert.equal(ui.input.value, "");
+assert.equal(ui.output.value, "");
+assert.equal(outputRecords().length, 0);
+
 // PWA audit: các file và version phải đồng bộ, paths tương đối cho GitHub Pages.
 const appVersion = html.match(/const APP_VERSION = "([^"]+)"/);
 assert.ok(appVersion, "thiếu APP_VERSION");
