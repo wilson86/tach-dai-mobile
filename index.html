@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.2</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.3</span></div>
 
   <div class="card">
     <div class="controls">
@@ -143,11 +143,13 @@ const MT = {
 const REGION_LABEL={mn:"Miền Nam",mt:"Miền Trung",mb:"Miền Bắc"};
 const BET_TYPES=new Set([
   "b","bao","dd","đđ","xc","x",
-  "dx","đx","da","đá","dathang",
+  "dx","đx","da","đá","dat","dathang",
   "d","duoi","đuôi","dau","đầu","lo","lô"
 ]);
-const DX_TYPES=new Set(["dx","đx","da","đá","dathang"]);
+const DX_TYPES=new Set(["dx","đx","da","đá"]);
 const TWO_STATION_DA=new Set(["da","đá","dx","đx"]);
+const DAT_TYPES=new Set(["dat","dathang"]);
+const ONE_STATION_DA_ALIASES=new Set(["da","đá"]);
 const IGNORED_SENDERS=new Set(["vinh"]);
 const CHAT_HEADER_RE=/^\[([^\]]+)\]\s*([^:]+?)(?:\s+in\s+reply\s+to\s+[^:]+?)?:\s*(.*)$/i;
 
@@ -231,6 +233,8 @@ function normalizeInput(s){
   s=s.replace(/đà\s+nẵng/gu,"dn");
   s=s.replace(/đắk\s+nông/gu,"dno");
   s=s.replace(/huế/gu,"hue");
+  // `dathang` cũ vẫn nhận, nhưng output chuẩn dùng `dat`.
+  s=s.replace(/(^|\s)dathang(?=\s|$|\d)/gu,"$1dat");
   s=s.replace(/(^|\s)dna(?=\s|$)/gu,"$1dn");
   s=s.replace(/(^|\s)hu(?=\s|$)/gu,"$1hue");
   s=s.replace(/(^|\s)\.+(?=\d)/gu,"$1");
@@ -359,14 +363,11 @@ function extractBetTypes(rest){
 }
 function validateStationVsDaSyntax(head,rest){
   const types=extractBetTypes(rest);
-  const hasTwo=types.some(x=>TWO_STATION_DA.has(x));
-  const hasDathang=types.includes("dathang");
-  if(head==="2d"){
-    if(hasDathang) throw new Error("2d phải dùng 'da' hoặc 'dx', không dùng 'dathang'");
+  const hasDat=types.some(x=>DAT_TYPES.has(x));
+  if(["2d","3d","4d"].includes(head)){
+    if(hasDat) throw new Error(`${head} phải dùng 'da' hoặc 'dx', không dùng 'dat'`);
     return;
   }
-  if(!["2d","3d","4d","mb"].includes(head)&&hasTwo)
-    throw new Error(`1 đài '${head}' phải dùng 'dathang', không dùng da/dx`);
 }
 
 function validateCheckOnlyLine(line,region,stations){
@@ -415,14 +416,33 @@ function validateCheckOnlyLine(line,region,stations){
   validateBetPayload(rest);
 
   const types=extractBetTypes(rest);
-  const hasTwo=types.some(x=>TWO_STATION_DA.has(x));
-  const hasDathang=types.includes("dathang");
+  const hasDx=types.some(x=>x==="dx"||x==="đx");
+  const hasDat=types.some(x=>DAT_TYPES.has(x));
   if(stationHeads.length===1){
-    if(hasTwo) throw new Error(`1 đài '${stationHeads[0]}' phải dùng 'dathang', không dùng da/dx`);
-  }else if(hasDathang){
-    throw new Error(`2 đài '${stationHeads[0]} ${stationHeads[1]}' phải dùng 'da' hoặc 'dx', không dùng 'dathang'`);
+    if(hasDx) throw new Error(`1 đài '${stationHeads[0]}' phải dùng 'dat', không dùng dx/đx`);
+  }else if(hasDat){
+    throw new Error(`2 đài '${stationHeads[0]} ${stationHeads[1]}' phải dùng 'da' hoặc 'dx', không dùng 'dat'`);
   }
   return true;
+}
+
+function canonicalizeSingleStationBet(line,region,stations){
+  if(region==="mb") return line;
+  const toks=line.split(/\s+/).filter(Boolean);
+  if(!toks.length||["2d","3d","4d"].includes(toks[0])) return line;
+
+  const valid=new Set(stations.map(x=>x[0]));
+  let stationCount=0;
+  while(stationCount<toks.length&&valid.has(toks[stationCount])&&stationCount<2) stationCount++;
+  if(stationCount!==1) return line;
+
+  return toks.map((tok,index)=>{
+    if(index===0) return tok;
+    if(ONE_STATION_DA_ALIASES.has(tok)) return "dat";
+    const compact=splitCompactBetToken(tok);
+    if(compact&&ONE_STATION_DA_ALIASES.has(compact[0])) return `dat${compact[1]}`;
+    return tok;
+  }).join(" ");
 }
 
 function splitNumberGroups(rest){
@@ -522,7 +542,7 @@ function processLine(line,region,stations){
   const mr=s.match(/^(mn|mt|mb)\s+(.+)$/);
   if(mr){ s=mr[2].trim(); }
   const m=s.match(/^(2d|3d|4d)\s+(.+)$/);
-  if(!m)return [s];
+  if(!m)return [canonicalizeSingleStationBet(s,region,stations)];
   const chunks=splitBetChunks(m[2].trim());
   if(!chunks.length)return [s];
   const out=[];
@@ -780,7 +800,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.2";
+const APP_VERSION = "2.0.3";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

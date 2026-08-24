@@ -68,7 +68,9 @@ const rules = loadRules();
 const outputRecords = () => JSON.parse(JSON.stringify(rules.getOutputRecords()));
 const saturday = new Date("2026-08-22T12:00:00");
 const sunday = new Date("2026-08-23T12:00:00");
+const monday = new Date("2026-08-24T12:00:00");
 const mtSaturday = rules.getSchedule("mt", saturday);
+const mnMonday = rules.getSchedule("mn", monday);
 
 // CASE 1: MT thứ Bảy, selector 3d và dx.
 assert.deepEqual(
@@ -94,7 +96,25 @@ assert.equal(rules.normalizeInput("Đắk Nông"), "dno");
 assert.equal(rules.normalizeInput("Huế"), "hue");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine("hue 71 dathang 2n", "mt", rules.getSchedule("mt", sunday)));
 
-// CASE 5: lọc chat, bỏ toàn bộ tin của Vinh và header ngày/giờ/người gửi.
+// CASE 5: DAT là chuẩn cho một đài; da/đá/dathang chỉ là input tương thích.
+function processSingleStationDat(line) {
+  assert.doesNotThrow(() => rules.validateCheckOnlyLine(line, "mn", mnMonday));
+  return Array.from(rules.processLine(line, "mn", mnMonday))[0];
+}
+assert.equal(processSingleStationDat("tp 31 91 b10n da 5n"), "tp 31 91 b10n dat 5n");
+assert.equal(processSingleStationDat("tp 31 91 b10n đá 5n"), "tp 31 91 b10n dat 5n");
+assert.equal(processSingleStationDat("tp 31 91 b10n dat 5n"), "tp 31 91 b10n dat 5n");
+assert.equal(processSingleStationDat("tp 31 91 da5n"), "tp 31 91 dat5n");
+assert.equal(processSingleStationDat("tp 31 91 dathang5n"), "tp 31 91 dat5n");
+expectThrow(() => rules.validateCheckOnlyLine("tp 31 91 dx 5n", "mn", mnMonday), /1 đài 'tp' phải dùng 'dat', không dùng dx\/đx/);
+assert.doesNotThrow(() => rules.validateCheckOnlyLine("tp dt 31 91 da 5n", "mn", mnMonday));
+assert.doesNotThrow(() => rules.validateCheckOnlyLine("tp dt 31 91 dx 5n", "mn", mnMonday));
+expectThrow(() => rules.validateCheckOnlyLine("tp dt 31 91 dat 5n", "mn", mnMonday), /2 đài 'tp dt' phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
+expectThrow(() => rules.validateCheckOnlyLine("2d 31 91 dat 5n", "mn", mnMonday), /2d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
+expectThrow(() => rules.validateCheckOnlyLine("3d 31 91 dat 5n", "mn", mnMonday), /3d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
+expectThrow(() => rules.validateCheckOnlyLine("4d 31 91 dat 5n", "mn", mnMonday), /4d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
+
+// CASE 6: lọc chat, bỏ toàn bộ tin của Vinh và header ngày/giờ/người gửi.
 const chat = `[8/23/2026 5:31 PM] Hiền: 20 89 98 da 2n
 79 58 97 da 2n
 [8/23/2026 5:32 PM] Vinh: 1
@@ -104,15 +124,15 @@ assert.equal(
   "20 89 98 da 2n\n79 58 97 da 2n\n25 52 50 da 2n"
 );
 
-// CASE 6: MB thiếu loại cược.
+// CASE 7: MB thiếu loại cược.
 expectThrow(() => rules.validateCheckOnlyLine("79 30n", "mb", rules.getSchedule("mb", saturday)), /thiếu loại cược/);
 
-// CASE 7: MB chỉ kiểm tra và không tách đài.
+// CASE 8: MB chỉ kiểm tra và không tách đài.
 const mbLine = "79 da 30n";
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(mbLine, "mb", rules.getSchedule("mb", saturday)));
 assert.deepEqual(Array.from(rules.processLine(mbLine, "mb", rules.getSchedule("mb", saturday))), [mbLine]);
 
-// CASE 8: Cut kết quả phải đồng bộ Input, Output, mapping và Undo.
+// CASE 9: Cut kết quả phải đồng bộ Input, Output, mapping và Undo.
 const ui = rules.elements;
 ui.region.value = "mt";
 ui.date.value = "2026-08-22";
@@ -160,12 +180,14 @@ assert.match(sw, /caches\.match\("\.\/index\.html"\)/);
 assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
 
 console.log("CORE RULES: PASS");
+console.log("DAT RULE: PASS");
+console.log("ALIASES: PASS");
 console.log("CHAT FILTER: PASS");
 console.log("MB CHECK: PASS");
 console.log("CUT SYNC: PASS");
 console.log("UNDO SYNC: PASS");
 console.log("PWA: PASS");
-console.log("OFFLINE: PASS");
+console.log("OFFLINE CACHE: PASS");
 console.log("AUTO UPDATE: PASS");
 }
 
