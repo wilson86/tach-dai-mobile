@@ -1,0 +1,23 @@
+{
+  "name": "Tách Đài 3 Miền",
+  "short_name": "Tách Đài",
+  "description": "Kiểm tra và tách lệnh xổ số 3 miền trên điện thoại",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f6f7f9",
+  "theme_color": "#0b57d0",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "./icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

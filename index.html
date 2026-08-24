@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b57d0">
+<title>Tách Đài 3 Miền Mobile</title>
+<style>
+  :root{
+    --bg:#f6f7f9;--card:#fff;--text:#172033;--muted:#667085;--line:#d9dee8;
+    --primary:#0b57d0;--primary2:#0842a0;--danger:#b42318;--dangerbg:#fff1f0;
+    --ok:#067647;--okbg:#ecfdf3;--shadow:0 1px 3px rgba(16,24,40,.08);
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+  .app{max-width:780px;margin:0 auto;padding:12px 12px calc(24px + env(safe-area-inset-bottom))}
+  .title{font-weight:800;font-size:20px;margin:2px 0 10px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px;margin-bottom:10px}
+  .controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  label.small{display:block;font-size:12px;color:var(--muted);margin:0 0 4px}
+  select,input[type=date]{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 10px;background:#fff;font-size:16px;color:var(--text)}
+  .today{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px}
+  .today input{width:20px;height:20px}
+  .schedule{margin-top:9px;padding:9px 10px;border-radius:10px;background:#f2f5fa;font-size:13px;line-height:1.45}
+  .label{font-size:14px;font-weight:750;margin:0 0 6px}
+  textarea{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 11px;font:15px/1.42 ui-monospace,SFMono-Regular,Consolas,"Liberation Mono",monospace;resize:vertical;color:#111827;background:#fff}
+  #input{min-height:250px}
+  #output{min-height:220px}
+  textarea:focus,select:focus,input:focus{outline:2px solid rgba(11,87,208,.18);border-color:var(--primary)}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:9px}
+  button{height:44px;border:0;border-radius:10px;padding:0 14px;font-weight:750;font-size:14px;cursor:pointer}
+  .primary{background:var(--primary);color:#fff;flex:1 1 180px}
+  .primary:active{background:var(--primary2)}
+  .secondary{background:#eef2f7;color:#27364b}
+  .danger{background:#fff0ee;color:var(--danger)}
+  .status{margin-top:8px;font-size:13px;font-weight:700}
+  .status.ok{color:var(--ok)}
+  .status.err{color:var(--danger)}
+  .result-card.error{border-color:#f6b9b4;background:var(--dangerbg)}
+  .result-card.ok{border-color:#a6e3c2;background:var(--okbg)}
+  .hint{font-size:12px;color:var(--muted);line-height:1.4;margin-top:8px}
+  .pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;background:#eef2f7;font-size:12px;font-weight:700;margin-right:4px}
+  @media (max-width:520px){
+    .app{padding:8px 8px calc(18px + env(safe-area-inset-bottom))}
+    .card{border-radius:12px;padding:10px}
+    .title{font-size:18px}
+    .controls{grid-template-columns:1fr}
+    #input{min-height:230px}
+    #output{min-height:200px}
+    button{height:46px;font-size:15px}
+  }
+</style>
+
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="./icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="application-name" content="Tách Đài">
+<meta name="apple-mobile-web-app-title" content="Tách Đài">
+
+</head>
+<body>
+<div class="app">
+
+  <div id="updateBanner" style="display:none;background:#fff7d6;border:1px solid #f1d46a;border-radius:12px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.4">
+    <b id="updateText">Có bản cập nhật mới.</b>
+    <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
+  </div>
+
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.0</span></div>
+
+  <div class="card">
+    <div class="controls">
+      <div>
+        <label class="small" for="region">Miền</label>
+        <select id="region">
+          <option value="mn">Miền Nam</option>
+          <option value="mt">Miền Trung</option>
+          <option value="mb">Miền Bắc</option>
+        </select>
+      </div>
+      <div>
+        <label class="small" for="date">Ngày</label>
+        <input id="date" type="date">
+      </div>
+    </div>
+    <label class="today"><input id="today" type="checkbox" checked> Hôm nay</label>
+    <div id="schedule" class="schedule"></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Nhập tin / nguyên đoạn chat</div>
+    <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
+      placeholder="Dán tin hoặc đoạn chat vào đây..."></textarea>
+
+    <div class="actions">
+      <button id="runBtn" class="primary">Kiểm tra + Tách</button>
+      <button id="undoBtn" class="secondary">Hoàn tác</button>
+      <button id="clearBtn" class="danger">Xóa</button>
+    </div>
+    <div id="status" class="status"></div>
+    <div class="hint">Nếu dán log chat, tool tự bỏ ngày/giờ, tên người gửi và toàn bộ tin của Vinh trước khi xử lý.</div>
+  </div>
+
+  <div id="resultCard" class="card result-card">
+    <div class="label">Kết quả</div>
+    <textarea id="output" readonly spellcheck="false"></textarea>
+    <div class="actions">
+      <button id="copyBtn" class="secondary">Copy kết quả</button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+// =========================
+// LỊCH ĐÀI TĨNH - OFFLINE
+// JS Date: 0=CN, 1=T2, ... 6=T7
+// =========================
+const MN = {
+  1:[["tp","TP.HCM"],["dt","Đồng Tháp"],["cm","Cà Mau"]],
+  2:[["bt","Bến Tre"],["vt","Vũng Tàu"],["bl","Bạc Liêu"]],
+  3:[["dn","Đồng Nai"],["ct","Cần Thơ"],["st","Sóc Trăng"]],
+  4:[["tn","Tây Ninh"],["ag","An Giang"],["bt","Bình Thuận"]],
+  5:[["vl","Vĩnh Long"],["bd","Bình Dương"],["tv","Trà Vinh"]],
+  6:[["tp","TP.HCM"],["la","Long An"],["bp","Bình Phước"],["hg","Hậu Giang"]],
+  0:[["tg","Tiền Giang"],["kg","Kiên Giang"],["dl","Đà Lạt"]]
+};
+
+const MT = {
+  1:[["hue","Huế"],["py","Phú Yên"]],
+  2:[["dl","Đắk Lắk"],["qn","Quảng Nam"]],
+  3:[["dn","Đà Nẵng"],["kh","Khánh Hòa"]],
+  4:[["bd","Bình Định"],["qt","Quảng Trị"],["qb","Quảng Bình"]],
+  5:[["gl","Gia Lai"],["nt","Ninh Thuận"]],
+  6:[["dn","Đà Nẵng"],["qn","Quảng Ngãi"],["dno","Đắk Nông"]],
+  0:[["hue","Huế"],["kt","Kon Tum"],["kh","Khánh Hòa"]]
+};
+
+const REGION_LABEL={mn:"Miền Nam",mt:"Miền Trung",mb:"Miền Bắc"};
+const BET_TYPES=new Set([
+  "b","bao","dd","đđ","xc","x",
+  "dx","đx","da","đá","dathang",
+  "d","duoi","đuôi","dau","đầu","lo","lô"
+]);
+const DX_TYPES=new Set(["dx","đx","da","đá","dathang"]);
+const TWO_STATION_DA=new Set(["da","đá","dx","đx"]);
+const IGNORED_SENDERS=new Set(["vinh"]);
+const CHAT_HEADER_RE=/^\[([^\]]+)\]\s*([^:]+?)(?:\s+in\s+reply\s+to\s+[^:]+?)?:\s*(.*)$/i;
+
+const $=id=>document.getElementById(id);
+const regionEl=$("region"), dateEl=$("date"), todayEl=$("today"), scheduleEl=$("schedule");
+const inputEl=$("input"), outputEl=$("output"), runBtn=$("runBtn"), statusEl=$("status");
+const resultCard=$("resultCard");
+
+let undoStack=[];
+
+function localDateISO(d=new Date()){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+}
+function parseLocalDate(v){
+  return new Date(`${v}T12:00:00`);
+}
+function formatDateVN(d){
+  return `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
+}
+function weekdayVN(day){
+  return ["Chủ nhật","Thứ 2","Thứ 3","Thứ 4","Thứ 5","Thứ 6","Thứ 7"][day];
+}
+function getSchedule(region, date){
+  if(region==="mb") return [["mb","Miền Bắc"]];
+  return (region==="mn"?MN:MT)[date.getDay()] || [];
+}
+function oneWord(name){ return name.trim().split(/\s+/).length===1; }
+function stationInfo([alias,name],i){
+  const role=i<2?"chính":"phụ";
+  return oneWord(name)?`${name} (${role})`:`${alias.toUpperCase()} (${name}, ${role})`;
+}
+function updateUI(){
+  if(todayEl.checked){
+    dateEl.value=localDateISO();
+    dateEl.disabled=true;
+  }else{
+    dateEl.disabled=false;
+    if(!dateEl.value) dateEl.value=localDateISO();
+  }
+  const region=regionEl.value;
+  const d=parseLocalDate(dateEl.value||localDateISO());
+  const stations=getSchedule(region,d);
+  runBtn.textContent=region==="mb"?"Kiểm tra":"Kiểm tra + Tách";
+  scheduleEl.innerHTML=
+    `<span class="pill">${REGION_LABEL[region]}</span>`+
+    `<span class="pill">${weekdayVN(d.getDay())} ${formatDateVN(d)}</span><br>`+
+    stations.map(stationInfo).join(" - ");
+  saveSettings();
+}
+
+function saveSettings(){
+  try{
+    localStorage.setItem("tachDaiMobileSettings",JSON.stringify({
+      region:regionEl.value,date:dateEl.value,today:todayEl.checked
+    }));
+  }catch(_){}
+}
+function loadSettings(){
+  dateEl.value=localDateISO();
+  try{
+    const s=JSON.parse(localStorage.getItem("tachDaiMobileSettings")||"{}");
+    if(["mn","mt","mb"].includes(s.region)) regionEl.value=s.region;
+    if(typeof s.today==="boolean") todayEl.checked=s.today;
+    if(s.date) dateEl.value=s.date;
+  }catch(_){}
+  updateUI();
+}
+
+function stripInvisible(s){
+  return (s||"").replace(/[\u2068\u2069\u200e\u200f\ufeff]/g,"");
+}
+function normalizeInput(s){
+  s=stripInvisible(s).toLowerCase().trim();
+  s=s.replace(/(^|\s)\+(?=[a-zA-ZÀ-ỹđĐ])/gu,"$1");
+  // Tên đài đầy đủ được quy về đúng alias nội bộ. Không đổi qn/dn/dno/hue
+  // sang các mã khác vì các mã này cũng được dùng trong lịch đài tĩnh.
+  s=s.replace(/quảng\s+ngãi/gu,"qn");
+  s=s.replace(/đà\s+nẵng/gu,"dn");
+  s=s.replace(/đắk\s+nông/gu,"dno");
+  s=s.replace(/huế/gu,"hue");
+  s=s.replace(/(^|\s)dna(?=\s|$)/gu,"$1dn");
+  s=s.replace(/(^|\s)hu(?=\s|$)/gu,"$1hue");
+  s=s.replace(/(^|\s)\.+(?=\d)/gu,"$1");
+  return s.replace(/\s+/g," ").trim();
+}
+function normalizeSenderName(s){
+  return stripInvisible(s).trim().toLowerCase().replace(/\s+/g," ");
+}
+function looksLikeChatLog(text){
+  return (text||"").split(/\r?\n/).some(raw=>CHAT_HEADER_RE.test(stripInvisible(raw).trim()));
+}
+function preprocessChatText(text){
+  const lines=(text||"").split(/\r?\n/);
+  if(!looksLikeChatLog(text)) return text.trim();
+
+  const kept=[];
+  let currentSender=null,currentKeep=false;
+
+  for(const raw of lines){
+    const line=raw.replace(/\r$/,"");
+    const matchLine=stripInvisible(line).trim();
+    const m=matchLine.match(CHAT_HEADER_RE);
+    if(m){
+      currentSender=normalizeSenderName(m[2]);
+      currentKeep=!IGNORED_SENDERS.has(currentSender);
+      let body=(m[3]||"").trim();
+      if(currentKeep && body){
+        body=stripInvisible(body).replace(/^\s*>\s*/,"").trim();
+        if(body) kept.push(normalizeInput(body));
+      }
+      continue;
+    }
+    if(currentSender!==null){
+      if(!currentKeep) continue;
+      let cleaned=stripInvisible(line).trim();
+      if(!cleaned) continue;
+      cleaned=cleaned.replace(/^\s*>\s*/,"").trim();
+      if(cleaned) kept.push(normalizeInput(cleaned));
+      continue;
+    }
+    if(line.trim()) kept.push(line.trim());
+  }
+  return kept.join("\n").trim();
+}
+
+function isNumberToken(tok){ return /^\d{1,4}$/.test(tok); }
+function isMoneyToken(tok){ return /^\d+(?:[.,]\d+)?[a-zA-ZđĐ]?$/.test(tok); }
+function isBetType(tok){ return BET_TYPES.has(tok); }
+function splitCompactBetToken(tok){
+  const types=[...BET_TYPES].sort((a,b)=>b.length-a.length);
+  for(const bet of types){
+    if(tok.startsWith(bet)&&tok.length>bet.length){
+      const money=tok.slice(bet.length);
+      if(isMoneyToken(money)) return [bet,money];
+    }
+  }
+  return null;
+}
+
+function validateBetPayload(rest){
+  const toks=rest.split(/\s+/).filter(Boolean);
+  if(!toks.length) throw new Error("thiếu nội dung cược");
+  let i=0;
+  const allNumbers=[];
+
+  while(i<toks.length){
+    const nums=[];
+    while(i<toks.length && isNumberToken(toks[i]) && !isBetType(toks[i])){
+      nums.push(toks[i]); allNumbers.push(toks[i]); i++;
+    }
+    if(!nums.length){
+      const tok=toks[i]||"";
+      if(isMoneyToken(tok)) throw new Error(`thiếu loại cược trước '${tok}'`);
+      throw new Error(tok?`phải có số đánh trước '${tok}'`:"phải có số đánh");
+    }
+    if(i>=toks.length) throw new Error("thiếu loại cược sau số");
+
+    let tok=toks[i];
+    if(isMoneyToken(tok)&&!isBetType(tok)&&!splitCompactBetToken(tok))
+      throw new Error(`thiếu loại cược trước '${tok}'`);
+
+    let betCount=0;
+    while(i<toks.length){
+      tok=toks[i];
+      if(betCount>0 && isNumberToken(tok) && !isBetType(tok)) break;
+
+      const compact=splitCompactBetToken(tok);
+      if(compact){ betCount++; i++; continue; }
+
+      if(isBetType(tok)){
+        const bet=tok;
+        if(i+1>=toks.length) throw new Error(`thiếu tiền sau loại cược '${bet}'`);
+        const money=toks[i+1];
+        if(isBetType(money)||splitCompactBetToken(money))
+          throw new Error(`thiếu tiền sau loại cược '${bet}'`);
+        if(!isMoneyToken(money)) throw new Error(`tiền cược '${money}' không hợp lệ`);
+        betCount++; i+=2; continue;
+      }
+
+      if(isMoneyToken(tok)) throw new Error(`thiếu loại cược trước '${tok}'`);
+      throw new Error(`không nhận ra cú pháp '${tok}'`);
+    }
+    if(!betCount) throw new Error("thiếu loại cược sau số");
+  }
+
+  const seen=new Set(),dups=[];
+  for(const n of allNumbers){
+    if(seen.has(n)&&!dups.includes(n)) dups.push(n);
+    seen.add(n);
+  }
+  if(dups.length===1) throw new Error(`trùng số ${dups[0]} trong cùng cú pháp`);
+  if(dups.length>1) throw new Error(`trùng các số ${dups.join(", ")} trong cùng cú pháp`);
+  return true;
+}
+
+function extractBetTypes(rest){
+  const toks=rest.split(/\s+/).filter(Boolean), types=[];
+  let i=0;
+  while(i<toks.length){
+    const compact=splitCompactBetToken(toks[i]);
+    if(compact){ types.push(compact[0]); i++; continue; }
+    if(isBetType(toks[i])){ types.push(toks[i]); i+=i+1<toks.length?2:1; continue; }
+    i++;
+  }
+  return types;
+}
+function validateStationVsDaSyntax(head,rest){
+  const types=extractBetTypes(rest);
+  const hasTwo=types.some(x=>TWO_STATION_DA.has(x));
+  const hasDathang=types.includes("dathang");
+  if(head==="2d"){
+    if(hasDathang) throw new Error("2d phải dùng 'da' hoặc 'dx', không dùng 'dathang'");
+    return;
+  }
+  if(!["2d","3d","4d","mb"].includes(head)&&hasTwo)
+    throw new Error(`1 đài '${head}' phải dùng 'dathang', không dùng da/dx`);
+}
+
+function validateCheckOnlyLine(line,region,stations){
+  let s=normalizeInput(line);
+  if(!s) return true;
+
+  const mr=s.match(/^(mn|mt|mb)\s+(.+)$/);
+  if(mr){
+    if(mr[1]!==region) throw new Error(`tin ghi miền '${mr[1]}' nhưng đang check '${region}'`);
+    s=mr[2].trim();
+  }
+
+  if(region==="mb"){
+    const toks=s.split(/\s+/);
+    if(toks.length&&isNumberToken(toks[0])){ validateBetPayload(s); return true; }
+    const parts=s.split(/\s+/,2);
+    if(parts.length<2) throw new Error("thiếu nội dung cược");
+    const head=parts[0],rest=s.slice(head.length).trim();
+    if(["2d","3d","4d","mb"].includes(head)){
+      validateBetPayload(rest); validateStationVsDaSyntax(head,rest); return true;
+    }
+    throw new Error("MB không cần ghi đài; cú pháp phải bắt đầu bằng số");
+  }
+
+  const toks=s.split(/\s+/);
+  if(toks.length<2) throw new Error("MN/MT phải có đài ở đầu tin");
+
+  if(["2d","3d","4d"].includes(toks[0])){
+    const head=toks[0],rest=toks.slice(1).join(" ");
+    validateBetPayload(rest); validateStationVsDaSyntax(head,rest); return true;
+  }
+
+  const valid=new Set(stations.map(x=>x[0]));
+  const stationHeads=[];
+  let i=0;
+  while(i<toks.length&&valid.has(toks[i])&&stationHeads.length<2){
+    stationHeads.push(toks[i]); i++;
+  }
+  if(!stationHeads.length){
+    if(valid.size) throw new Error(`đài '${toks[0]}' không thuộc lịch ${region.toUpperCase()} ngày đang chọn (hợp lệ: ${[...valid].sort().join(", ")})`);
+    throw new Error(`đài '${toks[0]}' không hợp lệ`);
+  }
+  if(i<toks.length&&valid.has(toks[i])) throw new Error("một cú pháp chỉ hỗ trợ tối đa 2 tên đài ở đầu");
+  const rest=toks.slice(i).join(" ").trim();
+  if(!rest) throw new Error("thiếu nội dung cược sau tên đài");
+  validateBetPayload(rest);
+
+  const types=extractBetTypes(rest);
+  const hasTwo=types.some(x=>TWO_STATION_DA.has(x));
+  const hasDathang=types.includes("dathang");
+  if(stationHeads.length===1){
+    if(hasTwo) throw new Error(`1 đài '${stationHeads[0]}' phải dùng 'dathang', không dùng da/dx`);
+  }else if(hasDathang){
+    throw new Error(`2 đài '${stationHeads[0]} ${stationHeads[1]}' phải dùng 'da' hoặc 'dx', không dùng 'dathang'`);
+  }
+  return true;
+}
+
+function splitNumberGroups(rest){
+  const toks=rest.split(/\s+/).filter(Boolean),groups=[];
+  let i=0;
+  while(i<toks.length){
+    const start=i;
+    const nums=[];
+    while(i<toks.length&&isNumberToken(toks[i])&&!isBetType(toks[i])){ nums.push(toks[i]); i++; }
+    if(!nums.length){
+      if(groups.length) groups[groups.length-1]+=" "+toks.slice(i).join(" ");
+      else groups.push(toks.slice(i).join(" "));
+      break;
+    }
+    if(i>=toks.length){ groups.push(toks.slice(start,i).join(" ")); break; }
+
+    let hasBet=false;
+    while(i<toks.length){
+      const tok=toks[i];
+      if(splitCompactBetToken(tok)){ hasBet=true;i++;continue; }
+      if(isBetType(tok)){ hasBet=true;i++;if(i<toks.length)i++;continue; }
+      if(hasBet&&isNumberToken(tok)) break;
+      i++;
+    }
+    groups.push(toks.slice(start,i).join(" ").trim());
+    if(i===start)i++;
+  }
+  return groups.filter(Boolean);
+}
+function splitDxFromNormal(group){
+  const toks=group.split(/\s+/).filter(Boolean);
+  if(!toks.length) return [];
+  let i=0; const nums=[];
+  while(i<toks.length&&isNumberToken(toks[i])&&!isBetType(toks[i])){nums.push(toks[i]);i++;}
+  if(!nums.length||i>=toks.length) return [group];
+
+  const normal=[],dx=[];
+  while(i<toks.length){
+    const compact=splitCompactBetToken(toks[i]);
+    if(compact){
+      (DX_TYPES.has(compact[0])?dx:normal).push(toks[i]);
+      i++;continue;
+    }
+    const bet=toks[i];
+    if(!isBetType(bet)){normal.push(bet);i++;continue;}
+    const money=i+1<toks.length?toks[i+1]:"";
+    const target=DX_TYPES.has(bet)?dx:normal;
+    target.push(bet); if(money) target.push(money);
+    i+=money?2:1;
+  }
+  const prefix=nums.join(" "),out=[];
+  if(normal.length) out.push(`${prefix} ${normal.join(" ")}`);
+  if(dx.length) out.push(`${prefix} ${dx.join(" ")}`);
+  return out.length?out:[group];
+}
+function splitBetChunks(rest){
+  const out=[];
+  for(const g of splitNumberGroups(rest)) out.push(...splitDxFromNormal(g));
+  return out;
+}
+function betKind(chunk){
+  const toks=chunk.split(/\s+/);
+  for(const t of toks){
+    if(DX_TYPES.has(t)) return "dx";
+    const c=splitCompactBetToken(t);
+    if(c&&DX_TYPES.has(c[0])) return "dx";
+  }
+  return "normal";
+}
+function expandChunk(selector,chunk,region,stations){
+  if(!stations.length) return [`${selector} ${chunk}`];
+  let main=stations.slice(0,2),aux=stations.slice(2);
+  const kind=betKind(chunk);
+
+  if(selector==="2d"){
+    if(main.length<2) return [`2d ${chunk}`];
+    if(kind==="normal") return [`${main[0][0]} ${chunk}`,`${main[1][0]} ${chunk}`];
+    return [`2d ${chunk}`];
+  }
+  if(stations.length<3) return [`${selector} ${chunk}`];
+
+  const n=selector==="3d"?3:4;
+  const selected=stations.slice(0,Math.min(n,stations.length));
+  main=selected.slice(0,2); aux=selected.slice(2);
+
+  if(kind==="normal"){
+    return [`2d ${chunk}`,...aux.map(x=>`${x[0]} ${chunk}`)];
+  }
+  const out=[`2d ${chunk}`];
+  for(const a of aux) for(const m of main) out.push(`${m[0]} ${a[0]} ${chunk}`);
+  if(selector==="4d"&&aux.length>=2) out.push(`${aux[0][0]} ${aux[1][0]} ${chunk}`);
+  return out;
+}
+function processLine(line,region,stations){
+  let s=normalizeInput(line);
+  if(!s)return [];
+  const mr=s.match(/^(mn|mt|mb)\s+(.+)$/);
+  if(mr){ s=mr[2].trim(); }
+  const m=s.match(/^(2d|3d|4d)\s+(.+)$/);
+  if(!m)return [s];
+  const chunks=splitBetChunks(m[2].trim());
+  if(!chunks.length)return [s];
+  const out=[];
+  for(const c of chunks) out.push(...expandChunk(m[1],c,region,stations));
+  return out;
+}
+
+function validateBatch(text,region,stations){
+  const errors=[];
+  text.split(/\r?\n/).forEach((raw,idx)=>{
+    raw=raw.trim(); if(!raw)return;
+    try{validateCheckOnlyLine(raw,region,stations);}
+    catch(e){errors.push({line:idx+1,msg:e.message,raw});}
+  });
+  return errors;
+}
+function snapshot(){
+  undoStack.push({input:inputEl.value,output:outputEl.value,status:statusEl.textContent,cls:statusEl.className});
+  if(undoStack.length>30)undoStack.shift();
+}
+function selectLine(textarea,lineNo){
+  const lines=textarea.value.split("\n");
+  let start=0;
+  for(let i=0;i<lineNo-1;i++)start+=lines[i].length+1;
+  const end=start+(lines[lineNo-1]||"").length;
+  textarea.focus();
+  textarea.setSelectionRange(start,end);
+}
+function setStatus(text,type=""){
+  statusEl.textContent=text;
+  statusEl.className=`status ${type}`;
+  resultCard.className=`card result-card ${type==="err"?"error":type==="ok"?"ok":""}`;
+}
+
+function run(){
+  const raw=inputEl.value.trim();
+  if(!raw){outputEl.value="";setStatus("Chưa có tin.","err");return;}
+
+  const wasChat=looksLikeChatLog(raw);
+  const clean=wasChat?preprocessChatText(raw):raw;
+  if(wasChat&&clean!==raw){
+    snapshot();
+    inputEl.value=clean;
+  }
+  if(!clean){outputEl.value="";setStatus("Không còn tin sau khi lọc chat.","err");return;}
+
+  const region=regionEl.value;
+  const d=parseLocalDate(dateEl.value||localDateISO());
+  const stations=getSchedule(region,d);
+  const errors=validateBatch(clean,region,stations);
+
+  if(errors.length){
+    outputEl.value="PHÁT HIỆN TIN SAI:\n\n"+errors.map(e=>`Dòng ${e.line}: ${e.msg}\n→ ${e.raw}`).join("\n\n");
+    setStatus(`Có ${errors.length} lỗi`,"err");
+    selectLine(inputEl,errors[0].line);
+    return;
+  }
+
+  const lines=clean.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(region==="mb"){
+    outputEl.value=lines.map(normalizeInput).join("\n");
+    setStatus(`MB OK • ${lines.length} tin • không tách đài${wasChat?" • đã lọc chat":""}`,"ok");
+    return;
+  }
+
+  const out=[];
+  for(const line of lines) out.push(...processLine(line,region,stations));
+  outputEl.value=out.join("\n");
+  setStatus(`Đã tách • ${out.length} dòng${wasChat?" • đã lọc chat":""}`,"ok");
+}
+
+async function copyOutput(){
+  const text=outputEl.value;
+  if(!text)return;
+  try{
+    await navigator.clipboard.writeText(text);
+    setStatus("Đã copy kết quả","ok");
+  }catch(_){
+    outputEl.removeAttribute("readonly");
+    outputEl.select();
+    document.execCommand("copy");
+    outputEl.setAttribute("readonly","");
+    setStatus("Đã copy kết quả","ok");
+  }
+}
+
+runBtn.addEventListener("click",run);
+$("copyBtn").addEventListener("click",copyOutput);
+$("clearBtn").addEventListener("click",()=>{
+  if(inputEl.value||outputEl.value)snapshot();
+  inputEl.value="";outputEl.value="";setStatus("");
+  inputEl.focus();
+});
+$("undoBtn").addEventListener("click",()=>{
+  const s=undoStack.pop(); if(!s)return;
+  inputEl.value=s.input;outputEl.value=s.output;
+  statusEl.textContent=s.status;statusEl.className=s.cls;
+});
+regionEl.addEventListener("change",updateUI);
+dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
+todayEl.addEventListener("change",updateUI);
+
+// Nếu người dùng Cut trong ô nhập trên mobile/desktop, chạy lại sau khi cut xong.
+inputEl.addEventListener("cut",()=>setTimeout(()=>{ if(inputEl.value.trim()) run(); else {outputEl.value="";setStatus("");}},0));
+
+loadSettings();
+
+// =========================
+// PWA / AUTO UPDATE
+// =========================
+const APP_VERSION = "2.0.0";
+let swRegistration = null;
+
+async function checkForAppUpdate() {
+  // file:// không hỗ trợ Service Worker/PWA update.
+  if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
+
+  try {
+    const res = await fetch("./version.json?t=" + Date.now(), {
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" }
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    if (data.version && data.version !== APP_VERSION) {
+      $("updateText").textContent = `Có bản mới v${data.version}.`;
+      $("updateBanner").style.display = "block";
+    }
+  } catch (_) {
+    // Offline: im lặng, dùng bản đã cache.
+  }
+
+  try {
+    if (swRegistration) await swRegistration.update();
+  } catch (_) {}
+}
+
+async function doAppUpdate() {
+  if (!swRegistration) {
+    location.reload();
+    return;
+  }
+
+  try {
+    await swRegistration.update();
+  } catch (_) {}
+
+  if (swRegistration.waiting) {
+    swRegistration.waiting.postMessage({ type: "SKIP_WAITING" });
+    return;
+  }
+
+  // Nếu SW mới chưa vào waiting, reload để lấy index mới qua network-first.
+  location.reload();
+}
+
+if ("serviceWorker" in navigator && location.protocol !== "file:") {
+  window.addEventListener("load", async () => {
+    try {
+      swRegistration = await navigator.serviceWorker.register("./sw.js", { scope: "./" });
+
+      swRegistration.addEventListener("updatefound", () => {
+        const worker = swRegistration.installing;
+        if (!worker) return;
+        worker.addEventListener("statechange", () => {
+          if (worker.state === "installed" && navigator.serviceWorker.controller) {
+            $("updateText").textContent = "Đã tải bản mới. Bấm Cập nhật ngay.";
+            $("updateBanner").style.display = "block";
+          }
+        });
+      });
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        location.reload();
+      });
+
+      await checkForAppUpdate();
+    } catch (_) {
+      // Không ảnh hưởng chức năng tách/check.
+    }
+  });
+}
+
+$("updateNowBtn").addEventListener("click", doAppUpdate);
+
+</script>
+</body>
+</html>

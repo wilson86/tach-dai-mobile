@@ -1,0 +1,38 @@
+TÁCH ĐÀI MOBILE PWA v2.0.0
+
+MỤC TIÊU
+- Có Internet: mỗi lần mở tool sẽ kiểm tra bản mới.
+- Có bản mới: hiện thanh "Có bản mới" -> bấm "Cập nhật ngay".
+- Mất Internet: vẫn dùng bản đã cache gần nhất.
+- Không cần PC khi đang sử dụng ngoài đường.
+- Không có LIVE xổ số.
+
+QUAN TRỌNG
+PWA tự cập nhật KHÔNG chạy khi mở index.html bằng file://.
+Phải đưa 5 file này lên một website HTTPS:
+- index.html
+- sw.js
+- version.json
+- manifest.webmanifest
+- icon-192.png
+- icon-512.png
+
+CÁCH DỄ NHẤT (MIỄN PHÍ)
+1. Đưa toàn bộ các file trong thư mục này lên GitHub Pages hoặc Cloudflare Pages.
+2. Mở link HTTPS trên Chrome Android.
+3. Chrome -> menu ⋮ -> "Thêm vào màn hình chính" / "Cài ứng dụng".
+4. Từ lần sau bấm icon Tách Đài trên màn hình điện thoại để dùng.
+
+CẬP NHẬT SAU NÀY
+Khi có bản mới:
+1. Thay index.html và sw.js trên hosting.
+2. Đổi version trong version.json (ví dụ 2.0.0 -> 2.0.1).
+3. Điện thoại mở tool sẽ tự phát hiện bản mới.
+4. Bấm "Cập nhật ngay".
+5. Nếu đang offline, tool tiếp tục dùng bản cũ cho tới khi có mạng.
+
+LƯU CẤU HÌNH
+- Miền/Ngày/Hôm nay vẫn lưu trên trình duyệt bằng localStorage.
+- Cập nhật app không làm mất cấu hình này trong cùng một domain.
+
+PHIÊN BẢN HIỆN TẠI: 2.0.0
