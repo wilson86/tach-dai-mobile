@@ -1,0 +1,16 @@
+Mobile v2.0.2 - đồng bộ Windows v54
+
+1) DAT:
+- 1 đài + da/đá => output dat
+- 1 đài dat hợp lệ
+- 1 đài dx/đx lỗi
+- 2 đài da/dx hợp lệ
+- 2 đài dat lỗi
+- 2d/3d/4d dat lỗi
+- dathang vẫn nhận nhưng normalize/output dat
+
+2) CUT:
+- Cut 1/3 output: tin gốc còn
+- Cut 2/3 output: tin gốc còn
+- Cut 3/3 output: mới xóa tin gốc
+- Undo khôi phục Input + Output + mapping

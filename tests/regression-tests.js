@@ -14,13 +14,15 @@ const version = JSON.parse(fs.readFileSync(path.join(root, "version.json"), "utf
 function loadRules() {
   const match = html.match(/<script>\s*([\s\S]*?)<\/script>/i);
   assert.ok(match, "index.html phải có script ứng dụng");
-  const marker = 'runBtn.addEventListener("click",run);';
+  const marker = 'loadSettings();';
   const source = match[1].slice(0, match[1].indexOf(marker));
   assert.ok(source.length > 0, "không tìm thấy phần rule tách/check");
 
   const elements = Object.create(null);
   const element = () => ({
-    addEventListener() {},
+    events: Object.create(null),
+    addEventListener(type, handler) { this.events[type] = handler; },
+    trigger(type) { return this.events[type]?.({ target: this }); },
     value: "",
     textContent: "",
     className: "",
@@ -52,7 +54,7 @@ function loadRules() {
     }
   };
   vm.createContext(context);
-  vm.runInContext(`${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,run,cutSelectedOutput,undo,getOutputRecords:()=>outputRecords.map(r=>({...r})),elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
+  vm.runInContext(`${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
   return context.__rules;
 }
 
@@ -146,17 +148,53 @@ assert.equal(outputRecords().length, 6);
 assert.deepEqual(outputRecords().slice(0, 3).map(record => record.sourceLine), [1, 1, 1]);
 assert.deepEqual(outputRecords().slice(3).map(record => record.sourceLine), [2, 2, 2]);
 
-ui.output.selectionStart = 0;
-ui.output.selectionEnd = firstOutput.length;
+const initialInput = "3d 22 10 dx 5n\n3d 64 51 dx 2n";
+const firstLines = firstOutput.split("\n");
+const selectFirstVisibleOutput = () => {
+  const end = ui.output.value.indexOf("\n");
+  ui.output.selectionStart = 0;
+  ui.output.selectionEnd = end === -1 ? ui.output.value.length : end;
+};
+
+// Cut 1/3: chỉ bỏ một output, source input phải còn.
+selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstOutput);
+assert.equal(rules.clipboard.text, firstLines[0]);
+assert.equal(ui.input.value, initialInput);
+assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
+assert.equal(outputRecords().filter(record => record.alive).length, 5);
+
+// Cut 2/3: source input vẫn còn vì còn một output của source đó.
+selectFirstVisibleOutput();
+await rules.cutSelectedOutput();
+assert.equal(rules.clipboard.text, firstLines[1]);
+assert.equal(ui.input.value, initialInput);
+assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
+assert.equal(outputRecords().filter(record => record.alive).length, 4);
+
+// Cut 3/3: khi hết toàn bộ output của source đầu, source input mới bị xóa/remap.
+selectFirstVisibleOutput();
+await rules.cutSelectedOutput();
+assert.equal(rules.clipboard.text, firstLines[2]);
 assert.equal(ui.input.value, "3d 64 51 dx 2n");
 assert.equal(ui.output.value, secondOutput);
 assert.equal(outputRecords().length, 3);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
 
-rules.undo();
-assert.equal(ui.input.value, "3d 22 10 dx 5n\n3d 64 51 dx 2n");
+// Undo bước cut cuối phải khôi phục source đầu và mapping trước đó.
+rules.triggerUndo();
+assert.equal(ui.input.value, initialInput);
+assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
+assert.equal(outputRecords().length, 6);
+
+// Cut toàn bộ 3 output và Undo phải quay về đầy đủ sáu output records.
+rules.run();
+ui.output.selectionStart = 0;
+ui.output.selectionEnd = firstOutput.length;
+await rules.cutSelectedOutput();
+assert.equal(ui.input.value, "3d 64 51 dx 2n");
+rules.triggerUndo();
+assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
@@ -164,7 +202,7 @@ assert.equal(outputRecords().length, 6);
 const appVersion = html.match(/const APP_VERSION = "([^"]+)"/);
 assert.ok(appVersion, "thiếu APP_VERSION");
 assert.equal(appVersion[1], version.version, "APP_VERSION và version.json lệch nhau");
-assert.match(sw, new RegExp(`CACHE_NAME = "tach-dai-mobile-v${appVersion[1].replaceAll(".", "\\.")}"`));
+assert.match(sw, new RegExp(`CACHE_NAME = "tach-dai-mobile-v${appVersion[1].replaceAll(".", "\\.")}(?:-[^"]+)?"`));
 assert.match(html, new RegExp(`>v${appVersion[1].replaceAll(".", "\\.")}<`), "version hiển thị phải đồng bộ APP_VERSION");
 assert.match(sw, new RegExp(`JSON\\.stringify\\(\\{version:"${appVersion[1].replaceAll(".", "\\.")}"\\}\\)`), "version fallback trong SW phải đồng bộ");
 assert.match(html, /rel="manifest" href="\.\/manifest\.webmanifest"/);
@@ -185,6 +223,9 @@ console.log("ALIASES: PASS");
 console.log("CHAT FILTER: PASS");
 console.log("MB CHECK: PASS");
 console.log("CUT SYNC: PASS");
+console.log("CUT 1/3: PASS");
+console.log("CUT 2/3: PASS");
+console.log("CUT 3/3: PASS");
 console.log("UNDO SYNC: PASS");
 console.log("PWA: PASS");
 console.log("OFFLINE CACHE: PASS");
