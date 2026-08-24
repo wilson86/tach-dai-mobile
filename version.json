@@ -1,5 +1,5 @@
 {
-  "version": "2.0.0",
-  "updated": "2026-08-24",
-  "notes": "PWA v2: tự kiểm tra cập nhật khi có mạng, vẫn chạy offline."
+    "version":  "2.0.2",
+    "updated":  "2026-08-24",
+    "notes":  "Thêm Cắt phần chọn trên mobile + đồng bộ Kết quả ↔ Nhập + Undo."
 }

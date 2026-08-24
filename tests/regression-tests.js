@@ -18,7 +18,23 @@ function loadRules() {
   const source = match[1].slice(0, match[1].indexOf(marker));
   assert.ok(source.length > 0, "không tìm thấy phần rule tách/check");
 
-  const element = () => ({ addEventListener() {}, value: "", textContent: "", className: "" });
+  const elements = Object.create(null);
+  const element = () => ({
+    addEventListener() {},
+    value: "",
+    textContent: "",
+    className: "",
+    selectionStart: 0,
+    selectionEnd: 0,
+    style: {},
+    focus() {},
+    select() { this.selectionStart = 0; this.selectionEnd = this.value.length; },
+    remove() {}
+  });
+  const clipboard = {
+    text: "",
+    async writeText(value) { this.text = value; }
+  };
   const context = {
     console,
     Set,
@@ -27,10 +43,16 @@ function loadRules() {
     RegExp,
     String,
     Error,
-    document: { getElementById: element }
+    navigator: { clipboard },
+    document: {
+      getElementById(id) { return elements[id] || (elements[id] = element()); },
+      createElement: element,
+      body: { appendChild() {} },
+      execCommand() { return true; }
+    }
   };
   vm.createContext(context);
-  vm.runInContext(`${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine};`, context);
+  vm.runInContext(`${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,run,cutSelectedOutput,undo,getOutputRecords:()=>outputRecords.map(r=>({...r})),elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
   return context.__rules;
 }
 
@@ -41,7 +63,9 @@ function expectThrow(fn, expected) {
   assert.match(error.message, expected);
 }
 
+async function main() {
 const rules = loadRules();
+const outputRecords = () => JSON.parse(JSON.stringify(rules.getOutputRecords()));
 const saturday = new Date("2026-08-22T12:00:00");
 const sunday = new Date("2026-08-23T12:00:00");
 const mtSaturday = rules.getSchedule("mt", saturday);
@@ -88,11 +112,41 @@ const mbLine = "79 da 30n";
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(mbLine, "mb", rules.getSchedule("mb", saturday)));
 assert.deepEqual(Array.from(rules.processLine(mbLine, "mb", rules.getSchedule("mb", saturday))), [mbLine]);
 
+// CASE 8: Cut kết quả phải đồng bộ Input, Output, mapping và Undo.
+const ui = rules.elements;
+ui.region.value = "mt";
+ui.date.value = "2026-08-22";
+ui.today.checked = false;
+ui.input.value = "3d 22 10 dx 5n\n3d 64 51 dx 2n";
+rules.run();
+const firstOutput = "2d 22 10 dx 5n\ndn dno 22 10 dx 5n\nqn dno 22 10 dx 5n";
+const secondOutput = "2d 64 51 dx 2n\ndn dno 64 51 dx 2n\nqn dno 64 51 dx 2n";
+assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
+assert.equal(outputRecords().length, 6);
+assert.deepEqual(outputRecords().slice(0, 3).map(record => record.sourceLine), [1, 1, 1]);
+assert.deepEqual(outputRecords().slice(3).map(record => record.sourceLine), [2, 2, 2]);
+
+ui.output.selectionStart = 0;
+ui.output.selectionEnd = firstOutput.length;
+await rules.cutSelectedOutput();
+assert.equal(rules.clipboard.text, firstOutput);
+assert.equal(ui.input.value, "3d 64 51 dx 2n");
+assert.equal(ui.output.value, secondOutput);
+assert.equal(outputRecords().length, 3);
+assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
+
+rules.undo();
+assert.equal(ui.input.value, "3d 22 10 dx 5n\n3d 64 51 dx 2n");
+assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
+assert.equal(outputRecords().length, 6);
+
 // PWA audit: các file và version phải đồng bộ, paths tương đối cho GitHub Pages.
 const appVersion = html.match(/const APP_VERSION = "([^"]+)"/);
 assert.ok(appVersion, "thiếu APP_VERSION");
 assert.equal(appVersion[1], version.version, "APP_VERSION và version.json lệch nhau");
 assert.match(sw, new RegExp(`CACHE_NAME = "tach-dai-mobile-v${appVersion[1].replaceAll(".", "\\.")}"`));
+assert.match(html, new RegExp(`>v${appVersion[1].replaceAll(".", "\\.")}<`), "version hiển thị phải đồng bộ APP_VERSION");
+assert.match(sw, new RegExp(`JSON\\.stringify\\(\\{version:"${appVersion[1].replaceAll(".", "\\.")}"\\}\\)`), "version fallback trong SW phải đồng bộ");
 assert.match(html, /rel="manifest" href="\.\/manifest\.webmanifest"/);
 assert.match(html, /serviceWorker\.register\("\.\/sw\.js", \{ scope: "\.\/" \}\)/);
 assert.match(html, /fetch\("\.\/version\.json\?t=" \+ Date\.now\(\), \{[\s\S]*?cache: "no-store"/);
@@ -102,6 +156,20 @@ assert.equal(manifest.scope, "./");
 assert.deepEqual(manifest.icons.map(icon => icon.sizes), ["192x192", "512x512"]);
 assert.match(sw, /self\.skipWaiting\(\)/);
 assert.match(sw, /req\.mode === "navigate"/);
+assert.match(sw, /caches\.match\("\.\/index\.html"\)/);
 assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
 
-console.log("PASS: regression rules + PWA audit");
+console.log("CORE RULES: PASS");
+console.log("CHAT FILTER: PASS");
+console.log("MB CHECK: PASS");
+console.log("CUT SYNC: PASS");
+console.log("UNDO SYNC: PASS");
+console.log("PWA: PASS");
+console.log("OFFLINE: PASS");
+console.log("AUTO UPDATE: PASS");
+}
+
+main().catch(error => {
+  console.error(error.stack || error);
+  process.exitCode = 1;
+});

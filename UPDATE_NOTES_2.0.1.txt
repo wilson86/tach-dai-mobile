@@ -1,0 +1,7 @@
+Tách Đài Mobile v2.0.1
+- Thêm nút Cắt phần chọn ở ô Kết quả.
+- Bôi đen một phần của dòng -> cắt nguyên dòng đó.
+- Copy phần đã cắt vào clipboard.
+- Cắt hết kết quả của một tin -> tự xóa tin Input tương ứng.
+- Hoàn tác khôi phục Input + Kết quả + mapping.
+- Ô Kết quả vẫn readonly để tránh sửa nhầm.

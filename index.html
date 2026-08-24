@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.0</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.2</span></div>
 
   <div class="card">
     <div class="controls">
@@ -107,6 +107,7 @@
     <div class="label">Kết quả</div>
     <textarea id="output" readonly spellcheck="false"></textarea>
     <div class="actions">
+      <button id="cutBtn" class="secondary">Cắt phần chọn</button>
       <button id="copyBtn" class="secondary">Copy kết quả</button>
     </div>
   </div>
@@ -156,6 +157,8 @@ const inputEl=$("input"), outputEl=$("output"), runBtn=$("runBtn"), statusEl=$("
 const resultCard=$("resultCard");
 
 let undoStack=[];
+let outputRecords=[]; // [{sourceLine,text,alive}]
+let lastOutputSelection={start:0,end:0};
 
 function localDateISO(d=new Date()){
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
@@ -537,7 +540,13 @@ function validateBatch(text,region,stations){
   return errors;
 }
 function snapshot(){
-  undoStack.push({input:inputEl.value,output:outputEl.value,status:statusEl.textContent,cls:statusEl.className});
+  undoStack.push({
+    input:inputEl.value,
+    output:outputEl.value,
+    status:statusEl.textContent,
+    cls:statusEl.className,
+    outputRecords:outputRecords.map(r=>({...r}))
+  });
   if(undoStack.length>30)undoStack.shift();
 }
 function selectLine(textarea,lineNo){
@@ -554,9 +563,125 @@ function setStatus(text,type=""){
   resultCard.className=`card result-card ${type==="err"?"error":type==="ok"?"ok":""}`;
 }
 
+
+function resetOutputRecords(){
+  outputRecords=[];
+  lastOutputSelection={start:0,end:0};
+}
+
+function renderOutputRecords(){
+  outputEl.value=outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n");
+}
+
+function rememberOutputSelection(){
+  const s=outputEl.selectionStart ?? 0;
+  const e=outputEl.selectionEnd ?? s;
+  if(e>s) lastOutputSelection={start:s,end:e};
+}
+
+function selectedAliveRecordIndexes(){
+  const alive=[];
+  outputRecords.forEach((r,idx)=>{ if(r.alive) alive.push(idx); });
+  if(!alive.length) return [];
+
+  const rendered=alive.map(i=>outputRecords[i].text).join("\n");
+  let start=lastOutputSelection.start, end=lastOutputSelection.end;
+  const cs=outputEl.selectionStart ?? 0;
+  const ce=outputEl.selectionEnd ?? cs;
+  if(ce>cs){ start=cs; end=ce; }
+
+  if(end<=start || start<0 || start>rendered.length) return [];
+
+  let firstLine=0, lastLine=0;
+  for(let i=0;i<start;i++) if(rendered[i]==="\n") firstLine++;
+  lastLine=firstLine;
+  for(let i=start;i<Math.min(end,rendered.length);i++) if(rendered[i]==="\n") lastLine++;
+
+  if(end>start && rendered[end-1]==="\n" && lastLine>firstLine) lastLine--;
+
+  const picked=[];
+  for(let visibleLine=firstLine;visibleLine<=lastLine;visibleLine++){
+    if(visibleLine>=0 && visibleLine<alive.length) picked.push(alive[visibleLine]);
+  }
+  return picked;
+}
+
+function deleteCompletedSourceLines(){
+  if(!outputRecords.length) return;
+
+  const grouped=new Map();
+  outputRecords.forEach(r=>{
+    if(!grouped.has(r.sourceLine)) grouped.set(r.sourceLine,[]);
+    grouped.get(r.sourceLine).push(r);
+  });
+
+  const completed=new Set();
+  for(const [sourceLine,records] of grouped.entries()){
+    if(records.length && records.every(r=>!r.alive)) completed.add(sourceLine);
+  }
+  if(!completed.size) return;
+
+  const oldLines=inputEl.value.split("\n");
+  const kept=[];
+  const oldToNew=new Map();
+  let newNo=0;
+
+  oldLines.forEach((line,idx)=>{
+    const oldNo=idx+1;
+    if(completed.has(oldNo)) return;
+    kept.push(line);
+    newNo++;
+    oldToNew.set(oldNo,newNo);
+  });
+
+  inputEl.value=kept.join("\n");
+
+  outputRecords=outputRecords
+    .filter(r=>!completed.has(r.sourceLine))
+    .map(r=>({...r,sourceLine:oldToNew.get(r.sourceLine) || r.sourceLine}));
+}
+
+async function writeClipboardText(text){
+  if(!text) return false;
+  try{
+    await navigator.clipboard.writeText(text);
+    return true;
+  }catch(_){
+    const tmp=document.createElement("textarea");
+    tmp.value=text;
+    tmp.style.position="fixed";
+    tmp.style.left="-9999px";
+    document.body.appendChild(tmp);
+    tmp.select();
+    let ok=false;
+    try{ ok=document.execCommand("copy"); }catch(_e){}
+    tmp.remove();
+    return ok;
+  }
+}
+
+async function cutSelectedOutput(){
+  const indexes=selectedAliveRecordIndexes();
+  if(!indexes.length){
+    setStatus("Hãy bôi đen dòng kết quả cần cắt trước.","err");
+    return;
+  }
+
+  snapshot();
+  const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
+  await writeClipboardText(selectedText);
+
+  indexes.forEach(i=>{ outputRecords[i].alive=false; });
+  deleteCompletedSourceLines();
+  renderOutputRecords();
+
+  lastOutputSelection={start:0,end:0};
+  setStatus(`Đã cắt ${indexes.length} dòng • đã đồng bộ ô Nhập`,"ok");
+}
+
 function run(){
   const raw=inputEl.value.trim();
-  if(!raw){outputEl.value="";setStatus("Chưa có tin.","err");return;}
+  if(!raw){outputEl.value="";resetOutputRecords();setStatus("Chưa có tin.","err");return;}
 
   const wasChat=looksLikeChatLog(raw);
   const clean=wasChat?preprocessChatText(raw):raw;
@@ -564,7 +689,7 @@ function run(){
     snapshot();
     inputEl.value=clean;
   }
-  if(!clean){outputEl.value="";setStatus("Không còn tin sau khi lọc chat.","err");return;}
+  if(!clean){outputEl.value="";resetOutputRecords();setStatus("Không còn tin sau khi lọc chat.","err");return;}
 
   const region=regionEl.value;
   const d=parseLocalDate(dateEl.value||localDateISO());
@@ -572,6 +697,7 @@ function run(){
   const errors=validateBatch(clean,region,stations);
 
   if(errors.length){
+    resetOutputRecords();
     outputEl.value="PHÁT HIỆN TIN SAI:\n\n"+errors.map(e=>`Dòng ${e.line}: ${e.msg}\n→ ${e.raw}`).join("\n\n");
     setStatus(`Có ${errors.length} lỗi`,"err");
     selectLine(inputEl,errors[0].line);
@@ -580,15 +706,27 @@ function run(){
 
   const lines=clean.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   if(region==="mb"){
-    outputEl.value=lines.map(normalizeInput).join("\n");
+    outputRecords=lines.map((line,idx)=>({
+      sourceLine:idx+1,
+      text:normalizeInput(line),
+      alive:true
+    }));
+    renderOutputRecords();
     setStatus(`MB OK • ${lines.length} tin • không tách đài${wasChat?" • đã lọc chat":""}`,"ok");
     return;
   }
 
-  const out=[];
-  for(const line of lines) out.push(...processLine(line,region,stations));
-  outputEl.value=out.join("\n");
-  setStatus(`Đã tách • ${out.length} dòng${wasChat?" • đã lọc chat":""}`,"ok");
+  outputRecords=[];
+  lines.forEach((line,idx)=>{
+    const generated=processLine(line,region,stations);
+    generated.forEach(text=>outputRecords.push({
+      sourceLine:idx+1,
+      text,
+      alive:true
+    }));
+  });
+  renderOutputRecords();
+  setStatus(`Đã tách • ${outputRecords.length} dòng${wasChat?" • đã lọc chat":""}`,"ok");
 }
 
 async function copyOutput(){
@@ -606,31 +744,43 @@ async function copyOutput(){
   }
 }
 
+function undo(){
+  const s=undoStack.pop(); if(!s)return;
+  inputEl.value=s.input;
+  outputEl.value=s.output;
+  outputRecords=(s.outputRecords||[]).map(r=>({...r}));
+  lastOutputSelection={start:0,end:0};
+  statusEl.textContent=s.status;
+  statusEl.className=s.cls;
+  resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
+}
+
+outputEl.addEventListener("select",rememberOutputSelection);
+outputEl.addEventListener("mouseup",rememberOutputSelection);
+outputEl.addEventListener("touchend",()=>setTimeout(rememberOutputSelection,0));
+outputEl.addEventListener("keyup",rememberOutputSelection);
+$("cutBtn").addEventListener("click",cutSelectedOutput);
 runBtn.addEventListener("click",run);
 $("copyBtn").addEventListener("click",copyOutput);
 $("clearBtn").addEventListener("click",()=>{
   if(inputEl.value||outputEl.value)snapshot();
-  inputEl.value="";outputEl.value="";setStatus("");
+  inputEl.value="";outputEl.value="";resetOutputRecords();setStatus("");
   inputEl.focus();
 });
-$("undoBtn").addEventListener("click",()=>{
-  const s=undoStack.pop(); if(!s)return;
-  inputEl.value=s.input;outputEl.value=s.output;
-  statusEl.textContent=s.status;statusEl.className=s.cls;
-});
+$("undoBtn").addEventListener("click",undo);
 regionEl.addEventListener("change",updateUI);
 dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
 todayEl.addEventListener("change",updateUI);
 
 // Nếu người dùng Cut trong ô nhập trên mobile/desktop, chạy lại sau khi cut xong.
-inputEl.addEventListener("cut",()=>setTimeout(()=>{ if(inputEl.value.trim()) run(); else {outputEl.value="";setStatus("");}},0));
+inputEl.addEventListener("cut",()=>setTimeout(()=>{ if(inputEl.value.trim()) run(); else {outputEl.value="";resetOutputRecords();setStatus("");}},0));
 
 loadSettings();
 
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.0";
+const APP_VERSION = "2.0.2";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
