@@ -1,6 +1,5 @@
-// Giữ version app 2.0.2 nhưng tách cache của gói đồng bộ Windows v54,
-// tránh tái sử dụng bundle 2.0.2 cũ trên thiết bị đã từng cài PWA.
-const CACHE_NAME = "tach-dai-mobile-v2.0.2-sync-v54";
+// Tách cache theo version để CUT source-sync mới không bị che bởi bundle cũ.
+const CACHE_NAME = "tach-dai-mobile-v2.0.3";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -37,7 +36,7 @@ self.addEventListener("fetch", event => {
   if (url.pathname.endsWith("/version.json") || url.pathname.endsWith("version.json")) {
     event.respondWith(
       fetch(req, { cache: "no-store" }).catch(() =>
-        new Response(JSON.stringify({version:"2.0.2"}), {
+        new Response(JSON.stringify({version:"2.0.3"}), {
           headers: { "Content-Type": "application/json" }
         })
       )

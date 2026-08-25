@@ -1,4 +1,4 @@
-TÁCH ĐÀI MOBILE PWA v2.0.0
+TÁCH ĐÀI MOBILE PWA v2.0.3
 
 MỤC TIÊU
 - Có Internet: mỗi lần mở tool sẽ kiểm tra bản mới.
@@ -35,4 +35,10 @@ LƯU CẤU HÌNH
 - Miền/Ngày/Hôm nay vẫn lưu trên trình duyệt bằng localStorage.
 - Cập nhật app không làm mất cấu hình này trong cùng một domain.
 
-PHIÊN BẢN HIỆN TẠI: 2.0.0
+CUT KẾT QUẢ
+- Cắt một hoặc nhiều dòng kết quả chỉ xóa đúng phần đã chọn.
+- Tin gốc được đồng bộ ngay: chỉ các phần chưa CUT còn lại trong ô Nhập.
+- Chạy lại sau CUT không được làm sống lại phần đã tiêu thụ.
+- Hoàn tác (Undo) khôi phục đồng thời tin gốc, kết quả và mapping trước CUT.
+
+PHIÊN BẢN HIỆN TẠI: 2.0.3

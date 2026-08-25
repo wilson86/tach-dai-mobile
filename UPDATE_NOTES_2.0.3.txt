@@ -1,0 +1,5 @@
+Mobile v2.0.3 - đồng bộ CUT từng phần
+
+- Sửa state CUT: một output đã CUT được phản ánh ngay trong tin gốc.
+- Các output chưa CUT được giữ lại dưới dạng dòng nguồn canonical để chạy lại không khôi phục phần đã tiêu thụ.
+- Giữ nguyên Undo, kiểm tra cú pháp, rule DAT/đá thẳng một đài và PWA offline update.

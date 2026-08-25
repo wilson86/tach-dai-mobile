@@ -1,5 +1,5 @@
 {
-  "version": "2.0.2",
-  "updated": "2026-08-24",
-  "notes": "Đồng bộ Windows v54: dat=đá thẳng 1 đài; Cut đủ toàn bộ output của một tin mới xóa tin gốc."
+  "version": "2.0.3",
+  "updated": "2026-08-25",
+  "notes": "CUT một phần đồng bộ ngay tin gốc: chỉ giữ các phần kết quả chưa CUT; dat vẫn là đá thẳng 1 đài."
 }

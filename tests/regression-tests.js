@@ -31,6 +31,7 @@ function loadRules() {
     style: {},
     focus() {},
     select() { this.selectionStart = 0; this.selectionEnd = this.value.length; },
+    setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
     remove() {}
   });
   const clipboard = {
@@ -156,23 +157,30 @@ const selectFirstVisibleOutput = () => {
   ui.output.selectionEnd = end === -1 ? ui.output.value.length : end;
 };
 
-// Cut 1/3: chỉ bỏ một output, source input phải còn.
+// Cut 1/3: phần đã CUT phải biến mất ngay khỏi tin gốc; các phần chưa CUT
+// được materialize thành các dòng nguồn còn lại, không chờ CUT đủ 3/3.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[0]);
-assert.equal(ui.input.value, initialInput);
+assert.equal(ui.input.value, `${firstLines[1]}\n${firstLines[2]}\n3d 64 51 dx 2n`);
 assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
 assert.equal(outputRecords().filter(record => record.alive).length, 5);
+assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 2, 3, 3, 3]);
 
-// Cut 2/3: source input vẫn còn vì còn một output của source đó.
+// Chạy lại sau CUT không được làm sống lại phần đã tiêu thụ.
+rules.run();
+assert.equal(ui.input.value, `${firstLines[1]}\n${firstLines[2]}\n3d 64 51 dx 2n`);
+assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
+
+// Cut tiếp: tin gốc tiếp tục phản ánh đúng phần còn lại.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[1]);
-assert.equal(ui.input.value, initialInput);
+assert.equal(ui.input.value, `${firstLines[2]}\n3d 64 51 dx 2n`);
 assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
 assert.equal(outputRecords().filter(record => record.alive).length, 4);
 
-// Cut 3/3: khi hết toàn bộ output của source đầu, source input mới bị xóa/remap.
+// Cut phần cuối của source đầu: source đó biến mất, source sau được remap.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[2]);
@@ -181,13 +189,14 @@ assert.equal(ui.output.value, secondOutput);
 assert.equal(outputRecords().length, 3);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
 
-// Undo bước cut cuối phải khôi phục source đầu và mapping trước đó.
+// Undo bước cut cuối phải khôi phục source đã materialize và mapping trước đó.
 rules.triggerUndo();
-assert.equal(ui.input.value, initialInput);
+assert.equal(ui.input.value, `${firstLines[2]}\n3d 64 51 dx 2n`);
 assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
-assert.equal(outputRecords().length, 6);
+assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 2, 2, 2]);
 
 // Cut toàn bộ 3 output và Undo phải quay về đầy đủ sáu output records.
+ui.input.value = initialInput;
 rules.run();
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = firstOutput.length;
@@ -198,19 +207,28 @@ assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
-// Nguồn có 2 output: chỉ cut đủ 2/2 mới được xóa input gốc.
+// Nguồn có 2 output: CUT một phần phải materialize ngay phần nguồn còn lại.
 ui.input.value = "2d 22 10 dd 5n";
 rules.run();
 assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "2d 22 10 dd 5n");
+assert.equal(ui.input.value, "qn 22 10 dd 5n");
 assert.equal(ui.output.value, "qn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(ui.input.value, "");
 assert.equal(ui.output.value, "");
 assert.equal(outputRecords().length, 0);
+
+// Input lặp, whitespace và tin sai phải giữ đúng ranh giới business rule.
+ui.input.value = "  2d   22 10 dd 5n  \n2d 22 10 dd 5n";
+rules.run();
+assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n\ndn 22 10 dd 5n\nqn 22 10 dd 5n");
+ui.input.value = "3d 22 22 dx 5n";
+rules.run();
+assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
+assert.match(ui.output.value, /trùng số 22/);
 
 // PWA audit: các file và version phải đồng bộ, paths tương đối cho GitHub Pages.
 const appVersion = html.match(/const APP_VERSION = "([^"]+)"/);

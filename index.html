@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.2</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.3</span></div>
 
   <div class="card">
     <div class="controls">
@@ -637,39 +637,46 @@ function selectedAliveRecordIndexes(){
   return picked;
 }
 
-function deleteCompletedSourceLines(){
-  if(!outputRecords.length) return;
-
+function synchronizeSourceAfterCut(){
+  /*
+    A generated output line is a consumable portion of its source line.  If a
+    user CUTs only some portions, retaining the original selector (for example
+    `3d ...`) would make the consumed portion reappear on the next run.  Replace
+    that source line immediately with exactly its surviving canonical outputs.
+    This keeps input, output, and the sourceLine mapping truthful after every
+    partial CUT; Undo restores the snapshot taken before this transformation.
+  */
   const grouped=new Map();
-  outputRecords.forEach(r=>{
-    if(!grouped.has(r.sourceLine)) grouped.set(r.sourceLine,[]);
-    grouped.get(r.sourceLine).push(r);
+  outputRecords.forEach(record=>{
+    if(!grouped.has(record.sourceLine)) grouped.set(record.sourceLine,[]);
+    grouped.get(record.sourceLine).push(record);
   });
-
-  const completed=new Set();
-  for(const [sourceLine,records] of grouped.entries()){
-    if(records.length && records.every(r=>!r.alive)) completed.add(sourceLine);
-  }
-  if(!completed.size) return;
 
   const oldLines=inputEl.value.split("\n");
-  const kept=[];
-  const oldToNew=new Map();
-  let newNo=0;
-
+  const nextInput=[];
+  const nextRecords=[];
   oldLines.forEach((line,idx)=>{
-    const oldNo=idx+1;
-    if(completed.has(oldNo)) return;
-    kept.push(line);
-    newNo++;
-    oldToNew.set(oldNo,newNo);
+    const records=grouped.get(idx+1) || [];
+    if(!records.length){
+      if(line.trim()) nextInput.push(line);
+      return;
+    }
+    const alive=records.filter(record=>record.alive);
+    if(alive.length===records.length){
+      const sourceLine=nextInput.length+1;
+      nextInput.push(line);
+      alive.forEach(record=>nextRecords.push({...record,sourceLine,alive:true}));
+      return;
+    }
+    // Materialize each remaining business portion as its own source line.
+    alive.forEach(record=>{
+      const sourceLine=nextInput.length+1;
+      nextInput.push(record.text);
+      nextRecords.push({...record,sourceLine,alive:true});
+    });
   });
-
-  inputEl.value=kept.join("\n");
-
-  outputRecords=outputRecords
-    .filter(r=>!completed.has(r.sourceLine))
-    .map(r=>({...r,sourceLine:oldToNew.get(r.sourceLine) || r.sourceLine}));
+  inputEl.value=nextInput.join("\n");
+  outputRecords=nextRecords;
 }
 
 async function writeClipboardText(text){
@@ -703,7 +710,7 @@ async function cutSelectedOutput(){
   await writeClipboardText(selectedText);
 
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
-  deleteCompletedSourceLines();
+  synchronizeSourceAfterCut();
   renderOutputRecords();
 
   lastOutputSelection={start:0,end:0};
@@ -809,7 +816,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.2";
+const APP_VERSION = "2.0.3";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
