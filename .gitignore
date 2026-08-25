@@ -8,6 +8,8 @@ desktop.ini
 *.tmp
 *.bak
 .localprojectagent/
+_SYNC_TEMP_/
+_SYNC_BACKUP_/
 
 # Never commit local credentials or environment files
 .env

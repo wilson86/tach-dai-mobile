@@ -1,0 +1,19 @@
+Mobile v2.0.4
+
+FULL STATION NAME
+- Tất cả tên đài MN/MT viết nguyên đều được tự hiểu.
+- Hỗ trợ có dấu và không dấu.
+- Ví dụ:
+  ben tre -> bt
+  bac lieu -> bli
+  vung tau -> vt
+  da nang -> dn
+  dak nong -> dno
+  quang ngai -> qn
+  ho chi minh -> tp
+
+Giữ nguyên:
+- Bạc Liêu canonical = bli
+- DAT = đá thẳng 1 đài
+- Cut đủ toàn bộ output của tin mới xóa tin gốc
+- Undo / PWA / offline / auto-update

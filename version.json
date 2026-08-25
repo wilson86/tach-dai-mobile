@@ -1,5 +1,5 @@
 {
-  "version": "2.0.3",
+  "version": "2.0.4",
   "updated": "2026-08-25",
-  "notes": "Đổi mã Bạc Liêu từ bl sang bli; vẫn nhận bl cũ và tự chuẩn hóa thành bli."
+  "notes": "Tự hiểu toàn bộ tên đài MN/MT viết nguyên, có dấu hoặc không dấu; ví dụ ben tre->bt, bac lieu->bli, da nang->dn, dak nong->dno."
 }

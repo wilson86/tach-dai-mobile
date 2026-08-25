@@ -92,11 +92,11 @@ const case3 = rules.normalizeInput("Qn +dna 71 64 51 dx 2n");
 assert.equal(case3, "qn dn 71 64 51 dx 2n");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(case3, "mt", mtSaturday));
 
-// CASE 4: các alias MT chuẩn phải được giữ nguyên.
-assert.equal(rules.normalizeInput("qn"), "qn");
-assert.equal(rules.normalizeInput("dn"), "dn");
-assert.equal(rules.normalizeInput("dno"), "dno");
-assert.equal(rules.normalizeInput("hue"), "hue");
+// CASE 4: alias chuẩn và tên đài đầy đủ có dấu/không dấu đều về mã chuẩn.
+assert.equal(rules.normalizeInput("qn dn dno hue"), "qn dn dno hue");
+assert.equal(rules.normalizeInput("ben tre bac lieu da nang dak nong quang ngai"), "bt bli dn dno qn");
+assert.equal(rules.normalizeInput("Bến Tre Bạc Liêu Đà Nẵng Đắk Nông Quảng Ngãi"), "bt bli dn dno qn");
+assert.equal(rules.normalizeInput("bl"), "bli");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine("hue 71 dathang 2n", "mt", rules.getSchedule("mt", sunday)));
 
 // CASE 5: DAT là chuẩn cho một đài; da/đá/dathang chỉ là input tương thích.

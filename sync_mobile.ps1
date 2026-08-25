@@ -13,7 +13,8 @@ $parentRoot = Split-Path -Parent $projectRoot
 $mobileUrl = 'https://wilson86.github.io/tach-dai-mobile/'
 $requiredTests = @(
   'CORE RULES', 'DAT RULE', 'ALIASES', 'CHAT FILTER', 'MB CHECK',
-  'CUT SYNC', 'UNDO SYNC', 'PWA', 'OFFLINE CACHE', 'AUTO UPDATE'
+  'CUT SYNC', 'CUT 1/3', 'CUT 2/3', 'CUT 3/3', 'UNDO SYNC',
+  'PWA', 'OFFLINE CACHE', 'AUTO UPDATE'
 )
 $protectedRoots = @('.git', '.github', 'tests')
 $protectedFiles = @('publish_update.ps1', 'UPDATE_MOBILE.bat', 'SYNC_MOBILE.bat', 'sync_mobile.ps1')
@@ -23,6 +24,58 @@ function Invoke-Git {
   param([Parameter(Mandatory = $true)][string[]]$Arguments)
   & git @Arguments
   if ($LASTEXITCODE -ne 0) { throw "Git command failed: git $($Arguments -join ' ')" }
+}
+
+function Get-GitPorcelain {
+  $status = @(& git status --porcelain)
+  if ($LASTEXITCODE -ne 0) { throw 'Không đọc được git status.' }
+  return $status
+}
+
+function Ensure-SyncGitIgnore {
+  $ignorePath = Join-Path $projectRoot '.gitignore'
+  $requiredEntries = @('.localprojectagent/', '_SYNC_TEMP_/', '_SYNC_BACKUP_/', '*.tmp', '*.bak')
+  $current = if (Test-Path -LiteralPath $ignorePath) { Get-Content -Raw -LiteralPath $ignorePath } else { '' }
+  $existing = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+  foreach ($line in ($current -split "`r?`n")) {
+    $trimmed = $line.Trim()
+    if ($trimmed) { [void]$existing.Add($trimmed) }
+  }
+
+  $missing = @()
+  foreach ($entry in $requiredEntries) {
+    if (-not $existing.Contains($entry)) { $missing += $entry }
+  }
+  if ($missing.Count -eq 0) { return }
+
+  $next = $current.TrimEnd("`r", "`n")
+  if ($next) { $next += "`n`n# One-click Mobile sync local state`n" }
+  $next += ($missing -join "`n") + "`n"
+  [System.IO.File]::WriteAllText($ignorePath, $next, $utf8NoBom)
+  Write-Host "Đã bổ sung .gitignore cho dữ liệu local sync." -ForegroundColor DarkGray
+}
+
+function New-AutoCheckpointIfDirty {
+  param([string[]]$StatusEntries)
+
+  if ($StatusEntries.Count -eq 0) { return $false }
+
+  Write-Host "Phát hiện working tree dirty; đang tạo checkpoint tự động an toàn." -ForegroundColor Yellow
+  Invoke-Git -Arguments @('add', '-A')
+  Invoke-Git -Arguments @('diff', '--cached', '--check')
+  $staged = @(& git diff --cached --name-only)
+  if ($LASTEXITCODE -ne 0) { throw 'Không đọc được staged diff cho checkpoint.' }
+  if ($staged.Count -gt 0) {
+    $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
+    Invoke-Git -Arguments @('commit', '-m', "auto-checkpoint before mobile sync $stamp")
+    Write-Host "Đã tạo auto-checkpoint: $stamp" -ForegroundColor Green
+  }
+
+  $remaining = @(Get-GitPorcelain)
+  if ($remaining.Count -gt 0) {
+    throw 'Không thể làm sạch working tree sau auto-checkpoint. Git repository có trạng thái cần can thiệp.'
+  }
+  return ($staged.Count -gt 0)
 }
 
 function Get-MobileVersion {
@@ -163,9 +216,10 @@ try {
     exit 0
   }
 
-  $preStatus = @(& git status --porcelain)
-  if ($LASTEXITCODE -ne 0) { throw 'Không đọc được git status.' }
-  if ($preStatus.Count -gt 0) { throw 'Project đang có thay đổi chưa commit. Hãy commit hoặc xử lý chúng trước khi sync ZIP để tránh commit nhầm.' }
+  # Local tool state phải luôn bị ignore trước khi checkpoint để không bị commit nhầm.
+  Ensure-SyncGitIgnore
+  $preStatus = @(Get-GitPorcelain)
+  $checkpointCreated = New-AutoCheckpointIfDirty -StatusEntries $preStatus
 
   $zip = if ($ZipPath) { Get-Item -LiteralPath $ZipPath -ErrorAction Stop } else { Find-LatestMobileZip }
   if (-not $zip) { throw 'Không tìm thấy ZIP tach_dai_mobile*.zip trong Downloads/Desktop/OneDrive\Desktop.' }
@@ -192,14 +246,20 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Không đọc được staged diff.' }
     if ($staged.Count -gt 0) {
       Invoke-Git -Arguments @('commit', '-m', "Update Tách Đài Mobile v$version")
+    } else {
+      Write-Host 'ZIP không tạo thay đổi Git.' -ForegroundColor Yellow
+    }
+
+    $shouldPush = $checkpointCreated -or $staged.Count -gt 0
+    if ($shouldPush) {
       Invoke-Git -Arguments @('push', 'origin', 'main')
     } else {
-      Write-Host 'ZIP không tạo thay đổi Git; bỏ qua commit/push.' -ForegroundColor Yellow
+      Write-Host 'Không có checkpoint hoặc thay đổi ZIP mới; bỏ qua push.' -ForegroundColor Yellow
     }
 
     & gh run list --repo wilson86/tach-dai-mobile --limit 5
     if ($LASTEXITCODE -ne 0) { throw 'Không đọc được GitHub Actions runs.' }
-    if ($staged.Count -gt 0) {
+    if ($shouldPush) {
       Start-Sleep -Seconds 2
       $runJson = & gh run list --repo wilson86/tach-dai-mobile --workflow deploy-pages.yml --limit 1 --json databaseId,status
       if ($LASTEXITCODE -ne 0) { throw 'Không tìm thấy GitHub Pages workflow.' }
@@ -215,14 +275,18 @@ try {
     if ($liveJson -is [byte[]]) { $liveJson = [Text.Encoding]::UTF8.GetString($liveJson) }
     $liveVersion = ($liveJson | ConvertFrom-Json).version
     if ($liveVersion -ne $version) { throw "Version online ($liveVersion) không khớp local ($version)." }
+    $finalStatus = @(Get-GitPorcelain)
+    if ($finalStatus.Count -gt 0) { throw 'Working tree không sạch sau khi sync.' }
 
     Write-Host ''
     Write-Host '================================'
     Write-Host 'STATUS: PASS' -ForegroundColor Green
     Write-Host "VERSION: $version"
     Write-Host 'REGRESSION: PASS'
+    Write-Host ("DIRTY AUTO CHECKPOINT: " + $(if ($checkpointCreated) { 'PASS' } else { 'NOT NEEDED' }))
     Write-Host 'GITHUB PUSH: PASS'
     Write-Host 'PAGES DEPLOY: PASS'
+    Write-Host 'WORKTREE CLEAN: PASS'
     Write-Host "MOBILE: $mobileUrl"
     Write-Host '================================'
   } finally {

@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.3</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.4</span></div>
 
   <div class="card">
     <div class="controls">
@@ -222,9 +222,26 @@ function loadSettings(){
 function stripInvisible(s){
   return (s||"").replace(/[\u2068\u2069\u200e\u200f\ufeff]/g,"");
 }
+const FULL_STATION_INPUT_ALIASES=[["thanh pho ho chi minh","tp"],["thành phố hồ chí minh","tp"],["thua thien hue","hue"],["thừa thiên huế","hue"],["ho chi minh","tp"],["hồ chí minh","tp"],["binh duong","bd"],["binh phuoc","bp"],["binh thuan","bt"],["bình dương","bd"],["bình phước","bp"],["bình thuận","bt"],["kien giang","kg"],["kiên giang","kg"],["ninh thuan","nt"],["ninh thuận","nt"],["quang binh","qb"],["quang ngai","qn"],["quảng bình","qb"],["quảng ngãi","qn"],["tien giang","tg"],["tiền giang","tg"],["binh dinh","bd"],["bình định","bd"],["dong thap","dt"],["hau giang","hg"],["hậu giang","hg"],["khanh hoa","kh"],["khánh hòa","kh"],["quang nam","qn"],["quang tri","qt"],["quảng nam","qn"],["quảng trị","qt"],["soc trang","st"],["sóc trăng","st"],["vinh long","vl"],["vĩnh long","vl"],["đồng tháp","dt"],["an giang","ag"],["bac lieu","bli"],["bạc liêu","bli"],["dak nong","dno"],["dong nai","dn"],["tay ninh","tn"],["tra vinh","tv"],["trà vinh","tv"],["tây ninh","tn"],["vung tau","vt"],["vũng tàu","vt"],["đắk nông","dno"],["đồng nai","dn"],["ben tre","bt"],["bến tre","bt"],["can tho","ct"],["cần thơ","ct"],["da nang","dn"],["dak lak","dl"],["gia lai","gl"],["kon tum","kt"],["long an","la"],["phu yen","py"],["phú yên","py"],["đà nẵng","dn"],["đắk lắk","dl"],["ca mau","cm"],["cà mau","cm"],["da lat","dl"],["tp hcm","tp"],["tp.hcm","tp"],["đà lạt","dl"],["tphcm","tp"],["hue","hue"],["huế","hue"]];
+
+function escapeRegExp(s){
+  return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+}
+function normalizeFullStationNames(s){
+  for(const [phrase,code] of FULL_STATION_INPUT_ALIASES){
+    const pat=phrase.split(/\s+/).map(escapeRegExp).join("\\s+");
+    const re=new RegExp(`(^|\\s)${pat}(?=\\s|$)`,"gu");
+    s=s.replace(re,`$1${code}`);
+  }
+  return s;
+}
+
 function normalizeInput(s){
   s=stripInvisible(s).toLowerCase().trim();
-  s=s.replace(/(^|\s)\+(?=[a-zA-ZÀ-ỹđĐ])/gu,"$1");
+  // '+' giữa các đài chỉ là dấu phân cách.
+  s=s.replace(/\s*\+\s*/gu," ");
+  // Tên đài viết nguyên, có dấu hoặc không dấu -> mã chuẩn.
+  s=normalizeFullStationNames(s);
   s=s.replace(/(^|\s)dna(?=\s|$)/gu,"$1dn");
   s=s.replace(/(^|\s)hu(?=\s|$)/gu,"$1hue");
   s=s.replace(/(^|\s)bl(?=\s|$)/gu,"$1bli");
@@ -805,7 +822,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.3";
+const APP_VERSION = "2.0.4";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
