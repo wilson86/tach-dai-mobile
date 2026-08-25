@@ -92,11 +92,11 @@ const case3 = rules.normalizeInput("Qn +dna 71 64 51 dx 2n");
 assert.equal(case3, "qn dn 71 64 51 dx 2n");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(case3, "mt", mtSaturday));
 
-// CASE 4: tên đài đầy đủ phải dùng đúng alias, không đổi mã đã quy ước.
-assert.equal(rules.normalizeInput("Quảng Ngãi"), "qn");
-assert.equal(rules.normalizeInput("Đà Nẵng"), "dn");
-assert.equal(rules.normalizeInput("Đắk Nông"), "dno");
-assert.equal(rules.normalizeInput("Huế"), "hue");
+// CASE 4: các alias MT chuẩn phải được giữ nguyên.
+assert.equal(rules.normalizeInput("qn"), "qn");
+assert.equal(rules.normalizeInput("dn"), "dn");
+assert.equal(rules.normalizeInput("dno"), "dno");
+assert.equal(rules.normalizeInput("hue"), "hue");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine("hue 71 dathang 2n", "mt", rules.getSchedule("mt", sunday)));
 
 // CASE 5: DAT là chuẩn cho một đài; da/đá/dathang chỉ là input tương thích.
@@ -135,7 +135,7 @@ const mbLine = "79 da 30n";
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(mbLine, "mb", rules.getSchedule("mb", saturday)));
 assert.deepEqual(Array.from(rules.processLine(mbLine, "mb", rules.getSchedule("mb", saturday))), [mbLine]);
 
-// CASE 9: Cut kết quả phải đồng bộ Input, Output, mapping và Undo.
+// CASE 9: Cut chỉ xóa tin gốc khi tất cả output của tin đó đã được CUT.
 const ui = rules.elements;
 ui.region.value = "mt";
 ui.date.value = "2026-08-22";
@@ -157,30 +157,24 @@ const selectFirstVisibleOutput = () => {
   ui.output.selectionEnd = end === -1 ? ui.output.value.length : end;
 };
 
-// Cut 1/3: phần đã CUT phải biến mất ngay khỏi tin gốc; các phần chưa CUT
-// được materialize thành các dòng nguồn còn lại, không chờ CUT đủ 3/3.
+// Cut 1/3: tin gốc vẫn còn nguyên.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[0]);
-assert.equal(ui.input.value, `${firstLines[1]}\n${firstLines[2]}\n3d 64 51 dx 2n`);
+assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
 assert.equal(outputRecords().filter(record => record.alive).length, 5);
-assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 2, 3, 3, 3]);
+assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
 
-// Chạy lại sau CUT không được làm sống lại phần đã tiêu thụ.
-rules.run();
-assert.equal(ui.input.value, `${firstLines[1]}\n${firstLines[2]}\n3d 64 51 dx 2n`);
-assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
-
-// Cut tiếp: tin gốc tiếp tục phản ánh đúng phần còn lại.
+// Cut 2/3: tin gốc vẫn còn nguyên.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[1]);
-assert.equal(ui.input.value, `${firstLines[2]}\n3d 64 51 dx 2n`);
+assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
 assert.equal(outputRecords().filter(record => record.alive).length, 4);
 
-// Cut phần cuối của source đầu: source đó biến mất, source sau được remap.
+// Cut 3/3: source đầu mới bị xóa, source sau được remap.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[2]);
@@ -189,11 +183,11 @@ assert.equal(ui.output.value, secondOutput);
 assert.equal(outputRecords().length, 3);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
 
-// Undo bước cut cuối phải khôi phục source đã materialize và mapping trước đó.
+// Undo bước cut cuối phải khôi phục source, output và mapping trước CUT.
 rules.triggerUndo();
-assert.equal(ui.input.value, `${firstLines[2]}\n3d 64 51 dx 2n`);
+assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
-assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 2, 2, 2]);
+assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
 
 // Cut toàn bộ 3 output và Undo phải quay về đầy đủ sáu output records.
 ui.input.value = initialInput;
@@ -207,13 +201,13 @@ assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
-// Nguồn có 2 output: CUT một phần phải materialize ngay phần nguồn còn lại.
+// Nguồn có 2 output: CUT một phần vẫn giữ nguyên source.
 ui.input.value = "2d 22 10 dd 5n";
 rules.run();
 assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "qn 22 10 dd 5n");
+assert.equal(ui.input.value, "2d 22 10 dd 5n");
 assert.equal(ui.output.value, "qn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();

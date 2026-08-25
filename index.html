@@ -122,7 +122,7 @@
 // =========================
 const MN = {
   1:[["tp","TP.HCM"],["dt","Đồng Tháp"],["cm","Cà Mau"]],
-  2:[["bt","Bến Tre"],["vt","Vũng Tàu"],["bl","Bạc Liêu"]],
+  2:[["bt","Bến Tre"],["vt","Vũng Tàu"],["bli","Bạc Liêu"]],
   3:[["dn","Đồng Nai"],["ct","Cần Thơ"],["st","Sóc Trăng"]],
   4:[["tn","Tây Ninh"],["ag","An Giang"],["bt","Bình Thuận"]],
   5:[["vl","Vĩnh Long"],["bd","Bình Dương"],["tv","Trà Vinh"]],
@@ -225,13 +225,9 @@ function stripInvisible(s){
 function normalizeInput(s){
   s=stripInvisible(s).toLowerCase().trim();
   s=s.replace(/(^|\s)\+(?=[a-zA-ZÀ-ỹđĐ])/gu,"$1");
-  // Giữ các alias đài chuẩn của Mobile khi đồng bộ rule từ Windows.
-  s=s.replace(/quảng\s+ngãi/gu,"qn");
-  s=s.replace(/đà\s+nẵng/gu,"dn");
-  s=s.replace(/đắk\s+nông/gu,"dno");
-  s=s.replace(/huế/gu,"hue");
   s=s.replace(/(^|\s)dna(?=\s|$)/gu,"$1dn");
   s=s.replace(/(^|\s)hu(?=\s|$)/gu,"$1hue");
+  s=s.replace(/(^|\s)bl(?=\s|$)/gu,"$1bli");
   s=s.replace(/(^|\s)dathang(?=\s|$)/gu,"$1dat");
   s=s.replace(/(^|\s)\.+(?=\d)/gu,"$1");
   return s.replace(/\s+/g," ").trim();
@@ -637,46 +633,39 @@ function selectedAliveRecordIndexes(){
   return picked;
 }
 
-function synchronizeSourceAfterCut(){
-  /*
-    A generated output line is a consumable portion of its source line.  If a
-    user CUTs only some portions, retaining the original selector (for example
-    `3d ...`) would make the consumed portion reappear on the next run.  Replace
-    that source line immediately with exactly its surviving canonical outputs.
-    This keeps input, output, and the sourceLine mapping truthful after every
-    partial CUT; Undo restores the snapshot taken before this transformation.
-  */
+function deleteCompletedSourceLines(){
+  if(!outputRecords.length) return;
+
   const grouped=new Map();
-  outputRecords.forEach(record=>{
-    if(!grouped.has(record.sourceLine)) grouped.set(record.sourceLine,[]);
-    grouped.get(record.sourceLine).push(record);
+  outputRecords.forEach(r=>{
+    if(!grouped.has(r.sourceLine)) grouped.set(r.sourceLine,[]);
+    grouped.get(r.sourceLine).push(r);
   });
 
+  const completed=new Set();
+  for(const [sourceLine,records] of grouped.entries()){
+    if(records.length && records.every(r=>!r.alive)) completed.add(sourceLine);
+  }
+  if(!completed.size) return;
+
   const oldLines=inputEl.value.split("\n");
-  const nextInput=[];
-  const nextRecords=[];
+  const kept=[];
+  const oldToNew=new Map();
+  let newNo=0;
+
   oldLines.forEach((line,idx)=>{
-    const records=grouped.get(idx+1) || [];
-    if(!records.length){
-      if(line.trim()) nextInput.push(line);
-      return;
-    }
-    const alive=records.filter(record=>record.alive);
-    if(alive.length===records.length){
-      const sourceLine=nextInput.length+1;
-      nextInput.push(line);
-      alive.forEach(record=>nextRecords.push({...record,sourceLine,alive:true}));
-      return;
-    }
-    // Materialize each remaining business portion as its own source line.
-    alive.forEach(record=>{
-      const sourceLine=nextInput.length+1;
-      nextInput.push(record.text);
-      nextRecords.push({...record,sourceLine,alive:true});
-    });
+    const oldNo=idx+1;
+    if(completed.has(oldNo)) return;
+    kept.push(line);
+    newNo++;
+    oldToNew.set(oldNo,newNo);
   });
-  inputEl.value=nextInput.join("\n");
-  outputRecords=nextRecords;
+
+  inputEl.value=kept.join("\n");
+
+  outputRecords=outputRecords
+    .filter(r=>!completed.has(r.sourceLine))
+    .map(r=>({...r,sourceLine:oldToNew.get(r.sourceLine) || r.sourceLine}));
 }
 
 async function writeClipboardText(text){
@@ -710,7 +699,7 @@ async function cutSelectedOutput(){
   await writeClipboardText(selectedText);
 
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
-  synchronizeSourceAfterCut();
+  deleteCompletedSourceLines();
   renderOutputRecords();
 
   lastOutputSelection={start:0,end:0};

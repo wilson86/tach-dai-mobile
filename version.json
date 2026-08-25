@@ -1,5 +1,5 @@
 {
   "version": "2.0.3",
   "updated": "2026-08-25",
-  "notes": "CUT một phần đồng bộ ngay tin gốc: chỉ giữ các phần kết quả chưa CUT; dat vẫn là đá thẳng 1 đài."
+  "notes": "Đổi mã Bạc Liêu từ bl sang bli; vẫn nhận bl cũ và tự chuẩn hóa thành bli."
 }

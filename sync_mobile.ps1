@@ -85,13 +85,28 @@ function Backup-Project {
 }
 
 function Copy-AppFiles {
-  param([Parameter(Mandatory = $true)][string]$AppRoot)
+  param(
+    [Parameter(Mandatory = $true)][string]$AppRoot,
+    [Parameter(Mandatory = $true)][string]$AppVersion
+  )
   $copied = 0
   Get-ChildItem -LiteralPath $AppRoot -File -Recurse | ForEach-Object {
     $relative = $_.FullName.Substring($AppRoot.Length).TrimStart('\', '/')
     $firstSegment = ($relative -split '[\\/]', 2)[0]
     $leaf = Split-Path -Leaf $relative
     if ($protectedRoots -contains $firstSegment -or $protectedFiles -contains $leaf) { return }
+
+    # Không để một ZIP có hướng dẫn cũ ghi đè tài liệu của release hiện tại.
+    # File app vẫn được đồng bộ; chỉ bỏ qua guide khi version ghi trong guide
+    # không khớp với APP_VERSION đã được kiểm tra ở trên.
+    if ($leaf -eq 'HUONG_DAN_PWA.txt') {
+      $guide = Get-Content -Raw -LiteralPath $_.FullName
+      $guideMatch = [regex]::Match($guide, 'PHIÊN BẢN HIỆN TẠI:\s*([^\r\n]+)')
+      if ($guideMatch.Success -and $guideMatch.Groups[1].Value.Trim() -ne $AppVersion) {
+        Write-Host "Bỏ qua HUONG_DAN_PWA.txt: version guide ($($guideMatch.Groups[1].Value.Trim())) không khớp ZIP ($AppVersion)." -ForegroundColor Yellow
+        return
+      }
+    }
 
     $destination = Join-Path $projectRoot $relative
     $destinationDir = Split-Path -Parent $destination
@@ -167,7 +182,7 @@ try {
     Write-Host "ZIP version: $zipVersion" -ForegroundColor Cyan
 
     Backup-Project
-    Copy-AppFiles -AppRoot $appRoot.FullName
+    Copy-AppFiles -AppRoot $appRoot.FullName -AppVersion $zipVersion
     $version = Get-MobileVersion -Root $projectRoot
     Invoke-FullRegression
 

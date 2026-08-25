@@ -1,0 +1,7 @@
+Mobile v2.0.3
+
+- Bạc Liêu canonical code: bli
+- Alias cũ bl vẫn được nhận và tự normalize thành bli
+- Lịch MN thứ Ba: bt, vt, bli
+- Giữ nguyên DAT rule
+- Giữ nguyên Cut: cut đủ toàn bộ output của tin mới xóa tin gốc

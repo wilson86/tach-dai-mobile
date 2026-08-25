@@ -1,4 +1,3 @@
-// Tách cache theo version để CUT source-sync mới không bị che bởi bundle cũ.
 const CACHE_NAME = "tach-dai-mobile-v2.0.3";
 const CORE_ASSETS = [
   "./",
