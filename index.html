@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.5</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.6</span></div>
 
   <div class="card">
     <div class="controls">
@@ -689,7 +689,7 @@ function syncPureInputDeletionNow(){
 }
 
 function scheduleFullInputSync(){
-  if(inputSyncTimer) clearTimeout(inputSyncTimer);
+  if(inputSyncTimer && typeof clearTimeout==="function") clearTimeout(inputSyncTimer);
   inputSyncTimer=setTimeout(()=>{
     inputSyncTimer=null;
     if(inputEl.value.trim()){
@@ -896,9 +896,12 @@ outputEl.addEventListener("keyup",rememberOutputSelection);
 
 // Mobile selection handles có thể thay đổi selection mà không phát "select" ổn định.
 // Ghi nhớ ở selectionchange + trước khi nút Cut lấy focus.
-document.addEventListener("selectionchange",()=>{
-  if(document.activeElement===outputEl) rememberOutputSelection();
-});
+// Browser thật có document.addEventListener; regression Node/vm cũ có thể không stub API này.
+if(typeof document!=="undefined" && typeof document.addEventListener==="function"){
+  document.addEventListener("selectionchange",()=>{
+    if(document.activeElement===outputEl) rememberOutputSelection();
+  });
+}
 $("cutBtn").addEventListener("pointerdown",rememberOutputSelection);
 $("cutBtn").addEventListener("touchstart",rememberOutputSelection,{passive:true});
 $("cutBtn").addEventListener("click",cutSelectedOutput);
@@ -940,7 +943,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.5";
+const APP_VERSION = "2.0.6";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
