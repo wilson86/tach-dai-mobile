@@ -1,5 +1,5 @@
 {
-  "version": "2.0.4",
-  "updated": "2026-08-25",
-  "notes": "Tự hiểu toàn bộ tên đài MN/MT viết nguyên, có dấu hoặc không dấu; ví dụ ben tre->bt, bac lieu->bli, da nang->dn, dak nong->dno."
+  "version": "2.0.5",
+  "updated": "2026-08-26",
+  "notes": "Fix đồng bộ Nhập ↔ Kết quả trên mobile: Backspace/Delete/Cut đều đồng bộ ngay; xóa một tin gốc sẽ xóa đúng KQ của tin đó, giữ trạng thái Cut của các tin còn lại."
 }

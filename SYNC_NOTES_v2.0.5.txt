@@ -1,0 +1,29 @@
+Mobile v2.0.5 - FIX ĐỒNG BỘ NHẬP ↔ KẾT QUẢ
+
+ROOT CAUSE
+- Bản cũ chỉ nghe sự kiện "cut" trong ô Nhập.
+- Backspace/Delete/chọn rồi xóa trên điện thoại không kích hoạt đồng bộ.
+- Vì vậy có lúc đồng bộ, có lúc không tùy cách xóa.
+
+FIX
+1. Mọi thay đổi Input đều bắt bằng sự kiện "input":
+   Backspace / Delete / Cut / paste / bàn phím mobile / undo.
+2. Nếu chỉ xóa một hay nhiều tin gốc:
+   - Kết quả tương ứng biến mất NGAY.
+   - Không rerun mù.
+   - Các output đã Cut của tin còn lại không bị sinh lại.
+3. Nếu sửa số/thêm tin:
+   - tự chạy parser sau debounce 100ms.
+4. Cut Kết quả vẫn giữ rule:
+   - cut 1/3 -> tin gốc còn
+   - cut 2/3 -> tin gốc còn
+   - cut đủ 3/3 -> tin gốc mới xóa
+5. Tăng độ ổn định selection trên Android bằng selectionchange/pointerdown.
+6. Undo lưu và phục hồi cả source mapping.
+
+Giữ nguyên:
+- DAT
+- Bạc Liêu = bli, bl cũ -> bli
+- toàn bộ tên đài full có dấu/không dấu
+- MB chỉ check
+- PWA/offline/auto update

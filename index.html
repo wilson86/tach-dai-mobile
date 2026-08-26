@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.4</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.5</span></div>
 
   <div class="card">
     <div class="controls">
@@ -159,6 +159,12 @@ const resultCard=$("resultCard");
 let undoStack=[];
 let outputRecords=[]; // [{sourceLine,text,alive}]
 let lastOutputSelection={start:0,end:0};
+
+// v2.0.5: source lines dùng để đồng bộ Input <-> Kết quả.
+// Giữ mapping riêng để xóa 1 tin trong Input thì chỉ xóa KQ của tin đó,
+// không rerun mù làm sống lại các output đã Cut trước đó.
+let lastSourceLines=[];
+let inputSyncTimer=null;
 
 function localDateISO(d=new Date()){
   const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,"0"), day=String(d.getDate()).padStart(2,"0");
@@ -589,7 +595,8 @@ function snapshot(){
     output:outputEl.value,
     status:statusEl.textContent,
     cls:statusEl.className,
-    outputRecords:outputRecords.map(r=>({...r}))
+    outputRecords:outputRecords.map(r=>({...r})),
+    sourceLines:lastSourceLines.slice()
   });
   if(undoStack.length>30)undoStack.shift();
 }
@@ -610,11 +617,97 @@ function setStatus(text,type=""){
 
 function resetOutputRecords(){
   outputRecords=[];
+  lastSourceLines=[];
   lastOutputSelection={start:0,end:0};
 }
 
 function renderOutputRecords(){
   outputEl.value=outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n");
+}
+
+function currentPlainInputLines(){
+  // Chỉ dùng fast-path khi không phải Telegram/chat log.
+  // Chat log cần đi qua preprocess đầy đủ bằng run().
+  const raw=inputEl.value;
+  if(looksLikeChatLog(raw)) return null;
+  return raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+}
+
+function mapPureDeletion(oldLines,newLines){
+  // Trả Map old sourceLine -> new sourceLine nếu newLines chỉ là
+  // oldLines bị xóa bớt, giữ nguyên thứ tự/nội dung.
+  // Nếu có sửa nội dung/thêm/reorder thì trả null để fallback run().
+  const oldToNew=new Map();
+  let j=0;
+
+  for(let i=0;i<oldLines.length;i++){
+    if(j<newLines.length && oldLines[i]===newLines[j]){
+      oldToNew.set(i+1,j+1);
+      j++;
+    }
+  }
+  if(j!==newLines.length) return null;
+
+  // Nếu số dòng không giảm thì không phải pure deletion.
+  if(newLines.length>=oldLines.length) return null;
+  return oldToNew;
+}
+
+function syncPureInputDeletionNow(){
+  const newLines=currentPlainInputLines();
+  if(newLines===null) return false;
+
+  if(!newLines.length){
+    outputRecords=[];
+    lastSourceLines=[];
+    renderOutputRecords();
+    lastOutputSelection={start:0,end:0};
+    setStatus("Đã xóa hết tin • Kết quả đã đồng bộ","ok");
+    return true;
+  }
+
+  if(!lastSourceLines.length || !outputRecords.length) return false;
+
+  const oldToNew=mapPureDeletion(lastSourceLines,newLines);
+  if(!oldToNew) return false;
+
+  const oldCount=lastSourceLines.length;
+
+  // Giữ nguyên alive/dead của output các source còn lại.
+  // Nhờ vậy các dòng đã Cut trước đó KHÔNG bị sinh lại.
+  outputRecords=outputRecords
+    .filter(r=>oldToNew.has(r.sourceLine))
+    .map(r=>({...r,sourceLine:oldToNew.get(r.sourceLine)}));
+
+  lastSourceLines=newLines.slice();
+  renderOutputRecords();
+  lastOutputSelection={start:0,end:0};
+
+  const removed=oldCount-newLines.length;
+  setStatus(`Đã đồng bộ ngay • xóa ${removed} tin gốc`,"ok");
+  return true;
+}
+
+function scheduleFullInputSync(){
+  if(inputSyncTimer) clearTimeout(inputSyncTimer);
+  inputSyncTimer=setTimeout(()=>{
+    inputSyncTimer=null;
+    if(inputEl.value.trim()){
+      run();
+    }else{
+      outputEl.value="";
+      resetOutputRecords();
+      setStatus("");
+    }
+  },100);
+}
+
+function syncAfterAnyInputEdit(){
+  // Fast path: xóa nguyên dòng/tin -> KQ đổi ngay, không cần debounce.
+  if(syncPureInputDeletionNow()) return;
+
+  // Các thay đổi khác (sửa số, thêm tin, paste...) chạy parser sau 100ms.
+  scheduleFullInputSync();
 }
 
 function rememberOutputSelection(){
@@ -679,6 +772,7 @@ function deleteCompletedSourceLines(){
   });
 
   inputEl.value=kept.join("\n");
+  lastSourceLines=kept.slice();
 
   outputRecords=outputRecords
     .filter(r=>!completed.has(r.sourceLine))
@@ -715,12 +809,17 @@ async function cutSelectedOutput(){
   const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
   await writeClipboardText(selectedText);
 
+  const inputBefore=inputEl.value;
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
   deleteCompletedSourceLines();
   renderOutputRecords();
 
   lastOutputSelection={start:0,end:0};
-  setStatus(`Đã cắt ${indexes.length} dòng • đã đồng bộ ô Nhập`,"ok");
+  if(inputEl.value!==inputBefore){
+    setStatus(`Đã cắt ${indexes.length} dòng • đã xóa tin gốc tương ứng`,"ok");
+  }else{
+    setStatus(`Đã cắt ${indexes.length} dòng • tin gốc vẫn giữ vì chưa cắt đủ`,"ok");
+  }
 }
 
 function run(){
@@ -750,6 +849,7 @@ function run(){
 
   const lines=clean.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   if(region==="mb"){
+    lastSourceLines=lines.slice();
     outputRecords=lines.map((line,idx)=>({
       sourceLine:idx+1,
       text:normalizeInput(line),
@@ -760,6 +860,7 @@ function run(){
     return;
   }
 
+  lastSourceLines=lines.slice();
   outputRecords=[];
   lines.forEach((line,idx)=>{
     const generated=processLine(line,region,stations);
@@ -792,6 +893,14 @@ outputEl.addEventListener("select",rememberOutputSelection);
 outputEl.addEventListener("mouseup",rememberOutputSelection);
 outputEl.addEventListener("touchend",()=>setTimeout(rememberOutputSelection,0));
 outputEl.addEventListener("keyup",rememberOutputSelection);
+
+// Mobile selection handles có thể thay đổi selection mà không phát "select" ổn định.
+// Ghi nhớ ở selectionchange + trước khi nút Cut lấy focus.
+document.addEventListener("selectionchange",()=>{
+  if(document.activeElement===outputEl) rememberOutputSelection();
+});
+$("cutBtn").addEventListener("pointerdown",rememberOutputSelection);
+$("cutBtn").addEventListener("touchstart",rememberOutputSelection,{passive:true});
 $("cutBtn").addEventListener("click",cutSelectedOutput);
 runBtn.addEventListener("click",run);
 $("copyBtn").addEventListener("click",copyOutput);
@@ -805,6 +914,7 @@ $("undoBtn").addEventListener("click",()=>{
   inputEl.value=s.input;
   outputEl.value=s.output;
   outputRecords=(s.outputRecords||[]).map(r=>({...r}));
+  lastSourceLines=(s.sourceLines||inputEl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)).slice();
   lastOutputSelection={start:0,end:0};
   statusEl.textContent=s.status;
   statusEl.className=s.cls;
@@ -814,15 +924,23 @@ regionEl.addEventListener("change",updateUI);
 dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
 todayEl.addEventListener("change",updateUI);
 
-// Nếu người dùng Cut trong ô nhập trên mobile/desktop, chạy lại sau khi cut xong.
-inputEl.addEventListener("cut",()=>setTimeout(()=>{ if(inputEl.value.trim()) run(); else {outputEl.value="";resetOutputRecords();setStatus("");}},0));
+// v2.0.5: mọi kiểu sửa/xóa Input đều đồng bộ Kết quả.
+// "input" bắt Backspace, Delete, Cut, paste, bàn phím mobile và native undo/redo.
+inputEl.addEventListener("beforeinput",(ev)=>{
+  // Với thao tác xóa, lưu snapshot trước khi browser thay đổi text để nút Hoàn tác
+  // có thể phục hồi cả Input + Kết quả.
+  if(ev && typeof ev.inputType==="string" && ev.inputType.startsWith("delete")){
+    snapshot();
+  }
+});
+inputEl.addEventListener("input",syncAfterAnyInputEdit);
 
 loadSettings();
 
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.4";
+const APP_VERSION = "2.0.5";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
