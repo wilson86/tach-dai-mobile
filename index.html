@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.7</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.8</span></div>
 
   <div class="card">
     <div class="controls">
@@ -100,7 +100,7 @@
       <button id="clearBtn" class="danger">Xóa</button>
     </div>
     <div id="status" class="status"></div>
-    <div class="hint">Nếu dán log chat, tool tự bỏ ngày/giờ và tên người gửi bất kỳ, giữ lại nội dung cược để xử lý.</div>
+    <div class="hint">Chat: bỏ ngày/giờ + tên người gửi; riêng <b>Vinh</b> xóa toàn bộ tin/block. Tên khác chỉ bỏ tên, giữ nội dung.</div>
   </div>
 
   <div id="resultCard" class="card result-card">
@@ -148,10 +148,15 @@ const BET_TYPES=new Set([
 ]);
 const DX_TYPES=new Set(["dx","đx","da","đá","dat","dathang"]);
 const TWO_STATION_DA=new Set(["da","đá","dx","đx"]);
+const IGNORED_SENDERS=new Set(["vinh"]);
 const CHAT_HEADER_RE=/^\[([^\]]+)\]\s*([^:]+?)(?:\s+in\s+reply\s+to\s+[^:]+?)?:\s*(.*)$/i;
 const CHAT_SENDER_TIME_RE=/^([^,\[\]:]{1,80}),\s*\[([^\]]+)\]\s*:?\s*(.*)$/i;
 const CHAT_SENDER_PREFIX_RE=/^([^\d:]{1,80}):\s*(.*)$/u;
 const CHAT_METADATA_ONLY_RE=/^(?:[-–—]\s*)?(?:\[\s*)?(?:\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?(?:[,\s]+(?:\d{1,2}:\d{2}(?:\s*[ap]m)?))?|\d{1,2}:\d{2}(?:\s*[ap]m)?)(?:\s*\])?$/iu;
+const ALL_STATION_CODES=new Set([
+  ...Object.values(MN).flat().map(x=>x[0]),
+  ...Object.values(MT).flat().map(x=>x[0])
+]);
 
 const $=id=>document.getElementById(id);
 const regionEl=$("region"), dateEl=$("date"), todayEl=$("today"), scheduleEl=$("schedule");
@@ -257,14 +262,25 @@ function normalizeInput(s){
   s=s.replace(/(^|\s)\.+(?=\d)/gu,"$1");
   return s.replace(/\s+/g," ").trim();
 }
+function normalizeSenderName(s){
+  return stripInvisible(s).trim().toLowerCase().replace(/\s+/g," ");
+}
+function isSenderPrefix(prefix){
+  prefix=normalizeSenderName(prefix);
+  if(!prefix || /\d/u.test(prefix)) return false;
+  const normalized=normalizeInput(prefix);
+  if(ALL_STATION_CODES.has(normalized)) return false;
+  if(["2d","3d","4d","mn","mt","mb"].includes(normalized)) return false;
+  return true;
+}
 function parseChatEnvelope(line){
   let m=line.match(CHAT_HEADER_RE);
-  if(m) return {body:m[3]||""};
+  if(m) return {sender:m[2]||"",body:m[3]||"",metadata:false};
   m=line.match(CHAT_SENDER_TIME_RE);
-  if(m) return {body:m[3]||""};
+  if(m && isSenderPrefix(m[1])) return {sender:m[1]||"",body:m[3]||"",metadata:false};
   m=line.match(CHAT_SENDER_PREFIX_RE);
-  if(m) return {body:m[2]||""};
-  if(CHAT_METADATA_ONLY_RE.test(line)) return {body:""};
+  if(m && isSenderPrefix(m[1])) return {sender:m[1]||"",body:m[2]||"",metadata:false};
+  if(CHAT_METADATA_ONLY_RE.test(line)) return {sender:null,body:"",metadata:true};
   return null;
 }
 function looksLikeChatLog(text){
@@ -273,21 +289,33 @@ function looksLikeChatLog(text){
 function preprocessChatText(text){
   const lines=(text||"").split(/\r?\n/);
   if(!looksLikeChatLog(text)) return text.trim();
-
   const kept=[];
+  let insideMessage=false;
+  let currentKeep=true;
+
   for(const raw of lines){
     const line=stripInvisible(raw.replace(/\r$/,"")).trim();
     if(!line) continue;
 
-    const envelope=parseChatEnvelope(line);
-    if(envelope){
-      let body=stripInvisible(envelope.body||"").replace(/^\s*>\s*/,"").trim();
+    const env=parseChatEnvelope(line);
+    if(env){
+      if(env.metadata) continue;
+      insideMessage=true;
+      currentKeep=!IGNORED_SENDERS.has(normalizeSenderName(env.sender));
+      if(!currentKeep) continue;
+      let body=stripInvisible(env.body||"").replace(/^\s*>\s*/,"").trim();
       if(body) kept.push(normalizeInput(body));
       continue;
     }
 
-    let cleaned=line.replace(/^\s*>\s*/,"").trim();
-    if(cleaned) kept.push(normalizeInput(cleaned));
+    if(insideMessage){
+      if(!currentKeep) continue;
+      const cleaned=line.replace(/^\s*>\s*/,"").trim();
+      if(cleaned) kept.push(normalizeInput(cleaned));
+      continue;
+    }
+
+    kept.push(normalizeInput(line));
   }
   return kept.join("\n").trim();
 }
@@ -955,7 +983,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.7";
+const APP_VERSION = "2.0.8";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

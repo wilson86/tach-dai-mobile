@@ -136,10 +136,12 @@ expectThrow(() => rules.validateCheckOnlyLine("2d 31 91 dat 5n", "mn", mnMonday)
 expectThrow(() => rules.validateCheckOnlyLine("3d 31 91 dat 5n", "mn", mnMonday), /3d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
 expectThrow(() => rules.validateCheckOnlyLine("4d 31 91 dat 5n", "mn", mnMonday), /4d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
 
-// CASE 6 v57: bỏ metadata + tên người gửi bất kỳ, nhưng GIỮ nội dung cược.
+// CASE 6 SHARED: tên khác bỏ tên/giữ nội dung; Vinh xóa cả block.
 const chat = `[8/23/2026 5:31 PM] Hiền: 20 89 98 da 2n
 79 58 97 da 2n
-[8/23/2026 5:32 PM] Vinh: 25 52 50 da 2n
+[8/23/2026 5:32 PM] Vinh: 1
+88 99 b 5n
+[8/23/2026 5:33 PM] Hiền: 25 52 50 da 2n
 Trúc Thái:
 Dna +qn 17 b30n
 Quýt: 2d 51 dd 60n`;
@@ -147,10 +149,20 @@ assert.equal(
   rules.preprocessChatText(chat),
   "20 89 98 da 2n\n79 58 97 da 2n\n25 52 50 da 2n\ndn qn 17 b30n\n2d 51 dd 60n"
 );
+assert.equal(rules.preprocessChatText(`Hiền:
+20 89 98 da 2n`), "20 89 98 da 2n");
+assert.equal(rules.preprocessChatText(`Hiền: 20 89 98 da 2n`), "20 89 98 da 2n");
+assert.equal(rules.preprocessChatText(`Vinh:
+20 89 98 da 2n
+79 58 97 da 2n`), "");
 assert.equal(
   rules.preprocessChatText(`Hiền, [8/23/2026 5:31 PM]
-20 89 b 2n`),
-  "20 89 b 2n"
+20 89 b 2n
+Vinh, [8/23/2026 5:32 PM]
+11 22 b 3n
+Quýt, [8/23/2026 5:33 PM]
+30 40 dd 4n`),
+  "20 89 b 2n\n30 40 dd 4n"
 );
 
 // CASE 7: MB thiếu loại cược.
@@ -272,7 +284,7 @@ assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
 console.log("CORE RULES: PASS");
 console.log("DAT RULE: PASS");
 console.log("ALIASES: PASS");
-console.log("CHAT FILTER v57: PASS");
+console.log("CHAT FILTER + VINH DROP: PASS");
 console.log("EXPLICIT 2-STATION v57: PASS");
 console.log("MB CHECK: PASS");
 console.log("CUT SYNC: PASS");

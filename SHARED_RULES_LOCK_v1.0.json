@@ -1,0 +1,30 @@
+{
+  "schema": "KTS_SHARED_RULES_V1",
+  "shared": {
+    "chat": {
+      "normal_sender": "strip sender name, keep message content",
+      "vinh": "drop whole sender block including continuation lines",
+      "metadata": "drop date/time metadata"
+    },
+    "aliases": [
+      "dna->dn",
+      "bl->bli",
+      "dno",
+      "qn",
+      "hue",
+      "full station names"
+    ],
+    "validation": [
+      "duplicates",
+      "region",
+      "MB check-only",
+      "DAT/DX syntax"
+    ],
+    "sync_ui": [
+      "cut",
+      "undo",
+      "input-output mapping"
+    ]
+  },
+  "only_difference": "output split engine"
+}
