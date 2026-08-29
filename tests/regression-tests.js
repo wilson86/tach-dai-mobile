@@ -92,6 +92,25 @@ const case3 = rules.normalizeInput("Qn +dna 71 64 51 dx 2n");
 assert.equal(case3, "qn dn 71 64 51 dx 2n");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(case3, "mt", mtSaturday));
 
+// CASE 3B v57: hai đài cụ thể cược thường bung 2 đài, KHÔNG chia tiền ngang.
+// DX/DA vẫn giữ nguyên cặp đài cụ thể.
+assert.deepEqual(
+  Array.from(rules.processLine("Dna +qn 17 b30n", "mt", mtSaturday)),
+  ["dn 17 b30n", "qn 17 b30n"]
+);
+assert.deepEqual(
+  Array.from(rules.processLine("Dna +qn 17 dx 2n", "mt", mtSaturday)),
+  ["dn qn 17 dx 2n"]
+);
+assert.deepEqual(
+  Array.from(rules.processLine("Dna +qn 17 da 2n", "mt", mtSaturday)),
+  ["dn qn 17 da 2n"]
+);
+assert.deepEqual(
+  Array.from(rules.processLine("Dna +qn 17 b30n da 2n", "mt", mtSaturday)),
+  ["dn 17 b30n", "qn 17 b30n", "dn qn 17 da 2n"]
+);
+
 // CASE 4: alias chuẩn và tên đài đầy đủ có dấu/không dấu đều về mã chuẩn.
 assert.equal(rules.normalizeInput("qn dn dno hue"), "qn dn dno hue");
 assert.equal(rules.normalizeInput("ben tre bac lieu da nang dak nong quang ngai"), "bt bli dn dno qn");
@@ -117,14 +136,21 @@ expectThrow(() => rules.validateCheckOnlyLine("2d 31 91 dat 5n", "mn", mnMonday)
 expectThrow(() => rules.validateCheckOnlyLine("3d 31 91 dat 5n", "mn", mnMonday), /3d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
 expectThrow(() => rules.validateCheckOnlyLine("4d 31 91 dat 5n", "mn", mnMonday), /4d phải dùng 'da' hoặc 'dx', không dùng 'dat'/);
 
-// CASE 6: lọc chat, bỏ toàn bộ tin của Vinh và header ngày/giờ/người gửi.
+// CASE 6 v57: bỏ metadata + tên người gửi bất kỳ, nhưng GIỮ nội dung cược.
 const chat = `[8/23/2026 5:31 PM] Hiền: 20 89 98 da 2n
 79 58 97 da 2n
-[8/23/2026 5:32 PM] Vinh: 1
-[8/23/2026 5:32 PM] Hiền: 25 52 50 da 2n`;
+[8/23/2026 5:32 PM] Vinh: 25 52 50 da 2n
+Trúc Thái:
+Dna +qn 17 b30n
+Quýt: 2d 51 dd 60n`;
 assert.equal(
   rules.preprocessChatText(chat),
-  "20 89 98 da 2n\n79 58 97 da 2n\n25 52 50 da 2n"
+  "20 89 98 da 2n\n79 58 97 da 2n\n25 52 50 da 2n\ndn qn 17 b30n\n2d 51 dd 60n"
+);
+assert.equal(
+  rules.preprocessChatText(`Hiền, [8/23/2026 5:31 PM]
+20 89 b 2n`),
+  "20 89 b 2n"
 );
 
 // CASE 7: MB thiếu loại cược.
@@ -246,7 +272,8 @@ assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
 console.log("CORE RULES: PASS");
 console.log("DAT RULE: PASS");
 console.log("ALIASES: PASS");
-console.log("CHAT FILTER: PASS");
+console.log("CHAT FILTER v57: PASS");
+console.log("EXPLICIT 2-STATION v57: PASS");
 console.log("MB CHECK: PASS");
 console.log("CUT SYNC: PASS");
 console.log("CUT 1/3: PASS");

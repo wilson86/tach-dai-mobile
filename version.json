@@ -1,5 +1,5 @@
 {
-  "version": "2.0.6",
-  "updated": "2026-08-26",
-  "notes": "Regression compatibility fix: guard document.addEventListener for Node/vm harness; giữ nguyên live sync Nhập-Kết quả, Android selection, DAT/BLI/full station names."
+  "version": "2.0.7",
+  "updated": "2026-08-29",
+  "notes": "Port rule Tách Miền desktop v57: 2 đài cụ thể cược thường bung thành 2 đài không chia tiền; DX/DA giữ nguyên cặp; bỏ metadata và tên người gửi bất kỳ khi paste chat nhưng giữ nội dung cược. Không áp rule Tách Đài Ngang."
 }

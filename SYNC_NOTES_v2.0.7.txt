@@ -1,0 +1,12 @@
+TACH DAI MOBILE v2.0.7 - PORT RULE TACH MIEN DESKTOP v57
+
+- Hai dai cu the + cuoc thuong: bung thanh 2 dong, GIU NGUYEN amount.
+  Vi du: Dna +qn 17 b30n
+  -> dn 17 b30n
+  -> qn 17 b30n
+
+- Hai dai cu the + DX/DA: giu nguyen cap dai.
+- 1 dai DA -> DAT giu nhu cu.
+- BLI / dna->dn / dno / qn / hue / full ten dai giu nhu cu.
+- Paste chat: bo ngay gio + ten nguoi gui bat ky; GIU noi dung cuoc.
+- TUYET DOI KHONG dua rule chia ngang vao tool Tach Mien Mobile.

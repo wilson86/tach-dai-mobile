@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.6</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.7</span></div>
 
   <div class="card">
     <div class="controls">
@@ -100,7 +100,7 @@
       <button id="clearBtn" class="danger">Xóa</button>
     </div>
     <div id="status" class="status"></div>
-    <div class="hint">Nếu dán log chat, tool tự bỏ ngày/giờ, tên người gửi và toàn bộ tin của Vinh trước khi xử lý.</div>
+    <div class="hint">Nếu dán log chat, tool tự bỏ ngày/giờ và tên người gửi bất kỳ, giữ lại nội dung cược để xử lý.</div>
   </div>
 
   <div id="resultCard" class="card result-card">
@@ -148,8 +148,10 @@ const BET_TYPES=new Set([
 ]);
 const DX_TYPES=new Set(["dx","đx","da","đá","dat","dathang"]);
 const TWO_STATION_DA=new Set(["da","đá","dx","đx"]);
-const IGNORED_SENDERS=new Set(["vinh"]);
 const CHAT_HEADER_RE=/^\[([^\]]+)\]\s*([^:]+?)(?:\s+in\s+reply\s+to\s+[^:]+?)?:\s*(.*)$/i;
+const CHAT_SENDER_TIME_RE=/^([^,\[\]:]{1,80}),\s*\[([^\]]+)\]\s*:?\s*(.*)$/i;
+const CHAT_SENDER_PREFIX_RE=/^([^\d:]{1,80}):\s*(.*)$/u;
+const CHAT_METADATA_ONLY_RE=/^(?:[-–—]\s*)?(?:\[\s*)?(?:\d{1,2}[\/.-]\d{1,2}(?:[\/.-]\d{2,4})?(?:[,\s]+(?:\d{1,2}:\d{2}(?:\s*[ap]m)?))?|\d{1,2}:\d{2}(?:\s*[ap]m)?)(?:\s*\])?$/iu;
 
 const $=id=>document.getElementById(id);
 const regionEl=$("region"), dateEl=$("date"), todayEl=$("today"), scheduleEl=$("schedule");
@@ -255,42 +257,37 @@ function normalizeInput(s){
   s=s.replace(/(^|\s)\.+(?=\d)/gu,"$1");
   return s.replace(/\s+/g," ").trim();
 }
-function normalizeSenderName(s){
-  return stripInvisible(s).trim().toLowerCase().replace(/\s+/g," ");
+function parseChatEnvelope(line){
+  let m=line.match(CHAT_HEADER_RE);
+  if(m) return {body:m[3]||""};
+  m=line.match(CHAT_SENDER_TIME_RE);
+  if(m) return {body:m[3]||""};
+  m=line.match(CHAT_SENDER_PREFIX_RE);
+  if(m) return {body:m[2]||""};
+  if(CHAT_METADATA_ONLY_RE.test(line)) return {body:""};
+  return null;
 }
 function looksLikeChatLog(text){
-  return (text||"").split(/\r?\n/).some(raw=>CHAT_HEADER_RE.test(stripInvisible(raw).trim()));
+  return (text||"").split(/\r?\n/).some(raw=>!!parseChatEnvelope(stripInvisible(raw).trim()));
 }
 function preprocessChatText(text){
   const lines=(text||"").split(/\r?\n/);
   if(!looksLikeChatLog(text)) return text.trim();
 
   const kept=[];
-  let currentSender=null,currentKeep=false;
-
   for(const raw of lines){
-    const line=raw.replace(/\r$/,"");
-    const matchLine=stripInvisible(line).trim();
-    const m=matchLine.match(CHAT_HEADER_RE);
-    if(m){
-      currentSender=normalizeSenderName(m[2]);
-      currentKeep=!IGNORED_SENDERS.has(currentSender);
-      let body=(m[3]||"").trim();
-      if(currentKeep && body){
-        body=stripInvisible(body).replace(/^\s*>\s*/,"").trim();
-        if(body) kept.push(normalizeInput(body));
-      }
+    const line=stripInvisible(raw.replace(/\r$/,"")).trim();
+    if(!line) continue;
+
+    const envelope=parseChatEnvelope(line);
+    if(envelope){
+      let body=stripInvisible(envelope.body||"").replace(/^\s*>\s*/,"").trim();
+      if(body) kept.push(normalizeInput(body));
       continue;
     }
-    if(currentSender!==null){
-      if(!currentKeep) continue;
-      let cleaned=stripInvisible(line).trim();
-      if(!cleaned) continue;
-      cleaned=cleaned.replace(/^\s*>\s*/,"").trim();
-      if(cleaned) kept.push(normalizeInput(cleaned));
-      continue;
-    }
-    if(line.trim()) kept.push(line.trim());
+
+    let cleaned=line.replace(/^\s*>\s*/,"").trim();
+    if(cleaned) kept.push(normalizeInput(cleaned));
   }
   return kept.join("\n").trim();
 }
@@ -555,6 +552,19 @@ function expandChunk(selector,chunk,region,stations){
   if(selector==="4d"&&aux.length>=2) out.push(`${aux[0][0]} ${aux[1][0]} ${chunk}`);
   return out;
 }
+function expandExplicitStationPair(first,second,rest){
+  const chunks=splitBetChunks(rest);
+  if(!chunks.length) return [`${first} ${second} ${rest}`.trim()];
+  const out=[];
+  for(const chunk of chunks){
+    if(betKind(chunk)==="normal"){
+      out.push(`${first} ${chunk}`,`${second} ${chunk}`);
+    }else{
+      out.push(`${first} ${second} ${chunk}`);
+    }
+  }
+  return out;
+}
 function processLine(line,region,stations){
   let s=normalizeInput(line);
   if(!s)return [];
@@ -570,6 +580,8 @@ function processLine(line,region,stations){
         const rest=normalizeOneStationDaPayload(toks.slice(1).join(" "));
         return [`${toks[0]} ${rest}`.trim()];
       }
+      const rest=toks.slice(2).join(" ").trim();
+      return expandExplicitStationPair(toks[0],toks[1],rest);
     }
     return [s];
   }
@@ -943,7 +955,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.6";
+const APP_VERSION = "2.0.7";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
