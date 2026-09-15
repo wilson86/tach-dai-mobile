@@ -1,11 +1,12 @@
 // Bump for every business-rule release.  A navigation is network-first, and
 // this distinct cache name prevents an installed PWA from retaining a prior
 // topology engine after activation.
-const CACHE_NAME = "tach-dai-mobile-v2.0.11";
+const CACHE_NAME = "tach-dai-mobile-v2.0.18";
 const CORE_ASSETS = [
   "./",
   "./index.html",
   "./station_calendar.generated.js",
+  "./business_engine.generated.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png"
@@ -39,7 +40,7 @@ self.addEventListener("fetch", event => {
   if (url.pathname.endsWith("/version.json") || url.pathname.endsWith("version.json")) {
     event.respondWith(
       fetch(req, { cache: "no-store" }).catch(() =>
-        new Response(JSON.stringify({version:"2.0.11"}), {
+        new Response(JSON.stringify({version:"2.0.18"}), {
           headers: { "Content-Type": "application/json" }
         })
       )

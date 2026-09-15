@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.11</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.18</span></div>
 
   <div class="card">
     <div class="controls">
@@ -122,6 +122,7 @@
 </div>
 
 <script src="./station_calendar.generated.js"></script>
+<script src="./business_engine.generated.js"></script>
 <script>
 "use strict";
 
@@ -131,13 +132,9 @@ if(!globalThis.KTS_STATION_CALENDAR) throw new Error("CALENDAR_AUTHORITY_MISSING
 const {MN,MT}=globalThis.KTS_STATION_CALENDAR;
 
 const REGION_LABEL={mn:"Miền Nam",mt:"Miền Trung",mb:"Miền Bắc"};
-const BET_TYPES=new Set([
-  "b","bao","dd","đđ","xc","x",
-  "dx","đx","da","đá","dat","dathang",
-  "d","duoi","đuôi","dau","đầu","lo","lô","bl"
-]);
-const DX_TYPES=new Set(["dx","đx","da","đá","dat","dathang"]);
-const TWO_STATION_DA=new Set(["da","đá","dx","đx"]);
+const BET_TYPES=new Set(KTS_BUSINESS_ENGINE.selectorGroups.bet_tokens);
+const DX_TYPES=new Set(KTS_BUSINESS_ENGINE.selectorGroups.dx_tokens);
+const TWO_STATION_DA=new Set(KTS_BUSINESS_ENGINE.selectorGroups.two_station_da_tokens);
 const IGNORED_SENDERS=new Set(["vinh"]);
 const CHAT_HEADER_RE=/^\[([^\]]+)\]\s*([^:]+?)(?:\s+in\s+reply\s+to\s+[^:]+?)?:\s*(.*)$/i;
 const CHAT_SENDER_TIME_RE=/^([^,\[\]:]{1,80}),\s*\[([^\]]+)\]\s*:?\s*(.*)$/i;
@@ -226,7 +223,7 @@ function loadSettings(){
 function stripInvisible(s){
   return (s||"").replace(/[\u2068\u2069\u200e\u200f\ufeff]/g,"");
 }
-const FULL_STATION_INPUT_ALIASES=[["thanh pho ho chi minh","tp"],["thành phố hồ chí minh","tp"],["thua thien hue","hue"],["thừa thiên huế","hue"],["ho chi minh","tp"],["hồ chí minh","tp"],["binh duong","bd"],["binh phuoc","bp"],["binh thuan","bt"],["bình dương","bd"],["bình phước","bp"],["bình thuận","bt"],["kien giang","kg"],["kiên giang","kg"],["ninh thuan","nt"],["ninh thuận","nt"],["quang binh","qb"],["quang ngai","qn"],["quảng bình","qb"],["quảng ngãi","qn"],["tien giang","tg"],["tiền giang","tg"],["binh dinh","bd"],["bình định","bd"],["dong thap","dt"],["hau giang","hg"],["hậu giang","hg"],["khanh hoa","kh"],["khánh hòa","kh"],["quang nam","qn"],["quang tri","qt"],["quảng nam","qn"],["quảng trị","qt"],["soc trang","st"],["sóc trăng","st"],["vinh long","vl"],["vĩnh long","vl"],["đồng tháp","dt"],["an giang","ag"],["bac lieu","bli"],["bạc liêu","bli"],["dak nong","dno"],["dong nai","dn"],["tay ninh","tn"],["tra vinh","tv"],["trà vinh","tv"],["tây ninh","tn"],["vung tau","vt"],["vũng tàu","vt"],["đắk nông","dno"],["đồng nai","dn"],["ben tre","bt"],["bến tre","bt"],["can tho","ct"],["cần thơ","ct"],["da nang","dn"],["dak lak","dl"],["gia lai","gl"],["kon tum","kt"],["long an","la"],["phu yen","py"],["phú yên","py"],["đà nẵng","dn"],["đắk lắk","dl"],["ca mau","cm"],["cà mau","cm"],["da lat","dl"],["tp hcm","tp"],["tp.hcm","tp"],["đà lạt","dl"],["tphcm","tp"],["hue","hue"],["huế","hue"]];
+const FULL_STATION_INPUT_ALIASES=KTS_BUSINESS_ENGINE.stationAliases;
 
 function escapeRegExp(s){
   return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
@@ -339,6 +336,7 @@ function normalizeBetGrammarSeparators(s){
 
 function normalizeInput(s){
   s=stripInvisible(s).toLowerCase().trim();
+  s=KTS_BUSINESS_ENGINE.normalizeCompactTicket(s);
   // `2 đài phụ` is a relative schedule selector, never a station alias.
   // Normalize it before punctuation and number-group parsing so `2dphu.92`
   // cannot become an invalid station token.
@@ -439,42 +437,12 @@ function preprocessChatText(text){
   return kept.join("\n").trim();
 }
 
-function isNumberToken(tok){ return /^\d{1,4}$/.test(tok); }
-function isMoneyToken(tok){ return /^\d+(?:[.,]\d+)?[a-zA-ZđĐ]?$/.test(tok); }
+function isNumberToken(tok){ return KTS_BUSINESS_ENGINE.isNumberToken(tok); }
+function isMoneyToken(tok){ return KTS_BUSINESS_ENGINE.isMoneyToken(tok); }
 function isBetType(tok){ return BET_TYPES.has(tok); }
-function splitCompactBetToken(tok){
-  const types=[...BET_TYPES].sort((a,b)=>b.length-a.length);
-  for(const bet of types){
-    if(tok.startsWith(bet)&&tok.length>bet.length){
-      const money=tok.slice(bet.length);
-      if(isMoneyToken(money)) return [bet,money];
-    }
-  }
-  return null;
-}
+function splitCompactBetToken(tok){ return KTS_BUSINESS_ENGINE.splitCompactBetToken(tok); }
 
-function parseBetPayloadAst(rest){
-  const toks=String(rest||"").split(/\s+/).filter(Boolean),groups=[]; let i=0;
-  while(i<toks.length){
-    const numbers=[];
-    while(i<toks.length&&isNumberToken(toks[i])&&!isBetType(toks[i])) numbers.push(toks[i++]);
-    if(!numbers.length) throw new Error(`phải có số đánh trước '${toks[i]||""}'`);
-    const seen=new Set(),dups=[]; for(const n of numbers){if(seen.has(n)&&!dups.includes(n))dups.push(n);seen.add(n);}
-    if(dups.length) throw new Error(dups.length===1?`trùng số ${dups[0]} trong cùng cú pháp`:`trùng các số ${dups.join(", ")} trong cùng cú pháp`);
-    const bets=[];
-    while(i<toks.length){
-      if(isNumberToken(toks[i])&&!isBetType(toks[i])) break;
-      const compact=splitCompactBetToken(toks[i]); let selector,money;
-      if(compact){[selector,money]=compact;i++;}
-      else if(isBetType(toks[i])){selector=toks[i++];money=toks[i++];if(!money)throw new Error(`thiếu tiền sau loại cược '${selector}'`);}
-      else if(isMoneyToken(toks[i])) throw new Error(`thiếu loại cược trước '${toks[i]}'`);
-      else throw new Error(`không nhận ra cú pháp '${toks[i]}'`);
-      if(isBetType(money)||splitCompactBetToken(money)||!isMoneyToken(money)) throw new Error(`tiền cược '${money}' không hợp lệ`);
-      bets.push({selector,amount:money});
-    }
-    if(!bets.length) throw new Error("thiếu loại cược sau số"); groups.push({numbers,bets});
-  } return groups;
-}
+function parseBetPayloadAst(rest){ return KTS_BUSINESS_ENGINE.parseBetPayloadAst(rest); }
 
 function validateBetPayload(rest){
   parseBetPayloadAst(rest); return true;
@@ -714,27 +682,10 @@ function formatAmount(value,suffix="",comma=false){
   if(comma) out=out.replace(".",",");
   return out+suffix;
 }
-function moneyHalfUnits(tok){
-  const m=String(tok||"").match(/^(\d+)(?:[.,](\d+))?([a-zA-ZđĐ]?)$/u);
-  if(!m) throw new Error("SỐ TIỀN CHIA CHỈ ĐƯỢC PHÉP BƯỚC 0.5");
-  const whole=Number(m[1]),fraction=m[2]||"";
-  if(!Number.isSafeInteger(whole)||(!/^0*$/u.test(fraction)&&!/^50*$/u.test(fraction))){
-    throw new Error("SỐ TIỀN CHIA CHỈ ĐƯỢC PHÉP BƯỚC 0.5");
-  }
-  return {halfUnits:whole*2+(fraction&&!/^0*$/u.test(fraction)?1:0),suffix:m[3],comma:String(tok).includes(",")};
-}
-function formatHalfUnits(halfUnits,suffix="",comma=false){
-  const out=halfUnits%2===0?String(halfUnits/2):`${Math.floor(halfUnits/2)}.5`;
-  return (comma?out.replace(".",","):out)+suffix;
-}
+
+
 function distributeAmountExactly(tok,count){
-  if(!Number.isInteger(count)||count<1) return Array(Math.max(0,count||0)).fill(null);
-  const parsed=moneyHalfUnits(tok);
-  const quotient=Math.floor(parsed.halfUnits/count),remainder=parsed.halfUnits%count;
-  return Array.from({length:count},(_,index)=>{
-    const units=quotient+(index>=count-remainder?1:0);
-    return units>0?formatHalfUnits(units,parsed.suffix,parsed.comma):null;
-  });
+  return KTS_BUSINESS_ENGINE.allocateStake(tok,count,"TACH_3_MIEN");
 }
 function splitChunkMoneyExactly(chunk,count){
   const toks=chunk.split(/\s+/).filter(Boolean),out=Array.from({length:count},()=>[]),hasStake=Array(count).fill(false);
@@ -768,17 +719,13 @@ function mbSplitBranchCount(){
 }
 
 function canonicalMoneySelector(value){
-  const aliases={b:"B",bao:"LO",dd:"DD","đđ":"DD",d:"D",dau:"DAU","đầu":"DAU",duoi:"DUOI","đuôi":"DUOI",lo:"LO","lô":"LO",bl:"LO",da:"DAT","đá":"DAT",dat:"DAT",dathang:"DAT",dx:"DX","đx":"DX",xc:"XC",x:"XC"};
+  const aliases=KTS_BUSINESS_ENGINE.selectorContract.canonical_aliases;
   return aliases[String(value||"").toLowerCase()]||null;
 }
 function moneyStakeOccurrences(text){
-  const occurrences=[],tokens=String(text||"").split(/\s+/).filter(Boolean); let i=0;
-  while(i<tokens.length){
-    const compact=tokens[i].match(/^(dathang|duoi|đuôi|dau|đầu|bao|dat|dx|đx|dd|đđ|xc|da|đá|lo|lô|bl|b|d|x)(\d+(?:[.,]\d+)?)([a-zA-ZđĐ]?)$/iu);
-    if(compact){const key=canonicalMoneySelector(compact[1]); if(key)occurrences.push({key,value:Number(compact[2].replace(",","."))});i++;continue;}
-    const key=canonicalMoneySelector(tokens[i]),money=key&&parseMoneyToken(tokens[i+1]||"");
-    if(key&&money){occurrences.push({key,value:money.value});i+=2;continue;} i++;
-  } return occurrences;
+  return KTS_BUSINESS_ENGINE.extractStakeOccurrences(text).map(({selector,amount})=>({
+    key:selector,value:Number(String(amount).replace(/[a-zA-ZđĐ]+$/u,"").replace(",","."))
+  }));
 }
 function moneyStakes(text){
   const totals={};
@@ -887,16 +834,11 @@ function expandChunk(selector,chunk,region,stations){
   if(stations.length<3) return [`${selector} ${chunk}`];
 
   const n=selector==="3d"?3:4;
-  const selected=stations.slice(0,Math.min(n,stations.length));
+  const topology=KTS_BUSINESS_ENGINE.topology(stations,n);
+  const selected=topology.stations;
   main=selected.slice(0,2); aux=selected.slice(2);
-
-  // Canonical topology is based only on the authoritative schedule order.
-  // Do not use the historic `2d` role shorthand: it loses the primary pair's
-  // identity and let a reversed pair masquerade as a distinct DX exposure.
-  const stationIds=selected.map(station=>station[0]);
-  if(new Set(stationIds).size!==stationIds.length) throw new Error("TOPOLOGY_INTEGRITY_FAILED:DUPLICATE_ACTIVE_STATION");
-  const canonicalPairs=[];
-  for(let i=0;i<stationIds.length;i++) for(let j=i+1;j<stationIds.length;j++) canonicalPairs.push(`${stationIds[i]} ${stationIds[j]}`);
+  const stationIds=topology.codes;
+  const canonicalPairs=topology.pairs.map(pair=>pair.join(" "));
   const prefixes=kind==="normal" ? stationIds : [];
   if(kind!=="normal"){
     // Only literal DX/ĐX is stake-per-unordered-station-pair.  DA/DAT share
@@ -1203,15 +1145,7 @@ async function cutSelectedOutput(){
 }
 
 function resolveExplicitSourceRegion(text){
-  const lines=String(text||"").split(/\r?\n/).filter(x=>x.trim());
-  const first=(lines[0]||"").trim();
-  const m=first.match(/^[\s\-—|_.,]*(mn|mt|mb)(?=$|[\s\-—|_.,])/i);
-  if(!m) return {region:null,text};
-  const region=m[1].toLowerCase();
-  // A bare header belongs to the block, rather than becoming an empty ticket.
-  if(/^[\s\-—|_.,]*(mn|mt|mb)[\s\-—|_.,]*$/i.test(first)) lines.shift();
-  else lines[0]=lines[0].replace(/^[\s\-—|_.,]*(?:mn|mt|mb)[\s\-—|_.,]+/i,"").trim();
-  return {region,text:lines.join("\n")};
+  return KTS_BUSINESS_ENGINE.extractExplicitSourceRegion(text);
 }
 
 function run(){
@@ -1325,7 +1259,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.11";
+const APP_VERSION = "2.0.18";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

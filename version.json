@@ -1,5 +1,6 @@
 {
-  "version": "2.0.11",
+  "version": "2.0.18",
   "updated": "2026-09-14",
-  "notes": "Calendar generated from KTS station_schedule_authority.json; explicit unordered DX pairs and full station coverage."
+  "notes": "Calendar generated from KTS station_schedule_authority.json; explicit unordered DX pairs and full station coverage.",
+  "business_engine_sha256": "2aea573c27fba78f1c98c664a4dc009d071cc3677fc3ee7f1183104ea93f64b4"
 }
