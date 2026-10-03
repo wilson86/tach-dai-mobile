@@ -816,7 +816,14 @@ function expandChunk(selector,chunk,region,stations){
     // existing full-exposure operations; DA/DAT and normal selectors divide.
     if(region==="mb"){
       const explicitDx=/(?:^|\s)(?:dx|đx)(?=\s|\d)/iu.test(chunk);
-      if(kind==="xc" || explicitDx) return [`2d ${chunk}`];
+      // This is a money contract, not a topology heuristic.  `betKind`
+      // intentionally distinguishes only DX vs normal, so derive protected
+      // selectors from the generated canonical MB contract instead.
+      const protectedSelectors=new Set(KTS_BUSINESS_ENGINE.mbMoneyContract.full_money_selectors);
+      const hasFullMoneySelector=parseBetPayloadAst(chunk).some(group=>
+        group.bets.some(bet=>protectedSelectors.has(canonicalMoneySelector(bet.selector)))
+      );
+      if(hasFullMoneySelector || explicitDx) return [`2d ${chunk}`];
       return splitChunkMoneyExactly(chunk,mbSplitBranchCount()).filter(Boolean).map(part=>`2d ${part}`);
     }
     if(main.length<2) return [`2d ${chunk}`];

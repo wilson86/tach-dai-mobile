@@ -7,6 +7,8 @@ const vm = require("node:vm");
 
 const root = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+const calendar = fs.readFileSync(path.join(root, "station_calendar.generated.js"), "utf8");
+const businessEngine = fs.readFileSync(path.join(root, "business_engine.generated.js"), "utf8");
 const sw = fs.readFileSync(path.join(root, "sw.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 const version = JSON.parse(fs.readFileSync(path.join(root, "version.json"), "utf8"));
@@ -55,7 +57,7 @@ function loadRules() {
     }
   };
   vm.createContext(context);
-  vm.runInContext(`${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
+  vm.runInContext(`${calendar}\n${businessEngine}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,distributeAmountExactly,auditMoneyConservation,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),engine:KTS_BUSINESS_ENGINE,elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
   return context.__rules;
 }
 
@@ -68,17 +70,50 @@ function expectThrow(fn, expected) {
 
 async function main() {
 const rules = loadRules();
+const assertHalfUnitSplit=(amount,count)=>{
+  const parts=rules.distributeAmountExactly(`${amount}n`,count).filter(Boolean);
+  const units=parts.map(part=>{const m=part.match(/^(\d+)(?:[.,](\d+))?n$/u);assert.ok(m,`bad split token ${part}`);assert.ok(!m[2]||/^0*$/u.test(m[2])||/^50*$/u.test(m[2]),`quarter/other fraction ${part}`);return Number(m[1])*2+(m[2]&&!/^0*$/u.test(m[2])?1:0);});
+  const source=Number(String(amount).replace(".5",""))*2+(String(amount).endsWith(".5")?1:0); assert.equal(units.reduce((a,b)=>a+b,0),source);
+};
+for(const amount of [1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,9,9.5,10,10.5,61]) for(const count of [2,3,4]) assertHalfUnitSplit(amount,count);
+assert.deepEqual(Array.from(rules.distributeAmountExactly("7n",2)),["3.5n","3.5n"]);
+assert.deepEqual(Array.from(rules.distributeAmountExactly("5.5n",2)),["2.5n","3n"]);
+assert.deepEqual(Array.from(rules.distributeAmountExactly("2.5n",2)),["1n","1.5n"]);
+assert.deepEqual(Array.from(rules.distributeAmountExactly("7n",3)),["2n","2.5n","2.5n"]);
+expectThrow(()=>rules.distributeAmountExactly("5.25n",2),/SỐ TIỀN CHIA CHỈ ĐƯỢC PHÉP BƯỚC 0\.5/u);
 const outputRecords = () => JSON.parse(JSON.stringify(rules.getOutputRecords()));
 const saturday = new Date("2026-08-22T12:00:00");
 const sunday = new Date("2026-08-23T12:00:00");
 const monday = new Date("2026-08-24T12:00:00");
 const mtSaturday = rules.getSchedule("mt", saturday);
 const mnMonday = rules.getSchedule("mn", monday);
+const mnFullAmountMonday = rules.getSchedule("mn", new Date("2026-09-07T12:00:00"));
+const mnFullAmountSaturday = rules.getSchedule("mn", new Date("2026-09-12T12:00:00"));
+
+// P1: normal generic 2d/3d/4d bets are full-stake exposure on every resolved station.
+// This is deliberately unlike Tách Đài Ngang's horizontal amount allocation.
+const mnStationExpansion = rules.getSchedule("mn", new Date("2026-09-05T12:00:00"));
+const full2dLiveMismatch = Array.from(rules.processLine("2d 22 b10n dd30n", "mn", mnStationExpansion));
+assert.deepEqual(full2dLiveMismatch, ["tp 22 b10n dd30n", "la 22 b10n dd30n"]);
+assert.equal(rules.auditMoneyConservation("2d 22 b10n dd30n", full2dLiveMismatch).status, "PASS");
+assert.ok(full2dLiveMismatch.every(x=>/b10n/.test(x)&&/dd30n/.test(x)));
+const full3dB = Array.from(rules.processLine("3d 52 b20n", "mn", mnFullAmountMonday));
+assert.deepEqual(full3dB, ["tp 52 b20n", "dt 52 b20n", "cm 52 b20n"]);
+assert.equal(rules.auditMoneyConservation("3d 52 b20n", full3dB).status, "PASS");
+const full3dMulti = Array.from(rules.processLine("3d 52 b20n dau30n duoi10n", "mn", mnFullAmountMonday));
+assert.deepEqual(full3dMulti, ["tp 52 b20n dau30n duoi10n", "dt 52 b20n dau30n duoi10n", "cm 52 b20n dau30n duoi10n"]);
+assert.equal(rules.auditMoneyConservation("3d 52 b20n dau30n duoi10n", full3dMulti).status, "PASS");
+const full3dOdd = Array.from(rules.processLine("3d 952 b5n", "mn", mnFullAmountMonday));
+assert.deepEqual(full3dOdd, ["tp 952 b5n", "dt 952 b5n", "cm 952 b5n"]);
+assert.equal(rules.auditMoneyConservation("3d 952 b5n", full3dOdd).status, "PASS");
+const full4d = Array.from(rules.processLine("4d 52 b20n dau30n duoi10n", "mn", mnFullAmountSaturday));
+assert.deepEqual(full4d, ["tp 52 b20n dau30n duoi10n", "la 52 b20n dau30n duoi10n", "bp 52 b20n dau30n duoi10n", "hg 52 b20n dau30n duoi10n"]);
+assert.equal(rules.auditMoneyConservation("4d 52 b20n dau30n duoi10n", full4d).status, "PASS");
 
 // CASE 1: MT thứ Bảy, selector 3d và dx.
 assert.deepEqual(
   Array.from(rules.processLine("3d 22 10 dx 5n", "mt", mtSaturday)),
-  ["2d 22 10 dx 5n", "dn dno 22 10 dx 5n", "qn dno 22 10 dx 5n"]
+  ["dn qn 22 10 dx 5n", "dn dno 22 10 dx 5n", "qn dno 22 10 dx 5n"]
 );
 
 // CASE 2: hai nhóm số/cược cùng selector 2d.
@@ -92,7 +127,7 @@ const case3 = rules.normalizeInput("Qn +dna 71 64 51 dx 2n");
 assert.equal(case3, "qn dn 71 64 51 dx 2n");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine(case3, "mt", mtSaturday));
 
-// CASE 3B v57: hai đài cụ thể cược thường bung 2 đài, KHÔNG chia tiền ngang.
+// CASE 3B: two explicit station exposures preserve full normal stake.
 // DX/DA vẫn giữ nguyên cặp đài cụ thể.
 assert.deepEqual(
   Array.from(rules.processLine("Dna +qn 17 b30n", "mt", mtSaturday)),
@@ -111,12 +146,53 @@ assert.deepEqual(
   ["dn 17 b30n", "qn 17 b30n", "dn qn 17 da 2n"]
 );
 
+// Generic station expansion preserves every original selector amount exactly.
+for(const stake of [1,2,3,4,5,7,9,10,61]){
+  const outputs=Array.from(rules.processLine(`2d 51 dd ${stake}n`, "mt", mtSaturday));
+  assert.deepEqual(outputs.map(x=>x.match(/dd (\d+)n/)[1]), [String(stake),String(stake)]);
+  assert.equal(rules.auditMoneyConservation(`2d 51 dd ${stake}n`,outputs).status,"PASS");
+}
+const mobileMulti=Array.from(rules.processLine("2d 51 dd 7n da 2n xc 10n", "mt", mtSaturday));
+assert.equal(rules.auditMoneyConservation("2d 51 dd 7n da 2n xc 10n",mobileMulti).status,"PASS");
+assert.equal(rules.auditMoneyConservation("tp 12 da 2n",["tp 12 dat 2n"]).status,"PASS");
+
 // CASE 4: alias chuẩn và tên đài đầy đủ có dấu/không dấu đều về mã chuẩn.
 assert.equal(rules.normalizeInput("qn dn dno hue"), "qn dn dno hue");
 assert.equal(rules.normalizeInput("ben tre bac lieu da nang dak nong quang ngai"), "bt bli dn dno qn");
 assert.equal(rules.normalizeInput("Bến Tre Bạc Liêu Đà Nẵng Đắk Nông Quảng Ngãi"), "bt bli dn dno qn");
-assert.equal(rules.normalizeInput("bl"), "bli");
+assert.equal(rules.normalizeInput("bl"), "bl");
+assert.equal(rules.normalizeInput("Bạc Liêu"), "bli");
 assert.doesNotThrow(() => rules.validateCheckOnlyLine("hue 71 dathang 2n", "mt", rules.getSchedule("mt", sunday)));
+
+// P1: dots separating numeric betting tokens must be normalized before the
+// canonical parser; decimal money after a bet remains intact.
+const periodNumberCases = [
+  "2d 868.879.299 xc 10n",
+  "2d 868. 879. 299 xc 10n",
+  "2d 868 .879 .299 xc 10n",
+  "2d 868 . 879 . 299 xc 10n",
+  "2d 868...879..299 xc 10n",
+  "2d 868. 879 .299.252.729 .384 xc 10n"
+];
+for(const value of periodNumberCases){
+  const normalized=rules.normalizeInput(value);
+  assert.match(normalized, /^2d 868 879 299(?: 252 729 384)? xc 10n$/);
+  assert.doesNotThrow(() => rules.validateCheckOnlyLine(normalized, "mn", mnMonday));
+}
+assert.equal(rules.normalizeInput("2d 12 b 10.50n"), "2d 12 b 10.50n");
+
+// R25: BL is BAO LÔ (canonical LO), including plain Router/bridge input.
+for(const selector of ["bl","BL","lo","lô"]){
+  const line=`3d 50 ${selector} 200`;
+  const normalized=rules.normalizeInput(line);
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(normalized,"mn",mnMonday));
+  assert.equal(rules.auditMoneyConservation(normalized,Array.from(rules.processLine(normalized,"mn",mnMonday))).status,"PASS");
+}
+for(const line of ["3d 50.34.43 dx 10","3d 50. 34. 43 dx 10","3d 50 .34 .43 dx 10","3d 50 . 34 . 43 dx 10","3d 50...34..43 dx 10"]){
+  const normalized=rules.normalizeInput(line);
+  assert.equal(normalized,"3d 50 34 43 dx 10");
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(normalized,"mn",mnMonday));
+}
 
 // CASE 5: DAT là chuẩn cho một đài; da/đá/dathang chỉ là input tương thích.
 function processSingleStationDat(line) {
@@ -178,16 +254,16 @@ const ui = rules.elements;
 ui.region.value = "mt";
 ui.date.value = "2026-08-22";
 ui.today.checked = false;
-ui.input.value = "3d 22 10 dx 5n\n3d 64 51 dx 2n";
+ui.input.value = "3d 22 10 dx 5n\n3d 64 51 dx 5n";
 rules.run();
-const firstOutput = "2d 22 10 dx 5n\ndn dno 22 10 dx 5n\nqn dno 22 10 dx 5n";
-const secondOutput = "2d 64 51 dx 2n\ndn dno 64 51 dx 2n\nqn dno 64 51 dx 2n";
+const firstOutput = "dn qn 22 10 dx 5n\ndn dno 22 10 dx 5n\nqn dno 22 10 dx 5n";
+const secondOutput = "dn qn 64 51 dx 5n\ndn dno 64 51 dx 5n\nqn dno 64 51 dx 5n";
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 assert.deepEqual(outputRecords().slice(0, 3).map(record => record.sourceLine), [1, 1, 1]);
 assert.deepEqual(outputRecords().slice(3).map(record => record.sourceLine), [2, 2, 2]);
 
-const initialInput = "3d 22 10 dx 5n\n3d 64 51 dx 2n";
+const initialInput = "3d 22 10 dx 5n\n3d 64 51 dx 5n";
 const firstLines = firstOutput.split("\n");
 const selectFirstVisibleOutput = () => {
   const end = ui.output.value.indexOf("\n");
@@ -216,7 +292,7 @@ assert.equal(outputRecords().filter(record => record.alive).length, 4);
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(rules.clipboard.text, firstLines[2]);
-assert.equal(ui.input.value, "3d 64 51 dx 2n");
+assert.equal(ui.input.value, "3d 64 51 dx 5n");
 assert.equal(ui.output.value, secondOutput);
 assert.equal(outputRecords().length, 3);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
@@ -233,7 +309,7 @@ rules.run();
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "3d 64 51 dx 2n");
+assert.equal(ui.input.value, "3d 64 51 dx 5n");
 rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
