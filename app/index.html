@@ -22,7 +22,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.0</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.2</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div class="tabs" role="tablist">
     <button class="tab active" data-mode="tach">Tách Đài</button>
     <button class="tab" data-mode="ngang">Tách Ngang</button>
@@ -33,7 +33,7 @@
   <section id="pane-ngang" class="pane"><iframe id="ngangFrame" class="frame" src="https://wilson86.github.io/tach-dai-ngang/" title="Tách Đài Ngang 3 Miền"></iframe></section>
 
   <section id="pane-davong" class="pane">
-    <div class="contract">ĐÁ VÒNG: giữ nguyên đầu đài · literal DX/ĐX → mọi cặp số không đảo · mỗi cặp giữ nguyên tiền DX.</div>
+    <div class="contract">ĐÁ VÒNG: số đá phải đủ 2 chữ số · DX/ĐX tách mọi cặp không đảo · MB cho phép DA trong chế độ Đá Vòng · MN/MT: 2d/3d + DA dùng semantics DX · mỗi cặp giữ nguyên tiền.</div>
     <div class="card">
       <div class="controls">
         <div><label class="small" for="dvRegion">Miền</label><select id="dvRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -45,11 +45,23 @@
     <div class="card">
       <div class="label">Nhập tin / nguyên đoạn chat</div>
       <textarea id="dvInput" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Ví dụ: 3d 12 32 42 52 dx5n"></textarea>
-      <div class="actions"><button id="dvRun" class="action primary">Kiểm tra + Đá Vòng</button><button id="dvClear" class="action danger">Xóa</button></div>
+      <div class="actions">
+        <button id="dvRun" class="action primary">Kiểm tra + Đá Vòng</button>
+        <button id="dvClear" class="action danger">Xóa</button>
+        <button id="dvSelectAllInput" class="action secondary">Chọn tất cả</button>
+      </div>
       <div id="dvStatus" class="status"></div>
-      <div class="hint">Dùng chính parser/lịch/engine Tách Đài 6ce6 để kiểm tra trước. Dòng không có DX giữ hành vi Tách Đài chuẩn. Cú pháp DX không thể chứng minh an toàn sẽ báo lỗi và không xuất kết quả một phần.</div>
+      <div class="hint">Sai độ dài số đá sẽ báo ngay, ví dụ <b>1 2 3 4</b> phải nhập <b>01 02 03 04</b>. Không tự thêm số 0 và không xuất kết quả một phần khi có lỗi.</div>
     </div>
-    <div class="card"><div class="label">Kết quả</div><textarea id="dvOutput" readonly spellcheck="false"></textarea><div class="actions"><button id="dvCopy" class="action secondary">Copy kết quả</button></div></div>
+    <div class="card">
+      <div id="dvResultLabel" class="label">Kết quả</div>
+      <textarea id="dvOutput" readonly spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="dvCutSelection" class="action secondary">Cắt phần chọn</button>
+        <button id="dvSelectAllOutput" class="action secondary">Chọn tất cả</button>
+        <button id="dvCopy" class="action secondary">Copy kết quả</button>
+      </div>
+    </div>
   </section>
 </div>
 <script src="./unified-core.js"></script>
@@ -77,13 +89,10 @@ function engine(){
   if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.ENGINE_SHA256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
   return w;
 }
-function engineApi(w){return {
-  normalizeInput:w.normalizeInput.bind(w),
-  validateCheckOnlyLine:w.validateCheckOnlyLine.bind(w),
-  processLine:w.processLine.bind(w),
-  splitBetChunks:w.splitBetChunks.bind(w)
-}}
+function engineApi(w){return {normalizeInput:w.normalizeInput.bind(w),validateCheckOnlyLine:w.validateCheckOnlyLine.bind(w),processLine:w.processLine.bind(w),splitBetChunks:w.splitBetChunks.bind(w)}}
 function setDvStatus(text,kind=''){const el=$('dvStatus');el.textContent=text;el.className='status '+kind}
+function selectAllText(el){if(!el)return;el.focus();if(typeof el.setSelectionRange==='function')el.setSelectionRange(0,String(el.value||'').length)}
+function bettingPayloadFromDisplay(text){return String(text||'').split(/\r?\n/).filter(line=>line.trim()&&!/^────\s+.+\s+đá\s+\(\d+\)\s+────$/u.test(line.trim())).join('\n')}
 function updateToday(){
   if($('dvToday').checked){$('dvDate').value=localDateISO();$('dvDate').disabled=true}else{$('dvDate').disabled=false;if(!$('dvDate').value)$('dvDate').value=localDateISO()}
   updateDvSchedule();
@@ -98,37 +107,35 @@ function updateDvSchedule(){
 }
 async function runDaVong(){
   const raw=$('dvInput').value.trim();
-  if(!raw){$('dvOutput').value='';setDvStatus('Chưa có tin.','err');return}
+  if(!raw){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
   try{
-    const w=engine();
-    const wasChat=w.looksLikeChatLog(raw);
-    const clean=wasChat?w.preprocessChatText(raw):raw;
+    const w=engine(), wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
     if(!clean) throw Error('Không còn tin sau khi lọc chat');
-    const explicit=w.resolveExplicitSourceRegion(clean);
-    const region=explicit.region||$('dvRegion').value;
-    const source=explicit.text;
-    const d=parseLocalDate($('dvDate').value||localDateISO());
-    const stations=w.getSchedule(region,d)||[];
+    const explicit=w.resolveExplicitSourceRegion(clean), region=explicit.region||$('dvRegion').value, source=explicit.text;
+    const d=parseLocalDate($('dvDate').value||localDateISO()), stations=w.getSchedule(region,d)||[];
     const result=KTS_UNIFIED.transformDaVongText(source,engineApi(w),region,stations);
     if(!result.ok) throw Error(result.error||'DA_VONG_FAILED');
-    $('dvOutput').value=result.output;
-    const pairs=result.outputs.filter(x=>KTS_UNIFIED.literalDxCount(x)>0).length;
-    setDvStatus(`Đã tách · ${result.outputs.length} dòng · ${pairs} dòng DX cặp${wasChat?' · đã lọc chat':''}`,'ok');
-  }catch(e){$('dvOutput').value='';setDvStatus('LỖI: '+String(e&&e.message||e),'err')}
+    $('dvOutput').value=result.display_output||result.output;
+    $('dvResultLabel').textContent=`Kết quả (${result.outputs.length})`;
+    setDvStatus(`Đã tách · ${result.outputs.length} tin · ${result.group_count||0} nhóm đá${wasChat?' · đã lọc chat':''}`,'ok');
+  }catch(e){
+    $('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';
+    const msg=String(e&&e.message||e);setDvStatus(msg.startsWith('LỖI')?msg:'LỖI: '+msg,'err');
+  }
 }
 $('dvRun').addEventListener('click',runDaVong);
-$('dvClear').addEventListener('click',()=>{$('dvInput').value='';$('dvOutput').value='';setDvStatus('');$('dvInput').focus()});
-$('dvCopy').addEventListener('click',async()=>{const text=$('dvOutput').value;if(!text)return;try{await navigator.clipboard.writeText(text);setDvStatus('Đã copy kết quả','ok')}catch(_){$('dvOutput').removeAttribute('readonly');$('dvOutput').select();document.execCommand('copy');$('dvOutput').setAttribute('readonly','');setDvStatus('Đã copy kết quả','ok')}});
+$('dvClear').addEventListener('click',()=>{$('dvInput').value='';$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('');$('dvInput').focus()});
+$('dvSelectAllInput').addEventListener('click',()=>selectAllText($('dvInput')));
+$('dvSelectAllOutput').addEventListener('click',()=>selectAllText($('dvOutput')));
+$('dvCutSelection').addEventListener('click',()=>{const el=$('dvOutput'),a=el.selectionStart,b=el.selectionEnd;if(!(b>a)){setDvStatus('Chưa chọn phần kết quả cần cắt.','err');return}el.value=el.value.slice(0,a)+el.value.slice(b);el.setSelectionRange(a,a);const count=bettingPayloadFromDisplay(el.value).split(/\r?\n/).filter(Boolean).length;$('dvResultLabel').textContent=`Kết quả (${count})`;setDvStatus(`Đã cắt phần chọn · còn ${count} tin`,'ok')});
+$('dvCopy').addEventListener('click',async()=>{const text=bettingPayloadFromDisplay($('dvOutput').value);if(!text)return;try{await navigator.clipboard.writeText(text);setDvStatus('Đã copy kết quả cược (không kèm gạch phân nhóm)','ok')}catch(_){const el=$('dvOutput'),old=el.value;el.removeAttribute('readonly');el.value=text;el.select();document.execCommand('copy');el.value=old;el.setAttribute('readonly','');setDvStatus('Đã copy kết quả cược (không kèm gạch phân nhóm)','ok')}});
 $('dvRegion').addEventListener('change',updateDvSchedule);
 $('dvDate').value=localDateISO();
 $('dvDate').addEventListener('change',()=>{$('dvToday').checked=false;$('dvDate').disabled=false;updateDvSchedule()});
 $('dvToday').addEventListener('change',updateToday);
 $('tachFrame').addEventListener('load',()=>{updateDvSchedule();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine 6ce6 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
 updateToday();
-
-if('serviceWorker' in navigator&&location.protocol!=='file:'){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{}));
-}
+if('serviceWorker' in navigator&&location.protocol!=='file:') window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{}));
 </script>
 </body>
 </html>
