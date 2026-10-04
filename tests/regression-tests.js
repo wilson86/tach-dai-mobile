@@ -338,6 +338,13 @@ rules.run();
 assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
 assert.match(ui.output.value, /trùng số 22/);
 
+// Standalone controls must exist without relying on the Unified iframe injector.
+assert.match(html, /id="selectAllInputBtn"/);
+assert.match(html, /id="selectAllOutputBtn"/);
+assert.match(html, /selectAllInputBtn[^\n]*addEventListener|\$\("selectAllInputBtn"\)\.addEventListener/);
+assert.match(html, /selectAllOutputBtn[^\n]*addEventListener|\$\("selectAllOutputBtn"\)\.addEventListener/);
+assert.match(html, /run\(\{preserveInputSelection:true\}\)/);
+
 // PWA audit: các file và version phải đồng bộ, paths tương đối cho GitHub Pages.
 const appVersion = html.match(/const APP_VERSION = "([^"]+)"/);
 assert.ok(appVersion, "thiếu APP_VERSION");

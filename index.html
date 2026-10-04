@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.18</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.19</span></div>
 
   <div class="card">
     <div class="controls">
@@ -106,6 +106,7 @@
       <button id="runBtn" class="primary">Kiểm tra + Tách</button>
       <button id="undoBtn" class="secondary">Hoàn tác</button>
       <button id="clearBtn" class="danger">Xóa</button>
+      <button id="selectAllInputBtn" class="secondary">Chọn tất cả</button>
     </div>
     <div id="status" class="status"></div>
     <div class="hint">Chat: bỏ ngày/giờ + tên người gửi; riêng <b>Vinh</b> xóa toàn bộ tin/block. Tên khác chỉ bỏ tên, giữ nội dung.</div>
@@ -116,6 +117,7 @@
     <textarea id="output" readonly spellcheck="false"></textarea>
     <div class="actions">
       <button id="cutBtn" class="secondary">Cắt phần chọn</button>
+      <button id="selectAllOutputBtn" class="secondary">Chọn tất cả</button>
       <button id="copyBtn" class="secondary">Copy kết quả</button>
     </div>
   </div>
@@ -1022,7 +1024,7 @@ function scheduleFullInputSync(){
   inputSyncTimer=setTimeout(()=>{
     inputSyncTimer=null;
     if(inputEl.value.trim()){
-      run();
+      run({preserveInputSelection:true});
     }else{
       outputEl.value="";
       resetOutputRecords();
@@ -1155,7 +1157,7 @@ function resolveExplicitSourceRegion(text){
   return KTS_BUSINESS_ENGINE.extractExplicitSourceRegion(text);
 }
 
-function run(){
+function run(options={}){
   const raw=inputEl.value.trim();
   if(!raw){outputEl.value="";resetOutputRecords();setStatus("Chưa có tin.","err");return;}
 
@@ -1178,7 +1180,7 @@ function run(){
     resetOutputRecords();
     outputEl.value="PHÁT HIỆN TIN SAI:\n\n"+errors.map(e=>`Dòng ${e.line}: ${e.msg}\n→ ${e.raw}`).join("\n\n");
     setStatus(`Có ${errors.length} lỗi`,"err");
-    selectLine(inputEl,errors[0].line);
+    if(!options.preserveInputSelection) selectLine(inputEl,errors[0].line);
     return;
   }
 
@@ -1197,6 +1199,13 @@ function run(){
   setStatus(`Đã tách • ${outputRecords.length} dòng${wasChat?" • đã lọc chat":""}`,"ok");
 }
 
+function selectAllText(textarea){
+  if(!textarea) return;
+  try{textarea.focus({preventScroll:true});}catch(_){textarea.focus();}
+  if(typeof textarea.setSelectionRange==="function") textarea.setSelectionRange(0,textarea.value.length);
+  else if(typeof textarea.select==="function") textarea.select();
+}
+
 async function copyOutput(){
   const text=outputEl.value;
   if(!text)return;
@@ -1211,6 +1220,9 @@ async function copyOutput(){
     setStatus("Đã copy kết quả","ok");
   }
 }
+
+$("selectAllInputBtn").addEventListener("click",()=>selectAllText(inputEl));
+$("selectAllOutputBtn").addEventListener("click",()=>selectAllText(outputEl));
 
 outputEl.addEventListener("select",rememberOutputSelection);
 outputEl.addEventListener("mouseup",rememberOutputSelection);
@@ -1266,7 +1278,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.18";
+const APP_VERSION = "2.0.19";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

@@ -1,6 +1,6 @@
 {
-  "version": "2.0.18",
-  "updated": "2026-09-14",
-  "notes": "Calendar generated from KTS station_schedule_authority.json; explicit unordered DX pairs and full station coverage.",
+  "version": "2.0.19",
+  "updated": "2026-10-05",
+  "notes": "Standalone Tách Đài adds explicit Select All controls for input/output and preserves active source selection during automatic sync; business engine unchanged.",
   "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c"
 }
