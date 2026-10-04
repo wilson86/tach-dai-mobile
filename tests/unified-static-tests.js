@@ -127,6 +127,6 @@ assert.equal(version.contract,U.CONTRACT);
 assert.match(sw,/kts-tach-unified-v1\.0\.2-da-vong-final-6ce6/);
 assert.match(sw,/skipWaiting\(\)/);
 assert.match(sw,/clients\.claim\(\)/);
-assert.match(sw,/cache\.put\(req,copy\)|cache\.put\(req, copy\)/);
+assert.match(sw,/(?:cache|c)\.put\(req,copy\)|(?:cache|c)\.put\(req, copy\)/);
 assert.doesNotMatch(sw,/cache\.put\("\.\/index\.html", copy\)/);
 console.log('UNIFIED STATIC CONTRACT: PASS');
