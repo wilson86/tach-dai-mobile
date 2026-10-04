@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b57d0">
+<title>KTS Tách Đài</title>
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" href="../icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="../icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="application-name" content="KTS Tách Đài">
+<meta name="apple-mobile-web-app-title" content="KTS Tách Đài">
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--text:#172033;--muted:#667085;--line:#d7dde7;--p:#0b57d0;--p2:#0842a0;--ok:#067647;--bad:#b42318;--shadow:0 1px 3px rgba(16,24,40,.08)}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.shell{max-width:880px;margin:auto;padding:10px 10px calc(20px + env(safe-area-inset-bottom))}.head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 9px}.title{font-weight:850;font-size:20px}.badge{font-size:11px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#174ea6;font-weight:800;white-space:nowrap}.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;background:#e8edf4;padding:5px;border-radius:13px;margin-bottom:9px;position:sticky;top:0;z-index:20}.tab{height:44px;border:0;border-radius:10px;background:transparent;color:#42526a;font-weight:800;font-size:14px}.tab.active{background:#fff;color:var(--p);box-shadow:var(--shadow)}.pane{display:none}.pane.active{display:block}.frame{width:100%;height:calc(100vh - 104px);min-height:650px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px;margin-bottom:10px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}.small{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}select,input[type=date]{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 10px;background:#fff;font-size:16px}.today{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px}.today input{width:20px;height:20px}.schedule{margin-top:9px;padding:9px 10px;border-radius:10px;background:#f2f5fa;font-size:13px;line-height:1.45}.label{font-size:14px;font-weight:800;margin-bottom:6px}textarea{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 11px;font:15px/1.42 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical;background:#fff;color:#111827}#dvInput{min-height:230px}#dvOutput{min-height:220px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}button.action{height:44px;border:0;border-radius:10px;padding:0 14px;font-weight:800;font-size:14px}.primary{background:var(--p);color:#fff;flex:1 1 180px}.primary:active{background:var(--p2)}.secondary{background:#eef2f7;color:#27364b}.danger{background:#fff0ee;color:var(--bad)}.status{font-size:13px;font-weight:750;margin-top:8px;white-space:pre-wrap}.ok{color:var(--ok)}.err{color:var(--bad)}.hint{font-size:12px;color:var(--muted);line-height:1.45;margin-top:8px}.contract{padding:9px 10px;border-radius:10px;background:#eef8f3;color:#05603a;font-weight:750;font-size:12px;margin-bottom:10px}
+@media(max-width:520px){.shell{padding:7px 7px calc(14px + env(safe-area-inset-bottom))}.head{margin-bottom:7px}.title{font-size:18px}.tabs{gap:4px;padding:4px}.tab{font-size:13px;height:43px}.frame{height:calc(100vh - 92px);min-height:610px}.controls{grid-template-columns:1fr}.card{padding:10px;border-radius:12px}#dvInput{min-height:210px}#dvOutput{min-height:190px}}
+</style>
+</head>
+<body>
+<div class="shell">
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.0</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-mode="tach">Tách Đài</button>
+    <button class="tab" data-mode="ngang">Tách Ngang</button>
+    <button class="tab" data-mode="davong">Đá Vòng</button>
+  </div>
+
+  <section id="pane-tach" class="pane active"><iframe id="tachFrame" class="frame" src="../" title="Tách Đài 3 Miền"></iframe></section>
+  <section id="pane-ngang" class="pane"><iframe id="ngangFrame" class="frame" src="https://wilson86.github.io/tach-dai-ngang/" title="Tách Đài Ngang 3 Miền"></iframe></section>
+
+  <section id="pane-davong" class="pane">
+    <div class="contract">ĐÁ VÒNG: giữ nguyên đầu đài · literal DX/ĐX → mọi cặp số không đảo · mỗi cặp giữ nguyên tiền DX.</div>
+    <div class="card">
+      <div class="controls">
+        <div><label class="small" for="dvRegion">Miền</label><select id="dvRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
+        <div><label class="small" for="dvDate">Ngày</label><input id="dvDate" type="date"></div>
+      </div>
+      <label class="today"><input id="dvToday" type="checkbox" checked> Hôm nay</label>
+      <div id="dvSchedule" class="schedule">Đang nạp engine 6ce6…</div>
+    </div>
+    <div class="card">
+      <div class="label">Nhập tin / nguyên đoạn chat</div>
+      <textarea id="dvInput" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Ví dụ: 3d 12 32 42 52 dx5n"></textarea>
+      <div class="actions"><button id="dvRun" class="action primary">Kiểm tra + Đá Vòng</button><button id="dvClear" class="action danger">Xóa</button></div>
+      <div id="dvStatus" class="status"></div>
+      <div class="hint">Dùng chính parser/lịch/engine Tách Đài 6ce6 để kiểm tra trước. Dòng không có DX giữ hành vi Tách Đài chuẩn. Cú pháp DX không thể chứng minh an toàn sẽ báo lỗi và không xuất kết quả một phần.</div>
+    </div>
+    <div class="card"><div class="label">Kết quả</div><textarea id="dvOutput" readonly spellcheck="false"></textarea><div class="actions"><button id="dvCopy" class="action secondary">Copy kết quả</button></div></div>
+  </section>
+</div>
+<script src="./unified-core.js"></script>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+const EXPECTED_ENGINE='6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c';
+const modeButtons=[...document.querySelectorAll('.tab')];
+function setMode(mode){
+  if(!['tach','ngang','davong'].includes(mode)) mode='tach';
+  modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
+  for(const name of ['tach','ngang','davong']) $(`pane-${name}`).classList.toggle('active',name===mode);
+  try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
+  if(mode==='davong') updateDvSchedule();
+}
+modeButtons.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+try{setMode(localStorage.getItem('kts_unified_mode_v1')||'tach')}catch(_){setMode('tach')}
+
+function localDateISO(d=new Date()){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function parseLocalDate(v){return new Date(`${v}T12:00:00`)}
+function engine(){
+  const w=$('tachFrame').contentWindow;
+  const names=['normalizeInput','validateCheckOnlyLine','processLine','getSchedule','preprocessChatText','looksLikeChatLog','resolveExplicitSourceRegion','splitBetChunks'];
+  if(!w||names.some(n=>typeof w[n]!=='function')) throw Error('ENGINE_6CE6_NOT_READY');
+  if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.sha256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
+  return w;
+}
+function engineApi(w){return {
+  normalizeInput:w.normalizeInput.bind(w),
+  validateCheckOnlyLine:w.validateCheckOnlyLine.bind(w),
+  processLine:w.processLine.bind(w),
+  splitBetChunks:w.splitBetChunks.bind(w)
+}}
+function setDvStatus(text,kind=''){const el=$('dvStatus');el.textContent=text;el.className='status '+kind}
+function updateToday(){
+  if($('dvToday').checked){$('dvDate').value=localDateISO();$('dvDate').disabled=true}else{$('dvDate').disabled=false;if(!$('dvDate').value)$('dvDate').value=localDateISO()}
+  updateDvSchedule();
+}
+function updateDvSchedule(){
+  updateTodayGuard=true;
+  try{
+    const w=engine(), region=$('dvRegion').value, d=parseLocalDate($('dvDate').value||localDateISO()), stations=w.getSchedule(region,d)||[];
+    const day=['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'][d.getDay()];
+    const names=stations.map((x,i)=>`${x[1]||x[0]} (${i<2?'chính':'phụ'})`).join(' - ');
+    $('dvSchedule').textContent=`${region.toUpperCase()} · ${day} · ${names||'Miền Bắc'}`;
+  }catch(e){$('dvSchedule').textContent='Đang nạp engine 6ce6…'}
+  updateTodayGuard=false;
+}
+let updateTodayGuard=false;
+async function runDaVong(){
+  const raw=$('dvInput').value.trim();
+  if(!raw){$('dvOutput').value='';setDvStatus('Chưa có tin.','err');return}
+  try{
+    const w=engine();
+    const wasChat=w.looksLikeChatLog(raw);
+    const clean=wasChat?w.preprocessChatText(raw):raw;
+    if(!clean) throw Error('Không còn tin sau khi lọc chat');
+    const explicit=w.resolveExplicitSourceRegion(clean);
+    const region=explicit.region||$('dvRegion').value;
+    const source=explicit.text;
+    const d=parseLocalDate($('dvDate').value||localDateISO());
+    const stations=w.getSchedule(region,d)||[];
+    const result=KTS_UNIFIED.transformDaVongText(source,engineApi(w),region,stations);
+    if(!result.ok) throw Error(result.error||'DA_VONG_FAILED');
+    $('dvOutput').value=result.output;
+    const pairs=result.outputs.filter(x=>KTS_UNIFIED.literalDxCount(x)>0).length;
+    setDvStatus(`Đã tách · ${result.outputs.length} dòng · ${pairs} dòng DX cặp${wasChat?' · đã lọc chat':''}`,'ok');
+  }catch(e){$('dvOutput').value='';setDvStatus('LỖI: '+String(e&&e.message||e),'err')}
+}
+$('dvRun').addEventListener('click',runDaVong);
+$('dvClear').addEventListener('click',()=>{$('dvInput').value='';$('dvOutput').value='';setDvStatus('');$('dvInput').focus()});
+$('dvCopy').addEventListener('click',async()=>{const text=$('dvOutput').value;if(!text)return;try{await navigator.clipboard.writeText(text);setDvStatus('Đã copy kết quả','ok')}catch(_){$('dvOutput').removeAttribute('readonly');$('dvOutput').select();document.execCommand('copy');$('dvOutput').setAttribute('readonly','');setDvStatus('Đã copy kết quả','ok')}});
+$('dvRegion').addEventListener('change',updateDvSchedule);
+$('dvDate').value=localDateISO();
+$('dvDate').addEventListener('change',()=>{$('dvToday').checked=false;$('dvDate').disabled=false;updateDvSchedule()});
+$('dvToday').addEventListener('change',updateToday);
+$('tachFrame').addEventListener('load',()=>{updateDvSchedule();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.sha256===EXPECTED_ENGINE)setDvStatus('Engine 6ce6 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
+updateToday();
+
+if('serviceWorker' in navigator&&location.protocol!=='file:'){
+  window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{}));
+}
+</script>
+</body>
+</html>
