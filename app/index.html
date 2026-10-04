@@ -74,7 +74,7 @@ function engine(){
   const w=$('tachFrame').contentWindow;
   const names=['normalizeInput','validateCheckOnlyLine','processLine','getSchedule','preprocessChatText','looksLikeChatLog','resolveExplicitSourceRegion','splitBetChunks'];
   if(!w||names.some(n=>typeof w[n]!=='function')) throw Error('ENGINE_6CE6_NOT_READY');
-  if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.sha256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
+  if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.ENGINE_SHA256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
   return w;
 }
 function engineApi(w){return {
@@ -89,16 +89,13 @@ function updateToday(){
   updateDvSchedule();
 }
 function updateDvSchedule(){
-  updateTodayGuard=true;
   try{
     const w=engine(), region=$('dvRegion').value, d=parseLocalDate($('dvDate').value||localDateISO()), stations=w.getSchedule(region,d)||[];
     const day=['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'][d.getDay()];
     const names=stations.map((x,i)=>`${x[1]||x[0]} (${i<2?'chính':'phụ'})`).join(' - ');
     $('dvSchedule').textContent=`${region.toUpperCase()} · ${day} · ${names||'Miền Bắc'}`;
   }catch(e){$('dvSchedule').textContent='Đang nạp engine 6ce6…'}
-  updateTodayGuard=false;
 }
-let updateTodayGuard=false;
 async function runDaVong(){
   const raw=$('dvInput').value.trim();
   if(!raw){$('dvOutput').value='';setDvStatus('Chưa có tin.','err');return}
@@ -126,7 +123,7 @@ $('dvRegion').addEventListener('change',updateDvSchedule);
 $('dvDate').value=localDateISO();
 $('dvDate').addEventListener('change',()=>{$('dvToday').checked=false;$('dvDate').disabled=false;updateDvSchedule()});
 $('dvToday').addEventListener('change',updateToday);
-$('tachFrame').addEventListener('load',()=>{updateDvSchedule();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.sha256===EXPECTED_ENGINE)setDvStatus('Engine 6ce6 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
+$('tachFrame').addEventListener('load',()=>{updateDvSchedule();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine 6ce6 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
 updateToday();
 
 if('serviceWorker' in navigator&&location.protocol!=='file:'){
