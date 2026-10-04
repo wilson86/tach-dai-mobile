@@ -1,7 +1,8 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "updated": "2026-10-04",
   "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c",
   "contract": "DX_NUMBER_PAIRS_PRESERVE_STATION_HEAD_V1",
-  "modes": ["tach", "ngang", "davong"]
+  "modes": ["tach", "ngang", "davong"],
+  "ux": ["select_all_input", "select_all_output", "preserve_input_selection_while_editing"]
 }
