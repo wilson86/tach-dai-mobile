@@ -2,6 +2,7 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const vm=require('node:vm');
 const U=require('../app/unified-core.js');
 
 function api(overrides={}){
@@ -111,6 +112,39 @@ const engine=fs.readFileSync(path.join(root,'business_engine.generated.js'),'utf
 const app=fs.readFileSync(path.join(root,'app','index.html'),'utf8');
 const sw=fs.readFileSync(path.join(root,'app','sw.js'),'utf8');
 const version=JSON.parse(fs.readFileSync(path.join(root,'app','version.json'),'utf8'));
+
+// Bind the new Đá Vòng projection to the real 6ce6 Mobile parser, not only the
+// synthetic test adapter, so MB/MT contextual DA validation is proven end-to-end.
+function loadActualRules(){
+  const html=fs.readFileSync(path.join(root,'index.html'),'utf8');
+  const calendar=fs.readFileSync(path.join(root,'station_calendar.generated.js'),'utf8');
+  const business=fs.readFileSync(path.join(root,'business_engine.generated.js'),'utf8');
+  const match=html.match(/<script>\s*([\s\S]*?)<\/script>/i);
+  assert.ok(match,'root index app script missing');
+  const marker='loadSettings();';
+  const source=match[1].slice(0,match[1].indexOf(marker));
+  const elements=Object.create(null);
+  const element=()=>({events:Object.create(null),addEventListener(type,handler){this.events[type]=handler},value:'',textContent:'',className:'',selectionStart:0,selectionEnd:0,style:{},focus(){},select(){this.selectionStart=0;this.selectionEnd=this.value.length},setSelectionRange(a,b){this.selectionStart=a;this.selectionEnd=b},remove(){}});
+  const context={console,Set,Date,JSON,RegExp,String,Error,navigator:{clipboard:{async writeText(){}}},document:{getElementById(id){return elements[id]||(elements[id]=element())},createElement:element,body:{appendChild(){}},execCommand(){return true}}};
+  vm.createContext(context);
+  vm.runInContext(`${calendar}\n${business}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,validateCheckOnlyLine,processLine,splitBetChunks,engine:KTS_BUSINESS_ENGINE};`,context);
+  return context.__rules;
+}
+{
+  const rules=loadActualRules();
+  assert.equal(rules.engine.ENGINE_SHA256,'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c');
+  const realApi={normalizeInput:rules.normalizeInput.bind(rules),validateCheckOnlyLine:rules.validateCheckOnlyLine.bind(rules),processLine:rules.processLine.bind(rules),splitBetChunks:rules.splitBetChunks.bind(rules)};
+  const date=new Date('2026-10-04T12:00:00');
+  const mb=U.transformDaVongText('68 86 28 da 5n',realApi,'mb',rules.getSchedule('mb',date));
+  assert.equal(mb.ok,true,mb.error); assert.deepEqual(Array.from(mb.outputs),['68 86 da 5n','68 28 da 5n','86 28 da 5n']);
+  for(const head of ['2d','3d']){
+    const mt=U.transformDaVongText(`${head} 68 86 28 da 5n`,realApi,'mt',rules.getSchedule('mt',date));
+    assert.equal(mt.ok,true,mt.error); assert.equal(mt.outputs.length,3); assert.ok(mt.outputs.every(x=>/5n$/u.test(x))); assert.doesNotMatch(mt.output,/2[.,]5n/);
+  }
+  const station=U.transformDaVongText('hue 68 86 da 5n',realApi,'mt',rules.getSchedule('mt',date));
+  assert.equal(station.ok,true,station.error); assert.equal(station.pair_lines,0); assert.ok(station.outputs.some(x=>/\bdat\s*5n$/u.test(x)));
+}
+
 assert.match(engine,/ENGINE_SHA256: 6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c/);
 assert.match(app,/data-mode="tach"/);
 assert.match(app,/data-mode="ngang"/);
