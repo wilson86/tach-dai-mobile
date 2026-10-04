@@ -1,0 +1,40 @@
+name: Qualify Unified Static KTS
+
+on:
+  push:
+    branches:
+      - feature/kts-unified-static-20261004
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout unified Mobile source
+        uses: actions/checkout@v4
+
+      - name: Mobile 6ce6 regression
+        run: node tests/regression-tests.js
+
+      - name: Unified shell and Da Vong contract
+        run: node tests/unified-static-tests.js
+
+      - name: Checkout Ngang 6ce6 authority
+        uses: actions/checkout@v4
+        with:
+          repository: wilson86/tach-dai-ngang
+          ref: candidate/6ce6-resume-20261003
+          path: _ngang_6ce6
+
+      - name: Ngang 6ce6 regression
+        run: node _ngang_6ce6/tests/regression-tests.js
+
+      - name: Cross-surface engine identity
+        shell: bash
+        run: |
+          grep -q 'ENGINE_SHA256: 6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c' business_engine.generated.js
+          grep -q 'ENGINE_SHA256: 6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c' _ngang_6ce6/business_engine.generated.js
+          echo 'CROSS_SURFACE_ENGINE_IDENTITY: PASS'
