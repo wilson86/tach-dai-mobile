@@ -97,9 +97,9 @@
 });
 
 // Browser-only UX patch for the unified Mobile app. Business rules above stay
-// untouched: this only adds explicit Select All controls and prevents the
-// embedded Tách Đài error highlighter from stealing the user's selection while
-// they are actively editing the source textarea.
+// untouched: this only adds explicit Select All controls and prevents embedded
+// Tách Đài/Tách Ngang error highlighters from stealing the user's selection
+// while they are actively editing the source textarea.
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
@@ -125,18 +125,20 @@
   function installButtons(doc,inputId,outputId,inputButtonId,outputButtonId){
     const input=doc.getElementById(inputId), output=doc.getElementById(outputId);
     if(input){
-      const actions=input.closest('.card')&&input.closest('.card').querySelector('.actions');
+      const card=input.closest('.card');
+      const actions=card&&card.querySelector('.actions');
       const button=makeButton(doc,inputButtonId,input);
       if(actions&&button) actions.appendChild(button);
     }
     if(output){
-      const actions=output.closest('.card')&&output.closest('.card').querySelector('.actions');
+      const card=output.closest('.card');
+      const actions=card&&card.querySelector('.actions');
       const button=makeButton(doc,outputButtonId,output);
       if(actions&&button) actions.insertBefore(button,actions.firstChild);
     }
   }
 
-  function installTachFrame(frame){
+  function installEmbeddedFrame(frame,prefix){
     try{
       const w=frame&&frame.contentWindow, doc=frame&&frame.contentDocument;
       if(!w||!doc) return;
@@ -153,8 +155,15 @@
         };
         w.__KTS_UNIFIED_KEEP_INPUT_SELECTION_V1__=true;
       }
-      installButtons(doc,'input','output','ktsSelectAllInput','ktsSelectAllOutput');
-    }catch(_){/* same-origin Tách frame only; fail closed for UI decoration */}
+      installButtons(doc,'input','output',`${prefix}SelectAllInput`,`${prefix}SelectAllOutput`);
+    }catch(_){/* same github.io origin expected; UI decoration fails closed */}
+  }
+
+  function attachFrame(id,prefix){
+    const frame=document.getElementById(id);
+    if(!frame) return;
+    frame.addEventListener('load',()=>installEmbeddedFrame(frame,prefix));
+    try{if(frame.contentDocument&&frame.contentDocument.readyState!=='loading') installEmbeddedFrame(frame,prefix)}catch(_){}
   }
 
   function install(){
@@ -162,15 +171,10 @@
     if(version&&/Unified\s+/i.test(version.textContent||'')) version.textContent=`Unified ${UX_VERSION}`;
 
     // Đá Vòng lives in the parent document, so give it the same explicit
-    // source/output Select All controls as Tách Đài.
+    // source/output Select All controls as both embedded split modes.
     installButtons(document,'dvInput','dvOutput','dvSelectAllInput','dvSelectAllOutput');
-
-    const frame=document.getElementById('tachFrame');
-    if(frame){
-      frame.addEventListener('load',()=>installTachFrame(frame));
-      // The frame can already be complete when this script executes from cache.
-      try{if(frame.contentDocument&&frame.contentDocument.readyState!=='loading') installTachFrame(frame)}catch(_){}
-    }
+    attachFrame('tachFrame','ktsTach');
+    attachFrame('ngangFrame','ktsNgang');
   }
 
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
