@@ -1,0 +1,91 @@
+name: Patch standalone Select All once
+
+on:
+  push:
+    branches: [feature/select-all-root-20261005]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/select-all-root-20261005
+          fetch-depth: 0
+      - name: Patch standalone Tách Đài controls
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+
+          def replace_exact(path, old, new, count=1):
+              p=Path(path)
+              text=p.read_text(encoding='utf-8')
+              actual=text.count(old)
+              if actual != count:
+                  raise SystemExit(f'{path}: expected {count} occurrences, found {actual}: {old[:80]!r}')
+              p.write_text(text.replace(old,new),encoding='utf-8',newline='\n')
+
+          p=Path('index.html')
+          text=p.read_text(encoding='utf-8')
+          text=text.replace('>v2.0.18</span>','>v2.0.19</span>',1)
+          text=text.replace(
+          '''      <button id="runBtn" class="primary">Kiểm tra + Tách</button>\n      <button id="undoBtn" class="secondary">Hoàn tác</button>\n      <button id="clearBtn" class="danger">Xóa</button>''',
+          '''      <button id="runBtn" class="primary">Kiểm tra + Tách</button>\n      <button id="undoBtn" class="secondary">Hoàn tác</button>\n      <button id="clearBtn" class="danger">Xóa</button>\n      <button id="selectAllInputBtn" class="secondary">Chọn tất cả</button>''',1)
+          text=text.replace(
+          '''      <button id="cutBtn" class="secondary">Cắt phần chọn</button>\n      <button id="copyBtn" class="secondary">Copy kết quả</button>''',
+          '''      <button id="cutBtn" class="secondary">Cắt phần chọn</button>\n      <button id="selectAllOutputBtn" class="secondary">Chọn tất cả</button>\n      <button id="copyBtn" class="secondary">Copy kết quả</button>''',1)
+          text=text.replace('function run(){','function run(options={}){',1)
+          text=text.replace('    selectLine(inputEl,errors[0].line);','    if(!options.preserveInputSelection) selectLine(inputEl,errors[0].line);',1)
+          text=text.replace('''    if(inputEl.value.trim()){\n      run();''','''    if(inputEl.value.trim()){\n      run({preserveInputSelection:true});''',1)
+          anchor='''async function copyOutput(){'''
+          helper='''function selectAllText(textarea){\n  if(!textarea) return;\n  try{textarea.focus({preventScroll:true});}catch(_){textarea.focus();}\n  if(typeof textarea.setSelectionRange==="function") textarea.setSelectionRange(0,textarea.value.length);\n  else if(typeof textarea.select==="function") textarea.select();\n}\n\n'''
+          if anchor not in text: raise SystemExit('copyOutput anchor missing')
+          text=text.replace(anchor,helper+anchor,1)
+          anchor2='''outputEl.addEventListener("select",rememberOutputSelection);'''
+          handlers='''$("selectAllInputBtn").addEventListener("click",()=>selectAllText(inputEl));\n$("selectAllOutputBtn").addEventListener("click",()=>selectAllText(outputEl));\n\n'''
+          if anchor2 not in text: raise SystemExit('output selection anchor missing')
+          text=text.replace(anchor2,handlers+anchor2,1)
+          text=text.replace('const APP_VERSION = "2.0.18";','const APP_VERSION = "2.0.19";',1)
+          p.write_text(text,encoding='utf-8',newline='\n')
+
+          v=Path('version.json')
+          data=json.loads(v.read_text(encoding='utf-8'))
+          if data.get('version')!='2.0.18': raise SystemExit(f'unexpected version {data.get("version")}')
+          data['version']='2.0.19'
+          data['updated']='2026-10-05'
+          data['notes']='Standalone Tách Đài adds explicit Select All controls for input/output and preserves active source selection during automatic sync; business engine unchanged.'
+          v.write_text(json.dumps(data,ensure_ascii=False,indent=2)+'\n',encoding='utf-8',newline='\n')
+
+          sw=Path('sw.js')
+          s=sw.read_text(encoding='utf-8')
+          if s.count('2.0.18')<2: raise SystemExit('expected SW version markers missing')
+          sw.write_text(s.replace('2.0.18','2.0.19'),encoding='utf-8',newline='\n')
+
+          t=Path('tests/regression-tests.js')
+          s=t.read_text(encoding='utf-8')
+          marker='// PWA audit: các file và version phải đồng bộ, paths tương đối cho GitHub Pages.'
+          if marker not in s: raise SystemExit('regression marker missing')
+          checks='''// Standalone controls must exist without relying on the Unified iframe injector.\nassert.match(html, /id="selectAllInputBtn"/);\nassert.match(html, /id="selectAllOutputBtn"/);\nassert.match(html, /selectAllInputBtn[^\\n]*addEventListener|\\$\\("selectAllInputBtn"\\)\\.addEventListener/);\nassert.match(html, /selectAllOutputBtn[^\\n]*addEventListener|\\$\\("selectAllOutputBtn"\\)\\.addEventListener/);\nassert.match(html, /run\\(\\{preserveInputSelection:true\\}\\)/);\n\n'''
+          s=s.replace(marker,checks+marker,1)
+          t.write_text(s,encoding='utf-8',newline='\n')
+          PY
+      - name: Focused regression
+        run: |
+          node tests/regression-tests.js
+          node tests/unified-static-tests.js
+          grep -q 'ENGINE_SHA256: 6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c' business_engine.generated.js
+      - name: Commit patch and remove one-shot workflow
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm .github/workflows/patch-select-all-once.yml
+          git add index.html version.json sw.js tests/regression-tests.js
+          git commit -m "fix(mobile): add standalone select-all controls"
+          git push origin HEAD:feature/select-all-root-20261005
