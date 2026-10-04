@@ -95,3 +95,84 @@
   }
   return {CONTRACT,literalDxCount,sourceHead,numberPairLines,expandDxOnlyFallback,expandDaVongLine,transformDaVongText};
 });
+
+// Browser-only UX patch for the unified Mobile app. Business rules above stay
+// untouched: this only adds explicit Select All controls and prevents the
+// embedded Tách Đài error highlighter from stealing the user's selection while
+// they are actively editing the source textarea.
+;(function installUnifiedMobileUx(){
+  'use strict';
+  if(typeof document==='undefined') return;
+  const UX_VERSION='1.0.1';
+
+  function selectAllText(el){
+    if(!el) return;
+    try{el.focus({preventScroll:true})}catch(_){el.focus()}
+    if(typeof el.setSelectionRange==='function') el.setSelectionRange(0,String(el.value||'').length);
+  }
+
+  function makeButton(doc,id,target){
+    if(!doc||!target||doc.getElementById(id)) return null;
+    const button=doc.createElement('button');
+    button.id=id;
+    button.type='button';
+    button.className='secondary';
+    button.textContent='Chọn tất cả';
+    button.addEventListener('click',()=>selectAllText(target));
+    return button;
+  }
+
+  function installButtons(doc,inputId,outputId,inputButtonId,outputButtonId){
+    const input=doc.getElementById(inputId), output=doc.getElementById(outputId);
+    if(input){
+      const actions=input.closest('.card')&&input.closest('.card').querySelector('.actions');
+      const button=makeButton(doc,inputButtonId,input);
+      if(actions&&button) actions.appendChild(button);
+    }
+    if(output){
+      const actions=output.closest('.card')&&output.closest('.card').querySelector('.actions');
+      const button=makeButton(doc,outputButtonId,output);
+      if(actions&&button) actions.insertBefore(button,actions.firstChild);
+    }
+  }
+
+  function installTachFrame(frame){
+    try{
+      const w=frame&&frame.contentWindow, doc=frame&&frame.contentDocument;
+      if(!w||!doc) return;
+      const input=doc.getElementById('input');
+      if(typeof w.selectLine==='function'&&!w.__KTS_UNIFIED_KEEP_INPUT_SELECTION_V1__){
+        const original=w.selectLine;
+        w.selectLine=function(textarea,lineNo){
+          // Auto-validation runs on every source edit. While the user is typing,
+          // do not focus/select the entire failing line (a one-line ticket looked
+          // like "select all" on mobile). Manual validation can still highlight
+          // an error when the source box is not actively being edited.
+          if(textarea===input&&doc.activeElement===input) return;
+          return original.call(w,textarea,lineNo);
+        };
+        w.__KTS_UNIFIED_KEEP_INPUT_SELECTION_V1__=true;
+      }
+      installButtons(doc,'input','output','ktsSelectAllInput','ktsSelectAllOutput');
+    }catch(_){/* same-origin Tách frame only; fail closed for UI decoration */}
+  }
+
+  function install(){
+    const version=document.querySelector('.title span');
+    if(version&&/Unified\s+/i.test(version.textContent||'')) version.textContent=`Unified ${UX_VERSION}`;
+
+    // Đá Vòng lives in the parent document, so give it the same explicit
+    // source/output Select All controls as Tách Đài.
+    installButtons(document,'dvInput','dvOutput','dvSelectAllInput','dvSelectAllOutput');
+
+    const frame=document.getElementById('tachFrame');
+    if(frame){
+      frame.addEventListener('load',()=>installTachFrame(frame));
+      // The frame can already be complete when this script executes from cache.
+      try{if(frame.contentDocument&&frame.contentDocument.readyState!=='loading') installTachFrame(frame)}catch(_){}
+    }
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
+  else install();
+})();
