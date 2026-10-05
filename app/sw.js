@@ -1,11 +1,12 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.5-settlement-shadow';
+const CACHE='kts-tach-unified-v1.0.6-shadow-compare';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
   './settlement-category-map.js','./settlement-research-defaults.js','./settlement-feature-gates.js',
   './settlement-runtime.js','./settlement-evaluator.js','./settlement-parser-provider.js','./settlement-pipeline.js',
-  './settlement-report.js','./result-service.js','./result-provider.js','./settlement-ui.js',
+  './settlement-report.js','./settlement-shadow.js','./settlement-shadow-runtime.js','./settlement-shadow-ui.js',
+  './result-service.js','./result-provider.js','./settlement-ui.js',
   '../icon-192.png','../icon-512.png'
 ];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
