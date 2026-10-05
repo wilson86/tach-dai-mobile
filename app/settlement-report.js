@@ -9,14 +9,7 @@
   function addCategory(target, row) {
     const code = String(row.code || row.category || 'UNKNOWN');
     if (!target[code]) {
-      target[code] = {
-        code,
-        xac: 0,
-        qua_co: 0,
-        hit_units: 0,
-        payout: 0,
-        message_count: 0
-      };
+      target[code] = { code, xac: 0, qua_co: 0, hit_units: 0, payout: 0, message_count: 0 };
     }
     const out = target[code];
     out.xac += num(row.xac);
@@ -29,10 +22,19 @@
   function settlementCategories(settlement) {
     const explicit = Array.isArray(settlement.category_rows) ? settlement.category_rows : [];
     if (explicit.length) return explicit;
-    const rows = settlement.result_snapshot && Array.isArray(settlement.result_snapshot.rows)
-      ? settlement.result_snapshot.rows
-      : [];
-    return rows;
+    const result = settlement.settlement_result || settlement.result_snapshot || {};
+    return Array.isArray(result.rows) ? result.rows : [];
+  }
+
+  function messageIds(settlement) {
+    if (Array.isArray(settlement.message_ids) && settlement.message_ids.length) return settlement.message_ids.slice();
+    return settlement.message_id ? [settlement.message_id] : [];
+  }
+
+  function messageBreakdown(settlement, id) {
+    const rows = Array.isArray(settlement.message_breakdown) ? settlement.message_breakdown : [];
+    const found = rows.find(x => x.message_id === id);
+    return found && Array.isArray(found.category_rows) ? found.category_rows.map(x => Object.assign({}, x)) : [];
   }
 
   function buildDailyPartnerReport(input) {
@@ -44,6 +46,7 @@
     const byRegion = {};
     const allCategories = {};
     const messageReports = [];
+    const blockedScopes = [];
     let totalXac = 0;
     let totalQuaCo = 0;
     let totalPayout = 0;
@@ -57,19 +60,24 @@
       const region = String(settlement.region || 'unknown').toLowerCase();
       if (!byRegion[region]) {
         byRegion[region] = {
-          region,
-          categories: {},
-          total_xac: 0,
-          total_qua_co: 0,
-          total_payout: 0,
-          refund_amount: 0,
-          final_net: 0,
-          messages: []
+          region, categories: {}, total_xac: 0, total_qua_co: 0, total_payout: 0,
+          refund_amount: 0, final_net: 0, messages: [], scope_statuses: []
         };
       }
       const regionReport = byRegion[region];
-      const result = settlement.result_snapshot || {};
+      const result = settlement.settlement_result || settlement.result_snapshot || {};
       const categories = settlementCategories(settlement);
+      const scopeStatus = settlement.scope_status || settlement.comparison_status || 'unverified';
+      regionReport.scope_statuses.push(scopeStatus);
+
+      if (scopeStatus === 'blocked' || settlement.comparison_status === 'blocked') {
+        blockedScopes.push({
+          settlement_id: settlement.id,
+          region,
+          reasons: Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.slice() : [],
+          message_ids: messageIds(settlement)
+        });
+      }
 
       for (const row of categories) {
         addCategory(regionReport.categories, row);
@@ -88,19 +96,25 @@
       refundAmount += num(result.refund_amount);
       finalNet += num(result.final_net);
 
-      const msg = messagesById[settlement.message_id] || null;
-      const messageReport = {
-        settlement_id: settlement.id,
-        message_id: settlement.message_id || null,
-        region,
-        raw_text: msg ? String(msg.raw_text || '') : '',
-        categories: categories.map(x => Object.assign({}, x)),
-        detail_rows: Array.isArray(settlement.detail_rows) ? settlement.detail_rows.map(x => Object.assign({}, x)) : [],
-        result: Object.assign({}, result),
-        comparison_status: settlement.comparison_status || 'unverified'
-      };
-      regionReport.messages.push(messageReport);
-      messageReports.push(messageReport);
+      const ids = messageIds(settlement);
+      const detailRows = Array.isArray(settlement.detail_rows) ? settlement.detail_rows : [];
+      for (const id of ids) {
+        const msg = messagesById[id] || null;
+        const messageReport = {
+          settlement_id: settlement.id,
+          message_id: id,
+          region,
+          raw_text: msg ? String(msg.raw_text || '') : '',
+          message_status: msg ? String(msg.status || '') : '',
+          categories: messageBreakdown(settlement, id),
+          detail_rows: detailRows.filter(x => !x.message_id || x.message_id === id).map(x => Object.assign({}, x)),
+          result: Object.assign({}, result),
+          scope_status: scopeStatus,
+          comparison_status: settlement.comparison_status || 'unverified'
+        };
+        regionReport.messages.push(messageReport);
+        messageReports.push(messageReport);
+      }
     }
 
     function finalizeRegion(regionReport) {
@@ -108,6 +122,8 @@
         .filter(x => x.xac !== 0 || x.qua_co !== 0 || x.hit_units !== 0 || x.payout !== 0)
         .sort((a, b) => a.code.localeCompare(b.code));
       regionReport.direction = regionReport.final_net > 0 ? 'THU' : regionReport.final_net < 0 ? 'BU' : 'HOA';
+      regionReport.blocked = regionReport.scope_statuses.includes('blocked');
+      regionReport.provisional = regionReport.scope_statuses.includes('provisional');
       return regionReport;
     }
 
@@ -122,6 +138,9 @@
       regions,
       categories,
       messages: messageReports,
+      blocked_scopes: blockedScopes,
+      provisional: regions.some(x => x.provisional),
+      blocked: blockedScopes.length > 0,
       totals: {
         xac: totalXac,
         qua_co: totalQuaCo,
