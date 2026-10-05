@@ -113,24 +113,34 @@ Audit the repository, docs, tests, old fixtures, examples and comments to determ
 ## Reference-app GUI oracle access
 The user has placed a Desktop shortcut named exactly `g1hp80` that opens the current reference KTS/accounting app. If the local Codex environment has GUI/browser/UI-automation capability, use that app as the oracle for unresolved rules rather than asking the user to run every test manually.
 
+### Dedicated disposable test partner
+The user has now created a dedicated partner/profile named exactly `TEST_KTS` for oracle testing.
+
+Rules for this profile:
+- Use `TEST_KTS` for all GUI oracle mutations. Do not use Hiền, Trúc, Thái, Quýt, Thiên, or any other real partner unless the user explicitly approves later.
+- It is permitted to change `TEST_KTS` pricing/toggles/rates temporarily for tests, provided the original values are captured first and restored exactly afterward.
+- Add only synthetic test messages to `TEST_KTS`.
+- After each individual test, delete that exact synthetic message and verify it is no longer present before proceeding.
+- At the end of the audit, `TEST_KTS` must have zero leftover synthetic messages from this run and its configuration must equal the pre-test snapshot.
+
 Operational protocol:
 - Resolve the shortcut from the user's Desktop (typically `%USERPROFILE%\\Desktop\\g1hp80.lnk` or the equivalent Desktop folder). Do not assume the target path; inspect the shortcut safely.
 - Launch only this reference app for oracle testing.
 - Do not send Telegram/Zalo/customer messages and do not trigger any production dispatch action.
-- Before changing any customer/config setting, capture the current value(s) so they can be restored exactly afterward.
-- For every oracle case, set only the minimum required date/config toggle, enter the exact synthetic test message, capture XAC / QUA CO / TRUNG / detail rows / THU-BU needed as evidence, then DELETE THAT TEST MESSAGE from the reference app immediately after evidence is recorded.
-- Never delete or edit a pre-existing real message. Identify the synthetic test message by exact text and/or creation order before deletion.
+- Before changing any TEST_KTS config setting, capture the current value(s) so they can be restored exactly afterward.
+- For every oracle case, set only the minimum required date/config toggle, enter the exact synthetic test message under TEST_KTS, capture XAC / QUA CO / TRUNG / detail rows / THU-BU needed as evidence, then DELETE THAT TEST MESSAGE from the reference app immediately after evidence is recorded.
+- Never delete or edit a pre-existing message. Identify the synthetic test message by exact text and/or creation order before deletion.
 - After a test that changes a toggle or rate (ONE_PAIR/MULTI_PAIR/KY_RUOI, Tinh Ui, commission mode, total %, refund %, etc.), restore the original setting exactly before moving to another unrelated test and verify the restore.
 - Prefer one synthetic message at a time so cleanup is unambiguous.
-- Keep an audit log of: date used, partner/customer used, setting before, setting during test, exact input, observed output, deletion confirmation, restored setting confirmation.
-- If the app requests credentials, OTP, CAPTCHA, elevated UAC approval, or anything requiring the user's secret/interactive approval, STOP that path and record exactly what the user must provide in the morning. Do not guess credentials or bypass controls.
+- Keep an audit log of: date used, TEST_KTS setting before, setting during test, exact input, observed output, deletion confirmation, restored setting confirmation.
+- If the app requests credentials, OTP, CAPTCHA, elevated UAC approval, or anything requiring the user's secret/interactive approval, STOP that path and record exactly what the user must provide. Do not guess credentials or bypass controls.
 - If GUI automation is unavailable in the local Codex runtime, do not pretend tests were run. Fall back to repository audit and produce the minimal manual oracle test list.
-- At end of run, verify there are zero known synthetic test messages left in the app and all modified settings have been restored.
+- At end of run, verify there are zero known synthetic test messages left in TEST_KTS and all modified settings have been restored.
 
 User-interaction minimization:
-- Do not wake/ask the user for information that can be discovered locally from the shortcut, repo, existing logged-in session, or app UI.
-- Ask the user only for a blocking item that cannot be derived safely, such as login/OTP or which partner profile is safe to use if the app cannot create/isolate a disposable test profile.
-- If no dedicated disposable partner exists and using a real partner could alter accounting history even after deleting the test message, STOP GUI mutation and report the blocker instead of risking live data.
+- Do not ask the user for information that can be discovered locally from the shortcut, repo, existing logged-in session, or app UI.
+- Ask the user only for a blocking item that cannot be derived safely, such as login/OTP, UAC approval, or a UI ambiguity that could risk mutating real data.
+- If `TEST_KTS` cannot be located in the app, stop GUI mutation and report that exact blocker rather than falling back to a real partner.
 
 ## Required work tonight
 1. Inventory all relevant settlement/betting logic already present in:
@@ -154,7 +164,7 @@ User-interaction minimization:
 6. Audit current settlement prototype for accidental guesses. If any unproven rule is implemented as if true, flag it and change only if needed to fail closed on this audit branch.
 7. Do not wire visible PWA UI yet.
 8. Do not implement commercial credit/licensing yet.
-9. If GUI oracle access is available, execute the minimum safe oracle test set and update the rule matrix from observed evidence, following the cleanup/restore protocol above.
+9. If GUI oracle access is available, execute the minimum safe oracle test set using TEST_KTS and update the rule matrix from observed evidence, following the cleanup/restore protocol above.
 
 ## Required final overnight report
 Produce `docs/OVERNIGHT_SETTLEMENT_AUDIT_RESULT.md` with:
