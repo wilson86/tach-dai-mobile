@@ -11,7 +11,7 @@ Status: internal shadow-development only. Not deployed to production/main.
 
 ## Local persistence
 
-IndexedDB database: `kts_settlement_v0`, schema version 3.
+IndexedDB database: `kts_settlement_v0`, schema version 4.
 
 Stores:
 
@@ -110,7 +110,7 @@ DAX is evaluated independently for each station pair and then summed.
 
 ## Verified MB category rules
 
-The following syntax is confirmed:
+The following syntax is confirmed and supported by the canonical settlement parser:
 
 - `01 tamlo 1n` => **2C 8 lô**.
 - `01 02 da 1n` => **2C Đá thẳng**.
@@ -180,22 +180,35 @@ For MB đá with 3+ selected numbers, settlement may carry hidden pair legs for 
 
 `app/result-service.js` is source-independent and defaults to 90-second polling (must stay within 60-120 seconds).
 
-Normalized snapshots contain date, region, source, fetched time, stations, prize arrays, completeness and a deterministic fingerprint. Incomplete draws are `partial`; complete draws stop polling. Network/provider failures retain the last snapshot and retry.
+Normalized snapshots contain date, region, source, fetched time, stations, prize arrays, completeness, verification state and a deterministic fingerprint. Incomplete draws are `partial`. Network/provider failures retain the last snapshot and retry.
+
+A poller can require repeated identical complete snapshots before stopping. The message-driven automatic manager uses three identical complete observations for the current business date, so a provider correction on the next 90-second fetch resets the confirmation streak instead of silently freezing the first complete response. Historical dates use one complete fetch. Independently verified results can stop immediately.
+
+`app/result-auto.js` starts the correct date/region KQXS monitor automatically when a settlement message is saved. Result updates are persisted and trigger `recalculateDateRegion`, so the operator does not have to remember to open the KQXS tab and start polling manually. Multiple date/region scopes are keyed independently and duplicate running pollers for the same scope are suppressed.
 
 `app/settlement-store.js` stores both the latest result and changed-result audit events. A changed provider result therefore causes a new audit event and can trigger settlement recalculation/warning without losing prior evidence.
 
 No API key or provider secret belongs in PWA JavaScript. Provider fetching must be injected through an adapter/server endpoint.
 
+## Shadow comparison and observation gate
+
+`app/settlement-shadow.js` and `app/settlement-shadow-runtime.js` compare the exact KTS settlement against HIOSKT-TTS by partner/date/region and persist the reference snapshot plus comparison result.
+
+A scope can be `MATCH_EXACT`, `MATCH_DISPLAY_ONLY`, `MISMATCH`, blocked/provisional, or still unverified. Matching only the rounded one-decimal display is not sufficient for promotion; exact internal monetary values are required.
+
+`app/settlement-observation.js` aggregates the observation window across scopes and days. It deliberately does not invent the required duration. Until `required_observation_days` is explicitly configured, `promotion_ready` is always false with blocker `OBSERVATION_DURATION_NOT_CONFIGURED`. When a duration is configured, promotion readiness requires every included scope to be exact and at least that many observation days to have all included scopes exact.
+
+The report pane exposes a Shadow observation dashboard for date range, required-day gate, exact/mismatch/display-only/blocked/provisional/unverified counts and remaining blockers.
+
 ## Remaining fail-closed items before full all-region automatic settlement
 
 1. `Tính Ủi` with a non-zero configured payout rate, including 00/99 edge behavior.
 2. Exact one-decimal display tie behavior at an exact `x.xx5` boundary. Exact internal money must never be rounded early.
-3. Canonical parser support for `tamlo`, `baylo`, `xcdau`, `xcduoi` and `xien` still needs to be added through the authoritative parser/engine source and regenerated adapters; generated engine files must not be edited by hand.
 
 Unsupported paths fail closed rather than guess.
 
-## Shadow comparison / release gate
+## Release gate
 
-The visible production PWA is still untouched. Engine/store/result modules remain isolated on `feature/settlement-pwa-v0`.
+The visible production PWA/main remains untouched; development stays isolated on `feature/settlement-pwa-v0`.
 
-Commercial readiness remains blocked until an agreed live observation window has zero unexplained money differences against HIOSKT-TTS. No automatic customer money action is allowed before that gate.
+Commercial readiness remains blocked until an agreed live observation window has zero unexplained monetary differences against HIOSKT-TTS and satisfies the configured observation-duration gate. No automatic customer money action is allowed before that gate.
