@@ -15,213 +15,110 @@
     if (!Number.isFinite(x)) throw new Error((name || 'value') + '_INVALID');
     return x;
   }
-
   function suffix(value, width) {
-    const raw = String(value == null ? '' : value).trim();
-    const digits = raw.replace(/\D/g, '');
-    if (!digits) return '';
-    return digits.padStart(width, '0').slice(-width);
+    const digits = String(value == null ? '' : value).replace(/\D/g, '');
+    return digits ? digits.padStart(width, '0').slice(-width) : '';
   }
-
-  function mbStation(snapshot) {
-    if (!snapshot || String(snapshot.region || '').toLowerCase() !== 'mb') throw new Error('MB_RESULT_REQUIRED');
+  function resultStations(snapshot, region) {
+    if (!snapshot || String(snapshot.region || '').toLowerCase() !== region) throw new Error(region.toUpperCase() + '_RESULT_REQUIRED');
     const stations = Array.isArray(snapshot.stations) ? snapshot.stations : [];
-    if (!stations.length) throw new Error('MB_RESULT_STATION_REQUIRED');
-    return stations[0];
+    if (!stations.length) throw new Error(region.toUpperCase() + '_RESULT_STATION_REQUIRED');
+    return stations;
   }
-
-  function selectedPrizeValues(snapshot, selectors, width) {
-    const station = mbStation(snapshot);
-    const prizes = station.prizes || {};
-    const out = [];
+  function stationByCode(snapshot, region, code) {
+    const needle = String(code || '').toLowerCase();
+    const station = resultStations(snapshot, region).find(s => String(s.code || '').toLowerCase() === needle);
+    if (!station) throw new Error('RESULT_STATION_NOT_FOUND:' + needle);
+    return station;
+  }
+  function mbStation(snapshot) { return resultStations(snapshot, 'mb')[0]; }
+  function selectedPrizeValuesFromStation(station, selectors, width) {
+    const prizes = station.prizes || {}, out = [];
     for (const selector of selectors) {
-      const parts = String(selector).split(':');
-      const prize = parts[0];
-      const index = parts[1];
+      const [prize, index] = String(selector).split(':');
       const values = Array.isArray(prizes[prize]) ? prizes[prize] : [];
-      if (index === '*') {
-        for (const value of values) out.push({ prize, index: out.length, value: suffix(value, width), raw_value: String(value) });
-      } else {
+      if (index === '*') values.forEach((value, i) => out.push({ prize, index: i, value: suffix(value, width), raw_value: String(value) }));
+      else {
         const i = Number(index);
         if (Number.isInteger(i) && i >= 0 && i < values.length) out.push({ prize, index: i, value: suffix(values[i], width), raw_value: String(values[i]) });
       }
     }
     return out;
   }
-
+  function selectedPrizeValues(snapshot, selectors, width) { return selectedPrizeValuesFromStation(mbStation(snapshot), selectors, width); }
   function countValueHits(value, selected, width) {
     const needle = suffix(value, width);
     return selected.reduce((sum, row) => sum + (row.value === needle ? 1 : 0), 0);
   }
-
-  function priceKey(code) {
-    const c = String(code || '').toUpperCase();
-    if (c === '3CXC') return '3CDD';
-    return c;
-  }
-
+  function priceKey(code) { return String(code || '').toUpperCase() === '3CXC' ? '3CDD' : String(code || '').toUpperCase(); }
   function pricing(config, region, code) {
-    const key = priceKey(code);
-    const byRegion = config && config.region_pricing && config.region_pricing[region];
-    const row = byRegion && byRegion[key];
+    const key = priceKey(code), byRegion = config && config.region_pricing && config.region_pricing[region];
+    const fallback = region === 'mt' && config && config.region_pricing ? config.region_pricing.mn : null;
+    const row = (byRegion && byRegion[key]) || (fallback && fallback[key]);
     if (!row) throw new Error('PRICE_MISSING:' + region + ':' + key);
-    const commission = num(row.commission, 'commission');
-    const win = num(row.win, 'win');
+    const commission = num(row.commission, 'commission'), win = num(row.win, 'win');
     if (commission < 0 || win < 0) throw new Error('PRICE_NEGATIVE:' + region + ':' + key);
     return { commission, win, price_key: key };
   }
-
   function standardCategoryInput(code, xac, hitUnits, price, config) {
-    return {
-      code,
-      xac,
-      commission_type: config.commission_type || 'ratio',
-      commission_value: price.commission,
-      hit_units: hitUnits,
-      win_rate: price.win
-    };
+    return { code, xac, commission_type: config.commission_type || 'ratio', commission_value: price.commission, hit_units: hitUnits, win_rate: price.win };
+  }
+
+  function uiRows(leg, selected, stake, price, stationCode) {
+    const d = deps(); let units = 0; const details = [];
+    for (const value of (leg.values || [])) {
+      const candidate = Number(suffix(value, 2)); let hits = 0;
+      for (const target of selected) if (d.engine.isUiNeighbor(candidate, Number(target.value))) hits += 1;
+      if (hits) details.push({ code: 'UI', station: stationCode, numbers: String(value), selector: 'ủi ±1', points: stake, hit_count: hits, hit_units: hits * stake, xac: 0 });
+      units += hits * stake;
+    }
+    return units ? { category_inputs: [{ code: 'UI', xac: 0, commission_type: 'direct', commission_value: 0, hit_units: units, win_rate: price.win }], detail_rows: details } : { category_inputs: [], detail_rows: details };
   }
 
   function evaluateNormalMbLeg(leg, snapshot, config) {
-    const d = deps();
-    const code = String(leg.code || '').toUpperCase();
-    const values = (leg.values || []).map(String);
-    const stake = num(leg.stake, 'stake');
+    const d = deps(), code = String(leg.code || '').toUpperCase(), values = (leg.values || []).map(String), stake = num(leg.stake, 'stake');
     const position = leg.position == null ? null : String(leg.position).toLowerCase();
     const width = code === '4C' ? 4 : (code === '3CB' || code === '3CB7' || code === '3CXC' ? 3 : 2);
-    const selectors = d.mb.mbSelectors(code, { position });
-    const selected = selectedPrizeValues(snapshot, selectors, width);
-    const price = pricing(config, 'mb', code);
+    const selected = selectedPrizeValues(snapshot, d.mb.mbSelectors(code, { position }), width), price = pricing(config, 'mb', code);
     const hitCounts = values.map(value => countValueHits(value, selected, width));
-    const hitUnits = hitCounts.reduce((a, b) => a + b, 0) * stake;
     const xac = d.mb.mbXacUnits(code, { number_count: values.length, stake, position });
-    const details = values.map((value, i) => ({
-      code,
-      station: mbStation(snapshot).code || 'mb',
-      numbers: value,
-      selector: position ? code + ':' + position : code,
-      points: stake,
-      hit_count: hitCounts[i],
-      hit_units: hitCounts[i] * stake,
-      xac: d.mb.mbXacUnits(code, { number_count: 1, stake, position })
-    }));
-    return { category_inputs: [standardCategoryInput(code, xac, hitUnits, price, config)], detail_rows: details };
-  }
-
-  function evaluateDatMbLeg(leg, snapshot, config) {
-    const d = deps();
-    const values = (leg.values || []).map(String);
-    const stake = num(leg.stake, 'stake');
-    if (values.length < 2) throw new Error('MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS');
-    const selected = selectedPrizeValues(snapshot, d.mb.mbSelectors('DAT'), 2);
-    const hitCounts = values.map(value => countValueHits(value, selected, 2));
-    const baseHitUnits = d.mb.mbDatTotalHitUnits(hitCounts);
-    const hitUnits = baseHitUnits * stake;
-    const xac = d.mb.mbXacUnits('DAT', { number_count: values.length, stake });
-    const price = pricing(config, 'mb', 'DAT');
-    const details = [];
-    for (let i = 0; i < values.length; i += 1) {
-      for (let j = i + 1; j < values.length; j += 1) {
-        const hit = d.mb.mbDatHitUnits(hitCounts[i], hitCounts[j]);
-        details.push({
-          code: 'DAT', station: mbStation(snapshot).code || 'mb', numbers: values[i] + '-' + values[j],
-          selector: 'đá thẳng', points: stake, hit_count_a: hitCounts[i], hit_count_b: hitCounts[j],
-          hit_units: hit * stake, xac: d.mb.MB_XAC_UNITS.DAT * stake
-        });
-      }
-    }
-    return { category_inputs: [standardCategoryInput('DAT', xac, hitUnits, price, config)], detail_rows: details };
-  }
-
-  function evaluateXienMbLeg(leg, snapshot, config) {
-    const d = deps();
-    const code = String(leg.code || '').toUpperCase();
-    const size = Number(code.replace('MB_XIEN', ''));
-    if (![2, 3, 4].includes(size)) throw new Error('INVALID_MB_XIEN_SIZE');
-    const values = (leg.values || []).map(String);
-    if (values.length !== size) throw new Error('MB_XIEN_SIZE_MISMATCH');
-    const stake = num(leg.stake, 'stake');
-    const selected = selectedPrizeValues(snapshot, d.mb.mbSelectors('2CB'), 2);
-    const hitCounts = values.map(value => countValueHits(value, selected, 2));
-    const winning = hitCounts.every(x => x > 0);
-    const price = pricing(config, 'mb', code);
-    return {
-      category_inputs: [{
-        code,
-        xac: stake,
-        commission_type: 'direct',
-        commission_value: price.commission,
-        hit_units: winning ? stake : 0,
-        win_rate: price.win
-      }],
-      detail_rows: [{
-        code, station: mbStation(snapshot).code || 'mb', numbers: values.join('-'), selector: 'xien',
-        points: stake, hit_counts: hitCounts, hit_units: winning ? stake : 0, xac: stake
-      }]
-    };
-  }
-
-  function evaluateUiFromDd(leg, snapshot, config) {
-    if (!config || config.tinh_ui !== true) return { category_inputs: [], detail_rows: [] };
-    const d = deps();
-    const price = pricing(config, 'mb', 'UI');
-    const stake = num(leg.stake, 'stake');
-    const selected = selectedPrizeValues(snapshot, d.mb.mbSelectors('2CD'), 2);
-    let units = 0;
-    const details = [];
-    for (const value of (leg.values || [])) {
-      const candidate = Number(suffix(value, 2));
-      let hits = 0;
-      for (const target of selected) {
-        const winning = Number(target.value);
-        if (d.engine.isUiNeighbor(candidate, winning)) hits += 1;
-      }
-      if (hits) details.push({ code: 'UI', station: mbStation(snapshot).code || 'mb', numbers: String(value), selector: 'ủi ±1', points: stake, hit_count: hits, hit_units: hits * stake, xac: 0 });
-      units += hits * stake;
-    }
-    if (!units) return { category_inputs: [], detail_rows: details };
-    return {
-      category_inputs: [{ code: 'UI', xac: 0, commission_type: 'direct', commission_value: 0, hit_units: units, win_rate: price.win }],
-      detail_rows: details
-    };
-  }
-
-  function evaluateMbLeg(leg, snapshot, config) {
-    const code = String(leg.code || '').toUpperCase();
-    if (code === 'DAT') return evaluateDatMbLeg(leg, snapshot, config);
-    if (/^MB_XIEN[234]$/.test(code)) return evaluateXienMbLeg(leg, snapshot, config);
-    const base = evaluateNormalMbLeg(leg, snapshot, config);
-    if (code === '2CD') {
-      const ui = evaluateUiFromDd(leg, snapshot, config);
-      base.category_inputs.push(...ui.category_inputs);
-      base.detail_rows.push(...ui.detail_rows);
-    }
+    const base = { category_inputs: [standardCategoryInput(code, xac, hitCounts.reduce((a,b)=>a+b,0) * stake, price, config)], detail_rows: values.map((value,i)=>({ code, station: mbStation(snapshot).code || 'mb', numbers:value, selector:position ? code+':'+position : code, points:stake, hit_count:hitCounts[i], hit_units:hitCounts[i]*stake, xac:d.mb.mbXacUnits(code,{number_count:1,stake,position}) })) };
+    if (code === '2CD' && config && config.tinh_ui === true) { const ui = uiRows(leg, selected, stake, pricing(config,'mb','UI'), mbStation(snapshot).code || 'mb'); base.category_inputs.push(...ui.category_inputs); base.detail_rows.push(...ui.detail_rows); }
     return base;
   }
-
-  function evaluateCanonicalMessage(input) {
-    const canonical = input && input.canonical_payload;
-    const config = input && input.config_snapshot;
-    const snapshot = input && input.result_snapshot;
-    if (!canonical || !Array.isArray(canonical.legs)) throw new Error('CANONICAL_PAYLOAD_REQUIRED');
-    const region = String(canonical.region || input.region || '').toLowerCase();
-    if (region !== 'mb') throw new Error('MN_MT_CANONICAL_EVALUATOR_PENDING');
-    const categoryInputs = [];
-    const detailRows = [];
-    for (const leg of canonical.legs) {
-      const evaluated = evaluateMbLeg(leg, snapshot, config);
-      categoryInputs.push(...evaluated.category_inputs);
-      detailRows.push(...evaluated.detail_rows);
-    }
-    return { region, category_inputs: clone(categoryInputs), detail_rows: clone(detailRows) };
+  function evaluateDatMbLeg(leg, snapshot, config) {
+    const d=deps(), values=(leg.values||[]).map(String), stake=num(leg.stake,'stake'); if(values.length<2) throw new Error('MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS');
+    const selected=selectedPrizeValues(snapshot,d.mb.mbSelectors('DAT'),2), hits=values.map(v=>countValueHits(v,selected,2));
+    const details=[]; for(let i=0;i<values.length;i++) for(let j=i+1;j<values.length;j++){ const h=d.mb.mbDatHitUnits(hits[i],hits[j]); details.push({code:'DAT',station:mbStation(snapshot).code||'mb',numbers:values[i]+'-'+values[j],selector:'đá thẳng',points:stake,hit_count_a:hits[i],hit_count_b:hits[j],hit_units:h*stake,xac:d.mb.MB_XAC_UNITS.DAT*stake}); }
+    return { category_inputs:[standardCategoryInput('DAT',d.mb.mbXacUnits('DAT',{number_count:values.length,stake}),d.mb.mbDatTotalHitUnits(hits)*stake,pricing(config,'mb','DAT'),config)], detail_rows:details };
   }
+  function evaluateXienMbLeg(leg,snapshot,config){ const d=deps(),code=String(leg.code||'').toUpperCase(),size=Number(code.replace('MB_XIEN','')),values=(leg.values||[]).map(String),stake=num(leg.stake,'stake'); if(![2,3,4].includes(size)||values.length!==size) throw new Error('INVALID_MB_XIEN_SIZE'); const selected=selectedPrizeValues(snapshot,d.mb.mbSelectors('2CB'),2),hits=values.map(v=>countValueHits(v,selected,2)),winning=hits.every(x=>x>0),price=pricing(config,'mb',code); return {category_inputs:[{code,xac:stake,commission_type:'direct',commission_value:price.commission,hit_units:winning?stake:0,win_rate:price.win}],detail_rows:[{code,station:mbStation(snapshot).code||'mb',numbers:values.join('-'),selector:'xien',points:stake,hit_counts:hits,hit_units:winning?stake:0,xac:stake}]}; }
+  function evaluateMbLeg(leg,snapshot,config){ const code=String(leg.code||'').toUpperCase(); if(code==='DAT') return evaluateDatMbLeg(leg,snapshot,config); if(/^MB_XIEN[234]$/.test(code)) return evaluateXienMbLeg(leg,snapshot,config); return evaluateNormalMbLeg(leg,snapshot,config); }
 
-  global.KTS_SETTLEMENT_EVALUATOR = Object.freeze({
-    version: 'settlement-evaluator-mb-v1',
-    suffix,
-    selectedPrizeValues,
-    countValueHits,
-    pricing,
-    evaluateCanonicalMessage
-  });
+  function mnMtWidth(code){ return code==='4C'?4:(code==='3CB'||code==='3CB7'||code==='3CXC'?3:2); }
+  function evaluateNormalMnMtLeg(leg,snapshot,config,region){
+    const d=deps(),code=String(leg.code||'').toUpperCase(),stations=Array.isArray(leg.station_codes)?leg.station_codes:[]; if(stations.length!==1) throw new Error('MN_MT_STANDARD_LEG_REQUIRES_ONE_STATION');
+    const station=stationByCode(snapshot,region,stations[0]),width=mnMtWidth(code),selected=selectedPrizeValuesFromStation(station,d.engine.mnMtSelectors(code),width),values=(leg.values||[]).map(String),stake=num(leg.stake,'stake');
+    const hits=values.map(v=>countValueHits(v,selected,width)),price=pricing(config,region,code),xac=d.engine.mnMtXacUnits(code,{number_count:values.length,stake});
+    const base={category_inputs:[standardCategoryInput(code,xac,hits.reduce((a,b)=>a+b,0)*stake,price,config)],detail_rows:values.map((v,i)=>({code,station:String(station.code||stations[0]).toLowerCase(),numbers:v,selector:code,points:stake,hit_count:hits[i],hit_units:hits[i]*stake,xac:d.engine.mnMtXacUnits(code,{number_count:1,stake})}))};
+    if(code==='2CD'&&config&&config.tinh_ui===true){const ui=uiRows(leg,selected,stake,pricing(config,region,'UI'),String(station.code||stations[0]).toLowerCase());base.category_inputs.push(...ui.category_inputs);base.detail_rows.push(...ui.detail_rows);} return base;
+  }
+  function evaluateDatMnMtLeg(leg,snapshot,config,region){
+    const d=deps(),stations=Array.isArray(leg.station_codes)?leg.station_codes:[]; if(stations.length!==1) throw new Error('MN_MT_DAT_REQUIRES_ONE_STATION');
+    const station=stationByCode(snapshot,region,stations[0]),selected=selectedPrizeValuesFromStation(station,d.engine.mnMtSelectors('2CB'),2),values=(leg.values||[]).map(String),stake=num(leg.stake,'stake'); if(values.length<2) throw new Error('MN_MT_DAT_REQUIRES_AT_LEAST_2_NUMBERS');
+    const hits=values.map(v=>countValueHits(v,selected,2)),mode=config.dat_hit_mode||'ky_ruoi'; let units=0; const details=[];
+    for(let i=0;i<values.length;i++) for(let j=i+1;j<values.length;j++){const h=d.engine.datHitUnits(hits[i],hits[j],mode);units+=h*stake;details.push({code:'DAT',station:String(station.code||stations[0]).toLowerCase(),numbers:values[i]+'-'+values[j],selector:mode,points:stake,hit_count_a:hits[i],hit_count_b:hits[j],hit_units:h*stake,xac:d.engine.MN_MT_XAC_UNITS.DAT*stake});}
+    return {category_inputs:[standardCategoryInput('DAT',d.engine.mnMtXacUnits('DAT',{number_count:values.length,stake}),units,pricing(config,region,'DAT'),config)],detail_rows:details};
+  }
+  function evaluateDaxMnMtLeg(leg,snapshot,config,region){
+    const d=deps(),stations=Array.isArray(leg.station_codes)?leg.station_codes:[],values=(leg.values||[]).map(String),stake=num(leg.stake,'stake'); if(stations.length<2||values.length<2) throw new Error('MN_MT_DAX_REQUIRES_2PLUS_STATIONS_AND_NUMBERS');
+    const selected=stations.map(code=>{const station=stationByCode(snapshot,region,code);return {station,selected:selectedPrizeValuesFromStation(station,d.engine.mnMtSelectors('2CB'),2)};}); const mode=config.dax_hit_mode||'multi_pair'; let units=0; const details=[];
+    for(let ni=0;ni<values.length;ni++) for(let nj=ni+1;nj<values.length;nj++) for(let si=0;si<stations.length;si++) for(let sj=si+1;sj<stations.length;sj++){const a=countValueHits(values[ni],selected[si].selected,2),b=countValueHits(values[nj],selected[sj].selected,2),h=d.engine.daxPairHitUnits(a,b,mode);units+=h*stake;details.push({code:'DAX',station:stations[si]+'-'+stations[sj],numbers:values[ni]+'-'+values[nj],selector:mode,points:stake,hit_count_a:a,hit_count_b:b,hit_units:h*stake,xac:d.engine.MN_MT_XAC_UNITS.DAX*stake});}
+    return {category_inputs:[standardCategoryInput('DAX',d.engine.mnMtXacUnits('DAX',{number_count:values.length,station_count:stations.length,stake}),units,pricing(config,region,'DAX'),config)],detail_rows:details};
+  }
+  function evaluateMnMtLeg(leg,snapshot,config,region){const code=String(leg.code||'').toUpperCase();if(code==='DAT')return evaluateDatMnMtLeg(leg,snapshot,config,region);if(code==='DAX')return evaluateDaxMnMtLeg(leg,snapshot,config,region);return evaluateNormalMnMtLeg(leg,snapshot,config,region);}
+
+  function evaluateCanonicalMessage(input){ const canonical=input&&input.canonical_payload,config=input&&input.config_snapshot,snapshot=input&&input.result_snapshot;if(!canonical||!Array.isArray(canonical.legs))throw new Error('CANONICAL_PAYLOAD_REQUIRED');const region=String(canonical.region||input.region||'').toLowerCase();if(!['mn','mt','mb'].includes(region))throw new Error('SETTLEMENT_REGION_REQUIRED');const categoryInputs=[],detailRows=[];for(const leg of canonical.legs){const e=region==='mb'?evaluateMbLeg(leg,snapshot,config):evaluateMnMtLeg(leg,snapshot,config,region);categoryInputs.push(...e.category_inputs);detailRows.push(...e.detail_rows);}return {region,category_inputs:clone(categoryInputs),detail_rows:clone(detailRows)};}
+
+  global.KTS_SETTLEMENT_EVALUATOR=Object.freeze({version:'settlement-evaluator-3region-v2',suffix,selectedPrizeValues,selectedPrizeValuesFromStation,countValueHits,pricing,evaluateCanonicalMessage});
 })(typeof window !== 'undefined' ? window : globalThis);
