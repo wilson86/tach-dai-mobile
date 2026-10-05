@@ -56,6 +56,7 @@ function fakeStore(messages) {
 }
 
 (async () => {
+  const approx = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
   const baseMessages = [
     { id: 'm1', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: '92 b 1n', status: 'parsed_waiting_result', canonical_payload: { region: 'mb', legs: [{ code: '2CB', values: ['92'], stake: '1' }] } },
     { id: 'm2', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: '92 61 da 1n', status: 'parsed_waiting_result', canonical_payload: { region: 'mb', legs: [{ code: 'DAT', values: ['92','61'], stake: '1' }] } }
@@ -67,9 +68,9 @@ function fakeStore(messages) {
   assert.strictEqual(out.settlement.id, 'scope:p1:2026-09-22:mb');
   assert.deepStrictEqual(Array.from(out.settlement.message_ids), ['m1','m2']);
   assert.strictEqual(out.settlement.result_snapshot.total_xac, 81);
-  assert.strictEqual(out.settlement.result_snapshot.total_qua_co, 61.56);
+  approx(out.settlement.result_snapshot.total_qua_co, 61.56);
   assert.strictEqual(out.settlement.result_snapshot.total_payout, 4);
-  assert.strictEqual(out.settlement.result_snapshot.final_net, 57.56);
+  approx(out.settlement.result_snapshot.final_net, 57.56);
   assert.strictEqual(out.settlement.message_breakdown.length, 2);
 
   store.state.messages.push({ id: 'm3', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: 'bad', status: 'parser_error', canonical_payload: null });
