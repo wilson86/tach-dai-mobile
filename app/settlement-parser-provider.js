@@ -28,10 +28,10 @@
     if (!input || typeof input !== 'object') throw new Error('PARSER_LEG_INVALID');
     const code = String(input.code || '').trim().toUpperCase();
     const values = Array.isArray(input.values) ? input.values.map(v => String(v)) : [];
-    const stake = String(input.stake == null ? '' : input.stake);
+    const stake = String(input.stake == null ? '' : input.stake).replace(',', '.');
     if (!code) throw new Error('PARSER_LEG_CODE_REQUIRED');
     if (!values.length) throw new Error('PARSER_LEG_VALUES_REQUIRED');
-    if (!/^\d+$/.test(stake)) throw new Error('PARSER_LEG_STAKE_INVALID');
+    if (!/^\d+(?:\.5)?$/.test(stake)) throw new Error('PARSER_LEG_STAKE_INVALID');
     return {
       code,
       values,
@@ -58,11 +58,13 @@
     };
   }
 
-  async function fetchCanonical(rawText, region) {
+  async function fetchCanonical(rawText, region, businessDate) {
     const raw = String(rawText || '').trim();
     const r = String(region || '').toLowerCase();
+    const d = String(businessDate || '').slice(0, 10);
     if (!raw) throw new Error('PARSER_MESSAGE_REQUIRED');
     if (!['mn', 'mt', 'mb'].includes(r)) throw new Error('PARSER_REGION_REQUIRED');
+    if (r !== 'mb' && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('PARSER_BUSINESS_DATE_REQUIRED');
 
     const url = new URL(endpoint(), global.location && global.location.href ? global.location.href : 'https://localhost/');
     const response = await global.fetch(url.toString(), {
@@ -70,9 +72,16 @@
       cache: 'no-store',
       credentials: 'omit',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ raw_text: raw, region: r })
+      body: JSON.stringify({ raw_text: raw, region: r, business_date: d || null })
     });
-    if (!response.ok) throw new Error('PARSER_HTTP_' + response.status);
+    if (!response.ok) {
+      let code = 'PARSER_HTTP_' + response.status;
+      try {
+        const body = await response.json();
+        if (body && body.error) code += ':' + String(body.error);
+      } catch (_) {}
+      throw new Error(code);
+    }
     return normalizeCanonicalPayload(await response.json(), r);
   }
 
