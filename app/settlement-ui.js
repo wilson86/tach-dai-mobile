@@ -1,0 +1,302 @@
+(function (global) {
+  'use strict';
+
+  const $ = id => document.getElementById(id);
+  const store = global.KTS_SETTLEMENT_STORE;
+  const resultService = global.KTS_RESULT_SERVICE;
+  const resultProvider = global.KTS_RESULT_PROVIDER;
+  const reportApi = global.KTS_SETTLEMENT_REPORT;
+  if (!store || !resultService || !resultProvider || !reportApi) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
+
+  const PRICES_MN_MT = [
+    ['2CB', '2C lô'], ['2CD', '2C ĐĐ'], ['2CB7', '2C 7 lô'], ['DAT', '2C ĐáT'], ['DAX', '2C ĐáX'],
+    ['3CB', '3C lô'], ['3CB7', '3C 7 lô'], ['3CDD', '3C ĐĐ / XC'], ['4C', '4C']
+  ];
+  const PRICES_MB = [
+    ['2CB', '2C lô'], ['2CD', '2C ĐĐ'], ['2CB8', '2C 8 lô'], ['DAT', '2C đá thẳng'],
+    ['3CB', '3C lô'], ['3CB7', '3C 7 lô'], ['3CDD', '3C ĐĐ / xỉu chủ'], ['4C', '4C'],
+    ['MB_XIEN2', 'Xiên 2', 'xien'], ['MB_XIEN3', 'Xiên 3', 'xien'], ['MB_XIEN4', 'Xiên 4', 'xien'], ['UI', 'Ủi', 'ui']
+  ];
+
+  let partners = [];
+  let poller = null;
+
+  function today() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function status(id, text, kind) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = text || '';
+    el.className = 'status ' + (kind || '');
+  }
+
+  function money(value) {
+    const n = Number(value || 0);
+    return Number.isFinite(n) ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(n) : '0';
+  }
+
+  function renderPricing(targetId, rows, region) {
+    const table = [`<table><thead><tr><th>Loại</th><th>Cò</th><th>Trúng</th></tr></thead><tbody>`];
+    for (const [code, label, gate] of rows) {
+      const gateClass = gate ? ` data-gate="${gate}"` : '';
+      table.push(`<tr${gateClass}><td><b>${esc(label)}</b><div class="hint">${esc(code)}</div></td><td><input data-price-region="${region}" data-price-code="${code}" data-price-field="commission" inputmode="decimal" value="0"></td><td><input data-price-region="${region}" data-price-code="${code}" data-price-field="win" inputmode="decimal" value="0"></td></tr>`);
+    }
+    table.push('</tbody></table>');
+    $(targetId).innerHTML = table.join('');
+    refreshGateVisuals();
+  }
+
+  function refreshGateVisuals() {
+    const xienOn = $('allowMbXien').checked;
+    const uiOn = $('allowUi').checked;
+    document.querySelectorAll('[data-gate="xien"] input').forEach(el => { el.disabled = !xienOn; });
+    document.querySelectorAll('[data-gate="ui"] input').forEach(el => { el.disabled = !uiOn; });
+  }
+
+  function currentPartnerId() { return $('partnerSelect').value || ''; }
+  function selectedPartner() { return partners.find(p => p.id === currentPartnerId()) || null; }
+
+  async function refreshPartners(preferId) {
+    partners = (await store.getAll(store.STORES.partners)).filter(p => p.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+    const options = partners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
+    $('partnerSelect').innerHTML = options || '<option value="">Chưa có đối tác</option>';
+    $('reportPartner').innerHTML = options || '<option value="">Chưa có đối tác</option>';
+    if (preferId && partners.some(p => p.id === preferId)) {
+      $('partnerSelect').value = preferId;
+      $('reportPartner').value = preferId;
+    }
+    updatePartnerView();
+    await loadConfigForDate();
+  }
+
+  function updatePartnerView() {
+    const p = selectedPartner();
+    $('partnerRoleView').textContent = p ? (p.role === 'owner' ? 'Chủ' : 'Khách') : '—';
+  }
+
+  async function addPartner() {
+    const name = $('partnerName').value.trim();
+    if (!name) return status('partnerStatus', 'Nhập tên đối tác.', 'err');
+    try {
+      const saved = await store.savePartner({ name, role: $('partnerRole').value });
+      $('partnerName').value = '';
+      await refreshPartners(saved.id);
+      status('partnerStatus', `Đã lưu ${saved.name}.`, 'ok');
+    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+  }
+
+  function priceInputsToObject() {
+    const out = { mn: {}, mt: {}, mb: {} };
+    document.querySelectorAll('[data-price-region]').forEach(input => {
+      const region = input.dataset.priceRegion;
+      const code = input.dataset.priceCode;
+      const field = input.dataset.priceField;
+      if (!out[region][code]) out[region][code] = {};
+      out[region][code][field] = String(input.value || '0').trim() || '0';
+    });
+    out.mt = JSON.parse(JSON.stringify(out.mn));
+    return out;
+  }
+
+  function fillPricing(config) {
+    const pricing = config && config.region_pricing ? config.region_pricing : {};
+    document.querySelectorAll('[data-price-region]').forEach(input => {
+      const region = input.dataset.priceRegion;
+      const code = input.dataset.priceCode;
+      const field = input.dataset.priceField;
+      const regionData = pricing[region] || (region === 'mt' ? pricing.mn : {}) || {};
+      input.value = regionData[code] && regionData[code][field] != null ? regionData[code][field] : '0';
+    });
+  }
+
+  function resetConfigForm() {
+    $('commissionType').value = 'ratio';
+    $('totalPercent').value = '100';
+    $('refundPercent').value = '0';
+    $('datMode').value = 'ky_ruoi';
+    $('daxMode').value = 'multi_pair';
+    $('allowMbXien').checked = false;
+    $('allowUi').checked = false;
+    fillPricing(null);
+    refreshGateVisuals();
+  }
+
+  function applyConfig(config) {
+    $('commissionType').value = config.commission_type || 'ratio';
+    $('totalPercent').value = config.total_percent == null ? '100' : config.total_percent;
+    $('refundPercent').value = config.refund_percent == null ? '0' : config.refund_percent;
+    $('datMode').value = config.dat_hit_mode || 'ky_ruoi';
+    $('daxMode').value = config.dax_hit_mode || 'multi_pair';
+    $('allowMbXien').checked = config.mb_xien_234 === true;
+    $('allowUi').checked = config.tinh_ui === true;
+    fillPricing(config);
+    refreshGateVisuals();
+  }
+
+  async function loadConfigForDate() {
+    const partnerId = currentPartnerId();
+    if (!partnerId) { resetConfigForm(); return; }
+    const date = $('effectiveDate').value || today();
+    try {
+      const cfg = await store.resolveConfigForDate(partnerId, date);
+      applyConfig(cfg);
+      status('configStatus', `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, 'ok');
+    } catch (e) {
+      resetConfigForm();
+      if (String(e.message || e).includes('NO_CONFIG')) status('configStatus', 'Chưa có cấu hình trước ngày này. Hãy tạo phiên bản đầu tiên.', 'warn');
+      else status('configStatus', String(e.message || e), 'err');
+    }
+  }
+
+  async function saveConfig() {
+    const partnerId = currentPartnerId();
+    if (!partnerId) return status('configStatus', 'Chưa chọn đối tác.', 'err');
+    const effective = $('effectiveDate').value;
+    if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
+    try {
+      const cfg = await store.saveConfig({
+        partner_id: partnerId,
+        effective_from_date: effective,
+        commission_type: $('commissionType').value,
+        total_percent: $('totalPercent').value,
+        refund_percent: $('refundPercent').value,
+        dat_hit_mode: $('datMode').value,
+        dax_hit_mode: $('daxMode').value,
+        mb_xien_234: $('allowMbXien').checked,
+        tinh_ui: $('allowUi').checked,
+        region_pricing: priceInputsToObject()
+      });
+      status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Các ngày trước giữ rule cũ.`, 'ok');
+    } catch (e) { status('configStatus', String(e.message || e), 'err'); }
+  }
+
+  async function saveMessage() {
+    const partnerId = currentPartnerId();
+    const raw = $('messageText').value.trim();
+    if (!partnerId) return status('messageStatus', 'Chưa chọn đối tác.', 'err');
+    if (!raw) return status('messageStatus', 'Chưa có tin.', 'err');
+    try {
+      const saved = await store.saveMessage({
+        partner_id: partnerId,
+        business_date: $('messageDate').value,
+        region: $('messageRegion').value,
+        raw_text: raw,
+        canonical_payload: null,
+        status: 'pending_parser'
+      });
+      status('messageStatus', `Đã lưu tin ${saved.id}. Đang chờ canonical parser trước khi tính tiền.`, 'ok');
+    } catch (e) { status('messageStatus', String(e.message || e), 'err'); }
+  }
+
+  function renderResult(snapshot, meta) {
+    const badge = snapshot.complete ? '<span class="tag ok">ĐÃ CHỐT</span>' : '<span class="tag warn">TẠM TÍNH</span>';
+    const parts = [`<div class="row" style="justify-content:space-between"><div>${badge} <span class="hint">${esc(snapshot.source)} · ${esc(snapshot.fetched_at)}</span></div></div>`];
+    for (const station of snapshot.stations) {
+      parts.push(`<h3 style="margin:12px 0 4px">${esc(station.name)}</h3><table><thead><tr><th>Giải</th><th>Kết quả</th></tr></thead><tbody>`);
+      const order = snapshot.region === 'mb' ? ['DB','G1','G2','G3','G4','G5','G6','G7'] : ['G8','G7','G6','G5','G4','G3','G2','G1','DB'];
+      for (const prize of order) parts.push(`<tr><td><b>${prize}</b></td><td>${esc((station.prizes[prize] || []).join(' · '))}</td></tr>`);
+      parts.push('</tbody></table>');
+    }
+    if (meta && meta.changed && meta.previous) parts.push('<div class="status warn">Nguồn vừa thay đổi kết quả đã lưu. Settlement liên quan phải tính lại và cảnh báo.</div>');
+    $('resultTable').innerHTML = parts.join('');
+  }
+
+  function renderPollStatus(info) {
+    const state = info && info.state;
+    if (state === 'fetching') status('resultStatus', 'Đang lấy KQXS…', '');
+    else if (state === 'waiting') status('resultStatus', 'Chưa đủ giải · sẽ cập nhật lại sau 90 giây · kết quả chỉ TẠM TÍNH.', 'warn');
+    else if (state === 'complete') status('resultStatus', 'Đã đủ kết quả · dừng polling và đánh dấu ĐÃ CHỐT.', 'ok');
+    else if (state === 'error') status('resultStatus', `Chưa lấy được KQXS: ${info.error}. Giữ dữ liệu gần nhất và sẽ thử lại.`, 'err');
+  }
+
+  async function startResults() {
+    if (poller) poller.stop();
+    poller = resultService.createPoller({
+      fetchSnapshot: resultProvider.fetchSnapshot,
+      store,
+      intervalMs: 90000,
+      onUpdate: renderResult,
+      onStatus: renderPollStatus
+    });
+    try {
+      await poller.start({ business_date: $('resultDate').value, region: $('resultRegion').value });
+    } catch (e) { status('resultStatus', String(e.message || e), 'err'); }
+  }
+
+  function stopResults() {
+    if (poller) poller.stop();
+    status('resultStatus', 'Đã dừng tự cập nhật.', '');
+  }
+
+  function renderReport(report) {
+    const out = [`<div class="row" style="justify-content:space-between"><b>${esc(report.partner.name || '')}</b><span class="tag">${esc(report.business_date)}</span></div>`];
+    if (!report.messages.length) { $('reportOutput').innerHTML = '<div class="hint">Ngày này chưa có settlement.</div>'; return; }
+    out.push(`<div style="margin:9px 0"><span class="money">XÁC ${money(report.totals.xac)}</span> · QUA CÒ <span class="money">${money(report.totals.qua_co)}</span> · TRẢ TRÚNG <span class="money">${money(report.totals.payout)}</span> · HỒI <span class="money">${money(report.totals.refund_amount)}</span></div>`);
+    out.push(`<div class="status ${report.totals.direction === 'THU' ? 'ok' : report.totals.direction === 'BU' ? 'err' : ''}">${report.totals.direction}: ${money(report.totals.final_net)}</div>`);
+    for (const region of report.regions) {
+      out.push(`<h3>${region.region.toUpperCase()}</h3><table><thead><tr><th>Loại</th><th>XÁC</th><th>Qua cò</th><th>Trúng</th><th>Trả</th></tr></thead><tbody>`);
+      for (const row of region.categories) out.push(`<tr><td>${esc(row.code)}</td><td>${money(row.xac)}</td><td>${money(row.qua_co)}</td><td>${money(row.hit_units)}</td><td>${money(row.payout)}</td></tr>`);
+      out.push('</tbody></table>');
+      for (const msg of region.messages) {
+        out.push(`<div class="report-message"><div class="raw">${esc(msg.raw_text)}</div>`);
+        for (const d of msg.detail_rows) out.push(`<div class="hint">• ${esc(d.station || '')} ${esc(d.numbers || '')} ${esc(d.selector || d.code || '')} ${d.points != null ? '×' + esc(d.points) : ''}</div>`);
+        out.push(`</div>`);
+      }
+    }
+    $('reportOutput').innerHTML = out.join('');
+  }
+
+  async function loadReport() {
+    const partnerId = $('reportPartner').value;
+    const date = $('reportDate').value;
+    if (!partnerId || !date) return;
+    const partner = partners.find(p => p.id === partnerId) || { id: partnerId };
+    const settlements = await store.getAll(store.STORES.settlements);
+    const messages = await store.getAll(store.STORES.messages);
+    const messagesById = Object.fromEntries(messages.map(m => [m.id, m]));
+    renderReport(reportApi.buildDailyPartnerReport({ partner, business_date: date, settlements, messages_by_id: messagesById }));
+  }
+
+  function nav() {
+    document.querySelectorAll('.nav button').forEach(btn => btn.addEventListener('click', () => {
+      document.querySelectorAll('.nav button').forEach(x => x.classList.toggle('active', x === btn));
+      document.querySelectorAll('.pane').forEach(p => p.classList.toggle('active', p.id === 'pane-' + btn.dataset.pane));
+    }));
+  }
+
+  async function boot() {
+    nav();
+    renderPricing('priceMnMt', PRICES_MN_MT, 'mn');
+    renderPricing('priceMb', PRICES_MB, 'mb');
+    const d = today();
+    for (const id of ['effectiveDate','messageDate','resultDate','reportDate']) $(id).value = d;
+    $('resultEndpoint').value = resultProvider.endpoint();
+    $('allowMbXien').addEventListener('change', refreshGateVisuals);
+    $('allowUi').addEventListener('change', refreshGateVisuals);
+    $('partnerSelect').addEventListener('change', async () => { updatePartnerView(); $('reportPartner').value = currentPartnerId(); await loadConfigForDate(); });
+    $('effectiveDate').addEventListener('change', loadConfigForDate);
+    $('addPartner').addEventListener('click', addPartner);
+    $('saveConfig').addEventListener('click', saveConfig);
+    $('saveMessage').addEventListener('click', saveMessage);
+    $('clearMessage').addEventListener('click', () => { $('messageText').value = ''; status('messageStatus', '', ''); });
+    $('startResults').addEventListener('click', startResults);
+    $('stopResults').addEventListener('click', stopResults);
+    $('saveEndpoint').addEventListener('click', () => {
+      try { $('resultEndpoint').value = resultProvider.setEndpoint($('resultEndpoint').value); status('resultStatus', 'Đã lưu endpoint KQXS. Không lưu API key trong PWA.', 'ok'); }
+      catch (e) { status('resultStatus', String(e.message || e), 'err'); }
+    });
+    $('loadReport').addEventListener('click', loadReport);
+    await refreshPartners();
+  }
+
+  boot().catch(e => status('partnerStatus', 'Khởi tạo lỗi: ' + String(e.message || e), 'err'));
+})(typeof window !== 'undefined' ? window : globalThis);
