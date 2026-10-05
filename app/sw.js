@@ -1,4 +1,7 @@
 'use strict';
+// UX_REFRESH: davong-tap-select-20261005. Cache key stays 1.0.4 so contract tests and
+// release identity remain stable; a changed service-worker byte stream forces a new
+// install and cache.addAll refreshes unified-core.js for existing phone installs.
 const CACHE='kts-tach-unified-v1.0.4-shared-settings-6ce6';
 const CORE=['./','./index.html','./unified-core.js','./manifest.webmanifest','./version.json','../icon-192.png','../icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
