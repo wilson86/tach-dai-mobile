@@ -123,7 +123,7 @@
           verified: snapshot.verified,
           final: snapshot.verified
         });
-        onStatus({ state: snapshot.verified ? 'verified' : snapshot.complete ? 'complete_unverified' : 'waiting', scope: clone(scope), snapshot: clone(snapshot) });
+        onStatus({ state: snapshot.verified ? 'verified' : snapshot.complete ? 'complete' : 'waiting', scope: clone(scope), snapshot: clone(snapshot) });
         if (snapshot.complete) stop();
         return snapshot;
       } catch (error) {
