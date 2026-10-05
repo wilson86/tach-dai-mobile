@@ -57,6 +57,9 @@ jobs:
       - name: Settlement shadow persistence tests
         run: node tests/settlement-shadow-runtime-tests.js
 
+      - name: Settlement shadow observation tests
+        run: node tests/settlement-observation-tests.js
+
       - name: Settlement page tests
         run: node tests/settlement-page-tests.js
 
