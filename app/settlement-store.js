@@ -2,13 +2,14 @@
   'use strict';
 
   const DB_NAME = 'kts_settlement_v0';
-  const DB_VERSION = 2;
+  const DB_VERSION = 3;
   const STORES = Object.freeze({
     partners: 'partners',
     configs: 'configs',
     messages: 'messages',
     settlements: 'settlements',
     results: 'results',
+    resultEvents: 'result_events',
     metadata: 'metadata'
   });
 
@@ -41,43 +42,42 @@
         const tx = req.transaction;
 
         let partners;
-        if (!db.objectStoreNames.contains(STORES.partners)) {
-          partners = db.createObjectStore(STORES.partners, { keyPath: 'id' });
-        } else partners = tx.objectStore(STORES.partners);
+        if (!db.objectStoreNames.contains(STORES.partners)) partners = db.createObjectStore(STORES.partners, { keyPath: 'id' });
+        else partners = tx.objectStore(STORES.partners);
         ensureIndex(partners, 'by_name', 'name');
         ensureIndex(partners, 'by_role', 'role');
 
         let configs;
-        if (!db.objectStoreNames.contains(STORES.configs)) {
-          configs = db.createObjectStore(STORES.configs, { keyPath: 'id' });
-        } else configs = tx.objectStore(STORES.configs);
+        if (!db.objectStoreNames.contains(STORES.configs)) configs = db.createObjectStore(STORES.configs, { keyPath: 'id' });
+        else configs = tx.objectStore(STORES.configs);
         ensureIndex(configs, 'by_partner', 'partner_id');
         ensureIndex(configs, 'by_partner_version', ['partner_id', 'version'], { unique: true });
         ensureIndex(configs, 'by_partner_effective', ['partner_id', 'effective_from_date'], { unique: false });
 
         let messages;
-        if (!db.objectStoreNames.contains(STORES.messages)) {
-          messages = db.createObjectStore(STORES.messages, { keyPath: 'id' });
-        } else messages = tx.objectStore(STORES.messages);
+        if (!db.objectStoreNames.contains(STORES.messages)) messages = db.createObjectStore(STORES.messages, { keyPath: 'id' });
+        else messages = tx.objectStore(STORES.messages);
         ensureIndex(messages, 'by_partner_date', ['partner_id', 'business_date']);
         ensureIndex(messages, 'by_date', 'business_date');
 
         let settlements;
-        if (!db.objectStoreNames.contains(STORES.settlements)) {
-          settlements = db.createObjectStore(STORES.settlements, { keyPath: 'id' });
-        } else settlements = tx.objectStore(STORES.settlements);
+        if (!db.objectStoreNames.contains(STORES.settlements)) settlements = db.createObjectStore(STORES.settlements, { keyPath: 'id' });
+        else settlements = tx.objectStore(STORES.settlements);
         ensureIndex(settlements, 'by_partner_date', ['partner_id', 'business_date']);
         ensureIndex(settlements, 'by_message', 'message_id');
 
         let results;
-        if (!db.objectStoreNames.contains(STORES.results)) {
-          results = db.createObjectStore(STORES.results, { keyPath: 'id' });
-        } else results = tx.objectStore(STORES.results);
+        if (!db.objectStoreNames.contains(STORES.results)) results = db.createObjectStore(STORES.results, { keyPath: 'id' });
+        else results = tx.objectStore(STORES.results);
         ensureIndex(results, 'by_date_region', ['business_date', 'region']);
 
-        if (!db.objectStoreNames.contains(STORES.metadata)) {
-          db.createObjectStore(STORES.metadata, { keyPath: 'key' });
-        }
+        let resultEvents;
+        if (!db.objectStoreNames.contains(STORES.resultEvents)) resultEvents = db.createObjectStore(STORES.resultEvents, { keyPath: 'id' });
+        else resultEvents = tx.objectStore(STORES.resultEvents);
+        ensureIndex(resultEvents, 'by_date_region', ['business_date', 'region']);
+        ensureIndex(resultEvents, 'by_result_id', 'result_id');
+
+        if (!db.objectStoreNames.contains(STORES.metadata)) db.createObjectStore(STORES.metadata, { keyPath: 'key' });
       };
       req.onsuccess = () => resolve(req.result);
     });
@@ -93,6 +93,12 @@
   function makeId(prefix) {
     if (global.crypto && typeof global.crypto.randomUUID === 'function') return prefix + '_' + global.crypto.randomUUID();
     return prefix + '_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2);
+  }
+
+  function stableStringify(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+    return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
   }
 
   function normalizePartner(input) {
@@ -131,6 +137,31 @@
       commission_type: input.commission_type || 'ratio',
       created_at: input.created_at || now,
       updated_at: now
+    };
+  }
+
+  function normalizeResultSnapshot(input) {
+    const businessDate = String(input.business_date || '').slice(0, 10);
+    const region = String(input.region || '').toLowerCase();
+    if (!validDateOnly(businessDate)) throw new Error('RESULT_DATE_REQUIRED');
+    if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('RESULT_REGION_REQUIRED');
+    const status = String(input.status || (input.complete ? 'complete' : 'partial')).toLowerCase();
+    if (!['partial', 'complete', 'error', 'stale'].includes(status)) throw new Error('INVALID_RESULT_STATUS');
+    const fetchedAt = input.fetched_at || nowIso();
+    const stations = clone(input.stations || []);
+    const core = { business_date: businessDate, region, status, complete: Boolean(input.complete), stations };
+    const fingerprint = input.fingerprint || stableStringify(core);
+    return {
+      id: input.id || `${businessDate}:${region}`,
+      business_date: businessDate,
+      region,
+      source: String(input.source || 'unknown'),
+      fetched_at: fetchedAt,
+      status,
+      complete: Boolean(input.complete),
+      stations,
+      fingerprint,
+      provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
     };
   }
 
@@ -235,7 +266,7 @@
       message_id: input.message_id || null,
       business_date: input.business_date,
       region: input.region || null,
-      engine_version: input.engine_version || 'settlement-v0',
+      engine_version: input.engine_version || 'settlement-v1-verified-rules',
       config_snapshot: clone(input.config_snapshot || null),
       result_snapshot: clone(input.result_snapshot || null),
       detail_rows: clone(input.detail_rows || []),
@@ -249,15 +280,31 @@
     return v;
   }
 
+  async function saveResultSnapshot(input) {
+    const v = normalizeResultSnapshot(input);
+    const previous = await get(STORES.results, v.id);
+    const changed = !previous || previous.fingerprint !== v.fingerprint;
+    await put(STORES.results, v);
+    if (changed) {
+      const event = Object.assign({}, clone(v), {
+        id: makeId('result_event'),
+        result_id: v.id,
+        observed_at: nowIso()
+      });
+      await put(STORES.resultEvents, event);
+    }
+    return { snapshot: v, changed, previous: previous || null };
+  }
+
   async function exportAll() {
-    const payload = { format: 'kts-settlement-export', version: 2, exported_at: nowIso(), stores: {} };
+    const payload = { format: 'kts-settlement-export', version: 3, exported_at: nowIso(), stores: {} };
     for (const name of Object.values(STORES)) payload.stores[name] = await getAll(name);
     return payload;
   }
 
   async function importAll(payload, options) {
     const replace = Boolean(options && options.replace);
-    if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
+    if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2, 3].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
     const db = await openDb();
     try {
       const names = Object.values(STORES);
@@ -274,8 +321,8 @@
   global.KTS_SETTLEMENT_STORE = Object.freeze({
     DB_NAME, DB_VERSION, STORES, openDb,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
-    saveMessage, saveSettlement,
+    saveMessage, saveSettlement, saveResultSnapshot,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);
