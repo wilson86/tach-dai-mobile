@@ -5,6 +5,7 @@
     '2CB': 27,
     '2CD': 5,
     '2CB8': 8,
+    // MB đá thẳng: exactly two lô numbers, 27 XÁC each.
     'DAT': 54,
     '3CB': 23,
     '3CB7': 7,
@@ -36,10 +37,13 @@
     return x;
   }
 
-  function choose2(count) {
-    const c = n(count, 'count');
-    if (!Number.isInteger(c) || c < 0) throw new Error('INVALID_COUNT');
-    return c * (c - 1) / 2;
+  function mbDatHitUnits(hitsA, hitsB) {
+    const a = n(hitsA, 'hits_a');
+    const b = n(hitsB, 'hits_b');
+    if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
+      throw new Error('INVALID_MB_DAT_HITS');
+    }
+    return a > 0 && b > 0 ? 1 : 0;
   }
 
   function mbXacUnits(code, options) {
@@ -48,7 +52,10 @@
     const numberCount = n(options && options.number_count == null ? 1 : options.number_count, 'number_count');
     if (stake < 0 || !Number.isInteger(numberCount) || numberCount < 0) throw new Error('INVALID_MB_XAC_INPUT');
 
-    if (c === 'DAT') return choose2(numberCount) * MB_XAC_UNITS.DAT * stake;
+    if (c === 'DAT') {
+      if (numberCount !== 2) throw new Error('MB_DAT_REQUIRES_EXACTLY_2_NUMBERS');
+      return MB_XAC_UNITS.DAT * stake;
+    }
 
     if (c === '3CXC') {
       const position = String(options && options.position || '').trim().toLowerCase();
@@ -74,10 +81,11 @@
   }
 
   global.KTS_SETTLEMENT_MB_RULES = Object.freeze({
-    version: 'mb-oracle-2026-09-25-v2',
+    version: 'mb-business-2026-10-05-straight-da-v1',
     MB_XAC_UNITS,
     MB_SELECTORS,
     MB_POSITION_XAC_UNITS,
+    mbDatHitUnits,
     mbXacUnits,
     mbSelectors
   });
