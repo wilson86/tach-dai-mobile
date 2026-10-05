@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b57d0">
+<title>KTS Kế Toán</title>
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--text:#172033;--muted:#667085;--line:#d7dde7;--p:#0b57d0;--ok:#067647;--bad:#b42318;--warn:#9a6700;--shadow:0 1px 3px rgba(16,24,40,.08)}
+*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}.wrap{max-width:920px;margin:auto;padding:8px 8px 28px}.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin:3px 2px 8px}.top h1{font-size:19px;margin:0}.pill{font-size:11px;font-weight:800;padding:4px 8px;border-radius:999px;background:#fff3cd;color:#7a5b00}.nav{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;position:sticky;top:0;z-index:10;background:#e8edf4;padding:4px;border-radius:12px;margin-bottom:8px}.nav button{border:0;border-radius:9px;height:42px;background:transparent;font-weight:800;color:#475467}.nav button.active{background:white;color:var(--p);box-shadow:var(--shadow)}.pane{display:none}.pane.active{display:block}.card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:11px;margin-bottom:9px;box-shadow:var(--shadow)}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}label{font-size:12px;color:var(--muted);font-weight:700;display:block;margin-bottom:4px}input,select,textarea{width:100%;border:1px solid var(--line);border-radius:9px;background:#fff;color:#101828;font-size:15px;padding:9px}input,select{height:42px}textarea{min-height:120px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace}.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.row>button{flex:0 0 auto}.btn{border:0;border-radius:9px;height:42px;padding:0 13px;font-weight:800}.primary{background:var(--p);color:#fff}.soft{background:#eef2f7;color:#27364b}.danger{background:#fff0ee;color:var(--bad)}.status{font-size:13px;font-weight:750;margin-top:7px;white-space:pre-wrap}.ok{color:var(--ok)}.err{color:var(--bad)}.warn{color:var(--warn)}.hint{font-size:12px;color:var(--muted);line-height:1.45}.gate{display:flex;align-items:center;gap:9px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fafafa;margin-top:8px}.gate input{width:20px;height:20px}.gate b{display:block;font-size:14px}.gate span{font-size:12px;color:var(--muted)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{border-bottom:1px solid #eaecf0;padding:7px 5px;text-align:left;vertical-align:middle}th{font-size:11px;color:var(--muted);text-transform:uppercase}td input{height:36px;padding:6px 7px;font-size:14px}.section-title{font-weight:850;margin:0 0 8px}.money{font-variant-numeric:tabular-nums;font-weight:800}.result-grid{overflow:auto}.result-grid table{min-width:520px}.tag{display:inline-block;border-radius:999px;padding:3px 7px;font-size:11px;font-weight:800;background:#eef2f7}.tag.ok{background:#ecfdf3}.tag.warn{background:#fffaeb}.report-message{border-top:1px dashed var(--line);padding-top:8px;margin-top:8px}.raw{font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;background:#f8fafc;border-radius:8px;padding:7px}.hidden{display:none!important}
+@media(max-width:600px){.grid,.grid3{grid-template-columns:1fr}.nav{grid-template-columns:repeat(5,minmax(0,1fr))}.nav button{font-size:11px;padding:0 2px}.wrap{padding:6px}.card{padding:9px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><h1>KTS Kế Toán</h1><span class="pill">SHADOW · chưa production</span></div>
+  <div class="nav">
+    <button class="active" data-pane="partner">Khách</button>
+    <button data-pane="config">Cấu hình</button>
+    <button data-pane="message">Tin</button>
+    <button data-pane="result">KQXS</button>
+    <button data-pane="report">Báo cáo</button>
+  </div>
+
+  <section id="pane-partner" class="pane active">
+    <div class="card"><div class="section-title">Đối tác</div><div class="grid"><div><label>Đang chọn</label><select id="partnerSelect"></select></div><div><label>Vai trò</label><div id="partnerRoleView" class="tag">—</div></div></div></div>
+    <div class="card"><div class="section-title">Thêm khách/chủ</div><div class="grid"><div><label>Tên</label><input id="partnerName" placeholder="Ví dụ: Hiền"></div><div><label>Vai trò đối tác</label><select id="partnerRole"><option value="customer">Khách</option><option value="owner">Chủ</option></select></div></div><div class="row" style="margin-top:8px"><button id="addPartner" class="btn primary">Lưu đối tác</button></div><div id="partnerStatus" class="status"></div></div>
+  </section>
+
+  <section id="pane-config" class="pane">
+    <div class="card"><div class="section-title">Cấu hình theo ngày hiệu lực</div><div class="grid3"><div><label>Ngày bắt đầu áp dụng</label><input id="effectiveDate" type="date"></div><div><label>Loại cò</label><select id="commissionType"><option value="ratio">Tỉ lệ</option><option value="amount">Thành tiền</option></select></div><div><label>% tổng</label><input id="totalPercent" inputmode="decimal" value="100"></div></div><div class="grid" style="margin-top:8px"><div><label>% hồi</label><input id="refundPercent" inputmode="decimal" value="0"></div><div><label>ĐáT / ĐáX MN-MT</label><div class="grid"><select id="datMode"><option value="one_time">1 lần</option><option value="ky_ruoi" selected>Kỳ rưỡi</option><option value="multi_pair">Nhiều cặp</option></select><select id="daxMode"><option value="one_time">1 lần</option><option value="ky_ruoi">Kỳ rưỡi</option><option value="multi_pair" selected>Nhiều cặp</option></select></div></div></div>
+      <div class="gate"><input id="allowMbXien" type="checkbox"><div><b>Cho phép Xiên 2-3-4 Miền Bắc</b><span>Mặc định TẮT. Chỉ tính khi bạn bật như soft gốc.</span></div></div>
+      <div class="gate"><input id="allowUi" type="checkbox"><div><b>Tính Ủi</b><span>Mặc định TẮT. Không sinh tiền Ủi khi chưa cho phép.</span></div></div>
+      <div class="hint" style="margin-top:8px">Lưu cấu hình mới không sửa lịch sử. Ngày trước ngày hiệu lực tiếp tục dùng phiên bản cũ.</div>
+    </div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá MN / MT</div><span class="hint">MT dùng cùng rule MN</span></div><div id="priceMnMt"></div></div>
+    <div class="card"><div class="section-title">Giá Miền Bắc</div><div id="priceMb"></div></div>
+    <div class="card"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><div id="configStatus" class="status"></div></div>
+  </section>
+
+  <section id="pane-message" class="pane">
+    <div class="card"><div class="section-title">Nhập tin kế toán</div><div class="grid"><div><label>Ngày</label><input id="messageDate" type="date"></div><div><label>Miền</label><select id="messageRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div></div><label style="margin-top:8px">Tin gốc</label><textarea id="messageText" placeholder="Dán tin cược nguyên bản"></textarea><div class="row" style="margin-top:8px"><button id="saveMessage" class="btn primary">Lưu tin</button><button id="clearMessage" class="btn soft">Xóa ô nhập</button></div><div id="messageStatus" class="status"></div><div class="hint">Bản hiện tại chỉ nhận tin vào kho shadow. Nếu canonical parser chưa xác nhận một cú pháp thì tin giữ trạng thái chờ, không tự đoán tiền.</div></div>
+  </section>
+
+  <section id="pane-result" class="pane">
+    <div class="card"><div class="section-title">Kết quả xổ số tự cập nhật</div><div class="grid3"><div><label>Ngày</label><input id="resultDate" type="date"></div><div><label>Miền</label><select id="resultRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div><div><label>Chu kỳ</label><input value="90 giây" readonly></div></div><div class="row" style="margin-top:8px"><button id="startResults" class="btn primary">Bắt đầu cập nhật</button><button id="stopResults" class="btn soft">Dừng</button></div><div id="resultStatus" class="status"></div></div>
+    <div class="card"><details><summary class="hint">Nguồn KQXS / proxy</summary><div style="margin-top:8px"><label>Endpoint (không chứa API key trong PWA)</label><div class="row"><input id="resultEndpoint" style="flex:1 1 280px"><button id="saveEndpoint" class="btn soft">Lưu endpoint</button></div></div></details></div>
+    <div class="card result-grid"><div id="resultTable" class="hint">Chưa có dữ liệu.</div></div>
+  </section>
+
+  <section id="pane-report" class="pane">
+    <div class="card"><div class="section-title">Báo cáo chi tiết</div><div class="grid"><div><label>Ngày</label><input id="reportDate" type="date"></div><div><label>Đối tác</label><select id="reportPartner"></select></div></div><div class="row" style="margin-top:8px"><button id="loadReport" class="btn primary">Xem báo cáo</button></div></div>
+    <div id="reportOutput" class="card hint">Chưa có báo cáo.</div>
+  </section>
+</div>
+<script src="./settlement-store.js"></script>
+<script src="./settlement-engine.js"></script>
+<script src="./settlement-mb-rules.js"></script>
+<script src="./settlement-category-map.js"></script>
+<script src="./settlement-research-defaults.js"></script>
+<script src="./settlement-feature-gates.js"></script>
+<script src="./settlement-runtime.js"></script>
+<script src="./settlement-report.js"></script>
+<script src="./result-service.js"></script>
+<script src="./result-provider.js"></script>
+<script src="./settlement-ui.js"></script>
+</body>
+</html>
