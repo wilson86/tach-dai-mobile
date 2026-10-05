@@ -66,5 +66,5 @@ assert.strictEqual(dat3.category_inputs[0].xac, 162);
 assert.strictEqual(dat3.category_inputs[0].hit_units, 3);
 assert.strictEqual(dat3.detail_rows.length, 3);
 
-assert.throws(() => E.evaluateCanonicalMessage({ canonical_payload: { region: 'mn', legs: [] }, config_snapshot: config, result_snapshot: result }), /MN_MT_CANONICAL_EVALUATOR_PENDING|CANONICAL_PAYLOAD_REQUIRED/);
+assert.throws(() => E.evaluateCanonicalMessage({ canonical_payload: { region: 'xx', legs: [] }, config_snapshot: config, result_snapshot: result }), /SETTLEMENT_REGION_REQUIRED/);
 console.log('settlement evaluator tests PASS');
