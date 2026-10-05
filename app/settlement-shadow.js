@@ -29,12 +29,15 @@
     const factor = 10 ** digits;
     const n = Number(value);
     if (!Number.isFinite(n)) return null;
-    return Math.round((n + Math.sign(n || 1) * Number.EPSILON) * factor) / factor;
+    const scaled = Math.abs(n) * factor;
+    const rounded = Math.floor(scaled + 0.5 + Number.EPSILON);
+    return Math.sign(n) * rounded / factor;
   }
 
   function compareNumber(localValue, referenceValue, options) {
-    const tolerance = Number(options && options.tolerance == null ? 1e-8 : options.tolerance);
-    const digits = Number(options && options.display_digits == null ? 1 : options.display_digits);
+    const opts = options || {};
+    const tolerance = Number(opts.tolerance == null ? 1e-8 : opts.tolerance);
+    const digits = Number(opts.display_digits == null ? 1 : opts.display_digits);
     const local = numeric(localValue);
     const reference = numeric(referenceValue);
     if (local == null || reference == null) return { status: 'NOT_COMPARABLE', local, reference, delta: null };
