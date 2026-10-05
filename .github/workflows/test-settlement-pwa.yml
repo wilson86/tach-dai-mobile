@@ -24,5 +24,8 @@ jobs:
       - name: Settlement category map tests
         run: node tests/settlement-category-map-tests.js
 
+      - name: Settlement MB oracle tests
+        run: node tests/settlement-mb-oracle-tests.js
+
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
