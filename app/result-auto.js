@@ -47,11 +47,12 @@
         intervalMs,
         completeConfirmations: confirmations,
         onUpdate: (snapshot, meta) => {
+          emit('kts:auto-result-update', { snapshot, meta, rows: null });
           Promise.resolve(pipeline.recalculateDateRegion({
             business_date: snapshot.business_date,
             region: snapshot.region,
             result_snapshot: snapshot
-          })).then(rows => emit('kts:auto-result-update', { snapshot, meta, rows })).catch(error => emit('kts:auto-result-error', { scope, error: String(error && error.message || error) }));
+          })).then(rows => emit('kts:auto-result-recalculated', { snapshot, meta, rows })).catch(error => emit('kts:auto-result-error', { scope, error: String(error && error.message || error) }));
         },
         onStatus: info => emit('kts:auto-result-status', info)
       });
@@ -174,7 +175,7 @@
       });
       global.addEventListener('kts:auto-result-error', event => {
         const detail = event.detail || {};
-        setAutoStatus(`Tự cập nhật KQXS lỗi: ${detail.error || 'UNKNOWN'}`, 'err');
+        setAutoStatus(`KQXS đã lưu nhưng tính lại settlement lỗi: ${detail.error || 'UNKNOWN'}`, 'err');
       });
       global.addEventListener('beforeunload', () => manager.stopAll());
     }
@@ -188,7 +189,7 @@
     }
   }
 
-  global.KTS_RESULT_AUTO = Object.freeze({ version: 'result-auto-v2', createManager, validScope });
+  global.KTS_RESULT_AUTO = Object.freeze({ version: 'result-auto-v3', createManager, validScope });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
