@@ -36,14 +36,23 @@ jobs:
       - name: Settlement MB oracle tests
         run: node tests/settlement-mb-oracle-tests.js
 
+      - name: Settlement canonical evaluator tests
+        run: node tests/settlement-evaluator-tests.js
+
+      - name: Settlement parser provider tests
+        run: node tests/settlement-parser-provider-tests.js
+
+      - name: Settlement pipeline tests
+        run: node tests/settlement-pipeline-tests.js
+
       - name: Settlement report tests
         run: node tests/settlement-report-tests.js
+
+      - name: Settlement page tests
+        run: node tests/settlement-page-tests.js
 
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
 
-      - name: KQXS provider adapter tests
+      - name: KQXS result provider tests
         run: node tests/result-provider-tests.js
-
-      - name: Settlement workspace static tests
-        run: node tests/settlement-page-tests.js
