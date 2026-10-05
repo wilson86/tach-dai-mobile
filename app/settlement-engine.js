@@ -11,9 +11,9 @@
   });
 
   const COMMISSION_TYPES = Object.freeze({
-    RATIO: 'ratio',          // QUA CO = XAC * value, e.g. 0.76
-    AMOUNT: 'amount',        // reference-app "Thanh tien": QUA CO = XAC * value / 100
-    DIRECT: 'direct'         // direct money per stake unit, used by MB xien 2/3/4
+    RATIO: 'ratio',
+    AMOUNT: 'amount',
+    DIRECT: 'direct'
   });
 
   const MN_MT_XAC_UNITS = Object.freeze({
@@ -29,12 +29,11 @@
   });
 
   const MB_XIEN = Object.freeze({
-    2: Object.freeze({ code: 'MB_XIEN2', xac_per_ticket: 1, direct_qua_co: 56, win_rate: 1000 }),
-    3: Object.freeze({ code: 'MB_XIEN3', xac_per_ticket: 1, direct_qua_co: 52, win_rate: 4000 }),
-    4: Object.freeze({ code: 'MB_XIEN4', xac_per_ticket: 1, direct_qua_co: 45, win_rate: 10000 })
+    2: Object.freeze({ code: 'MB_XIEN2', xac_per_ticket: 1 }),
+    3: Object.freeze({ code: 'MB_XIEN3', xac_per_ticket: 1 }),
+    4: Object.freeze({ code: 'MB_XIEN4', xac_per_ticket: 1 })
   });
 
-  // Normalized prize selectors proven against the reference app for MN/MT.
   const MN_MT_SELECTORS = Object.freeze({
     '2CB': Object.freeze(['G8:*', 'G7:*', 'G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']),
     '2CD': Object.freeze(['G8:0', 'DB:0']),
@@ -147,8 +146,6 @@
     const totalQuaCo = rows.reduce((s, r) => s + r.qua_co, 0);
     const totalPayout = rows.reduce((s, r) => s + r.payout, 0);
     const gross = partnerRole === 'customer' ? totalQuaCo - totalPayout : totalPayout - totalQuaCo;
-
-    // Reference app order is proven: gross -> total percent -> refund on eligible direction.
     const proportional = gross * totalPercent / HUNDRED;
     const refundEligible = (partnerRole === 'customer' && proportional > 0) || (partnerRole === 'owner' && proportional < 0);
     const refundAmount = refundEligible ? Math.abs(proportional) * refundPercent / HUNDRED : 0;
@@ -203,7 +200,7 @@
     return selectors.slice();
   }
 
-  function mbXienCategory(size, stake, hitUnits) {
+  function mbXienCategory(size, stake, hitUnits, commissionValue, winRate) {
     const s = Number(size);
     const cfg = MB_XIEN[s];
     if (!cfg) throw new Error('INVALID_MB_XIEN_SIZE');
@@ -211,9 +208,9 @@
       code: cfg.code,
       xac: n(stake, 'stake') * cfg.xac_per_ticket,
       commission_type: COMMISSION_TYPES.DIRECT,
-      commission_value: cfg.direct_qua_co,
+      commission_value: n(commissionValue, 'commission_value'),
       hit_units: n(hitUnits, 'hit_units'),
-      win_rate: cfg.win_rate
+      win_rate: n(winRate, 'win_rate')
     });
   }
 
@@ -221,7 +218,6 @@
     const a = n(candidate, 'candidate');
     const b = n(winning, 'winning');
     if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || a > 99 || b < 0 || b > 99) throw new Error('INVALID_UI_NUMBER');
-    // Exact +/-1 behavior is proven. Wraparound 00<->99 is intentionally not assumed.
     return Math.abs(a - b) === 1;
   }
 
