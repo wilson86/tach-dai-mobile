@@ -9,6 +9,8 @@ const ui = fs.readFileSync(path.join(app, 'settlement-ui.js'), 'utf8');
 const provider = fs.readFileSync(path.join(app, 'result-provider.js'), 'utf8');
 const parserProvider = fs.readFileSync(path.join(app, 'settlement-parser-provider.js'), 'utf8');
 const pipeline = fs.readFileSync(path.join(app, 'settlement-pipeline.js'), 'utf8');
+const observation = fs.readFileSync(path.join(app, 'settlement-observation.js'), 'utf8');
+const observationUi = fs.readFileSync(path.join(app, 'settlement-observation-ui.js'), 'utf8');
 const index = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(app, 'sw.js'), 'utf8');
 
@@ -32,6 +34,13 @@ assert(!provider.toLowerCase().includes('your_api_key'));
 assert(!parserProvider.toLowerCase().includes('your_api_key'));
 assert(index.includes('data-mode="settlement"'));
 assert(index.includes('src="./settlement.html"'));
+assert(page.includes('src="./settlement-observation.js"'));
+assert(page.includes('src="./settlement-observation-ui.js"'));
+assert(observation.includes('promotion_ready'));
+assert(observation.includes('OBSERVATION_DURATION_NOT_CONFIGURED'));
+assert(observationUi.includes('Theo dõi giai đoạn Shadow'));
+assert(sw.includes("'./settlement-observation.js'"));
+assert(sw.includes("'./settlement-observation-ui.js'"));
 assert(sw.includes("url.pathname.includes('/api/kqxs')"));
 assert(sw.includes("url.pathname.includes('/api/settlement/parse')"));
 
