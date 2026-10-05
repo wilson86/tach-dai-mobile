@@ -36,8 +36,11 @@ jobs:
       - name: Settlement MB oracle tests
         run: node tests/settlement-mb-oracle-tests.js
 
-      - name: Settlement canonical evaluator tests
+      - name: Settlement MB canonical evaluator tests
         run: node tests/settlement-evaluator-tests.js
+
+      - name: Settlement MN MT evaluator golden tests
+        run: node tests/settlement-mn-mt-evaluator-tests.js
 
       - name: Settlement parser provider tests
         run: node tests/settlement-parser-provider-tests.js
