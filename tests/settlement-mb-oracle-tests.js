@@ -22,19 +22,30 @@ assert.strictEqual(M.mbXacUnits('2CD', { number_count: 1 }), 5);
 assert.strictEqual(M.mbXacUnits('2CB8', { number_count: 1 }), 8);
 assert.strictEqual(M.mbXacUnits('DAT', { number_count: 2 }), 54);
 assert.strictEqual(M.mbXacUnits('DAT', { number_count: 2, stake: 2 }), 108);
-assert.throws(() => M.mbXacUnits('DAT', { number_count: 3 }), /MB_DAT_REQUIRES_EXACTLY_2_NUMBERS/);
+assert.strictEqual(M.mbXacUnits('DAT', { number_count: 3 }), 162);
+assert.strictEqual(M.mbXacUnits('DAT', { number_count: 4 }), 324);
+assert.throws(() => M.mbXacUnits('DAT', { number_count: 1 }), /MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS/);
+
 assert.strictEqual(M.mbDatHitUnits(1, 1), 1);
 assert.strictEqual(M.mbDatHitUnits(3, 2), 1);
 assert.strictEqual(M.mbDatHitUnits(0, 2), 0);
 assert.strictEqual(M.mbDatHitUnits(2, 0), 0);
+
+// 92 61 44 da 1n => hidden pairs 92-61, 92-44, 61-44.
+// All three selected numbers hit => 3 winning straight pairs.
+assert.strictEqual(M.mbDatTotalHitUnits([3, 2, 1]), 3);
+// Only first + third hit => one winning selected pair.
+assert.strictEqual(M.mbDatTotalHitUnits([3, 0, 1]), 1);
+assert.strictEqual(M.mbDatTotalHitUnits([0, 0, 1]), 0);
+assert.throws(() => M.mbDatTotalHitUnits([1]), /MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS/);
+
 assert.strictEqual(M.mbXacUnits('3CB', { number_count: 1 }), 23);
 assert.strictEqual(M.mbXacUnits('3CB7', { number_count: 1 }), 7);
 assert.strictEqual(M.mbXacUnits('4C', { number_count: 1 }), 20);
 assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 3, position: 'dau' }), 9);
 assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 1, position: 'duoi' }), 1);
 
-// Target KTS business rule: MB đá is straight-only, so the 92-61 pair
-// contributes one hit unit even when the underlying lô numbers repeat.
+// Two-number MB đá golden remains unchanged: one internal pair.
 {
   const r = E.settle([
     row('MB_2CB', 27, 3, 75),
