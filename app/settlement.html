@@ -40,7 +40,7 @@
 
   <section id="pane-message" class="pane">
     <div class="card"><div class="section-title">Nhập tin kế toán</div><div class="grid"><div><label>Ngày</label><input id="messageDate" type="date"></div><div><label>Miền</label><select id="messageRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div></div><label style="margin-top:8px">Tin gốc</label><textarea id="messageText" placeholder="Dán tin cược nguyên bản"></textarea><div class="row" style="margin-top:8px"><button id="saveMessage" class="btn primary">Lưu + tính</button><button id="clearMessage" class="btn soft">Xóa ô nhập</button></div><div id="messageStatus" class="status"></div><div class="hint">Tin phải qua canonical parser. Cú pháp chưa xác nhận hoặc parser lỗi sẽ giữ tin nhưng FAIL-CLOSED, không tự đoán tiền.</div></div>
-    <div class="card"><details><summary class="hint">Canonical parser / KTS backend</summary><div style="margin-top:8px"><label>Endpoint parser</label><div class="row"><input id="parserEndpoint" style="flex:1 1 280px"><button id="saveParserEndpoint" class="btn soft">Lưu endpoint</button></div><div class="hint" style="margin-top:6px">PWA gửi POST raw_text + region; parser trả canonical legs. Không nhúng secret trong PWA.</div></div></details></div>
+    <div class="card"><details><summary class="hint">Canonical parser / KTS backend</summary><div style="margin-top:8px"><label>Endpoint parser</label><div class="row"><input id="parserEndpoint" style="flex:1 1 280px"><button id="saveParserEndpoint" class="btn soft">Lưu endpoint</button></div><div class="hint" style="margin-top:6px">PWA gửi POST raw_text + region + ngày; parser trả canonical legs. Không nhúng secret trong PWA.</div></div></details></div>
   </section>
 
   <section id="pane-result" class="pane">
@@ -65,8 +65,11 @@
 <script src="./settlement-parser-provider.js"></script>
 <script src="./settlement-pipeline.js"></script>
 <script src="./settlement-report.js"></script>
+<script src="./settlement-shadow.js"></script>
+<script src="./settlement-shadow-runtime.js"></script>
 <script src="./result-service.js"></script>
 <script src="./result-provider.js"></script>
 <script src="./settlement-ui.js"></script>
+<script src="./settlement-shadow-ui.js"></script>
 </body>
 </html>
