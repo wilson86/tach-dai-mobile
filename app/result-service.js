@@ -93,11 +93,15 @@
     const onStatus = typeof options.onStatus === 'function' ? options.onStatus : function () {};
     const intervalMs = Number(options.intervalMs == null ? DEFAULT_INTERVAL_MS : options.intervalMs);
     if (!Number.isFinite(intervalMs) || intervalMs < 60000 || intervalMs > 120000) throw new Error('POLL_INTERVAL_MUST_BE_60_TO_120_SECONDS');
+    const completeConfirmations = Number(options.completeConfirmations == null ? 1 : options.completeConfirmations);
+    if (!Number.isInteger(completeConfirmations) || completeConfirmations < 1 || completeConfirmations > 10) throw new Error('COMPLETE_CONFIRMATIONS_MUST_BE_1_TO_10');
 
     let timer = null;
     let running = false;
     let lastSnapshot = null;
     let scope = null;
+    let completeStreak = 0;
+    let lastCompleteFingerprint = null;
 
     async function runOnce() {
       if (!scope) throw new Error('POLL_SCOPE_REQUIRED');
@@ -115,16 +119,41 @@
         }
 
         lastSnapshot = snapshot;
+        if (snapshot.complete) {
+          if (lastCompleteFingerprint === snapshot.fingerprint) completeStreak += 1;
+          else {
+            lastCompleteFingerprint = snapshot.fingerprint;
+            completeStreak = 1;
+          }
+        } else {
+          completeStreak = 0;
+          lastCompleteFingerprint = null;
+        }
+
+        const confirmedComplete = snapshot.complete && completeStreak >= completeConfirmations;
         onUpdate(clone(snapshot), {
           changed,
           previous: clone(previous),
           provisional: !snapshot.complete,
           complete: snapshot.complete,
+          complete_confirmations: completeStreak,
+          complete_confirmations_required: completeConfirmations,
+          complete_confirmed: confirmedComplete,
           verified: snapshot.verified,
           final: snapshot.verified
         });
-        onStatus({ state: snapshot.verified ? 'verified' : snapshot.complete ? 'complete' : 'waiting', scope: clone(scope), snapshot: clone(snapshot) });
-        if (snapshot.complete) stop();
+
+        if (snapshot.verified) {
+          onStatus({ state: 'verified', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
+          stop();
+        } else if (confirmedComplete) {
+          onStatus({ state: 'complete', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
+          stop();
+        } else if (snapshot.complete) {
+          onStatus({ state: 'complete_waiting_confirmation', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak, complete_confirmations_required: completeConfirmations });
+        } else {
+          onStatus({ state: 'waiting', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: 0 });
+        }
         return snapshot;
       } catch (error) {
         onStatus({ state: 'error', scope: clone(scope), error: String(error && error.message || error), last_snapshot: clone(lastSnapshot) });
@@ -146,6 +175,8 @@
       }
       stop();
       scope = { business_date: String(nextScope.business_date), region: String(nextScope.region).toLowerCase() };
+      completeStreak = 0;
+      lastCompleteFingerprint = null;
       running = true;
       try { await runOnce(); } catch (_) { /* keep polling after transient failure */ }
       if (running) schedule();
@@ -161,7 +192,14 @@
       start,
       stop,
       runOnce,
-      getState: () => ({ running, scope: clone(scope), last_snapshot: clone(lastSnapshot), interval_ms: intervalMs })
+      getState: () => ({
+        running,
+        scope: clone(scope),
+        last_snapshot: clone(lastSnapshot),
+        interval_ms: intervalMs,
+        complete_confirmations: completeStreak,
+        complete_confirmations_required: completeConfirmations
+      })
     });
   }
 
