@@ -1,0 +1,25 @@
+name: Qualify Settlement PWA
+
+on:
+  push:
+    branches:
+      - feature/settlement-pwa-v0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Existing Mobile regression
+        run: node tests/regression-tests.js
+
+      - name: Settlement engine golden tests
+        run: node tests/settlement-engine-tests.js
+
+      - name: KQXS result service tests
+        run: node tests/result-service-tests.js
