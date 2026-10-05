@@ -1,0 +1,50 @@
+'use strict';
+const fs = require('fs');
+const vm = require('vm');
+const path = require('path');
+const assert = require('assert');
+
+const code = fs.readFileSync(path.join(__dirname, '..', 'app', 'result-provider.js'), 'utf8');
+const mem = new Map();
+let requested = null;
+const sandbox = {
+  globalThis: {},
+  URL,
+  Date,
+  location: { href: 'https://example.test/app/settlement.html' },
+  localStorage: {
+    getItem: k => mem.has(k) ? mem.get(k) : null,
+    setItem: (k, v) => mem.set(k, String(v))
+  },
+  fetch: async (url, options) => {
+    requested = { url, options };
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ source: 'fixture', stations: [{ code: 'bl', name: 'Bạc Liêu', prizes: { G8: ['90'] } }] })
+    };
+  }
+};
+Object.assign(sandbox.globalThis, sandbox);
+vm.createContext(sandbox);
+vm.runInContext(code, sandbox);
+const P = sandbox.globalThis.KTS_RESULT_PROVIDER;
+
+assert.strictEqual(P.endpoint(), '/api/kqxs');
+assert.strictEqual(P.setEndpoint('/kts-api/kqxs'), '/kts-api/kqxs');
+assert.strictEqual(P.endpoint(), '/kts-api/kqxs');
+assert.throws(() => P.setEndpoint('javascript:alert(1)'), /KQXS_ENDPOINT/);
+
+(async () => {
+  const out = await P.fetchSnapshot({ business_date: '2026-10-05', region: 'mn' });
+  assert.strictEqual(out.business_date, '2026-10-05');
+  assert.strictEqual(out.region, 'mn');
+  assert.strictEqual(out.source, 'fixture');
+  assert.strictEqual(out.stations[0].code, 'bl');
+  assert(requested.url.includes('date=2026-10-05'));
+  assert(requested.url.includes('region=mn'));
+  assert.strictEqual(requested.options.cache, 'no-store');
+  assert.strictEqual(requested.options.credentials, 'omit');
+  assert(!JSON.stringify(requested.options).toLowerCase().includes('api-key'));
+  console.log('result-provider-tests: PASS');
+})().catch(err => { console.error(err); process.exit(1); });
