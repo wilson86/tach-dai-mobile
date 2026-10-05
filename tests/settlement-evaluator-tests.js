@@ -12,6 +12,7 @@ for (const file of ['app/settlement-engine.js', 'app/settlement-mb-rules.js', 'a
 
 const E = ctx.KTS_SETTLEMENT_EVALUATOR;
 const engine = ctx.KTS_SETTLEMENT_ENGINE;
+const approx = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-9, `${actual} != ${expected}`);
 
 const result = {
   business_date: '2026-09-22', region: 'mb', complete: true,
@@ -51,7 +52,7 @@ const evaluated = E.evaluateCanonicalMessage({ canonical_payload: canonical, con
 assert.strictEqual(evaluated.category_inputs.length, 9);
 const settled = engine.settle(evaluated.category_inputs, { partner_role: 'customer', total_percent: 100, refund_percent: 0 });
 assert.strictEqual(settled.total_xac, 148);
-assert.strictEqual(settled.total_qua_co, 112.48);
+approx(settled.total_qua_co, 112.48);
 assert.strictEqual(settled.total_payout, 12);
 assert.ok(evaluated.detail_rows.some(x => x.code === 'DAT' && x.numbers === '92-61' && x.hit_units === 1));
 assert.ok(evaluated.detail_rows.some(x => x.code === '3CXC' && x.selector === '3CXC:dau' && x.hit_units === 1));
