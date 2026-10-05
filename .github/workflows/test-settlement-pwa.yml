@@ -68,3 +68,6 @@ jobs:
 
       - name: KQXS result provider tests
         run: node tests/result-provider-tests.js
+
+      - name: KQXS automatic scope polling tests
+        run: node tests/result-auto-tests.js
