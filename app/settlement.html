@@ -31,7 +31,7 @@
     <div class="card"><div class="section-title">Cấu hình theo ngày hiệu lực</div><div class="grid3"><div><label>Ngày bắt đầu áp dụng</label><input id="effectiveDate" type="date"></div><div><label>Loại cò</label><select id="commissionType"><option value="ratio">Tỉ lệ</option><option value="amount">Thành tiền</option></select></div><div><label>% tổng</label><input id="totalPercent" inputmode="decimal" value="100"></div></div><div class="grid" style="margin-top:8px"><div><label>% hồi</label><input id="refundPercent" inputmode="decimal" value="0"></div><div><label>ĐáT / ĐáX MN-MT</label><div class="grid"><select id="datMode"><option value="one_time">1 lần</option><option value="ky_ruoi" selected>Kỳ rưỡi</option><option value="multi_pair">Nhiều cặp</option></select><select id="daxMode"><option value="one_time">1 lần</option><option value="ky_ruoi">Kỳ rưỡi</option><option value="multi_pair" selected>Nhiều cặp</option></select></div></div></div>
       <div class="gate"><input id="allowMbXien" type="checkbox"><div><b>Cho phép Xiên 2-3-4 Miền Bắc</b><span>Mặc định TẮT. Chỉ tính khi bạn bật như soft gốc.</span></div></div>
       <div class="gate"><input id="allowUi" type="checkbox"><div><b>Tính Ủi</b><span>Mặc định TẮT. Không sinh tiền Ủi khi chưa cho phép.</span></div></div>
-      <div class="hint" style="margin-top:8px">Lưu cấu hình mới không sửa lịch sử. Ngày trước ngày hiệu lực tiếp tục dùng phiên bản cũ.</div>
+      <div class="hint" style="margin-top:8px">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi. Ngày trước ngày hiệu lực tiếp tục dùng phiên bản cũ.</div>
     </div>
     <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá MN / MT</div><span class="hint">MT dùng cùng rule MN</span></div><div id="priceMnMt"></div></div>
     <div class="card"><div class="section-title">Giá Miền Bắc</div><div id="priceMb"></div></div>
@@ -39,7 +39,8 @@
   </section>
 
   <section id="pane-message" class="pane">
-    <div class="card"><div class="section-title">Nhập tin kế toán</div><div class="grid"><div><label>Ngày</label><input id="messageDate" type="date"></div><div><label>Miền</label><select id="messageRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div></div><label style="margin-top:8px">Tin gốc</label><textarea id="messageText" placeholder="Dán tin cược nguyên bản"></textarea><div class="row" style="margin-top:8px"><button id="saveMessage" class="btn primary">Lưu tin</button><button id="clearMessage" class="btn soft">Xóa ô nhập</button></div><div id="messageStatus" class="status"></div><div class="hint">Bản hiện tại chỉ nhận tin vào kho shadow. Nếu canonical parser chưa xác nhận một cú pháp thì tin giữ trạng thái chờ, không tự đoán tiền.</div></div>
+    <div class="card"><div class="section-title">Nhập tin kế toán</div><div class="grid"><div><label>Ngày</label><input id="messageDate" type="date"></div><div><label>Miền</label><select id="messageRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div></div><label style="margin-top:8px">Tin gốc</label><textarea id="messageText" placeholder="Dán tin cược nguyên bản"></textarea><div class="row" style="margin-top:8px"><button id="saveMessage" class="btn primary">Lưu + tính</button><button id="clearMessage" class="btn soft">Xóa ô nhập</button></div><div id="messageStatus" class="status"></div><div class="hint">Tin phải qua canonical parser. Cú pháp chưa xác nhận hoặc parser lỗi sẽ giữ tin nhưng FAIL-CLOSED, không tự đoán tiền.</div></div>
+    <div class="card"><details><summary class="hint">Canonical parser / KTS backend</summary><div style="margin-top:8px"><label>Endpoint parser</label><div class="row"><input id="parserEndpoint" style="flex:1 1 280px"><button id="saveParserEndpoint" class="btn soft">Lưu endpoint</button></div><div class="hint" style="margin-top:6px">PWA gửi POST raw_text + region; parser trả canonical legs. Không nhúng secret trong PWA.</div></div></details></div>
   </section>
 
   <section id="pane-result" class="pane">
@@ -60,6 +61,9 @@
 <script src="./settlement-research-defaults.js"></script>
 <script src="./settlement-feature-gates.js"></script>
 <script src="./settlement-runtime.js"></script>
+<script src="./settlement-evaluator.js"></script>
+<script src="./settlement-parser-provider.js"></script>
+<script src="./settlement-pipeline.js"></script>
 <script src="./settlement-report.js"></script>
 <script src="./result-service.js"></script>
 <script src="./result-provider.js"></script>
