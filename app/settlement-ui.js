@@ -5,8 +5,10 @@
   const store = global.KTS_SETTLEMENT_STORE;
   const resultService = global.KTS_RESULT_SERVICE;
   const resultProvider = global.KTS_RESULT_PROVIDER;
+  const parserProvider = global.KTS_SETTLEMENT_PARSER_PROVIDER;
+  const pipeline = global.KTS_SETTLEMENT_PIPELINE;
   const reportApi = global.KTS_SETTLEMENT_REPORT;
-  if (!store || !resultService || !resultProvider || !reportApi) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
+  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
 
   const PRICES_MN_MT = [
     ['2CB', '2C lô'], ['2CD', '2C ĐĐ'], ['2CB7', '2C 7 lô'], ['DAT', '2C ĐáT'], ['DAX', '2C ĐáX'],
@@ -175,7 +177,8 @@
         tinh_ui: $('allowUi').checked,
         region_pricing: priceInputsToObject()
       });
-      status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Các ngày trước giữ rule cũ.`, 'ok');
+      const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, effective);
+      status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.`, 'ok');
     } catch (e) { status('configStatus', String(e.message || e), 'err'); }
   }
 
@@ -184,17 +187,37 @@
     const raw = $('messageText').value.trim();
     if (!partnerId) return status('messageStatus', 'Chưa chọn đối tác.', 'err');
     if (!raw) return status('messageStatus', 'Chưa có tin.', 'err');
+    status('messageStatus', 'Đang chạy canonical parser…', '');
     try {
-      const saved = await store.saveMessage({
+      const outcome = await pipeline.parseAndSaveMessage({
         partner_id: partnerId,
         business_date: $('messageDate').value,
         region: $('messageRegion').value,
         raw_text: raw,
-        canonical_payload: null,
-        status: 'pending_parser'
+        parser_provider: parserProvider
       });
-      status('messageStatus', `Đã lưu tin ${saved.id}. Đang chờ canonical parser trước khi tính tiền.`, 'ok');
+      if (outcome.status === 'parser_error') {
+        status('messageStatus', `Đã giữ tin ${outcome.message.id} nhưng KHÔNG tính tiền: ${outcome.error}`, 'err');
+        return;
+      }
+      if (outcome.status === 'parsed_waiting_result') {
+        status('messageStatus', `Đã parse tin ${outcome.message.id}. Chờ KQXS trước khi tính tiền.`, 'warn');
+        return;
+      }
+      if (outcome.status === 'blocked') {
+        status('messageStatus', `Tin đã parse nhưng settlement đang chặn: ${outcome.settlement && outcome.settlement.reason ? outcome.settlement.reason : 'xem báo cáo'}`, 'err');
+        return;
+      }
+      status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.`, outcome.status === 'provisional' ? 'warn' : 'ok');
     } catch (e) { status('messageStatus', String(e.message || e), 'err'); }
+  }
+
+  async function recalcAfterResult(snapshot) {
+    try {
+      const rows = await pipeline.recalculateDateRegion({ business_date: snapshot.business_date, region: snapshot.region, result_snapshot: snapshot });
+      const blocked = rows.filter(x => x.status === 'blocked').length;
+      if (blocked) status('resultStatus', `KQXS đã cập nhật · đã tính lại ${rows.length} đối tác · ${blocked} phạm vi đang fail-closed.`, 'warn');
+    } catch (e) { status('resultStatus', 'KQXS có dữ liệu nhưng tính lại lỗi: ' + String(e.message || e), 'err'); }
   }
 
   function renderResult(snapshot, meta) {
@@ -206,15 +229,16 @@
       for (const prize of order) parts.push(`<tr><td><b>${prize}</b></td><td>${esc((station.prizes[prize] || []).join(' · '))}</td></tr>`);
       parts.push('</tbody></table>');
     }
-    if (meta && meta.changed && meta.previous) parts.push('<div class="status warn">Nguồn vừa thay đổi kết quả đã lưu. Settlement liên quan phải tính lại và cảnh báo.</div>');
+    if (meta && meta.changed && meta.previous) parts.push('<div class="status warn">Nguồn vừa thay đổi kết quả đã lưu. Hệ thống sẽ tự tính lại toàn bộ settlement liên quan.</div>');
     $('resultTable').innerHTML = parts.join('');
+    recalcAfterResult(snapshot);
   }
 
   function renderPollStatus(info) {
     const state = info && info.state;
     if (state === 'fetching') status('resultStatus', 'Đang lấy KQXS…', '');
-    else if (state === 'waiting') status('resultStatus', 'Chưa đủ giải · sẽ cập nhật lại sau 90 giây · kết quả chỉ TẠM TÍNH.', 'warn');
-    else if (state === 'complete') status('resultStatus', 'Đã đủ kết quả · dừng polling và đánh dấu ĐÃ CHỐT.', 'ok');
+    else if (state === 'waiting') status('resultStatus', 'Chưa đủ giải · sẽ cập nhật lại sau 90 giây · settlement chỉ TẠM TÍNH.', 'warn');
+    else if (state === 'complete') status('resultStatus', 'Đã đủ kết quả · dừng polling · settlement được tính lại và chờ shadow đối chiếu.', 'ok');
     else if (state === 'error') status('resultStatus', `Chưa lấy được KQXS: ${info.error}. Giữ dữ liệu gần nhất và sẽ thử lại.`, 'err');
   }
 
@@ -239,16 +263,18 @@
 
   function renderReport(report) {
     const out = [`<div class="row" style="justify-content:space-between"><b>${esc(report.partner.name || '')}</b><span class="tag">${esc(report.business_date)}</span></div>`];
-    if (!report.messages.length) { $('reportOutput').innerHTML = '<div class="hint">Ngày này chưa có settlement.</div>'; return; }
+    if (!report.messages.length && !report.blocked) { $('reportOutput').innerHTML = '<div class="hint">Ngày này chưa có settlement.</div>'; return; }
+    if (report.blocked) out.push(`<div class="status err">FAIL-CLOSED: có ${report.blocked_scopes.length} phạm vi chưa đủ điều kiện tính. Không dùng tổng tiền này để chốt.</div>`);
+    else if (report.provisional) out.push('<div class="status warn">TẠM TÍNH: KQXS chưa hoàn tất.</div>');
     out.push(`<div style="margin:9px 0"><span class="money">XÁC ${money(report.totals.xac)}</span> · QUA CÒ <span class="money">${money(report.totals.qua_co)}</span> · TRẢ TRÚNG <span class="money">${money(report.totals.payout)}</span> · HỒI <span class="money">${money(report.totals.refund_amount)}</span></div>`);
     out.push(`<div class="status ${report.totals.direction === 'THU' ? 'ok' : report.totals.direction === 'BU' ? 'err' : ''}">${report.totals.direction}: ${money(report.totals.final_net)}</div>`);
     for (const region of report.regions) {
-      out.push(`<h3>${region.region.toUpperCase()}</h3><table><thead><tr><th>Loại</th><th>XÁC</th><th>Qua cò</th><th>Trúng</th><th>Trả</th></tr></thead><tbody>`);
+      out.push(`<h3>${region.region.toUpperCase()} ${region.blocked ? '<span class="tag warn">BLOCKED</span>' : region.provisional ? '<span class="tag warn">TẠM TÍNH</span>' : ''}</h3><table><thead><tr><th>Loại</th><th>XÁC</th><th>Qua cò</th><th>Trúng</th><th>Trả</th></tr></thead><tbody>`);
       for (const row of region.categories) out.push(`<tr><td>${esc(row.code)}</td><td>${money(row.xac)}</td><td>${money(row.qua_co)}</td><td>${money(row.hit_units)}</td><td>${money(row.payout)}</td></tr>`);
       out.push('</tbody></table>');
       for (const msg of region.messages) {
         out.push(`<div class="report-message"><div class="raw">${esc(msg.raw_text)}</div>`);
-        for (const d of msg.detail_rows) out.push(`<div class="hint">• ${esc(d.station || '')} ${esc(d.numbers || '')} ${esc(d.selector || d.code || '')} ${d.points != null ? '×' + esc(d.points) : ''}</div>`);
+        for (const d of msg.detail_rows) out.push(`<div class="hint">• ${esc(d.station || '')} ${esc(d.numbers || '')} ${esc(d.selector || d.code || '')} · xác ${money(d.xac)} · trúng ${money(d.hit_units)} ${d.points != null ? '· ' + esc(d.points) + 'n' : ''}</div>`);
         out.push(`</div>`);
       }
     }
@@ -280,6 +306,7 @@
     const d = today();
     for (const id of ['effectiveDate','messageDate','resultDate','reportDate']) $(id).value = d;
     $('resultEndpoint').value = resultProvider.endpoint();
+    $('parserEndpoint').value = parserProvider.endpoint();
     $('allowMbXien').addEventListener('change', refreshGateVisuals);
     $('allowUi').addEventListener('change', refreshGateVisuals);
     $('partnerSelect').addEventListener('change', async () => { updatePartnerView(); $('reportPartner').value = currentPartnerId(); await loadConfigForDate(); });
@@ -288,6 +315,10 @@
     $('saveConfig').addEventListener('click', saveConfig);
     $('saveMessage').addEventListener('click', saveMessage);
     $('clearMessage').addEventListener('click', () => { $('messageText').value = ''; status('messageStatus', '', ''); });
+    $('saveParserEndpoint').addEventListener('click', () => {
+      try { $('parserEndpoint').value = parserProvider.setEndpoint($('parserEndpoint').value); status('messageStatus', 'Đã lưu endpoint canonical parser.', 'ok'); }
+      catch (e) { status('messageStatus', String(e.message || e), 'err'); }
+    });
     $('startResults').addEventListener('click', startResults);
     $('stopResults').addEventListener('click', stopResults);
     $('saveEndpoint').addEventListener('click', () => {
