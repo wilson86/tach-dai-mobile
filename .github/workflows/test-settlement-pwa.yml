@@ -21,5 +21,8 @@ jobs:
       - name: Settlement engine golden tests
         run: node tests/settlement-engine-tests.js
 
+      - name: Settlement category map tests
+        run: node tests/settlement-category-map-tests.js
+
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
