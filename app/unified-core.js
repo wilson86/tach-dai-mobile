@@ -170,7 +170,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.3';
+  const UX_VERSION='1.0.4';
 
   function selectAllText(el){
     if(!el) return;
@@ -228,4 +228,149 @@
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',install,{once:true});
   else install();
+})();
+
+// Đá Vòng mobile result UX: never rely on Android text selection for wager
+// operations. Group labels are presentation-only/non-selectable; each real wager
+// row is a large tap target. This layer changes only selection/presentation.
+;(function installDaVongTapSelectUx(){
+  'use strict';
+  if(typeof document==='undefined') return;
+  const HEADER=/^────\s+(.+?)\s+đá\s+\((\d+)\)\s+────$/u;
+  let groups=[];
+  let rows=[];
+  const selected=new Set();
+
+  function status(text,kind=''){
+    const el=document.getElementById('dvStatus');
+    if(!el) return;
+    el.textContent=text;
+    el.className='status '+kind;
+  }
+  async function writeClipboard(text){
+    if(!text) return false;
+    try{
+      if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);return true;}
+    }catch(_){}
+    const tmp=document.createElement('textarea');
+    tmp.value=text;tmp.style.position='fixed';tmp.style.left='-9999px';
+    document.body.appendChild(tmp);tmp.focus();tmp.select();
+    let ok=false;try{ok=document.execCommand('copy')}catch(_){}
+    tmp.remove();return !!ok;
+  }
+  function parseDisplay(text){
+    groups=[];rows=[];selected.clear();
+    let current=null,rowNo=0,groupNo=0;
+    for(const raw of String(text||'').split(/\r?\n/)){
+      const line=raw.trim();
+      if(!line){current=null;continue;}
+      const m=line.match(HEADER);
+      if(m){
+        current={id:`g${++groupNo}`,type:'pair',key:m[1],rowIds:[]};
+        groups.push(current);continue;
+      }
+      if(!current){current={id:`g${++groupNo}`,type:'plain',key:'',rowIds:[]};groups.push(current);}
+      const row={id:`r${++rowNo}`,groupId:current.id,text:line,alive:true};
+      rows.push(row);current.rowIds.push(row.id);
+    }
+  }
+  function aliveRows(){return rows.filter(r=>r.alive)}
+  function selectedRows(){return aliveRows().filter(r=>selected.has(r.id))}
+  function aliveGroups(){return groups.filter(g=>g.rowIds.some(id=>{const r=rows.find(x=>x.id===id);return r&&r.alive;}))}
+  function syncShadow(){const out=document.getElementById('dvOutput');if(out)out.value=aliveRows().map(r=>r.text).join('\n')}
+  function toggleRow(id){const row=rows.find(r=>r.id===id);if(!row||!row.alive)return;selected.has(id)?selected.delete(id):selected.add(id);render();}
+  function toggleGroup(id){
+    const group=groups.find(g=>g.id===id);if(!group)return;
+    const live=group.rowIds.filter(rowId=>{const r=rows.find(x=>x.id===rowId);return r&&r.alive;});
+    const all=live.length&&live.every(rowId=>selected.has(rowId));
+    for(const rowId of live){all?selected.delete(rowId):selected.add(rowId)}
+    render();
+  }
+  function toggleAll(){
+    const live=aliveRows();
+    const all=live.length&&live.every(r=>selected.has(r.id));
+    selected.clear();if(!all)for(const row of live)selected.add(row.id);
+    render();
+  }
+  function render(){
+    const list=document.getElementById('dvTapResultList');
+    if(!list)return;
+    list.replaceChildren();
+    const live=aliveRows(), picked=selectedRows(), liveGroups=aliveGroups();
+    if(!live.length){
+      const empty=document.createElement('div');empty.className='dv-tap-empty';empty.textContent='Chưa có kết quả.';list.appendChild(empty);
+    }
+    for(const group of liveGroups){
+      const section=document.createElement('section');section.className='dv-tap-group';
+      const head=document.createElement('div');head.className='dv-tap-head';
+      const groupRows=group.rowIds.map(id=>rows.find(r=>r.id===id)).filter(r=>r&&r.alive);
+      const title=document.createElement('div');title.className='dv-tap-title';
+      title.textContent=group.type==='pair'?`${group.key} đá · ${groupRows.length} tin`:`Tin thường · ${groupRows.length} tin`;
+      const groupButton=document.createElement('button');groupButton.type='button';groupButton.className='dv-tap-group-btn';
+      const groupAll=groupRows.length&&groupRows.every(r=>selected.has(r.id));
+      groupButton.textContent=groupAll?'Bỏ chọn nhóm':'Chọn nhóm';groupButton.addEventListener('click',()=>toggleGroup(group.id));
+      head.append(title,groupButton);section.appendChild(head);
+      for(const row of groupRows){
+        const button=document.createElement('button');button.type='button';button.className='dv-tap-row'+(selected.has(row.id)?' selected':'');
+        button.setAttribute('aria-pressed',selected.has(row.id)?'true':'false');
+        const mark=document.createElement('span');mark.className='dv-tap-mark';mark.textContent='✓';
+        const text=document.createElement('span');text.className='dv-tap-text';text.textContent=row.text;
+        button.append(mark,text);button.addEventListener('click',()=>toggleRow(row.id));section.appendChild(button);
+      }
+      list.appendChild(section);
+    }
+    const pairGroups=liveGroups.filter(g=>g.type==='pair').length;
+    const label=document.getElementById('dvResultLabel');
+    if(label)label.textContent=live.length?`Kết quả · ${live.length} tin${pairGroups?` · ${pairGroups} nhóm đá`:''}`:'Kết quả';
+    const summary=document.getElementById('dvTapSummary');
+    if(summary)summary.textContent=live.length?`Đã chọn ${picked.length}/${live.length}`:'Chưa có tin';
+    const cut=document.getElementById('dvCutSelection');
+    if(cut){cut.disabled=picked.length===0;cut.textContent=`Cắt đã chọn (${picked.length})`;}
+    const all=document.getElementById('dvSelectAllOutput');
+    if(all)all.textContent=(live.length&&picked.length===live.length)?'Bỏ chọn tất cả':'Chọn tất cả';
+    syncShadow();
+  }
+  function rebuildFromDisplay(){
+    const out=document.getElementById('dvOutput');
+    if(!out)return;
+    parseDisplay(out.value);render();
+  }
+  function replaceButton(id,handler){
+    const old=document.getElementById(id);if(!old)return null;
+    const fresh=old.cloneNode(true);old.replaceWith(fresh);fresh.addEventListener('click',handler);return fresh;
+  }
+  function install(){
+    const out=document.getElementById('dvOutput'),run=document.getElementById('dvRun'),clear=document.getElementById('dvClear');
+    if(!out||!run)return;
+    if(document.getElementById('dvTapResultList'))return;
+    const style=document.createElement('style');style.id='dvTapSelectStyle';style.textContent=`
+      #dvOutput{display:none!important}
+      #dvTapResultList{display:grid;gap:10px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+      .dv-tap-summary{font-size:12px;font-weight:800;color:#667085;margin:-2px 0 8px;text-align:right;user-select:none;-webkit-user-select:none}
+      .dv-tap-group{border:1px solid #d7dde7;border-radius:12px;overflow:hidden;background:#fff}
+      .dv-tap-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;background:#f2f5fa;font-weight:850;font-size:14px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+      .dv-tap-title{min-width:0}.dv-tap-group-btn{height:34px;border:0;border-radius:9px;padding:0 10px;background:#e4ebf5;color:#27364b;font-weight:800;white-space:nowrap}
+      .dv-tap-row{width:100%;display:flex;align-items:center;gap:10px;border:0;border-top:1px solid #edf0f5;background:#fff;padding:13px 11px;text-align:left;color:#172033;font:15px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+      .dv-tap-row.selected{background:#eaf2ff}.dv-tap-mark{flex:0 0 24px;width:24px;height:24px;border:2px solid #9aa7b8;border-radius:7px;display:grid;place-items:center;color:transparent;background:#fff;font:900 15px/1 system-ui}.dv-tap-row.selected .dv-tap-mark{border-color:#0b57d0;background:#0b57d0;color:#fff}.dv-tap-text{min-width:0;overflow-wrap:anywhere}.dv-tap-empty{padding:18px 12px;border:1px dashed #d7dde7;border-radius:12px;color:#667085;text-align:center;font-size:13px}.dv-tap-cut:disabled{opacity:.45}
+    `;document.head.appendChild(style);
+    const summary=document.createElement('div');summary.id='dvTapSummary';summary.className='dv-tap-summary';summary.textContent='Chưa có tin';
+    const list=document.createElement('div');list.id='dvTapResultList';list.setAttribute('aria-live','polite');
+    out.parentNode.insertBefore(summary,out);out.parentNode.insertBefore(list,out);
+    out.setAttribute('aria-hidden','true');out.tabIndex=-1;
+    replaceButton('dvCutSelection',async()=>{
+      const picked=selectedRows();if(!picked.length){status('Chưa chọn tin cần cắt. Chạm vào dòng cược để chọn.','err');return;}
+      const payload=picked.map(r=>r.text).join('\n');
+      if(!(await writeClipboard(payload))){status('Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.','err');return;}
+      for(const row of picked)row.alive=false;selected.clear();
+      const remaining=aliveRows().length;if(!remaining){const input=document.getElementById('dvInput');if(input)input.value='';}
+      render();status(remaining?`Đã cắt + copy ${picked.length} tin · còn ${remaining} tin`:`Đã cắt + copy ${picked.length} tin · đã xóa tin gốc`,'ok');
+    })?.classList.add('dv-tap-cut');
+    replaceButton('dvSelectAllOutput',toggleAll);
+    replaceButton('dvCopy',async()=>{const live=aliveRows();if(!live.length)return;const ok=await writeClipboard(live.map(r=>r.text).join('\n'));status(ok?`Đã copy ${live.length} tin kết quả`:'Không thể ghi bộ nhớ tạm.',ok?'ok':'err');});
+    run.addEventListener('click',()=>Promise.resolve().then(rebuildFromDisplay));
+    if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();render();});
+    list.addEventListener('selectstart',event=>event.preventDefault());
+    rebuildFromDisplay();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
