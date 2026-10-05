@@ -9,7 +9,7 @@
     mb: Object.freeze({ G7: 4, G6: 3, G5: 6, G4: 4, G3: 6, G2: 2, G1: 1, DB: 1 })
   });
 
-  function clone(v) { return JSON.parse(JSON.stringify(v)); }
+  function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function nowIso() { return new Date().toISOString(); }
   function validDateOnly(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
 
@@ -48,6 +48,14 @@
     };
   }
 
+  function normalizeVerification(input, complete) {
+    let status = String(input && input.verification_status || '').toLowerCase();
+    if (input && input.verified === true) status = 'verified';
+    if (!['unverified', 'verified', 'conflict'].includes(status)) status = 'unverified';
+    if (!complete && status === 'verified') status = 'unverified';
+    return status;
+  }
+
   function normalizeSnapshot(input) {
     const businessDate = String(input && input.business_date || '').slice(0, 10);
     const region = String(input && input.region || '').toLowerCase();
@@ -57,7 +65,9 @@
     if (!stations.length) throw new Error('RESULT_STATIONS_REQUIRED');
     const complete = stations.every(s => s.complete);
     const status = complete ? 'complete' : 'partial';
-    const core = { business_date: businessDate, region, stations, complete, status };
+    const verificationStatus = normalizeVerification(input, complete);
+    const verified = complete && verificationStatus === 'verified';
+    const core = { business_date: businessDate, region, stations, complete, status, verification_status: verificationStatus };
     return {
       id: input.id || `${businessDate}:${region}`,
       business_date: businessDate,
@@ -66,6 +76,9 @@
       fetched_at: input.fetched_at || nowIso(),
       status,
       complete,
+      verified,
+      verification_status: verificationStatus,
+      verification_sources: Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [],
       stations,
       fingerprint: stableStringify(core),
       provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
@@ -106,9 +119,11 @@
           changed,
           previous: clone(previous),
           provisional: !snapshot.complete,
-          final: snapshot.complete
+          complete: snapshot.complete,
+          verified: snapshot.verified,
+          final: snapshot.verified
         });
-        onStatus({ state: snapshot.complete ? 'complete' : 'waiting', scope: clone(scope), snapshot: clone(snapshot) });
+        onStatus({ state: snapshot.verified ? 'verified' : snapshot.complete ? 'complete_unverified' : 'waiting', scope: clone(scope), snapshot: clone(snapshot) });
         if (snapshot.complete) stop();
         return snapshot;
       } catch (error) {
