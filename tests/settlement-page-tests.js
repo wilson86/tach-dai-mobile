@@ -12,6 +12,7 @@ const parserProvider = fs.readFileSync(path.join(app, 'settlement-parser-provide
 const pipeline = fs.readFileSync(path.join(app, 'settlement-pipeline.js'), 'utf8');
 const observation = fs.readFileSync(path.join(app, 'settlement-observation.js'), 'utf8');
 const observationUi = fs.readFileSync(path.join(app, 'settlement-observation-ui.js'), 'utf8');
+const backupUi = fs.readFileSync(path.join(app, 'settlement-backup-ui.js'), 'utf8');
 const index = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(app, 'sw.js'), 'utf8');
 
@@ -38,14 +39,19 @@ assert(index.includes('src="./settlement.html"'));
 assert(page.includes('src="./settlement-observation.js"'));
 assert(page.includes('src="./settlement-observation-ui.js"'));
 assert(page.includes('src="./result-auto.js"'));
+assert(page.includes('src="./settlement-backup-ui.js"'));
 assert(resultAuto.includes('completeConfirmations: confirmations'));
 assert(resultAuto.includes('pipeline.recalculateDateRegion'));
 assert(resultAuto.includes("getElementById('saveMessage')"));
+assert(resultAuto.includes('complete_waiting_confirmation'));
 assert(observation.includes('promotion_ready'));
 assert(observation.includes('OBSERVATION_DURATION_NOT_CONFIGURED'));
 assert(observationUi.includes('Theo dõi giai đoạn Shadow'));
+assert(backupUi.includes('store.exportAll()'));
+assert(backupUi.includes("store.importAll(payload, { replace: false })"));
 assert(sw.includes("'./settlement-observation.js'"));
 assert(sw.includes("'./settlement-observation-ui.js'"));
+assert(sw.includes("'./settlement-backup-ui.js'"));
 assert(sw.includes("'./result-auto.js'"));
 assert(sw.includes("url.pathname.includes('/api/kqxs')"));
 assert(sw.includes("url.pathname.includes('/api/settlement/parse')"));
