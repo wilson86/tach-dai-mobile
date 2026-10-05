@@ -70,6 +70,24 @@
     return normalizeProviderPayload(await response.json(), { business_date: String(scope.business_date), region });
   }
 
+  function installUnverifiedUiGuard() {
+    if (!global.document || typeof global.MutationObserver !== 'function') return;
+    const root = global.document.getElementById('resultTable');
+    if (!root) return;
+    const soften = () => {
+      for (const tag of root.querySelectorAll('.tag')) {
+        if (String(tag.textContent || '').trim() === 'ĐÃ CHỐT') {
+          tag.textContent = 'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU';
+          tag.classList.remove('ok');
+          tag.classList.add('warn');
+        }
+      }
+    };
+    soften();
+    const observer = new global.MutationObserver(soften);
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+  }
+
   global.KTS_RESULT_PROVIDER = Object.freeze({
     STORAGE_KEY,
     DEFAULT_ENDPOINT,
@@ -78,4 +96,7 @@
     normalizeProviderPayload,
     fetchSnapshot
   });
+
+  if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', installUnverifiedUiGuard, { once: true });
+  else installUnverifiedUiGuard();
 })(typeof window !== 'undefined' ? window : globalThis);
