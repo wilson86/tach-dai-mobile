@@ -50,6 +50,7 @@ jobs:
               raise SystemExit('expected parseBetPayloadAst wrapper not found')
           s = s.replace(old, new, 1)
           s = s.replace('v2.0.20</span>', 'v2.0.21</span>', 1)
+          s = s.replace('const APP_VERSION = "2.0.20";', 'const APP_VERSION = "2.0.21";', 1)
           p.write_text(s, encoding='utf-8')
 
           vp = Path('version.json')
