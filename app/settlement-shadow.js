@@ -8,6 +8,7 @@
     refund_amount: ['refund_amount', 'refund', 'hoi'],
     final_net: ['final_net', 'final', 'thu_bu']
   });
+  const REQUIRED_PROMOTION_TOTALS = Object.freeze(['total_xac', 'total_qua_co', 'total_payout', 'final_net']);
 
   function numeric(value) {
     if (value == null || value === '') return null;
@@ -96,18 +97,22 @@
       else if (statuses.includes('MATCH_DISPLAY')) status = 'MATCH_DISPLAY_ONLY';
       else status = 'MATCH_EXACT';
     }
+    const requiredTotalsExact = REQUIRED_PROMOTION_TOTALS.every(field => totals[field] && totals[field].status === 'MATCH_EXACT');
+    const categoriesExact = categories.every(row => row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE');
     return {
       status,
       totals,
       categories,
       compared_fields: statuses.length,
+      required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
-      safe_to_promote: status === 'MATCH_EXACT'
+      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact
     };
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v1',
+    version: 'settlement-shadow-v2',
+    REQUIRED_PROMOTION_TOTALS,
     roundDisplay,
     compareNumber,
     compareCategories,
