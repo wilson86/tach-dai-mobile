@@ -9,6 +9,9 @@
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
   function scopeKey(scope) { return `${scope.business_date}:${String(scope.region).toLowerCase()}`; }
+  function esc(v) {
+    return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+  }
 
   function createManager(options) {
     const o = options || {};
@@ -91,11 +94,61 @@
     const manager = createManager({ resultService, provider, store, pipeline, intervalMs: 90000 });
     global.KTS_RESULT_AUTO_MANAGER = manager;
 
+    const messageStatus = doc.getElementById('messageStatus');
+    let autoStatus = doc.getElementById('autoResultStatus');
+    if (!autoStatus && messageStatus) {
+      autoStatus = doc.createElement('div');
+      autoStatus.id = 'autoResultStatus';
+      autoStatus.className = 'status';
+      messageStatus.insertAdjacentElement('afterend', autoStatus);
+    }
+
+    function setAutoStatus(text, kind) {
+      if (!autoStatus) return;
+      autoStatus.textContent = text || '';
+      autoStatus.className = 'status ' + (kind || '');
+    }
+
+    function renderSnapshot(snapshot) {
+      if (!snapshot || !snapshot.business_date || !snapshot.region) return;
+      const date = doc.getElementById('resultDate');
+      const region = doc.getElementById('resultRegion');
+      const table = doc.getElementById('resultTable');
+      if (!date || !region || !table) return;
+      if (date.value !== snapshot.business_date || String(region.value).toLowerCase() !== String(snapshot.region).toLowerCase()) return;
+
+      const verified = snapshot.verified === true || snapshot.verification_status === 'verified';
+      const badge = verified
+        ? '<span class="tag ok">ĐÃ XÁC MINH</span>'
+        : snapshot.complete
+          ? '<span class="tag warn">ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU</span>'
+          : '<span class="tag warn">TẠM TÍNH</span>';
+      const parts = [`<div class="row" style="justify-content:space-between"><div>${badge} <span class="hint">${esc(snapshot.source)} · ${esc(snapshot.fetched_at)}</span></div></div>`];
+      const order = snapshot.region === 'mb' ? ['DB','G1','G2','G3','G4','G5','G6','G7'] : ['G8','G7','G6','G5','G4','G3','G2','G1','DB'];
+      for (const station of (snapshot.stations || [])) {
+        parts.push(`<h3 style="margin:12px 0 4px">${esc(station.name || station.code)}</h3><table><thead><tr><th>Giải</th><th>Kết quả</th></tr></thead><tbody>`);
+        for (const prize of order) parts.push(`<tr><td><b>${prize}</b></td><td>${esc(((station.prizes || {})[prize] || []).join(' · '))}</td></tr>`);
+        parts.push('</tbody></table>');
+      }
+      table.innerHTML = parts.join('');
+    }
+
+    async function renderStoredSelected() {
+      const date = doc.getElementById('resultDate');
+      const region = doc.getElementById('resultRegion');
+      if (!date || !region || !date.value || !region.value) return;
+      const snapshot = await store.get(store.STORES.results, `${date.value}:${String(region.value).toLowerCase()}`);
+      if (snapshot) renderSnapshot(snapshot);
+    }
+
     const save = doc.getElementById('saveMessage');
     if (save) save.addEventListener('click', () => {
       const date = doc.getElementById('messageDate');
       const region = doc.getElementById('messageRegion');
-      if (!date || !region || !date.value || !region.value) return;
+      const raw = doc.getElementById('messageText');
+      const partner = doc.getElementById('partnerSelect');
+      if (!date || !region || !date.value || !region.value || !raw || !raw.value.trim() || !partner || !partner.value) return;
+      setAutoStatus(`KQXS ${String(region.value).toUpperCase()} ${date.value}: đang tự theo dõi 90 giây/lần…`, 'warn');
       manager.ensureScope({ business_date: date.value, region: region.value }).catch(error => {
         if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
           global.dispatchEvent(new global.CustomEvent('kts:auto-result-error', { detail: { scope: { business_date: date.value, region: region.value }, error: String(error && error.message || error) } }));
@@ -103,10 +156,39 @@
       });
     });
 
-    if (typeof global.addEventListener === 'function') global.addEventListener('beforeunload', () => manager.stopAll());
+    if (typeof global.addEventListener === 'function') {
+      global.addEventListener('kts:auto-result-status', event => {
+        const info = event.detail || {};
+        const scope = info.scope || {};
+        const label = `${String(scope.region || '').toUpperCase()} ${scope.business_date || ''}`.trim();
+        if (info.state === 'fetching') setAutoStatus(`KQXS ${label}: đang cập nhật…`, '');
+        else if (info.state === 'waiting') setAutoStatus(`KQXS ${label}: chưa đủ giải · tự kiểm tra lại sau 90 giây.`, 'warn');
+        else if (info.state === 'complete_waiting_confirmation') setAutoStatus(`KQXS ${label}: đã đủ giải lần ${info.complete_confirmations}/${info.complete_confirmations_required} · đang xác nhận lại để bắt sửa kết quả.`, 'warn');
+        else if (info.state === 'complete') setAutoStatus(`KQXS ${label}: đã đủ và ổn định qua ${info.complete_confirmations || 1} lần lấy · chờ đối chiếu độc lập.`, 'ok');
+        else if (info.state === 'verified') setAutoStatus(`KQXS ${label}: đã xác minh.`, 'ok');
+        else if (info.state === 'error') setAutoStatus(`KQXS ${label}: lỗi ${info.error} · giữ dữ liệu gần nhất và sẽ thử lại.`, 'err');
+      });
+      global.addEventListener('kts:auto-result-update', event => {
+        const detail = event.detail || {};
+        if (detail.snapshot) renderSnapshot(detail.snapshot);
+      });
+      global.addEventListener('kts:auto-result-error', event => {
+        const detail = event.detail || {};
+        setAutoStatus(`Tự cập nhật KQXS lỗi: ${detail.error || 'UNKNOWN'}`, 'err');
+      });
+      global.addEventListener('beforeunload', () => manager.stopAll());
+    }
+
+    const resultDate = doc.getElementById('resultDate');
+    const resultRegion = doc.getElementById('resultRegion');
+    if (resultDate) resultDate.addEventListener('change', () => renderStoredSelected().catch(() => {}));
+    if (resultRegion) resultRegion.addEventListener('change', () => renderStoredSelected().catch(() => {}));
+    for (const button of doc.querySelectorAll('.nav button[data-pane="result"]')) {
+      button.addEventListener('click', () => renderStoredSelected().catch(() => {}));
+    }
   }
 
-  global.KTS_RESULT_AUTO = Object.freeze({ version: 'result-auto-v1', createManager, validScope });
+  global.KTS_RESULT_AUTO = Object.freeze({ version: 'result-auto-v2', createManager, validScope });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
