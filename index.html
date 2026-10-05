@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.20</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.21</span></div>
 
   <div class="card">
     <div class="controls">
@@ -444,7 +444,23 @@ function isMoneyToken(tok){ return KTS_BUSINESS_ENGINE.isMoneyToken(tok); }
 function isBetType(tok){ return BET_TYPES.has(tok); }
 function splitCompactBetToken(tok){ return KTS_BUSINESS_ENGINE.splitCompactBetToken(tok); }
 
-function parseBetPayloadAst(rest){ return KTS_BUSINESS_ENGINE.parseBetPayloadAst(rest); }
+function assertNoDuplicateBetSelectors(groups){
+  for(const group of groups||[]){
+    const seen=new Map();
+    for(const bet of group.bets||[]){
+      const key=String(bet.selector||'').toLowerCase();
+      if(seen.has(key)){
+        const first=seen.get(key);
+        throw new Error(`lặp cú pháp '${bet.selector}': sau ${first.selector}${first.amount} phải có số mới trước ${bet.selector}${bet.amount}`);
+      }
+      seen.set(key,bet);
+    }
+  }
+  return groups;
+}
+function parseBetPayloadAst(rest){
+  return assertNoDuplicateBetSelectors(KTS_BUSINESS_ENGINE.parseBetPayloadAst(rest));
+}
 
 function validateBetPayload(rest){
   parseBetPayloadAst(rest); return true;
@@ -1284,7 +1300,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.20";
+const APP_VERSION = "2.0.21";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
