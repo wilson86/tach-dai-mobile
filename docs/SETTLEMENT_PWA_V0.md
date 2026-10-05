@@ -86,7 +86,7 @@ Winning selectors proven by reference-app oracle:
 - XC payout uses the configured `3C ĐĐ` win rate.
 - 4C: 16 results with at least 4 digits (G6..DB).
 
-## Verified DAT / DAX rules
+## Verified MN / MT DAT / DAX rules
 
 Classification:
 
@@ -108,24 +108,40 @@ Three hit modes are verified for DAT and per-station-pair DAX:
 
 DAX is evaluated independently for each station pair and then summed.
 
-## Verified MB reference syntax / category identity
+## Verified MB category rules
 
-The following raw HIOSKT-TTS syntax is now confirmed by the user:
+The following syntax is confirmed:
 
 - `01 tamlo 1n` => **2C 8 lô**.
-- `01 02 đá 1n` => **2C Đá**.
+- `01 02 da 1n` => **2C Đá thẳng**.
 - `012 baylo 1n` => **3C 7 lô**.
 - `012 xcdau 1n xcduoi 1n` => **3C ĐĐ**, meaning **xỉu chủ đầu + xỉu chủ đuôi**.
-- `xien` is MB Xiên 2/3/4 syntax, not `x`.
+- `xien` is MB Xiên 2/3/4 syntax.
 
-Settlement category mapping is implemented for future canonical selectors:
+Verified MB XÁC/selectors:
 
-- `TAMLO` -> `MB_2C8`
-- `DAT` -> `MB_2CDA`
-- `BAYLO` -> `MB_3C7`
-- `XCDAU` / `XCDUOI` -> `MB_3CDD` with position `dau` / `duoi`
+- 2CB: 27 XÁC per number; all 27 MB results.
+- 2CĐ: 5 XÁC per number; đầu = all four G7 values, đuôi = DB.
+- 2C 8 lô / `tamlo`: 8 XÁC per number; all three G6 + all four G7 + DB.
+- 3CB: 23 XÁC per number; G6 through DB.
+- 3C 7 lô / `baylo`: 7 XÁC per number; all three G6 + G5 positions 4,5,6 + DB.
+- `xcdau`: 3 XÁC per number; all three G6.
+- `xcduoi`: 1 XÁC per number; DB.
+- 4C: 20 XÁC per number; G5 through DB.
 
-This mapping is **not a second raw-text parser**. The authoritative KTS parser must normalize the raw tokens first. Exact MB XÁC/selectors/hit semantics for these categories still require oracle output before money calculation is enabled.
+### MB đá thẳng: fixed selected-number multi-pair behavior
+
+MB does not use the MN/MT hit-mode switch. Its target business rule is always đá thẳng with all selected-number pairs evaluated.
+
+- `92 61 da 1n` => one hidden pair: `92-61`.
+- `92 61 44 da 1n` => three hidden pairs: `92-61`, `92-44`, `61-44`.
+- N selected numbers => `C(N,2)` hidden unordered pairs.
+- Each hidden pair has XÁC `54 × stake` (`27 lô positions × 2 numbers`).
+- Total MB đá XÁC = `C(N,2) × 54 × stake`.
+- Each hidden pair can win at most one unit: both numbers occur at least once => 1; otherwise 0. Repeat lô occurrences do not multiply that pair.
+- Total đá hit units are the sum of winning hidden selected pairs.
+
+**Display rule:** internal pair expansion must not rewrite the visible accepted message. `92 61 44 da 1n` remains displayed as that original line in message/report views.
 
 ## Verified MB Xiên 2-3-4
 
@@ -156,7 +172,9 @@ Reports are dynamic: if a partner bet a category, it must appear; categories wit
 
 For every partner/date, reports must support MN / MT / MB sections, every category actually present, XÁC, QUA CÒ, TRÚNG units, payout, HỒI, final THU/BÙ, original message text, detailed winning rows, message/day totals, and reference-app comparison status.
 
-`app/settlement-report.js` builds this dynamically rather than from a fixed category list.
+For MB đá with 3+ selected numbers, settlement may carry hidden pair legs for calculation, but the user-facing message line must remain the original raw/canonical accepted line rather than three rewritten bet lines.
+
+`app/settlement-report.js` builds reports dynamically rather than from a fixed category list.
 
 ## KQXS auto-update
 
@@ -170,10 +188,9 @@ No API key or provider secret belongs in PWA JavaScript. Provider fetching must 
 
 ## Remaining fail-closed items before full all-region automatic settlement
 
-1. MB non-Xiên money rules: exact XÁC/selectors/hit semantics for 2C lô, 2C ĐĐ, 2C 8 lô (`tamlo`), 2C Đá, 3C lô, 3C 7 lô (`baylo`), 3C ĐĐ (`xcdau`/`xcduoi`) and 4C must be oracle-tested before settlement money is enabled.
-2. `Tính Ủi` with a non-zero configured payout rate, including 00/99 edge behavior.
-3. Exact one-decimal display tie behavior at an exact `x.xx5` boundary. Exact internal money must never be rounded early.
-4. Canonical parser support for `tamlo`, `baylo`, `xcdau`, `xcduoi` and `xien` still needs to be added through the authoritative parser/engine source and regenerated adapters; generated engine files must not be edited by hand.
+1. `Tính Ủi` with a non-zero configured payout rate, including 00/99 edge behavior.
+2. Exact one-decimal display tie behavior at an exact `x.xx5` boundary. Exact internal money must never be rounded early.
+3. Canonical parser support for `tamlo`, `baylo`, `xcdau`, `xcduoi` and `xien` still needs to be added through the authoritative parser/engine source and regenerated adapters; generated engine files must not be edited by hand.
 
 Unsupported paths fail closed rather than guess.
 
