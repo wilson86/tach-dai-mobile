@@ -1,0 +1,87 @@
+(function (global) {
+  'use strict';
+
+  const STORAGE_KEY = 'kts_settlement_parser_endpoint_v1';
+  const DEFAULT_ENDPOINT = '/api/settlement/parse';
+
+  function endpoint() {
+    try {
+      const saved = global.localStorage && global.localStorage.getItem(STORAGE_KEY);
+      return String(saved || DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT;
+    } catch (_) {
+      return DEFAULT_ENDPOINT;
+    }
+  }
+
+  function setEndpoint(value) {
+    const next = String(value || '').trim() || DEFAULT_ENDPOINT;
+    if (!/^https?:\/\//i.test(next) && !next.startsWith('/')) {
+      throw new Error('PARSER_ENDPOINT_MUST_BE_HTTP_OR_SAME_ORIGIN_PATH');
+    }
+    try {
+      if (global.localStorage) global.localStorage.setItem(STORAGE_KEY, next);
+    } catch (_) {}
+    return next;
+  }
+
+  function normalizeLeg(input) {
+    if (!input || typeof input !== 'object') throw new Error('PARSER_LEG_INVALID');
+    const code = String(input.code || '').trim().toUpperCase();
+    const values = Array.isArray(input.values) ? input.values.map(v => String(v)) : [];
+    const stake = String(input.stake == null ? '' : input.stake);
+    if (!code) throw new Error('PARSER_LEG_CODE_REQUIRED');
+    if (!values.length) throw new Error('PARSER_LEG_VALUES_REQUIRED');
+    if (!/^\d+$/.test(stake)) throw new Error('PARSER_LEG_STAKE_INVALID');
+    return {
+      code,
+      values,
+      stake,
+      action: String(input.action || '').toLowerCase(),
+      position: input.position == null ? null : String(input.position).toLowerCase(),
+      station_codes: Array.isArray(input.station_codes) ? input.station_codes.map(x => String(x).toLowerCase()) : [],
+      inherited_values: Boolean(input.inherited_values)
+    };
+  }
+
+  function normalizeCanonicalPayload(payload, requestedRegion) {
+    if (!payload || typeof payload !== 'object') throw new Error('PARSER_INVALID_JSON');
+    const body = payload.canonical_payload || payload.data || payload;
+    const region = String(body.region || requestedRegion || '').toLowerCase();
+    if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('PARSER_REGION_INVALID');
+    const legs = Array.isArray(body.legs) ? body.legs.map(normalizeLeg) : [];
+    if (!legs.length) throw new Error('PARSER_NO_LEGS');
+    return {
+      raw_text: String(body.raw_text || ''),
+      region,
+      parser_version: String(body.parser_version || payload.parser_version || 'canonical-settlement-v1'),
+      legs
+    };
+  }
+
+  async function fetchCanonical(rawText, region) {
+    const raw = String(rawText || '').trim();
+    const r = String(region || '').toLowerCase();
+    if (!raw) throw new Error('PARSER_MESSAGE_REQUIRED');
+    if (!['mn', 'mt', 'mb'].includes(r)) throw new Error('PARSER_REGION_REQUIRED');
+
+    const url = new URL(endpoint(), global.location && global.location.href ? global.location.href : 'https://localhost/');
+    const response = await global.fetch(url.toString(), {
+      method: 'POST',
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ raw_text: raw, region: r })
+    });
+    if (!response.ok) throw new Error('PARSER_HTTP_' + response.status);
+    return normalizeCanonicalPayload(await response.json(), r);
+  }
+
+  global.KTS_SETTLEMENT_PARSER_PROVIDER = Object.freeze({
+    STORAGE_KEY,
+    DEFAULT_ENDPOINT,
+    endpoint,
+    setEndpoint,
+    normalizeCanonicalPayload,
+    fetchCanonical
+  });
+})(typeof window !== 'undefined' ? window : globalThis);
