@@ -41,3 +41,9 @@ jobs:
 
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
+
+      - name: KQXS provider adapter tests
+        run: node tests/result-provider-tests.js
+
+      - name: Settlement workspace static tests
+        run: node tests/settlement-page-tests.js
