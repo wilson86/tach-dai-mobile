@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.11-phone-backup';
+const CACHE='kts-tach-unified-v1.0.12-kqxs-view-modes';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
