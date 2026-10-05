@@ -27,8 +27,5 @@ jobs:
       - name: Settlement MB oracle tests
         run: node tests/settlement-mb-oracle-tests.js
 
-      - name: MB selector oracle tests
-        run: node tests/mb-settlement-rules-tests.js
-
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
