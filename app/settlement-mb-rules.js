@@ -5,7 +5,8 @@
     '2CB': 27,
     '2CD': 5,
     '2CB8': 8,
-    // MB đá thẳng: exactly two lô numbers, 27 XÁC each.
+    // MB đá thẳng base exposure for one selected pair:
+    // 27 lô positions × 2 numbers = 54 XÁC.
     'DAT': 54,
     '3CB': 23,
     '3CB7': 7,
@@ -37,6 +38,12 @@
     return x;
   }
 
+  function choose2(count) {
+    const c = n(count, 'count');
+    if (!Number.isInteger(c) || c < 0) throw new Error('INVALID_COUNT');
+    return c * (c - 1) / 2;
+  }
+
   function mbDatHitUnits(hitsA, hitsB) {
     const a = n(hitsA, 'hits_a');
     const b = n(hitsB, 'hits_b');
@@ -46,6 +53,25 @@
     return a > 0 && b > 0 ? 1 : 0;
   }
 
+  function mbDatTotalHitUnits(hitCounts) {
+    if (!Array.isArray(hitCounts) || hitCounts.length < 2) {
+      throw new Error('MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS');
+    }
+    const counts = hitCounts.map((value) => {
+      const x = n(value, 'hit_count');
+      if (!Number.isInteger(x) || x < 0) throw new Error('INVALID_MB_DAT_HITS');
+      return x;
+    });
+
+    let total = 0;
+    for (let i = 0; i < counts.length; i += 1) {
+      for (let j = i + 1; j < counts.length; j += 1) {
+        total += mbDatHitUnits(counts[i], counts[j]);
+      }
+    }
+    return total;
+  }
+
   function mbXacUnits(code, options) {
     const c = String(code || '').trim().toUpperCase();
     const stake = n(options && options.stake == null ? 1 : options.stake, 'stake');
@@ -53,8 +79,8 @@
     if (stake < 0 || !Number.isInteger(numberCount) || numberCount < 0) throw new Error('INVALID_MB_XAC_INPUT');
 
     if (c === 'DAT') {
-      if (numberCount !== 2) throw new Error('MB_DAT_REQUIRES_EXACTLY_2_NUMBERS');
-      return MB_XAC_UNITS.DAT * stake;
+      if (numberCount < 2) throw new Error('MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS');
+      return choose2(numberCount) * MB_XAC_UNITS.DAT * stake;
     }
 
     if (c === '3CXC') {
@@ -81,11 +107,12 @@
   }
 
   global.KTS_SETTLEMENT_MB_RULES = Object.freeze({
-    version: 'mb-business-2026-10-05-straight-da-v1',
+    version: 'mb-business-2026-10-05-straight-da-v2',
     MB_XAC_UNITS,
     MB_SELECTORS,
     MB_POSITION_XAC_UNITS,
     mbDatHitUnits,
+    mbDatTotalHitUnits,
     mbXacUnits,
     mbSelectors
   });
