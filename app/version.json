@@ -20,6 +20,10 @@
     "iframe_clipboard_write_permission",
     "shared_region_date_across_modes",
     "shared_schedule_across_modes",
-    "hide_duplicate_mode_settings"
+    "hide_duplicate_mode_settings",
+    "davong_tap_select_wager_rows",
+    "davong_nonselectable_group_headers",
+    "davong_group_select_button",
+    "davong_selected_and_remaining_counts"
   ]
 }
