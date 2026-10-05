@@ -188,7 +188,7 @@
     };
     let canonical;
     try {
-      canonical = await parser.fetchCanonical(input.raw_text, input.region);
+      canonical = await parser.fetchCanonical(input.raw_text, input.region, input.business_date);
     } catch (e) {
       const savedPending = await d.store.saveMessage(Object.assign({}, base, {
         canonical_payload: null,
