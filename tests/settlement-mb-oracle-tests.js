@@ -24,6 +24,8 @@ assert.strictEqual(M.mbXacUnits('DAT', { number_count: 2 }), 54);
 assert.strictEqual(M.mbXacUnits('3CB', { number_count: 1 }), 23);
 assert.strictEqual(M.mbXacUnits('3CB7', { number_count: 1 }), 7);
 assert.strictEqual(M.mbXacUnits('4C', { number_count: 1 }), 20);
+assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 3, position: 'dau' }), 9);
+assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 1, position: 'duoi' }), 1);
 
 {
   const r = E.settle([
@@ -45,11 +47,14 @@ assert.strictEqual(M.mbXacUnits('4C', { number_count: 1 }), 20);
 }
 
 assert.deepStrictEqual(Array.from(M.mbSelectors('2CB')), ['G7:*', 'G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('2CD', { position: 'dau' })), ['G7:*']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('2CD', { position: 'duoi' })), ['DB:0']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('2CB8')), ['G6:*', 'G7:*', 'DB:0']);
 assert.deepStrictEqual(Array.from(M.mbSelectors('3CB')), ['G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('3CB7')), ['G6:*', 'G5:3', 'G5:4', 'G5:5', 'DB:0']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('3CXC', { position: 'dau' })), ['G6:*']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('3CXC', { position: 'duoi' })), ['DB:0']);
 assert.deepStrictEqual(Array.from(M.mbSelectors('4C')), ['G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']);
-
-for (const code of ['2CD', '2CB8', '3CB7', '3CXC']) {
-  assert.throws(() => M.mbSelectors(code), /UNVERIFIED_MB_SELECTOR_CATEGORY/);
-}
+assert.throws(() => M.mbXacUnits('3CXC', {}), /UNVERIFIED_MB_3CXC_POSITION/);
 
 console.log('settlement-mb-oracle-tests: PASS');
