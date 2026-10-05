@@ -57,5 +57,9 @@ function fixture() {
 
   assert.strictEqual(A.validScope({ business_date: '2026-10-06', region: 'mt' }), true);
   assert.strictEqual(A.validScope({ business_date: 'bad', region: 'mt' }), false);
+  assert.strictEqual(A.normalizeViewMode('date'), 'date');
+  assert.strictEqual(A.normalizeViewMode('realtime'), 'realtime');
+  assert.strictEqual(A.normalizeViewMode('anything-else'), 'realtime');
+  assert.strictEqual(A.VIEW_MODE_KEY, 'kts_kqxs_view_mode_v1');
   console.log('result-auto-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
