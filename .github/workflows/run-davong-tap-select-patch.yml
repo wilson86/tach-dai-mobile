@@ -1,0 +1,199 @@
+name: Run Da Vong tap-select UX patch
+
+on:
+  push:
+    branches:
+      - feature/kts-davong-tap-select-20261005
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/kts-davong-tap-select-20261005
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Patch Da Vong selectable result list
+        shell: python
+        run: |
+          from pathlib import Path
+          import json
+
+          p = Path('app/index.html')
+          s = p.read_text(encoding='utf-8')
+
+          css_old = ".contract{padding:9px 10px;border-radius:10px;background:#eef8f3;color:#05603a;font-weight:750;font-size:12px;margin-bottom:10px}\n.shared-settings{margin-bottom:9px}.shared-settings .schedule{margin-bottom:0}.mode-settings-legacy{display:none!important}"
+          css_new = ".contract{padding:9px 10px;border-radius:10px;background:#eef8f3;color:#05603a;font-weight:750;font-size:12px;margin-bottom:10px}\n.dv-result-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}.dv-selection-summary{font-size:12px;font-weight:800;color:var(--muted);white-space:nowrap}.dv-result-list{display:grid;gap:10px;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.dv-result-group{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#fff}.dv-group-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;background:#f2f5fa;font-weight:850;font-size:14px;user-select:none;-webkit-user-select:none}.dv-group-title{min-width:0}.dv-group-pick{border:0;border-radius:9px;background:#e4ebf5;color:#27364b;height:34px;padding:0 10px;font-weight:800;white-space:nowrap}.dv-wager-row{width:100%;display:flex;align-items:center;gap:10px;border:0;border-top:1px solid #edf0f5;background:#fff;padding:12px 11px;text-align:left;color:#172033;font:15px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace;cursor:pointer;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}.dv-wager-row:first-of-type{border-top:0}.dv-wager-row.selected{background:#eaf2ff}.dv-wager-mark{flex:0 0 24px;width:24px;height:24px;border:2px solid #9aa7b8;border-radius:7px;display:grid;place-items:center;font:900 15px/1 system-ui;color:transparent;background:#fff}.dv-wager-row.selected .dv-wager-mark{border-color:var(--p);background:var(--p);color:#fff}.dv-wager-text{min-width:0;overflow-wrap:anywhere}.dv-empty{padding:18px 12px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);text-align:center;font-size:13px}.dv-output-shadow{display:none!important}.dv-cut-button:disabled{opacity:.45}.shared-settings{margin-bottom:9px}.shared-settings .schedule{margin-bottom:0}.mode-settings-legacy{display:none!important}"
+          if css_old not in s:
+              raise SystemExit('CSS anchor not found')
+          s = s.replace(css_old, css_new, 1)
+
+          html_old = '''    <div class="card">
+      <div id="dvResultLabel" class="label">Kết quả</div>
+      <textarea id="dvOutput" readonly spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="dvCutSelection" class="action secondary">Cắt phần chọn</button>
+        <button id="dvSelectAllOutput" class="action secondary">Chọn tất cả</button>
+        <button id="dvCopy" class="action secondary">Copy kết quả</button>
+      </div>
+    </div>'''
+          html_new = '''    <div class="card">
+      <div class="dv-result-head">
+        <div id="dvResultLabel" class="label">Kết quả</div>
+        <div id="dvSelectionSummary" class="dv-selection-summary">Chưa có tin</div>
+      </div>
+      <div id="dvResultList" class="dv-result-list" aria-live="polite"></div>
+      <textarea id="dvOutput" class="dv-output-shadow" readonly tabindex="-1" aria-hidden="true" spellcheck="false"></textarea>
+      <div class="actions">
+        <button id="dvCutSelection" class="action primary dv-cut-button" disabled>Cắt đã chọn (0)</button>
+        <button id="dvSelectAllOutput" class="action secondary">Chọn tất cả</button>
+        <button id="dvCopy" class="action secondary">Copy kết quả</button>
+      </div>
+    </div>'''
+          if html_old not in s:
+              raise SystemExit('result card anchor not found')
+          s = s.replace(html_old, html_new, 1)
+
+          js_old = '''let dvLastSelection={start:0,end:0};
+function rememberDvSelection(){const el=$('dvOutput'),a=el.selectionStart??0,b=el.selectionEnd??a;if(b>a)dvLastSelection={start:a,end:b}}
+function selectAllText(el){if(!el)return;el.focus();if(typeof el.setSelectionRange==='function')el.setSelectionRange(0,String(el.value||'').length);if(el===$('dvOutput'))dvLastSelection={start:0,end:String(el.value||'').length}}
+async function writeDvClipboardText(text){if(!text)return false;try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);return true}}catch(_){}const tmp=document.createElement('textarea');tmp.value=text;tmp.style.position='fixed';tmp.style.left='-9999px';document.body.appendChild(tmp);tmp.focus();tmp.select();let ok=false;try{ok=document.execCommand('copy')}catch(_){}tmp.remove();return !!ok;}
+function bettingPayloadFromDisplay(text){return String(text||'').split(/\\r?\\n/).filter(line=>line.trim()&&!/^────\\s+.+\\s+đá\\s+\\(\\d+\\)\\s+────$/u.test(line.trim())).join('\\n')}'''
+          js_new = '''let dvGroups=[];
+let dvRows=[];
+let dvSelected=new Set();
+function selectAllText(el){if(!el)return;try{el.focus({preventScroll:true})}catch(_){el.focus()}if(typeof el.setSelectionRange==='function')el.setSelectionRange(0,String(el.value||'').length)}
+async function writeDvClipboardText(text){if(!text)return false;try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);return true}}catch(_){}const tmp=document.createElement('textarea');tmp.value=text;tmp.style.position='fixed';tmp.style.left='-9999px';document.body.appendChild(tmp);tmp.focus();tmp.select();let ok=false;try{ok=document.execCommand('copy')}catch(_){}tmp.remove();return !!ok;}
+function aliveDvRows(){return dvRows.filter(row=>row.alive)}
+function selectedAliveDvRows(){return aliveDvRows().filter(row=>dvSelected.has(row.id))}
+function aliveDvGroups(){return dvGroups.filter(group=>group.rowIds.some(id=>{const row=dvRows.find(x=>x.id===id);return row&&row.alive}))}
+function syncDvOutputShadow(){$('dvOutput').value=aliveDvRows().map(row=>row.text).join('\\n')}
+function clearDvResultModel(){dvGroups=[];dvRows=[];dvSelected.clear();$('dvOutput').value='';renderDvResultList()}
+function buildDvResultModel(result){
+  dvGroups=[];dvRows=[];dvSelected.clear();let rowNo=0,groupNo=0;
+  for(const block of result.blocks||[]){
+    const lines=(block.lines||[]).map(String);if(!lines.length)continue;
+    const group={id:`g${++groupNo}`,type:block.type==='pair'?'pair':'plain',key:block.key||'',rowIds:[]};
+    for(const text of lines){const row={id:`r${++rowNo}`,groupId:group.id,text,alive:true};dvRows.push(row);group.rowIds.push(row.id)}
+    dvGroups.push(group);
+  }
+  syncDvOutputShadow();renderDvResultList();
+}
+function toggleDvRow(id){const row=dvRows.find(x=>x.id===id);if(!row||!row.alive)return;if(dvSelected.has(id))dvSelected.delete(id);else dvSelected.add(id);renderDvResultList()}
+function toggleDvGroup(id){const group=dvGroups.find(x=>x.id===id);if(!group)return;const live=group.rowIds.filter(rowId=>{const row=dvRows.find(x=>x.id===rowId);return row&&row.alive});const all=live.length&&live.every(rowId=>dvSelected.has(rowId));for(const rowId of live){if(all)dvSelected.delete(rowId);else dvSelected.add(rowId)}renderDvResultList()}
+function toggleAllDvRows(){const live=aliveDvRows();const all=live.length&&live.every(row=>dvSelected.has(row.id));dvSelected.clear();if(!all)for(const row of live)dvSelected.add(row.id);renderDvResultList()}
+function renderDvResultList(){
+  const list=$('dvResultList');if(!list)return;list.replaceChildren();
+  const live=aliveDvRows(), groups=aliveDvGroups(), selected=selectedAliveDvRows();
+  if(!live.length){const empty=document.createElement('div');empty.className='dv-empty';empty.textContent='Chưa có kết quả.';list.appendChild(empty)}
+  for(const group of groups){
+    const section=document.createElement('section');section.className='dv-result-group';
+    const head=document.createElement('div');head.className='dv-group-head';
+    const title=document.createElement('div');title.className='dv-group-title';
+    const groupLive=group.rowIds.map(id=>dvRows.find(x=>x.id===id)).filter(row=>row&&row.alive);
+    title.textContent=group.type==='pair'?`${group.key} đá · ${groupLive.length} tin`:`Tin thường · ${groupLive.length} tin`;
+    const pick=document.createElement('button');pick.type='button';pick.className='dv-group-pick';
+    const groupAll=groupLive.length&&groupLive.every(row=>dvSelected.has(row.id));pick.textContent=groupAll?'Bỏ chọn nhóm':'Chọn nhóm';pick.addEventListener('click',()=>toggleDvGroup(group.id));
+    head.append(title,pick);section.appendChild(head);
+    for(const row of groupLive){
+      const button=document.createElement('button');button.type='button';button.className='dv-wager-row'+(dvSelected.has(row.id)?' selected':'');button.dataset.rowId=row.id;button.setAttribute('aria-pressed',dvSelected.has(row.id)?'true':'false');
+      const mark=document.createElement('span');mark.className='dv-wager-mark';mark.textContent='✓';
+      const text=document.createElement('span');text.className='dv-wager-text';text.textContent=row.text;
+      button.append(mark,text);button.addEventListener('click',()=>toggleDvRow(row.id));section.appendChild(button);
+    }
+    list.appendChild(section);
+  }
+  const pairGroups=groups.filter(group=>group.type==='pair').length;
+  $('dvResultLabel').textContent=live.length?`Kết quả · ${live.length} tin${pairGroups?` · ${pairGroups} nhóm đá`:''}`:'Kết quả';
+  $('dvSelectionSummary').textContent=live.length?`Đã chọn ${selected.length}/${live.length}`:'Chưa có tin';
+  const cut=$('dvCutSelection');cut.disabled=selected.length===0;cut.textContent=`Cắt đã chọn (${selected.length})`;
+  const allSelected=live.length&&selected.length===live.length;$('dvSelectAllOutput').textContent=allSelected?'Bỏ chọn tất cả':'Chọn tất cả';
+  syncDvOutputShadow();
+}'''
+          if js_old not in s:
+              raise SystemExit('selection JS anchor not found')
+          s = s.replace(js_old, js_new, 1)
+
+          run_old = '''    $('dvOutput').value=result.display_output||result.output;
+    $('dvResultLabel').textContent=`Kết quả (${result.outputs.length})`;
+    setDvStatus(`Đã tách · ${result.outputs.length} tin · ${result.group_count||0} nhóm đá${wasChat?' · đã lọc chat':''}`,'ok');'''
+          run_new = '''    buildDvResultModel(result);
+    setDvStatus(`Đã tách · ${result.outputs.length} tin · ${result.group_count||0} nhóm đá${wasChat?' · đã lọc chat':''}`,'ok');'''
+          if run_old not in s:
+              raise SystemExit('runDaVong result anchor not found')
+          s = s.replace(run_old, run_new, 1)
+
+          err_old = "    $('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';\n    const msg=String(e&&e.message||e);setDvStatus(msg.startsWith('LỖI')?msg:'LỖI: '+msg,'err');"
+          err_new = "    clearDvResultModel();\n    const msg=String(e&&e.message||e);setDvStatus(msg.startsWith('LỖI')?msg:'LỖI: '+msg,'err');"
+          if err_old not in s:
+              raise SystemExit('runDaVong error anchor not found')
+          s = s.replace(err_old, err_new, 1)
+
+          action_old = '''$('dvRun').addEventListener('click',runDaVong);
+$('dvClear').addEventListener('click',()=>{$('dvInput').value='';$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('');$('dvInput').focus()});
+$('dvSelectAllInput').addEventListener('click',()=>selectAllText($('dvInput')));
+$('dvSelectAllOutput').addEventListener('click',()=>selectAllText($('dvOutput')));
+$('dvOutput').addEventListener('select',rememberDvSelection);
+$('dvOutput').addEventListener('mouseup',rememberDvSelection);
+$('dvOutput').addEventListener('touchend',()=>setTimeout(rememberDvSelection,0));
+$('dvCutSelection').addEventListener('pointerdown',rememberDvSelection);
+$('dvCutSelection').addEventListener('touchstart',rememberDvSelection,{passive:true});
+$('dvCutSelection').addEventListener('click',async()=>{const el=$('dvOutput');rememberDvSelection();let a=dvLastSelection.start,b=dvLastSelection.end;const ca=el.selectionStart??0,cb=el.selectionEnd??ca;if(cb>ca){a=ca;b=cb}if(!(b>a)){setDvStatus('Chưa chọn phần kết quả cần cắt.','err');return}const selectedPayload=bettingPayloadFromDisplay(el.value.slice(a,b));if(!selectedPayload){setDvStatus('Phần chọn không có tin cược để cắt.','err');return}const copied=await writeDvClipboardText(selectedPayload);if(!copied){setDvStatus('Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.','err');return}el.value=el.value.slice(0,a)+el.value.slice(b);el.setSelectionRange(a,a);dvLastSelection={start:0,end:0};const count=bettingPayloadFromDisplay(el.value).split(/\\r?\\n/).filter(Boolean).length;if(count===0)$('dvInput').value='';$('dvResultLabel').textContent=`Kết quả (${count})`;setDvStatus(count===0?'Đã cắt + copy · đã xóa tin gốc':'Đã cắt + copy · tin gốc giữ đến khi cắt hết kết quả của tin đó','ok')});
+$('dvCopy').addEventListener('click',async()=>{const text=bettingPayloadFromDisplay($('dvOutput').value);if(!text)return;const ok=await writeDvClipboardText(text);setDvStatus(ok?'Đã copy kết quả cược (không kèm gạch phân nhóm)':'Không thể ghi bộ nhớ tạm.',ok?'ok':'err')});'''
+          action_new = '''$('dvRun').addEventListener('click',runDaVong);
+$('dvClear').addEventListener('click',()=>{$('dvInput').value='';clearDvResultModel();setDvStatus('');$('dvInput').focus()});
+$('dvSelectAllInput').addEventListener('click',()=>selectAllText($('dvInput')));
+$('dvSelectAllOutput').addEventListener('click',toggleAllDvRows);
+$('dvCutSelection').addEventListener('click',async()=>{const picked=selectedAliveDvRows();if(!picked.length){setDvStatus('Chưa chọn tin cần cắt. Chạm vào từng dòng cược để chọn.','err');return}const payload=picked.map(row=>row.text).join('\\n');const copied=await writeDvClipboardText(payload);if(!copied){setDvStatus('Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.','err');return}for(const row of picked)row.alive=false;dvSelected.clear();const remaining=aliveDvRows().length;if(!remaining)$('dvInput').value='';renderDvResultList();setDvStatus(remaining?`Đã cắt + copy ${picked.length} tin · còn ${remaining} tin`:`Đã cắt + copy ${picked.length} tin · đã xóa tin gốc`,'ok')});
+$('dvCopy').addEventListener('click',async()=>{const text=aliveDvRows().map(row=>row.text).join('\\n');if(!text)return;const ok=await writeDvClipboardText(text);setDvStatus(ok?`Đã copy ${aliveDvRows().length} tin kết quả`:'Không thể ghi bộ nhớ tạm.',ok?'ok':'err')});'''
+          if action_old not in s:
+              raise SystemExit('action handler anchor not found')
+          s = s.replace(action_old, action_new, 1)
+
+          s = s.replace('Unified 1.0.4</span>', 'Unified 1.0.5</span>', 1)
+          p.write_text(s, encoding='utf-8')
+
+          vp = Path('app/version.json')
+          v = json.loads(vp.read_text(encoding='utf-8'))
+          if v.get('version') != '1.0.4':
+              raise SystemExit(f"unexpected unified version {v.get('version')}")
+          v['version']='1.0.5'
+          ux=v.setdefault('ux',[])
+          for item in ['tap_select_wager_rows','non_selectable_group_headers','group_select_button','selected_count_and_remaining_count','cut_selected_rows_without_native_text_selection']:
+              if item not in ux: ux.append(item)
+          vp.write_text(json.dumps(v,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+
+          sp=Path('app/sw.js')
+          sw=sp.read_text(encoding='utf-8')
+          sw=sw.replace('kts-tach-unified-v1.0.4-shared-settings-6ce6','kts-tach-unified-v1.0.5-tap-select-6ce6')
+          if 'kts-tach-unified-v1.0.5-tap-select-6ce6' not in sw:
+              raise SystemExit('unified cache bump failed')
+          sp.write_text(sw,encoding='utf-8')
+
+          tp=Path('tests/unified-static-tests.js')
+          t=tp.read_text(encoding='utf-8')
+          t=t.replace("assert.match(app,/Kết quả \\(\\$\\{result\\.outputs\\.length\\}\\)/);", "assert.match(app,/id=\"dvResultList\"/);\nassert.match(app,/className='dv-wager-row'/);\nassert.match(app,/Cắt đã chọn \\(\\$\\{selected\\.length\\}\\)/);\nassert.match(app,/Bỏ chọn nhóm/);\nassert.match(app,/user-select:none/);")
+          t=t.replace("assert.equal(version.version,'1.0.4');", "assert.equal(version.version,'1.0.5');")
+          t=t.replace("assert.match(sw,/kts-tach-unified-v1\\.0\\.4-shared-settings-6ce6/);", "assert.match(sw,/kts-tach-unified-v1\\.0\\.5-tap-select-6ce6/);")
+          t += "\nassert.ok(version.ux.includes('tap_select_wager_rows'));\nassert.ok(version.ux.includes('non_selectable_group_headers'));\nassert.match(app,/dvSelected=new Set\\(\\)/);\nassert.match(app,/toggleDvRow/);\nassert.match(app,/toggleDvGroup/);\nassert.match(app,/toggleAllDvRows/);\nassert.match(app,/picked\\.map\\(row=>row\\.text\\)\\.join/);\n"
+          tp.write_text(t,encoding='utf-8')
+
+      - name: Run focused tests
+        run: |
+          node tests/regression-tests.js
+          node tests/unified-static-tests.js
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/index.html app/version.json app/sw.js tests/unified-static-tests.js
+          git diff --cached --check
+          git commit -m "feat(unified): make Da Vong result rows tap-selectable"
+          git push origin HEAD:feature/kts-davong-tap-select-20261005
