@@ -35,6 +35,9 @@
       source: String(body.source || payload.source || 'kqxs-proxy'),
       fetched_at: body.fetched_at || payload.fetched_at || new Date().toISOString(),
       provider_revision: body.provider_revision == null ? null : String(body.provider_revision),
+      verified: body.verified === true,
+      verification_status: body.verification_status || (body.verified === true ? 'verified' : 'unverified'),
+      verification_sources: Array.isArray(body.verification_sources) ? body.verification_sources.map(String) : [],
       stations
     };
   }
@@ -56,7 +59,14 @@
       credentials: 'omit',
       headers: { Accept: 'application/json' }
     });
-    if (!response.ok) throw new Error('KQXS_HTTP_' + response.status);
+    if (!response.ok) {
+      let code = 'KQXS_HTTP_' + response.status;
+      try {
+        const body = await response.json();
+        if (body && body.error) code += ':' + String(body.error);
+      } catch (_) {}
+      throw new Error(code);
+    }
     return normalizeProviderPayload(await response.json(), { business_date: String(scope.business_date), region });
   }
 
