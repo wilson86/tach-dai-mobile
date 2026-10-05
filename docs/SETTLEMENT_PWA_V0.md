@@ -29,12 +29,6 @@ Export/import is required so the phone database can be backed up before later se
 
 Saving a changed partner configuration requires `effective_from_date` (`YYYY-MM-DD`). The resolver selects the latest config with `effective_from_date <= business_date`.
 
-Example:
-
-- v1 effective 2026-10-01
-- v2 effective 2026-10-10
-- dates 01-09/10 keep v1; dates on/after 10/10 use v2 until a later version exists.
-
 Old configs are never overwritten merely because a new price is saved. Accepted messages and settlements retain the exact config snapshot used, so later price changes cannot rewrite historical reports.
 
 ## Accounting direction
@@ -57,8 +51,8 @@ Refund eligibility:
 
 Verified:
 
-- `ratio` (`Tỉ lệ`): `QUA_CO = XAC * value`, e.g. 18 * 0.76 = 13.68.
-- `amount` (`Thành tiền`): `QUA_CO = XAC * value / 100`, e.g. XAC 18 and value 10 => 1.8.
+- `ratio` (`Tỉ lệ`): `QUA_CO = XAC * value`.
+- `amount` (`Thành tiền`): `QUA_CO = XAC * value / 100`.
 - `direct`: direct money per stake unit, used by MB Xiên 2/3/4. Values are partner config, not hard-coded business constants.
 
 All exact money is retained internally; one-decimal display is presentation only.
@@ -89,16 +83,8 @@ Winning selectors proven by reference-app oracle:
 - 3CB: all draw results with at least 3 digits = 17 results (everything except G8).
 - 3C 7lô: G7 + all 3 G6 + G5 + first G4 + DB = 7 draw results.
 - XC / 3CXC: G7 last 3 digits = xcđầu; DB last 3 digits = xcđuôi.
-- XC payout uses the configured `3C ĐĐ` win rate; oracle test changed 3C ĐĐ 650 -> 700 and XC payout changed to 700.
+- XC payout uses the configured `3C ĐĐ` win rate.
 - 4C: 16 results with at least 4 digits (G6..DB).
-
-Canonical syntax evidence from the reference app:
-
-- `01 baylo 1n` => 2C 7lô.
-- `001 baylo 1n` => 3C 7lô.
-- `xc` => XC/3CXC.
-
-Parser integration must extend the canonical KTS parser; do not add a second raw-text parser inside settlement.
 
 ## Verified DAT / DAX rules
 
@@ -122,9 +108,28 @@ Three hit modes are verified for DAT and per-station-pair DAX:
 
 DAX is evaluated independently for each station pair and then summed.
 
+## Verified MB reference syntax / category identity
+
+The following raw HIOSKT-TTS syntax is now confirmed by the user:
+
+- `01 tamlo 1n` => **2C 8 lô**.
+- `01 02 đá 1n` => **2C Đá**.
+- `012 baylo 1n` => **3C 7 lô**.
+- `012 xcdau 1n xcduoi 1n` => **3C ĐĐ**, meaning **xỉu chủ đầu + xỉu chủ đuôi**.
+- `xien` is MB Xiên 2/3/4 syntax, not `x`.
+
+Settlement category mapping is implemented for future canonical selectors:
+
+- `TAMLO` -> `MB_2C8`
+- `DAT` -> `MB_2CDA`
+- `BAYLO` -> `MB_3C7`
+- `XCDAU` / `XCDUOI` -> `MB_3CDD` with position `dau` / `duoi`
+
+This mapping is **not a second raw-text parser**. The authoritative KTS parser must normalize the raw tokens first. Exact MB XÁC/selectors/hit semantics for these categories still require oracle output before money calculation is enabled.
+
 ## Verified MB Xiên 2-3-4
 
-User syntax is `xien` (not `x`). Examples:
+Examples:
 
 - `92 61 xien 1n` => Xiên 2.
 - `92 61 44 xien 1n` => Xiên 3.
@@ -137,30 +142,19 @@ For one ticket at stake 1:
 - QUA CÒ is direct per-ticket money from partner config.
 - payout is `hit_units * configured win rate`.
 
-Reference TEST_KTS example used Cò 56/52/45 and Trúng 1000/4000/10000, producing QUA CÒ 153 and payout 15000 for three winning tickets. Those rates are config values and must never be hard-coded for every partner.
+Reference TEST_KTS example used Cò 56/52/45 and Trúng 1000/4000/10000. Those rates are config values and must never be hard-coded for every partner.
 
 ## Tính Ủi
 
 Verified visible hit rule for MN/MT DD: a selected 2-digit number exactly `-1` or `+1` from the winning đầu/đuôi number is counted as `An Ủi`.
 
-Oracle case: đầu 90, đuôi 37; selected 89, 91, 36, 38 => An Ủi 4.
-
-Implementation helper currently supports exact numeric ±1 only. Wrap behavior around `00`/`99` has not been proven and must not be invented. The config exposes an `Ủi` win-rate field; non-zero Ủi payout still requires an oracle case before automatic money impact is enabled.
+Implementation helper currently supports exact numeric ±1 only. Wrap behavior around `00`/`99` has not been proven. Non-zero Ủi payout still requires an oracle case before automatic money impact is enabled.
 
 ## Detailed report contract
 
 Reports are dynamic: if a partner bet a category, it must appear; categories with no activity do not need empty rows.
 
-For every partner/date, reports must support:
-
-- separate MN / MT / MB sections when present;
-- every category actually present;
-- XÁC, QUA CÒ, TRÚNG units, payout;
-- HỒI and final THU/BÙ;
-- original message text;
-- detailed rows: station/pair/number/selector/points;
-- message-level and day-level totals;
-- reference-app comparison status.
+For every partner/date, reports must support MN / MT / MB sections, every category actually present, XÁC, QUA CÒ, TRÚNG units, payout, HỒI, final THU/BÙ, original message text, detailed winning rows, message/day totals, and reference-app comparison status.
 
 `app/settlement-report.js` builds this dynamically rather than from a fixed category list.
 
@@ -176,14 +170,12 @@ No API key or provider secret belongs in PWA JavaScript. Provider fetching must 
 
 ## Remaining fail-closed items before full all-region automatic settlement
 
-These are the only known rule gaps after the 2026-10-05 oracle session:
+1. MB non-Xiên money rules: exact XÁC/selectors/hit semantics for 2C lô, 2C ĐĐ, 2C 8 lô (`tamlo`), 2C Đá, 3C lô, 3C 7 lô (`baylo`), 3C ĐĐ (`xcdau`/`xcduoi`) and 4C must be oracle-tested before settlement money is enabled.
+2. `Tính Ủi` with a non-zero configured payout rate, including 00/99 edge behavior.
+3. Exact one-decimal display tie behavior at an exact `x.xx5` boundary. Exact internal money must never be rounded early.
+4. Canonical parser support for `tamlo`, `baylo`, `xcdau`, `xcduoi` and `xien` still needs to be added through the authoritative parser/engine source and regenerated adapters; generated engine files must not be edited by hand.
 
-1. MB non-Xiên category settlement specifics (2C lô, 2C ĐĐ, 2C 8lô, 2C Đá, 3C lô, 3C 7lô, 3C ĐĐ, 4C): exact XÁC/selectors/hit semantics have not yet been oracle-tested in this project and must not be copied from MN by assumption.
-2. `Tính Ủi` with a non-zero configured Ủi payout rate, including whether/how that payout is added and 00/99 edge behavior.
-3. Exact one-decimal display tie behavior at an exact `x.xx5` boundary. This is presentation-only; exact internal money must never be rounded early.
-4. Canonical parser support for reference-app tokens `baylo` and `xien` still needs to be added through the authoritative parser/engine source and regenerated adapters; do not edit generated engine files by hand.
-
-Until these are closed, unsupported paths fail closed rather than guess.
+Unsupported paths fail closed rather than guess.
 
 ## Shadow comparison / release gate
 
