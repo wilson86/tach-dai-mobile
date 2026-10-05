@@ -147,9 +147,13 @@
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('RESULT_REGION_REQUIRED');
     const status = String(input.status || (input.complete ? 'complete' : 'partial')).toLowerCase();
     if (!['partial', 'complete', 'error', 'stale'].includes(status)) throw new Error('INVALID_RESULT_STATUS');
+    let verificationStatus = String(input.verification_status || (input.verified ? 'verified' : 'unverified')).toLowerCase();
+    if (!['unverified', 'verified', 'conflict'].includes(verificationStatus)) verificationStatus = 'unverified';
+    const complete = Boolean(input.complete);
+    if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
     const fetchedAt = input.fetched_at || nowIso();
     const stations = clone(input.stations || []);
-    const core = { business_date: businessDate, region, status, complete: Boolean(input.complete), stations };
+    const core = { business_date: businessDate, region, status, complete, verification_status: verificationStatus, stations };
     const fingerprint = input.fingerprint || stableStringify(core);
     return {
       id: input.id || `${businessDate}:${region}`,
@@ -158,7 +162,10 @@
       source: String(input.source || 'unknown'),
       fetched_at: fetchedAt,
       status,
-      complete: Boolean(input.complete),
+      complete,
+      verified: complete && verificationStatus === 'verified',
+      verification_status: verificationStatus,
+      verification_sources: Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [],
       stations,
       fingerprint,
       provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
