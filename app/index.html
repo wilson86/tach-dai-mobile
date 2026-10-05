@@ -22,15 +22,15 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.2</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.3</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div class="tabs" role="tablist">
     <button class="tab active" data-mode="tach">Tách Đài</button>
     <button class="tab" data-mode="ngang">Tách Ngang</button>
     <button class="tab" data-mode="davong">Đá Vòng</button>
   </div>
 
-  <section id="pane-tach" class="pane active"><iframe id="tachFrame" class="frame" src="../" title="Tách Đài 3 Miền"></iframe></section>
-  <section id="pane-ngang" class="pane"><iframe id="ngangFrame" class="frame" src="https://wilson86.github.io/tach-dai-ngang/" title="Tách Đài Ngang 3 Miền"></iframe></section>
+  <section id="pane-tach" class="pane active"><iframe id="tachFrame" class="frame" src="../" title="Tách Đài 3 Miền" allow="clipboard-write"></iframe></section>
+  <section id="pane-ngang" class="pane"><iframe id="ngangFrame" class="frame" src="https://wilson86.github.io/tach-dai-ngang/" title="Tách Đài Ngang 3 Miền" allow="clipboard-write"></iframe></section>
 
   <section id="pane-davong" class="pane">
     <div class="contract">ĐÁ VÒNG: số đá phải đủ 2 chữ số · DX/ĐX tách mọi cặp không đảo · MB cho phép DA trong chế độ Đá Vòng · MN/MT: 2d/3d + DA dùng semantics DX · mỗi cặp giữ nguyên tiền.</div>
@@ -91,7 +91,10 @@ function engine(){
 }
 function engineApi(w){return {normalizeInput:w.normalizeInput.bind(w),validateCheckOnlyLine:w.validateCheckOnlyLine.bind(w),processLine:w.processLine.bind(w),splitBetChunks:w.splitBetChunks.bind(w)}}
 function setDvStatus(text,kind=''){const el=$('dvStatus');el.textContent=text;el.className='status '+kind}
-function selectAllText(el){if(!el)return;el.focus();if(typeof el.setSelectionRange==='function')el.setSelectionRange(0,String(el.value||'').length)}
+let dvLastSelection={start:0,end:0};
+function rememberDvSelection(){const el=$('dvOutput'),a=el.selectionStart??0,b=el.selectionEnd??a;if(b>a)dvLastSelection={start:a,end:b}}
+function selectAllText(el){if(!el)return;el.focus();if(typeof el.setSelectionRange==='function')el.setSelectionRange(0,String(el.value||'').length);if(el===$('dvOutput'))dvLastSelection={start:0,end:String(el.value||'').length}}
+async function writeDvClipboardText(text){if(!text)return false;try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(text);return true}}catch(_){}const tmp=document.createElement('textarea');tmp.value=text;tmp.style.position='fixed';tmp.style.left='-9999px';document.body.appendChild(tmp);tmp.focus();tmp.select();let ok=false;try{ok=document.execCommand('copy')}catch(_){}tmp.remove();return !!ok;}
 function bettingPayloadFromDisplay(text){return String(text||'').split(/\r?\n/).filter(line=>line.trim()&&!/^────\s+.+\s+đá\s+\(\d+\)\s+────$/u.test(line.trim())).join('\n')}
 function updateToday(){
   if($('dvToday').checked){$('dvDate').value=localDateISO();$('dvDate').disabled=true}else{$('dvDate').disabled=false;if(!$('dvDate').value)$('dvDate').value=localDateISO()}
@@ -127,8 +130,13 @@ $('dvRun').addEventListener('click',runDaVong);
 $('dvClear').addEventListener('click',()=>{$('dvInput').value='';$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('');$('dvInput').focus()});
 $('dvSelectAllInput').addEventListener('click',()=>selectAllText($('dvInput')));
 $('dvSelectAllOutput').addEventListener('click',()=>selectAllText($('dvOutput')));
-$('dvCutSelection').addEventListener('click',()=>{const el=$('dvOutput'),a=el.selectionStart,b=el.selectionEnd;if(!(b>a)){setDvStatus('Chưa chọn phần kết quả cần cắt.','err');return}el.value=el.value.slice(0,a)+el.value.slice(b);el.setSelectionRange(a,a);const count=bettingPayloadFromDisplay(el.value).split(/\r?\n/).filter(Boolean).length;$('dvResultLabel').textContent=`Kết quả (${count})`;setDvStatus(`Đã cắt phần chọn · còn ${count} tin`,'ok')});
-$('dvCopy').addEventListener('click',async()=>{const text=bettingPayloadFromDisplay($('dvOutput').value);if(!text)return;try{await navigator.clipboard.writeText(text);setDvStatus('Đã copy kết quả cược (không kèm gạch phân nhóm)','ok')}catch(_){const el=$('dvOutput'),old=el.value;el.removeAttribute('readonly');el.value=text;el.select();document.execCommand('copy');el.value=old;el.setAttribute('readonly','');setDvStatus('Đã copy kết quả cược (không kèm gạch phân nhóm)','ok')}});
+$('dvOutput').addEventListener('select',rememberDvSelection);
+$('dvOutput').addEventListener('mouseup',rememberDvSelection);
+$('dvOutput').addEventListener('touchend',()=>setTimeout(rememberDvSelection,0));
+$('dvCutSelection').addEventListener('pointerdown',rememberDvSelection);
+$('dvCutSelection').addEventListener('touchstart',rememberDvSelection,{passive:true});
+$('dvCutSelection').addEventListener('click',async()=>{const el=$('dvOutput');rememberDvSelection();let a=dvLastSelection.start,b=dvLastSelection.end;const ca=el.selectionStart??0,cb=el.selectionEnd??ca;if(cb>ca){a=ca;b=cb}if(!(b>a)){setDvStatus('Chưa chọn phần kết quả cần cắt.','err');return}const selectedPayload=bettingPayloadFromDisplay(el.value.slice(a,b));if(!selectedPayload){setDvStatus('Phần chọn không có tin cược để cắt.','err');return}const copied=await writeDvClipboardText(selectedPayload);if(!copied){setDvStatus('Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.','err');return}el.value=el.value.slice(0,a)+el.value.slice(b);el.setSelectionRange(a,a);dvLastSelection={start:0,end:0};const count=bettingPayloadFromDisplay(el.value).split(/\r?\n/).filter(Boolean).length;if(count===0)$('dvInput').value='';$('dvResultLabel').textContent=`Kết quả (${count})`;setDvStatus(count===0?'Đã cắt + copy · đã xóa tin gốc':'Đã cắt + copy · tin gốc giữ đến khi cắt hết kết quả của tin đó','ok')});
+$('dvCopy').addEventListener('click',async()=>{const text=bettingPayloadFromDisplay($('dvOutput').value);if(!text)return;const ok=await writeDvClipboardText(text);setDvStatus(ok?'Đã copy kết quả cược (không kèm gạch phân nhóm)':'Không thể ghi bộ nhớ tạm.',ok?'ok':'err')});
 $('dvRegion').addEventListener('change',updateDvSchedule);
 $('dvDate').value=localDateISO();
 $('dvDate').addEventListener('change',()=>{$('dvToday').checked=false;$('dvDate').disabled=false;updateDvSchedule()});

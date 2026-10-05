@@ -68,7 +68,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.19</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.20</span></div>
 
   <div class="card">
     <div class="controls">
@@ -1130,6 +1130,7 @@ async function writeClipboardText(text){
 }
 
 async function cutSelectedOutput(){
+  rememberOutputSelection();
   const indexes=selectedAliveRecordIndexes();
   if(!indexes.length){
     setStatus("Hãy bôi đen dòng kết quả cần cắt trước.","err");
@@ -1138,7 +1139,11 @@ async function cutSelectedOutput(){
 
   snapshot();
   const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
-  await writeClipboardText(selectedText);
+  const copied=await writeClipboardText(selectedText);
+  if(!copied){
+    setStatus("Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.","err");
+    return;
+  }
 
   const inputBefore=inputEl.value;
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
@@ -1147,9 +1152,9 @@ async function cutSelectedOutput(){
 
   lastOutputSelection={start:0,end:0};
   if(inputEl.value!==inputBefore){
-    setStatus(`Đã cắt ${indexes.length} dòng • đã xóa tin gốc tương ứng`,"ok");
+    setStatus(`Đã cắt ${indexes.length} dòng • đã copy • đã xóa tin gốc tương ứng`,"ok");
   }else{
-    setStatus(`Đã cắt ${indexes.length} dòng • tin gốc vẫn giữ vì chưa cắt đủ`,"ok");
+    setStatus(`Đã cắt ${indexes.length} dòng • đã copy • tin gốc giữ đến khi cắt hết kết quả của tin đó`,"ok");
   }
 }
 
@@ -1204,6 +1209,7 @@ function selectAllText(textarea){
   try{textarea.focus({preventScroll:true});}catch(_){textarea.focus();}
   if(typeof textarea.setSelectionRange==="function") textarea.setSelectionRange(0,textarea.value.length);
   else if(typeof textarea.select==="function") textarea.select();
+  if(textarea===outputEl) lastOutputSelection={start:0,end:textarea.value.length};
 }
 
 async function copyOutput(){
@@ -1278,7 +1284,7 @@ loadSettings();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.19";
+const APP_VERSION = "2.0.20";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

@@ -1,6 +1,6 @@
 {
-  "version": "2.0.19",
+  "version": "2.0.20",
   "updated": "2026-10-05",
-  "notes": "Standalone Tách Đài adds explicit Select All controls for input/output and preserves active source selection during automatic sync; business engine unchanged.",
+  "notes": "Cut writes clipboard before removing result/source, remembers Select All across button focus, and keeps source until all derived outputs are cut; business engine unchanged.",
   "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c"
 }

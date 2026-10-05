@@ -155,12 +155,16 @@ assert.match(app,/id="dvSelectAllInput"/);
 assert.match(app,/id="dvCutSelection"/);
 assert.match(app,/id="dvSelectAllOutput"/);
 assert.match(app,/Kết quả \(\$\{result\.outputs\.length\}\)/);
-assert.equal(version.version,'1.0.2');
+assert.equal(version.version,'1.0.3');
 assert.equal(version.business_engine_sha256,'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c');
 assert.equal(version.contract,U.CONTRACT);
-assert.match(sw,/kts-tach-unified-v1\.0\.2-da-vong-final-6ce6/);
+assert.match(sw,/kts-tach-unified-v1\.0\.3-cut-sync-6ce6/);
 assert.match(sw,/skipWaiting\(\)/);
 assert.match(sw,/clients\.claim\(\)/);
 assert.match(sw,/(?:cache|c)\.put\(req,copy\)|(?:cache|c)\.put\(req, copy\)/);
 assert.doesNotMatch(sw,/cache\.put\("\.\/index\.html", copy\)/);
 console.log('UNIFIED STATIC CONTRACT: PASS');
+
+assert.match(app,/allow="clipboard-write"/);
+assert.match(app,/writeDvClipboardText/);
+assert.match(app,/Không thể ghi phần đã cắt vào bộ nhớ tạm/);
