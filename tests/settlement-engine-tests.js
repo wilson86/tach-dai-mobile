@@ -14,7 +14,6 @@ function row(code, xac, hit_units, win_rate, commission_value = 0.76, commission
   return { code, xac, hit_units, win_rate, commission_value, commission_type };
 }
 
-// 2026-10-04 combined MN golden.
 {
   const r = E.settle([
     row('2CB', 18, 2, 75),
@@ -31,7 +30,6 @@ function row(code, xac, hit_units, win_rate, commission_value = 0.76, commission
   assert.strictEqual(E.display1(r.final_net), '-7914');
 }
 
-// DAT three verified modes.
 assert.strictEqual(E.datHitUnits(3, 1, 'one_time'), 1);
 assert.strictEqual(E.datHitUnits(3, 1, 'multi_pair'), 1);
 assert.strictEqual(E.datHitUnits(3, 1, 'ky_ruoi'), 2);
@@ -41,12 +39,10 @@ assert.strictEqual(E.datHitUnits(2, 2, 'ky_ruoi'), 2);
 assert.strictEqual(E.datHitUnits(2, 1, 'ky_ruoi'), 1.5);
 assert.strictEqual(E.datHitUnits(0, 3, 'multi_pair'), 0);
 
-// DAX is evaluated per station-pair then aggregated.
 assert.strictEqual(E.daxHitUnits([[3, 2], [2, 1], [0, 3]], 'ky_ruoi'), 4);
 assert.strictEqual(E.daxHitUnits([[2, 2]], 'one_time'), 1);
 assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
 
-// 2026-09-22 combined DAT + DAX golden.
 {
   const r = E.settle([
     row('DAT', 72, 4, 750),
@@ -59,7 +55,6 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert.strictEqual(E.display1(r.final_net), '-4431.1');
 }
 
-// Total percent is applied before refund. 13.68 * 80% * 95% = 10.3968.
 {
   const r = E.settle([
     row('2CB', 18, 0, 75)
@@ -71,7 +66,6 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert.strictEqual(E.display1(r.final_net), '10.4');
 }
 
-// Reference-app commission mode "Thanh tien": XAC * value / 100.
 {
   const r = E.settle([
     row('2CB', 18, 0, 75, 10, 'amount')
@@ -80,7 +74,6 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert.strictEqual(r.final_net, 1.8);
 }
 
-// Owner direction + refund on payment direction.
 {
   const r = E.settle([
     row('TEST', 10000, 0, 0, 1, 'ratio')
@@ -90,7 +83,6 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert.strictEqual(r.final_net, -9500);
 }
 
-// MN/MT XAC expansion.
 assert.strictEqual(E.mnMtXacUnits('2CB', { number_count: 1, stake: 1 }), 18);
 assert.strictEqual(E.mnMtXacUnits('2CD', { number_count: 2, stake: 1 }), 4);
 assert.strictEqual(E.mnMtXacUnits('2CB7', { number_count: 7, stake: 1 }), 49);
@@ -101,13 +93,11 @@ assert.strictEqual(E.mnMtXacUnits('4C', { number_count: 1, stake: 1 }), 16);
 assert.strictEqual(E.mnMtXacUnits('DAT', { number_count: 3, stake: 1 }), 108);
 assert.strictEqual(E.mnMtXacUnits('DAX', { number_count: 2, station_count: 3, stake: 1 }), 216);
 
-// Proven MN/MT selector contracts.
 assert.deepStrictEqual(Array.from(E.mnMtSelectors('2CB7')), ['G8:0', 'G7:0', 'G6:0', 'G6:1', 'G6:2', 'G5:0', 'DB:0']);
 assert.deepStrictEqual(Array.from(E.mnMtSelectors('3CB7')), ['G7:0', 'G6:0', 'G6:1', 'G6:2', 'G5:0', 'G4:0', 'DB:0']);
 assert.deepStrictEqual(Array.from(E.mnMtSelectors('2CD')), ['G8:0', 'DB:0']);
 assert.deepStrictEqual(Array.from(E.mnMtSelectors('3CXC')), ['G7:0', 'DB:0']);
 
-// XC uses the configured 3C DD win rate: 1 hit at 700 => payout 700.
 {
   const r = E.settle([
     row('3CXC', 2, 1, 700)
@@ -117,12 +107,11 @@ assert.deepStrictEqual(Array.from(E.mnMtSelectors('3CXC')), ['G7:0', 'DB:0']);
   assert.strictEqual(E.display1(r.final_net), '-698.5');
 }
 
-// MB xien 2/3/4: direct QUA CO and verified win rates.
 {
   const rows = [
-    E.mbXienCategory(2, 1, 1),
-    E.mbXienCategory(3, 1, 1),
-    E.mbXienCategory(4, 1, 1)
+    E.mbXienCategory(2, 1, 1, 56, 1000),
+    E.mbXienCategory(3, 1, 1, 52, 4000),
+    E.mbXienCategory(4, 1, 1, 45, 10000)
   ];
   const r = E.settle(rows, { partner_role: 'customer' });
   assert.strictEqual(r.total_xac, 3);
@@ -131,7 +120,6 @@ assert.deepStrictEqual(Array.from(E.mnMtSelectors('3CXC')), ['G7:0', 'DB:0']);
   assert.strictEqual(r.final_net, -14847);
 }
 
-// Tinh Ui exact +/-1 behavior proven by the reference app; no wrap assumption.
 assert.strictEqual(E.isUiNeighbor(89, 90), true);
 assert.strictEqual(E.isUiNeighbor(91, 90), true);
 assert.strictEqual(E.isUiNeighbor(36, 37), true);
