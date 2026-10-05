@@ -2,7 +2,7 @@
   'use strict';
 
   const DB_NAME = 'kts_settlement_v0';
-  const DB_VERSION = 3;
+  const DB_VERSION = 4;
   const STORES = Object.freeze({
     partners: 'partners',
     configs: 'configs',
@@ -248,6 +248,8 @@
       region: input.region || null,
       raw_text: String(input.raw_text || ''),
       canonical_payload: clone(input.canonical_payload || null),
+      canonical_version: input.canonical_version == null ? null : String(input.canonical_version),
+      parser_error: input.parser_error == null ? null : String(input.parser_error),
       config_snapshot: clone(configSnapshot),
       status: input.status || 'draft',
       created_at: input.created_at || now,
@@ -264,13 +266,19 @@
       id: input.id || makeId('settlement'),
       partner_id: input.partner_id,
       message_id: input.message_id || null,
+      message_ids: clone(input.message_ids || (input.message_id ? [input.message_id] : [])),
       business_date: input.business_date,
       region: input.region || null,
       engine_version: input.engine_version || 'settlement-v1-verified-rules',
       config_snapshot: clone(input.config_snapshot || null),
-      result_snapshot: clone(input.result_snapshot || null),
+      lottery_result_snapshot: clone(input.lottery_result_snapshot || null),
+      result_snapshot: clone(input.result_snapshot || input.settlement_result || null),
+      settlement_result: clone(input.settlement_result || input.result_snapshot || null),
       detail_rows: clone(input.detail_rows || []),
       category_rows: clone(input.category_rows || []),
+      message_breakdown: clone(input.message_breakdown || []),
+      scope_status: input.scope_status || 'unverified',
+      blocked_reasons: clone(input.blocked_reasons || []),
       reference_app_snapshot: clone(input.reference_app_snapshot || null),
       comparison_status: input.comparison_status || 'unverified',
       created_at: input.created_at || now,
@@ -297,14 +305,14 @@
   }
 
   async function exportAll() {
-    const payload = { format: 'kts-settlement-export', version: 3, exported_at: nowIso(), stores: {} };
+    const payload = { format: 'kts-settlement-export', version: 4, exported_at: nowIso(), stores: {} };
     for (const name of Object.values(STORES)) payload.stores[name] = await getAll(name);
     return payload;
   }
 
   async function importAll(payload, options) {
     const replace = Boolean(options && options.replace);
-    if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2, 3].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
+    if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2, 3, 4].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
     const db = await openDb();
     try {
       const names = Object.values(STORES);
