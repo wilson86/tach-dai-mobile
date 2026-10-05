@@ -21,6 +21,12 @@ jobs:
       - name: Settlement engine golden tests
         run: node tests/settlement-engine-tests.js
 
+      - name: Settlement permission gate tests
+        run: node tests/settlement-feature-gates-tests.js
+
+      - name: Settlement runtime gate tests
+        run: node tests/settlement-runtime-tests.js
+
       - name: Settlement research fallback tests
         run: node tests/settlement-research-defaults-tests.js
 
@@ -29,6 +35,9 @@ jobs:
 
       - name: Settlement MB oracle tests
         run: node tests/settlement-mb-oracle-tests.js
+
+      - name: Settlement report tests
+        run: node tests/settlement-report-tests.js
 
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
