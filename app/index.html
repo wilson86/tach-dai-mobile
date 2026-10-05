@@ -15,9 +15,9 @@
 <style>
 :root{--bg:#f4f6f9;--card:#fff;--text:#172033;--muted:#667085;--line:#d7dde7;--p:#0b57d0;--p2:#0842a0;--ok:#067647;--bad:#b42318;--shadow:0 1px 3px rgba(16,24,40,.08)}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
-.shell{max-width:880px;margin:auto;padding:10px 10px calc(20px + env(safe-area-inset-bottom))}.head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 9px}.title{font-weight:850;font-size:20px}.badge{font-size:11px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#174ea6;font-weight:800;white-space:nowrap}.tabs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;background:#e8edf4;padding:5px;border-radius:13px;margin-bottom:9px;position:sticky;top:0;z-index:20}.tab{height:44px;border:0;border-radius:10px;background:transparent;color:#42526a;font-weight:800;font-size:14px}.tab.active{background:#fff;color:var(--p);box-shadow:var(--shadow)}.pane{display:none}.pane.active{display:block}.frame{width:100%;height:calc(100vh - 104px);min-height:650px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow)}
+.shell{max-width:880px;margin:auto;padding:10px 10px calc(20px + env(safe-area-inset-bottom))}.head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:2px 2px 9px}.title{font-weight:850;font-size:20px}.badge{font-size:11px;padding:4px 8px;border-radius:999px;background:#eaf2ff;color:#174ea6;font-weight:800;white-space:nowrap}.tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;background:#e8edf4;padding:5px;border-radius:13px;margin-bottom:9px;position:sticky;top:0;z-index:20}.tab{height:44px;border:0;border-radius:10px;background:transparent;color:#42526a;font-weight:800;font-size:14px}.tab.active{background:#fff;color:var(--p);box-shadow:var(--shadow)}.pane{display:none}.pane.active{display:block}.frame{width:100%;height:calc(100vh - 104px);min-height:650px;border:1px solid var(--line);border-radius:14px;background:#fff;box-shadow:var(--shadow)}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);padding:12px;margin-bottom:10px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:8px}.small{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}select,input[type=date]{width:100%;height:44px;border:1px solid var(--line);border-radius:10px;padding:0 10px;background:#fff;font-size:16px}.today{display:flex;align-items:center;gap:8px;margin-top:9px;font-size:14px}.today input{width:20px;height:20px}.schedule{margin-top:9px;padding:9px 10px;border-radius:10px;background:#f2f5fa;font-size:13px;line-height:1.45}.label{font-size:14px;font-weight:800;margin-bottom:6px}textarea{width:100%;border:1px solid var(--line);border-radius:11px;padding:10px 11px;font:15px/1.42 ui-monospace,SFMono-Regular,Consolas,monospace;resize:vertical;background:#fff;color:#111827}#dvInput{min-height:230px}#dvOutput{min-height:220px}.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:9px}button.action{height:44px;border:0;border-radius:10px;padding:0 14px;font-weight:800;font-size:14px}.primary{background:var(--p);color:#fff;flex:1 1 180px}.primary:active{background:var(--p2)}.secondary{background:#eef2f7;color:#27364b}.danger{background:#fff0ee;color:var(--bad)}.status{font-size:13px;font-weight:750;margin-top:8px;white-space:pre-wrap}.ok{color:var(--ok)}.err{color:var(--bad)}.hint{font-size:12px;color:var(--muted);line-height:1.45;margin-top:8px}.contract{padding:9px 10px;border-radius:10px;background:#eef8f3;color:#05603a;font-weight:750;font-size:12px;margin-bottom:10px}
-@media(max-width:520px){.shell{padding:7px 7px calc(14px + env(safe-area-inset-bottom))}.head{margin-bottom:7px}.title{font-size:18px}.tabs{gap:4px;padding:4px}.tab{font-size:13px;height:43px}.frame{height:calc(100vh - 92px);min-height:610px}.controls{grid-template-columns:1fr}.card{padding:10px;border-radius:12px}#dvInput{min-height:210px}#dvOutput{min-height:190px}}
+@media(max-width:520px){.shell{padding:7px 7px calc(14px + env(safe-area-inset-bottom))}.head{margin-bottom:7px}.title{font-size:18px}.tabs{gap:3px;padding:4px}.tab{font-size:11px;height:43px;padding:0 2px}.frame{height:calc(100vh - 92px);min-height:610px}.controls{grid-template-columns:1fr}.card{padding:10px;border-radius:12px}#dvInput{min-height:210px}#dvOutput{min-height:190px}}
 </style>
 </head>
 <body>
@@ -27,6 +27,7 @@
     <button class="tab active" data-mode="tach">Tách Đài</button>
     <button class="tab" data-mode="ngang">Tách Ngang</button>
     <button class="tab" data-mode="davong">Đá Vòng</button>
+    <button class="tab" data-mode="settlement">Kế Toán</button>
   </div>
 
   <section id="pane-tach" class="pane active"><iframe id="tachFrame" class="frame" src="../" title="Tách Đài 3 Miền"></iframe></section>
@@ -63,6 +64,8 @@
       </div>
     </div>
   </section>
+
+  <section id="pane-settlement" class="pane"><iframe id="settlementFrame" class="frame" src="./settlement.html" title="KTS Kế Toán"></iframe></section>
 </div>
 <script src="./unified-core.js"></script>
 <script>
@@ -71,9 +74,9 @@ const $=id=>document.getElementById(id);
 const EXPECTED_ENGINE='6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c';
 const modeButtons=[...document.querySelectorAll('.tab')];
 function setMode(mode){
-  if(!['tach','ngang','davong'].includes(mode)) mode='tach';
+  if(!['tach','ngang','davong','settlement'].includes(mode)) mode='tach';
   modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
-  for(const name of ['tach','ngang','davong']) $(`pane-${name}`).classList.toggle('active',name===mode);
+  for(const name of ['tach','ngang','davong','settlement']) $(`pane-${name}`).classList.toggle('active',name===mode);
   try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
   if(mode==='davong') updateDvSchedule();
 }
