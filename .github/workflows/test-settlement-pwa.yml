@@ -63,6 +63,12 @@ jobs:
       - name: Settlement shadow persistence tests
         run: node tests/settlement-shadow-runtime-tests.js
 
+      - name: Settlement shadow regression case tests
+        run: node tests/settlement-regression-cases-tests.js
+
+      - name: Committed shadow regression fixtures
+        run: node tests/shadow-regression-fixture-runner.js
+
       - name: Settlement shadow recalculation guard tests
         run: node tests/settlement-shadow-guard-tests.js
 
