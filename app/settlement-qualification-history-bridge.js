@@ -16,9 +16,13 @@
     const doc=global.document;if(!doc||doc.querySelector('script['+attr+']'))return;
     const script=doc.createElement('script');script.src=src;script.async=false;script.setAttribute(attr,'1');if(onload)script.addEventListener('load',onload,{once:true});(doc.body||doc.head||doc.documentElement).appendChild(script);
   }
+  function loadPreproductionReviewBundle(){
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_BUNDLE)return;
+    appendScript('./settlement-preproduction-review-bundle.js','data-kts-preproduction-review-bundle');
+  }
   function loadPreproductionReviewHistory(){
-    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_HISTORY)return;
-    appendScript('./settlement-preproduction-review-history.js','data-kts-preproduction-review-history');
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_HISTORY){loadPreproductionReviewBundle();return;}
+    appendScript('./settlement-preproduction-review-history.js','data-kts-preproduction-review-history',loadPreproductionReviewBundle);
   }
   function loadPreproductionReview(){
     if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW){loadPreproductionReviewHistory();return;}
