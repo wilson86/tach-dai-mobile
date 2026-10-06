@@ -27,6 +27,18 @@
     try { if (global.localStorage) global.localStorage.setItem(VIEW_MODE_KEY, mode); } catch (_) {}
     return mode;
   }
+  function verificationConflict(snapshot) {
+    return Boolean(snapshot && String(snapshot.verification_status || '').toLowerCase() === 'conflict');
+  }
+  function verificationDetails(snapshot) {
+    const sources = Array.isArray(snapshot && snapshot.verification_sources) ? snapshot.verification_sources.map(String) : [];
+    const conflicts = Array.isArray(snapshot && snapshot.verification_conflicts) ? snapshot.verification_conflicts.map(String) : [];
+    return {
+      sources,
+      conflicts,
+      reason: snapshot && snapshot.verification_reason ? String(snapshot.verification_reason) : ''
+    };
+  }
 
   function createManager(options) {
     const o = options || {};
@@ -149,14 +161,25 @@
       const table = doc.getElementById('resultTable');
       if (!table || !sameScope(scope, snapshot)) return;
 
+      const conflict = verificationConflict(snapshot);
       const verified = snapshot.verified === true || snapshot.verification_status === 'verified';
-      const badge = verified
-        ? '<span class="tag ok">ĐÃ XÁC MINH</span>'
-        : snapshot.complete
-          ? '<span class="tag warn">ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU</span>'
-          : '<span class="tag warn">TẠM TÍNH</span>';
+      const badge = conflict
+        ? '<span class="tag err">XUNG ĐỘT NGUỒN KQXS</span>'
+        : verified
+          ? '<span class="tag ok">ĐÃ XÁC MINH</span>'
+          : snapshot.complete
+            ? '<span class="tag warn">ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU</span>'
+            : '<span class="tag warn">TẠM TÍNH</span>';
       const modeBadge = currentViewMode() === 'realtime' ? '<span class="tag">THỜI GIAN THẬT</span>' : `<span class="tag">NGÀY ${esc(snapshot.business_date)}</span>`;
       const parts = [`<div class="row" style="justify-content:space-between"><div>${badge} ${modeBadge} <span class="hint">${esc(snapshot.source)} · ${esc(snapshot.fetched_at)}</span></div></div>`];
+      const verify = verificationDetails(snapshot);
+      if (conflict) {
+        const sourceText = verify.sources.length ? ` · nguồn: ${esc(verify.sources.join(' ↔ '))}` : '';
+        const conflictText = verify.conflicts.length ? ` · lệch: ${esc(verify.conflicts.join(', '))}` : '';
+        parts.push(`<div class="status err">Không được coi KQXS này là đã xác minh${sourceText}${conflictText}. Hệ thống tiếp tục kiểm tra lại; settlement chỉ dùng ở trạng thái shadow/chưa xác minh.</div>`);
+      } else if (verify.reason && String(verify.reason).startsWith('SECONDARY_')) {
+        parts.push(`<div class="status warn">Nguồn đối chiếu thứ hai chưa sẵn sàng (${esc(verify.reason)}). Kết quả nguồn chính vẫn hiển thị nhưng chưa xác minh.</div>`);
+      }
       const order = snapshot.region === 'mb' ? ['DB','G1','G2','G3','G4','G5','G6','G7'] : ['G8','G7','G6','G5','G4','G3','G2','G1','DB'];
       for (const station of (snapshot.stations || [])) {
         parts.push(`<h3 style="margin:12px 0 4px">${esc(station.name || station.code)}</h3><table><thead><tr><th>Giải</th><th>Kết quả</th></tr></thead><tbody>`);
@@ -176,8 +199,12 @@
       if (snapshot) {
         renderSnapshot(snapshot, { cached: true });
         if (o.status !== false) {
-          const label = snapshot.complete ? 'Đã nạp KQXS đã lưu.' : 'Đã nạp snapshot KQXS tạm đã lưu.';
-          setResultStatus(`${label} ${scope.region.toUpperCase()} ${scope.business_date}.`, snapshot.complete ? 'ok' : 'warn');
+          if (verificationConflict(snapshot)) {
+            setResultStatus(`KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN · không được chốt.`, 'err');
+          } else {
+            const label = snapshot.complete ? 'Đã nạp KQXS đã lưu.' : 'Đã nạp snapshot KQXS tạm đã lưu.';
+            setResultStatus(`${label} ${scope.region.toUpperCase()} ${scope.business_date}.`, snapshot.complete ? 'ok' : 'warn');
+          }
         }
         return snapshot;
       }
@@ -244,7 +271,9 @@
           result_snapshot: saved.snapshot || snapshot
         });
         const blocked = rows.filter(x => x && x.status === 'blocked').length;
-        if (snapshot.complete) {
+        if (verificationConflict(snapshot)) {
+          setResultStatus(`Theo ngày chọn · KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN. Đã tính shadow nhưng KHÔNG được coi là xác minh/chốt.`, 'err');
+        } else if (snapshot.complete) {
           setResultStatus(`Theo ngày chọn · đã tải đủ KQXS ${scope.region.toUpperCase()} ${scope.business_date}. ${rows.length} phạm vi settlement đã rà lại${blocked ? ` · ${blocked} đang fail-closed` : ''}.`, blocked ? 'warn' : 'ok');
         } else {
           setResultStatus(`Theo ngày chọn · snapshot này chưa đủ giải. Không tự polling; bấm “Tải ngày đã chọn” để kiểm tra lại.`, 'warn');
@@ -363,16 +392,20 @@
         if (info.state === 'fetching') setAutoStatus(`KQXS ${label}: đang cập nhật…`, '');
         else if (info.state === 'waiting') setAutoStatus(`KQXS ${label}: chưa đủ giải · tự kiểm tra lại sau 90 giây.`, 'warn');
         else if (info.state === 'complete_waiting_confirmation') setAutoStatus(`KQXS ${label}: đã đủ giải lần ${info.complete_confirmations}/${info.complete_confirmations_required} · đang xác nhận lại để bắt sửa kết quả.`, 'warn');
+        else if (info.state === 'verification_pending') setAutoStatus(`KQXS ${label}: đã đủ nhưng nguồn đối chiếu thứ hai chưa xác nhận · tiếp tục kiểm tra 90 giây/lần.`, 'warn');
+        else if (info.state === 'conflict') setAutoStatus(`KQXS ${label}: XUNG ĐỘT GIỮA CÁC NGUỒN · không chốt, tiếp tục kiểm tra lại.`, 'err');
         else if (info.state === 'complete') setAutoStatus(`KQXS ${label}: đã đủ và ổn định qua ${info.complete_confirmations || 1} lần lấy · chờ đối chiếu độc lập.`, 'ok');
-        else if (info.state === 'verified') setAutoStatus(`KQXS ${label}: đã xác minh.`, 'ok');
+        else if (info.state === 'verified') setAutoStatus(`KQXS ${label}: đã xác minh từ nguồn độc lập.`, 'ok');
         else if (info.state === 'error') setAutoStatus(`KQXS ${label}: lỗi ${info.error} · giữ dữ liệu gần nhất và sẽ thử lại.`, 'err');
 
         if (currentViewMode() === 'realtime' && realtimeDisplayActive && sameScope(scope, currentScope())) {
           if (info.state === 'fetching') setResultStatus('THỜI GIAN THẬT · đang lấy KQXS…', '');
           else if (info.state === 'waiting') setResultStatus('THỜI GIAN THẬT · chưa đủ giải · tự kiểm tra lại sau 90 giây.', 'warn');
           else if (info.state === 'complete_waiting_confirmation') setResultStatus(`THỜI GIAN THẬT · đủ giải lần ${info.complete_confirmations}/${info.complete_confirmations_required} · đang xác nhận lại.`, 'warn');
+          else if (info.state === 'verification_pending') setResultStatus('THỜI GIAN THẬT · kết quả đã đủ nhưng nguồn thứ hai chưa xác nhận · tiếp tục kiểm tra.', 'warn');
+          else if (info.state === 'conflict') setResultStatus('THỜI GIAN THẬT · XUNG ĐỘT NGUỒN KQXS · không chốt, tiếp tục kiểm tra lại.', 'err');
           else if (info.state === 'complete') setResultStatus('THỜI GIAN THẬT · kết quả đã đủ và ổn định · chờ đối chiếu độc lập.', 'ok');
-          else if (info.state === 'verified') setResultStatus('THỜI GIAN THẬT · kết quả đã xác minh.', 'ok');
+          else if (info.state === 'verified') setResultStatus('THỜI GIAN THẬT · kết quả đã xác minh từ nguồn độc lập.', 'ok');
           else if (info.state === 'error') setResultStatus(`THỜI GIAN THẬT · lỗi ${info.error} · giữ snapshot gần nhất.`, 'err');
         }
       });
@@ -392,11 +425,13 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v4',
+    version: 'result-auto-v5-cross-source',
     VIEW_MODE_KEY,
     createManager,
     validScope,
-    normalizeViewMode
+    normalizeViewMode,
+    verificationConflict,
+    verificationDetails
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
