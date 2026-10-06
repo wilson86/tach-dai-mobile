@@ -10,7 +10,7 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const D = sandbox.globalThis.KTS_SETTLEMENT_REPORT_DASHBOARD;
 
-assert.strictEqual(D.version, 'settlement-report-dashboard-v2');
+assert.strictEqual(D.version, 'settlement-report-dashboard-v3-readiness');
 assert.strictEqual(D.shadowLabel('MATCH_EXACT'), 'KHỚP EXACT');
 assert.strictEqual(D.shadowLabel('MISMATCH'), 'LỆCH SHADOW');
 assert.strictEqual(D.shadowKind('MATCH_EXACT'), 'ok');
@@ -37,10 +37,27 @@ assert.strictEqual(breakdown.role_totals.owner.payout, 80);
 assert.strictEqual(breakdown.region_totals.mn.xac, 60);
 assert.strictEqual(breakdown.region_totals.mb.final_net, 30.4);
 assert.strictEqual(breakdown.region_totals.mt.final_net, 42);
+
+const ready = D.buildReadiness({ status:'MATCH_EXACT', counts:{ partners:3, exact:3, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 } });
+assert.strictEqual(ready.ready, true);
+assert.strictEqual(ready.reasons.length, 0);
+const notReady = D.buildReadiness({ status:'BLOCKED', counts:{ partners:3, exact:1, blocked:1, provisional:1, mismatch:0, display_only:0, unverified:1 } });
+assert.strictEqual(notReady.ready, false);
+assert.deepStrictEqual(Array.from(notReady.reasons, r => r.code), ['BLOCKED','PROVISIONAL','UNVERIFIED']);
+const displayOnly = D.buildReadiness({ status:'MATCH_DISPLAY_ONLY', counts:{ partners:1, exact:0, blocked:0, provisional:0, mismatch:0, display_only:1, unverified:0 } });
+assert.strictEqual(displayOnly.ready, false);
+assert.strictEqual(displayOnly.reasons[0].code, 'DISPLAY_ONLY');
+const empty = D.buildReadiness({ status:'EMPTY', counts:{ partners:0 } });
+assert.strictEqual(empty.ready, false);
+assert.strictEqual(empty.reasons[0].code, 'NO_DATA');
+
 assert(code.includes('Tách Khách / Chủ'));
 assert(code.includes('Tách theo miền'));
 assert(code.includes('Tổng chỉ các đối tác đã khớp exact'));
+assert(code.includes('GATE ĐỐI SOÁT CUỐI NGÀY'));
+assert(code.includes('không tự chốt hoặc khóa ngày'));
 assert(code.includes('Không dùng tổng này để chốt'));
+assert(code.includes('Theo loại cược'));
 assert(code.includes('Xem chi tiết'));
 assert(code.includes('buildDailyOperationsReport'));
 
