@@ -1,6 +1,7 @@
 (function (global) {
   'use strict';
 
+  let repairLoadPromise = null;
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   }
@@ -90,6 +91,27 @@
       partners: [...row.partners].sort()
     })).sort((a, b) => b.count - a.count || b.total_abs_delta - a.total_abs_delta || a.signature.localeCompare(b.signature));
   }
+  function ensureRepairWorkflow() {
+    if (global.KTS_SETTLEMENT_REPAIR_WORKFLOW) return Promise.resolve(global.KTS_SETTLEMENT_REPAIR_WORKFLOW);
+    if (repairLoadPromise) return repairLoadPromise;
+    const doc = global.document;
+    if (!doc || !doc.head || typeof doc.createElement !== 'function') return Promise.reject(new Error('REPAIR_WORKFLOW_LOADER_UNAVAILABLE'));
+    repairLoadPromise = new Promise((resolve, reject) => {
+      let script = doc.getElementById('settlementRepairWorkflowLoader');
+      if (!script) {
+        script = doc.createElement('script');
+        script.id = 'settlementRepairWorkflowLoader';
+        script.src = './settlement-repair-workflow.js';
+        script.async = false;
+        doc.head.appendChild(script);
+      }
+      const done = () => global.KTS_SETTLEMENT_REPAIR_WORKFLOW ? resolve(global.KTS_SETTLEMENT_REPAIR_WORKFLOW) : reject(new Error('REPAIR_WORKFLOW_NOT_LOADED'));
+      script.addEventListener('load', done, { once: true });
+      script.addEventListener('error', () => reject(new Error('REPAIR_WORKFLOW_LOAD_FAILED')), { once: true });
+      if (global.KTS_SETTLEMENT_REPAIR_WORKFLOW) done();
+    }).catch(error => { repairLoadPromise = null; throw error; });
+    return repairLoadPromise;
+  }
 
   function installUi() {
     const doc = global.document;
@@ -134,13 +156,21 @@
           `<div class="row" style="margin-top:6px"><button class="btn soft" data-repair-group="${index}">Mở hồ sơ sửa</button></div>`+
           `<details style="margin-top:4px"><summary class="hint">Candidate ID</summary><div class="raw">${esc(g.candidate_ids.join('\n'))}</div></details></div>`;
       }).join('');
-      host.querySelectorAll('[data-repair-group]').forEach(btn => btn.addEventListener('click', () => {
+      host.querySelectorAll('[data-repair-group]').forEach(btn => btn.addEventListener('click', async () => {
         const index = Number(btn.getAttribute('data-repair-group'));
         const group = lastGroups[index];
         if (!group || !group.candidate_ids.length) return;
-        if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
-          global.dispatchEvent(new global.CustomEvent('kts:repair-open', { detail: { signature: group.signature, candidate_ids: group.candidate_ids.slice() } }));
-        }
+        try {
+          btn.disabled = true;
+          status('Đang mở evidence của nhóm mismatch…', 'warn');
+          await ensureRepairWorkflow();
+          if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+            global.dispatchEvent(new global.CustomEvent('kts:repair-open', { detail: { signature: group.signature, candidate_ids: group.candidate_ids.slice() } }));
+          }
+          status('Đã mở hồ sơ evidence; chưa thay đổi rule hay tiền.', 'ok');
+        } catch (error) {
+          status(String(error && error.message || error), 'err');
+        } finally { btn.disabled = false; }
       }));
       status(`${pending.length} candidate đang chờ · gom thành ${groups.length} nhóm lỗi. Ưu tiên nhóm lặp nhiều trước.`, 'warn');
       return groups;
@@ -155,11 +185,12 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_REVIEW = Object.freeze({
-    version: 'settlement-regression-review-v2-repair-link',
+    version: 'settlement-regression-review-v3-repair-loader',
     replayComparison,
     candidateIssueShape,
     signatureForCandidate,
-    summarizeCandidates
+    summarizeCandidates,
+    ensureRepairWorkflow
   });
 
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', installUi, { once: true });
