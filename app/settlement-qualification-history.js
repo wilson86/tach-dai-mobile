@@ -1,0 +1,203 @@
+(function (global) {
+  'use strict';
+
+  const META_KEY = 'qualification_history_v1';
+  const FORMAT = 'kts-qualification-evidence-v1';
+  const READY = 'READY_FOR_PRODUCTION_REVIEW';
+  const COMPONENTS = Object.freeze(['runtime','messages','settlements','results','configs','regression_cases','candidates','qualification']);
+
+  function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
+  function deps() {
+    const store = global.KTS_SETTLEMENT_STORE;
+    const qualification = global.KTS_SETTLEMENT_QUALIFICATION;
+    const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
+    const candidates = global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    if (!store || !qualification || !regression || !candidates) throw new Error('QUALIFICATION_HISTORY_DEPENDENCY_MISSING');
+    return { store, qualification, regression, candidates };
+  }
+  function stable(value) {
+    const store = global.KTS_SETTLEMENT_STORE;
+    if (store && typeof store.stableStringify === 'function') return store.stableStringify(value);
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return '[' + value.map(stable).join(',') + ']';
+    return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stable(value[k])).join(',') + '}';
+  }
+  async function sha256Hex(value) {
+    if (!global.crypto || !global.crypto.subtle || !global.TextEncoder) throw new Error('QUALIFICATION_SHA256_UNAVAILABLE');
+    const bytes = new global.TextEncoder().encode(typeof value === 'string' ? value : stable(value));
+    const digest = await global.crypto.subtle.digest('SHA-256', bytes);
+    return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2,'0')).join('');
+  }
+  function semanticMessage(m) {
+    return { id:m.id, partner_id:m.partner_id, business_date:m.business_date, region:m.region, status:m.status, raw_text:m.raw_text, canonical_payload:clone(m.canonical_payload||null), canonical_version:m.canonical_version||null, parser_error:m.parser_error||null, config_snapshot:clone(m.config_snapshot||null) };
+  }
+  function semanticSettlement(s) {
+    return { id:s.id, partner_id:s.partner_id, business_date:s.business_date, region:s.region, message_ids:clone(s.message_ids||[]), engine_version:s.engine_version||null, config_snapshot:clone(s.config_snapshot||null), lottery_result_snapshot:clone(s.lottery_result_snapshot||null), settlement_result:clone(s.settlement_result||null), category_rows:clone(s.category_rows||[]), detail_rows:clone(s.detail_rows||[]), message_breakdown:clone(s.message_breakdown||[]), scope_status:s.scope_status||null, blocked_reasons:clone(s.blocked_reasons||[]), reference_app_snapshot:clone(s.reference_app_snapshot||null), comparison_status:s.comparison_status||null };
+  }
+  function semanticResult(r) {
+    return { id:r.id, business_date:r.business_date, region:r.region, source:r.source, status:r.status, complete:r.complete, coverage_complete:r.coverage_complete, verified:r.verified, verification_status:r.verification_status, verification_sources:clone(r.verification_sources||[]), verification_reason:r.verification_reason||null, verification_conflicts:clone(r.verification_conflicts||[]), expected_station_codes:clone(r.expected_station_codes||[]), stations:clone(r.stations||[]), fingerprint:r.fingerprint||null, provider_revision:r.provider_revision||null };
+  }
+  function semanticConfig(c) {
+    return { id:c.id, partner_id:c.partner_id, version:c.version, effective_from_date:c.effective_from_date, region_pricing:clone(c.region_pricing||{}), dat_hit_mode:c.dat_hit_mode, dax_hit_mode:c.dax_hit_mode, mb_xien_234:Boolean(c.mb_xien_234), tinh_ui:Boolean(c.tinh_ui), total_percent:String(c.total_percent==null?'100':c.total_percent), refund_percent:String(c.refund_percent==null?'0':c.refund_percent), commission_type:c.commission_type };
+  }
+  function qualificationCore(q) {
+    const copy = clone(q || {});
+    delete copy.generated_at;
+    if (copy.repair_readiness) delete copy.repair_readiness.generated_at;
+    return copy;
+  }
+  function runtimeSignature() {
+    const names = [
+      ['engine','KTS_SETTLEMENT_ENGINE'], ['mb_rules','KTS_SETTLEMENT_MB_RULES'], ['category_map','KTS_SETTLEMENT_CATEGORY_MAP'],
+      ['runtime','KTS_SETTLEMENT_RUNTIME'], ['evaluator','KTS_SETTLEMENT_EVALUATOR'], ['parser_provider','KTS_SETTLEMENT_PARSER_PROVIDER'],
+      ['shadow','KTS_SETTLEMENT_SHADOW'], ['observation','KTS_SETTLEMENT_OBSERVATION'], ['regression_cases','KTS_SETTLEMENT_REGRESSION_CASES'],
+      ['repair_readiness','KTS_SETTLEMENT_REPAIR_READINESS'], ['qualification','KTS_SETTLEMENT_QUALIFICATION'], ['result_service','KTS_RESULT_SERVICE']
+    ];
+    const out = {};
+    for (const [key, globalName] of names) {
+      const api = global[globalName];
+      out[key] = api && api.version ? String(api.version) : null;
+    }
+    return out;
+  }
+  function sortById(rows) { return rows.slice().sort((a,b)=>String(a.id||'').localeCompare(String(b.id||''))); }
+  function scopeKey(x) { return [String(x&&x.partner_id||''),String(x&&x.business_date||''),String(x&&x.region||'').toLowerCase()].join(':'); }
+  function relevantConfigs(configs, activeMessages, options) {
+    const partners = new Set(activeMessages.map(x=>String(x.partner_id||'')).filter(Boolean));
+    const from = String(options&&options.from_date||''), to = String(options&&options.to_date||'');
+    const out = [];
+    for (const partner of partners) {
+      const rows = configs.filter(c=>String(c.partner_id||'')===partner).sort((a,b)=>String(a.effective_from_date||'').localeCompare(String(b.effective_from_date||''))||Number(a.version||0)-Number(b.version||0));
+      let baseline = null;
+      for (const row of rows) {
+        const d = String(row.effective_from_date||'');
+        if ((!from || d < from) && (!to || d <= to)) baseline = row;
+        if ((!from || d >= from) && (!to || d <= to)) out.push(row);
+      }
+      if (baseline) out.push(baseline);
+    }
+    return sortById(out.filter((x,i,a)=>a.findIndex(y=>String(y.id)===String(x.id))===i));
+  }
+  async function collectMaterial(qualificationSnapshot, options) {
+    const d = deps();
+    const [messagesAll, settlementsAll, resultsAll, configsAll, pinned, candidateRows] = await Promise.all([
+      d.store.getAll(d.store.STORES.messages), d.store.getAll(d.store.STORES.settlements),
+      d.store.getAll(d.store.STORES.results), d.store.getAll(d.store.STORES.configs),
+      d.regression.listPinnedCases(), d.candidates.listCandidates()
+    ]);
+    const activeMessages = messagesAll.filter(m=>d.qualification.messageInWindow(m,options)).map(semanticMessage);
+    const scopeSet = new Set((qualificationSnapshot&&qualificationSnapshot.observation&&qualificationSnapshot.observation.scopes||[]).map(scopeKey));
+    const settlements = settlementsAll.filter(s=>scopeSet.has(scopeKey(s))).map(semanticSettlement);
+    const dateRegions = new Set(activeMessages.map(m=>`${m.business_date}:${String(m.region||'').toLowerCase()}`));
+    const results = resultsAll.filter(r=>dateRegions.has(`${r.business_date}:${String(r.region||'').toLowerCase()}`)).map(semanticResult);
+    const configs = relevantConfigs(configsAll,activeMessages,options).map(semanticConfig);
+    return {
+      runtime:runtimeSignature(),
+      messages:sortById(activeMessages), settlements:sortById(settlements), results:sortById(results), configs:sortById(configs),
+      regression_cases:sortById((pinned||[]).map(clone)), candidates:sortById((candidateRows||[]).map(c=>({ id:c.id, source_event_id:c.source_event_id, state:c.state, confirmation_note:c.confirmation_note||'', dismiss_reason:c.dismiss_reason||'', case:clone(c.case) }))),
+      qualification:qualificationCore(qualificationSnapshot)
+    };
+  }
+  async function componentFingerprints(material) {
+    const out = {};
+    for (const name of COMPONENTS) out[name] = await sha256Hex(material[name]);
+    return out;
+  }
+  async function overallFingerprint(options, components) {
+    return sha256Hex({ format:'kts-qualification-input-v1', options:{ from_date:String(options&&options.from_date||''), to_date:String(options&&options.to_date||''), required_observation_days:String(options&&options.required_observation_days||''), partner_id:String(options&&options.partner_id||''), regions:Array.isArray(options&&options.regions)?options.regions.slice().sort():[] }, components });
+  }
+  function changedComponents(previous, current) {
+    if (!previous) return COMPONENTS.slice();
+    return COMPONENTS.filter(name=>String(previous[name]||'')!==String(current[name]||''));
+  }
+  async function readRow() {
+    const {store}=deps();
+    const row = await store.get(store.STORES.metadata,META_KEY);
+    return row && Array.isArray(row.events) ? row : { key:META_KEY, version:1, events:[] };
+  }
+  function txDone(tx) { return new Promise((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('QUALIFICATION_HISTORY_TX_FAILED'));tx.onabort=()=>reject(tx.error||new Error('QUALIFICATION_HISTORY_TX_ABORTED'));}); }
+  async function writeRow(row) {
+    const {store}=deps();
+    const db = await store.openDb();
+    try {
+      const tx=db.transaction(store.STORES.metadata,'readwrite');
+      tx.objectStore(store.STORES.metadata).put(clone(row));
+      await txDone(tx);
+    } finally { db.close(); }
+    return row;
+  }
+  function makeId() {
+    if (global.crypto && typeof global.crypto.randomUUID==='function') return 'qualification_event_'+global.crypto.randomUUID();
+    return 'qualification_event_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
+  }
+  function buildEvidenceEvent(qualificationSnapshot, options, components, fingerprint, history) {
+    const list=Array.isArray(history)?history:[];
+    const previous=list.length?list[list.length-1]:null;
+    const lastReady=[...list].reverse().find(x=>x&&x.ready_for_production_review===true)||null;
+    const changesPrev=changedComponents(previous&&previous.component_fingerprints,components);
+    const changesReady=changedComponents(lastReady&&lastReady.component_fingerprints,components);
+    const ready=Boolean(qualificationSnapshot&&qualificationSnapshot.ready_for_production_review===true);
+    const changedFromReady=Boolean(lastReady&&String(lastReady.input_fingerprint_sha256)!==String(fingerprint));
+    return {
+      format:FORMAT, id:makeId(), observed_at:new Date().toISOString(),
+      from_date:String(options&&options.from_date||''), to_date:String(options&&options.to_date||''), required_observation_days:String(options&&options.required_observation_days||''),
+      qualification_state:String(qualificationSnapshot&&qualificationSnapshot.qualification_state||'BLOCKED_SHADOW_QUALIFICATION'), ready_for_production_review:ready,
+      input_fingerprint_sha256:fingerprint, component_fingerprints:clone(components),
+      previous_event_id:previous&&previous.id||null, previous_ready_event_id:lastReady&&lastReady.id||null,
+      changed_components_from_previous:changesPrev, changed_components_from_last_ready:changesReady,
+      invalidates_previous_ready:Boolean(lastReady&&changedFromReady&&!ready),
+      requalifies_after_change:Boolean(lastReady&&changedFromReady&&ready),
+      production_enabled:false, merge_authorized:false,
+      blockers:clone(qualificationSnapshot&&qualificationSnapshot.blockers||[]), qualification_snapshot:clone(qualificationSnapshot)
+    };
+  }
+  async function recordQualification(qualificationSnapshot, options) {
+    if (!qualificationSnapshot || typeof qualificationSnapshot!=='object') throw new Error('QUALIFICATION_SNAPSHOT_REQUIRED');
+    const material=await collectMaterial(qualificationSnapshot,options||{});
+    const components=await componentFingerprints(material);
+    const fingerprint=await overallFingerprint(options||{},components);
+    const row=await readRow();
+    const event=buildEvidenceEvent(qualificationSnapshot,options||{},components,fingerprint,row.events);
+    row.events.push(event); row.updated_at=event.observed_at;
+    await writeRow(row);
+    return clone(event);
+  }
+  async function listEvents() {
+    const row=await readRow();
+    return row.events.map(clone).sort((a,b)=>String(a.observed_at||'').localeCompare(String(b.observed_at||''))||String(a.id||'').localeCompare(String(b.id||'')));
+  }
+  async function checkLastReadyValidity() {
+    const events=await listEvents();
+    const lastReady=[...events].reverse().find(x=>x.ready_for_production_review===true);
+    if (!lastReady) return { status:'NO_READY_EVIDENCE', current:false, changed_components:[], ready_event:null };
+    const options={from_date:lastReady.from_date,to_date:lastReady.to_date,required_observation_days:lastReady.required_observation_days};
+    const material=await collectMaterial(lastReady.qualification_snapshot,options);
+    const components=await componentFingerprints(material);
+    const fingerprint=await overallFingerprint(options,components);
+    const changed=changedComponents(lastReady.component_fingerprints,components);
+    return { status:fingerprint===lastReady.input_fingerprint_sha256?'READY_EVIDENCE_CURRENT':'READY_EVIDENCE_STALE', current:fingerprint===lastReady.input_fingerprint_sha256, changed_components:changed, ready_event:clone(lastReady), current_fingerprint_sha256:fingerprint };
+  }
+
+  function installUi() {
+    const doc=global.document,pane=doc&&doc.getElementById('pane-report');
+    if(!pane||doc.getElementById('qualificationHistoryPanel'))return;
+    const card=doc.createElement('div');card.className='card';card.id='qualificationHistoryPanel';
+    card.innerHTML=`<div class="section-title">Lịch sử qualification · evidence bất biến</div><div class="hint">Mỗi lần chạy gate cuối được append thành một mốc riêng với SHA-256 theo component. READY cũ không bị xóa; nếu tin/config/KQXS/regression/candidate/runtime thay đổi, fingerprint mới cho biết READY trước đó đã stale hay đã được re-qualify.</div><div class="row" style="margin-top:8px"><button id="qualificationHistoryRefresh" class="btn soft">Nạp lịch sử</button><button id="qualificationHistoryCheck" class="btn soft">Kiểm hiệu lực READY gần nhất</button></div><div id="qualificationHistoryStatus" class="status"></div><div id="qualificationHistoryOutput" class="hint"></div>`;
+    const anchor=doc.getElementById('finalQualificationPanel');pane.insertBefore(card,anchor&&anchor.nextSibling||pane.firstChild);
+    function status(text,kind){const el=doc.getElementById('qualificationHistoryStatus');el.textContent=text||'';el.className='status '+(kind||'');}
+    async function render(){const events=await listEvents(),host=doc.getElementById('qualificationHistoryOutput');if(!events.length){host.innerHTML='<div class="hint">Chưa có mốc qualification nào được lưu.</div>';return events;}const rows=[...events].reverse().slice(0,20);host.innerHTML=rows.map(e=>`<div class="report-message"><div><span class="tag ${e.ready_for_production_review?'ok':'warn'}">${esc(e.qualification_state)}</span> <b>${esc(e.observed_at)}</b></div><div class="hint">${esc(e.from_date||'—')} → ${esc(e.to_date||'—')} · SHA ${esc(String(e.input_fingerprint_sha256||'').slice(0,16))}…</div><div class="hint">đổi từ lần trước: ${esc((e.changed_components_from_previous||[]).join(', ')||'không')} ${e.invalidates_previous_ready?'· READY cũ MẤT HIỆU LỰC':''}${e.requalifies_after_change?'· đã RE-QUALIFY':''}</div></div>`).join('');status(`${events.length} mốc qualification được giữ append-only trên thiết bị.`,'ok');return events;}
+    doc.getElementById('qualificationHistoryRefresh').addEventListener('click',()=>render().catch(e=>status(String(e&&e.message||e),'err')));
+    doc.getElementById('qualificationHistoryCheck').addEventListener('click',async()=>{try{status('Đang tính lại fingerprint hiện tại so với READY gần nhất…','warn');const v=await checkLastReadyValidity();if(v.status==='NO_READY_EVIDENCE')status('Chưa có READY evidence để kiểm.','warn');else if(v.current)status('READY gần nhất vẫn CURRENT: các input fingerprint chưa đổi.','ok');else status(`READY gần nhất đã STALE · thay đổi: ${v.changed_components.join(', ')||'unknown'}. Phải chạy qualification lại.`, 'err');}catch(e){status(String(e&&e.message||e),'err');}});
+    if(typeof global.addEventListener==='function')global.addEventListener('kts:qualification-evidence-saved',()=>render().catch(()=>{}));
+    render().catch(()=>{});
+  }
+
+  global.KTS_SETTLEMENT_QUALIFICATION_HISTORY=Object.freeze({
+    version:'settlement-qualification-history-v1-fingerprint',META_KEY,FORMAT,COMPONENTS,
+    sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,qualificationCore,runtimeSignature,relevantConfigs,
+    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+  });
+  if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
+  else if(global.document)installUi();
+})(typeof window!=='undefined'?window:globalThis);
