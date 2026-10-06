@@ -165,6 +165,15 @@ jobs:
       - name: Settlement final pre-production boundary wiring tests
         run: node tests/settlement-preproduction-boundary-wiring-tests.js
 
+      - name: Settlement pre-production orchestrator tests
+        run: node tests/settlement-preproduction-orchestrator-tests.js
+
+      - name: Settlement portable audit pack tests
+        run: node tests/settlement-preproduction-audit-pack-tests.js
+
+      - name: Settlement pre-production orchestration wiring tests
+        run: node tests/settlement-preproduction-orchestration-wiring-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
