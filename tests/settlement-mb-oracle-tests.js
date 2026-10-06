@@ -26,15 +26,17 @@ assert.strictEqual(M.mbXacUnits('DAT', { number_count: 3 }), 162);
 assert.strictEqual(M.mbXacUnits('DAT', { number_count: 4 }), 324);
 assert.throws(() => M.mbXacUnits('DAT', { number_count: 1 }), /MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS/);
 
+// MB đá thẳng has one fixed hit mode: nhiều cặp = min(hitsA, hitsB).
 assert.strictEqual(M.mbDatHitUnits(1, 1), 1);
-assert.strictEqual(M.mbDatHitUnits(3, 2), 1);
+assert.strictEqual(M.mbDatHitUnits(3, 2), 2);
+assert.strictEqual(M.mbDatHitUnits(5, 3), 3);
 assert.strictEqual(M.mbDatHitUnits(0, 2), 0);
 assert.strictEqual(M.mbDatHitUnits(2, 0), 0);
 
-// 92 61 44 da 1n => hidden pairs 92-61, 92-44, 61-44.
-// All three selected numbers hit => 3 winning straight pairs.
-assert.strictEqual(M.mbDatTotalHitUnits([3, 2, 1]), 3);
-// Only first + third hit => one winning selected pair.
+// 92 61 44 da 1n => hidden selected pairs 92-61, 92-44, 61-44.
+// If their occurrence counts are 3,2,1 then hit units are 2+1+1 = 4.
+assert.strictEqual(M.mbDatTotalHitUnits([3, 2, 1]), 4);
+// Only first + third hit => one winning selected pair, one unit.
 assert.strictEqual(M.mbDatTotalHitUnits([3, 0, 1]), 1);
 assert.strictEqual(M.mbDatTotalHitUnits([0, 0, 1]), 0);
 assert.throws(() => M.mbDatTotalHitUnits([1]), /MB_DAT_REQUIRES_AT_LEAST_2_NUMBERS/);
@@ -45,7 +47,8 @@ assert.strictEqual(M.mbXacUnits('4C', { number_count: 1 }), 20);
 assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 3, position: 'dau' }), 9);
 assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 1, position: 'duoi' }), 1);
 
-// Two-number MB đá golden remains unchanged: one internal pair.
+// 2026-09-22 reference oracle: 92 appeared 3 times, 61 appeared 2 times,
+// therefore MB DAT hit units = min(3,2)=2.
 {
   const r = E.settle([
     row('MB_2CB', 27, 3, 75),
@@ -60,9 +63,9 @@ assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 1, position: 'duoi' }), 
 
   assert.strictEqual(r.total_xac, 148);
   assert(Math.abs(r.total_qua_co - 112.48) < 1e-9);
-  assert.strictEqual(r.total_payout, 8475);
-  assert(Math.abs(r.final_net - (-8362.52)) < 1e-9);
-  assert.strictEqual(E.display1(r.final_net), '-8362.5');
+  assert.strictEqual(r.total_payout, 9125);
+  assert(Math.abs(r.final_net - (-9012.52)) < 1e-9);
+  assert.strictEqual(E.display1(r.final_net), '-9012.5');
 }
 
 assert.deepStrictEqual(Array.from(M.mbSelectors('2CB')), ['G7:*', 'G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']);
