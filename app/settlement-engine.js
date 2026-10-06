@@ -50,6 +50,59 @@
     return x;
   }
 
+  // Money/accounting arithmetic is decimal-exact. Public numeric fields are kept
+  // for existing UI compatibility; exact decimal strings travel beside them.
+  function decNormalize(d) {
+    let i = BigInt(d.i), s = Number(d.s || 0);
+    if (!Number.isInteger(s) || s < 0) throw new Error('DECIMAL_SCALE_INVALID');
+    if (i === 0n) return { i: 0n, s: 0 };
+    while (s > 0 && i % 10n === 0n) { i /= 10n; s -= 1; }
+    return { i, s };
+  }
+  function dec(v, name) {
+    if (v && typeof v === 'object' && typeof v.i === 'bigint' && Number.isInteger(v.s)) return decNormalize(v);
+    if (typeof v === 'number' && !Number.isFinite(v)) throw new Error((name || 'value') + '_INVALID');
+    const text = String(v == null ? '' : v).trim();
+    const m = text.match(/^([+-]?)(\d+)(?:\.(\d*))?(?:[eE]([+-]?\d+))?$/);
+    if (!m) throw new Error((name || 'value') + '_INVALID');
+    const sign = m[1] === '-' ? -1n : 1n;
+    const frac = m[3] || '';
+    const exp = m[4] == null ? 0 : Number(m[4]);
+    if (!Number.isInteger(exp) || Math.abs(exp) > 1000) throw new Error((name || 'value') + '_INVALID');
+    let digits = (m[2] + frac).replace(/^0+(?=\d)/, '') || '0';
+    let scale = frac.length - exp;
+    if (scale < 0) { digits += '0'.repeat(-scale); scale = 0; }
+    return decNormalize({ i: sign * BigInt(digits), s: scale });
+  }
+  function decPow10(power) { return 10n ** BigInt(power); }
+  function decAlign(a, b) {
+    a = dec(a); b = dec(b);
+    const s = Math.max(a.s, b.s);
+    return {
+      a: a.i * decPow10(s - a.s),
+      b: b.i * decPow10(s - b.s),
+      s
+    };
+  }
+  function decAdd(a, b) { const x = decAlign(a, b); return decNormalize({ i: x.a + x.b, s: x.s }); }
+  function decSub(a, b) { const x = decAlign(a, b); return decNormalize({ i: x.a - x.b, s: x.s }); }
+  function decMul(a, b) { a = dec(a); b = dec(b); return decNormalize({ i: a.i * b.i, s: a.s + b.s }); }
+  function decDiv100(a) { a = dec(a); return decNormalize({ i: a.i, s: a.s + 2 }); }
+  function decAbs(a) { a = dec(a); return { i: a.i < 0n ? -a.i : a.i, s: a.s }; }
+  function decCmp(a, b) { const x = decAlign(a, b); return x.a < x.b ? -1 : x.a > x.b ? 1 : 0; }
+  function decString(a) {
+    a = dec(a);
+    const neg = a.i < 0n;
+    let digits = (neg ? -a.i : a.i).toString();
+    if (a.s === 0) return (neg ? '-' : '') + digits;
+    if (digits.length <= a.s) digits = '0'.repeat(a.s - digits.length + 1) + digits;
+    const cut = digits.length - a.s;
+    return (neg ? '-' : '') + digits.slice(0, cut) + '.' + digits.slice(cut);
+  }
+  function decNumber(a) { return Number(decString(a)); }
+  function decimalCanonical(v) { return decString(dec(v)); }
+  function decSum(values) { return (values || []).reduce((sum, value) => decAdd(sum, value), dec(0)); }
+
   function role(v) {
     const r = String(v || '').toLowerCase();
     if (r !== 'customer' && r !== 'owner') throw new Error('INVALID_PARTNER_ROLE');
@@ -80,14 +133,8 @@
     }
   }
 
-  function datHitUnits(hitsA, hitsB, mode) {
-    return pairHitUnits(hitsA, hitsB, mode);
-  }
-
-  function daxPairHitUnits(hitsA, hitsB, mode) {
-    return pairHitUnits(hitsA, hitsB, mode);
-  }
-
+  function datHitUnits(hitsA, hitsB, mode) { return pairHitUnits(hitsA, hitsB, mode); }
+  function daxPairHitUnits(hitsA, hitsB, mode) { return pairHitUnits(hitsA, hitsB, mode); }
   function daxHitUnits(pairHits, mode) {
     if (!Array.isArray(pairHits)) throw new Error('DAX_PAIR_HITS_REQUIRED');
     return pairHits.reduce((sum, pair) => {
@@ -96,72 +143,90 @@
     }, 0);
   }
 
-  function commissionQuaCo(xac, value, type) {
-    const x = n(xac, 'xac');
-    const v = n(value, 'commission_value');
+  function commissionQuaCoDecimal(xac, value, type) {
+    const x = dec(xac, 'xac');
+    const v = dec(value, 'commission_value');
     const t = String(type || COMMISSION_TYPES.RATIO).toLowerCase();
-    if (x < 0 || v < 0) throw new Error('INVALID_COMMISSION_VALUES');
-
+    if (x.i < 0n || v.i < 0n) throw new Error('INVALID_COMMISSION_VALUES');
     if (t === COMMISSION_TYPES.RATIO) {
-      if (v > 1) throw new Error('INVALID_COMMISSION_RATIO');
-      return x * v;
+      if (decCmp(v, 1) > 0) throw new Error('INVALID_COMMISSION_RATIO');
+      return decMul(x, v);
     }
-    if (t === COMMISSION_TYPES.AMOUNT) return x * v / HUNDRED;
-    if (t === COMMISSION_TYPES.DIRECT) return x * v;
+    if (t === COMMISSION_TYPES.AMOUNT) return decDiv100(decMul(x, v));
+    if (t === COMMISSION_TYPES.DIRECT) return decMul(x, v);
     throw new Error('INVALID_COMMISSION_TYPE:' + type);
   }
+  function commissionQuaCo(xac, value, type) { return decNumber(commissionQuaCoDecimal(xac, value, type)); }
 
   function category(input) {
-    const xac = n(input.xac, 'xac');
+    const xacD = dec(input.xac, 'xac');
     const commissionType = String(input.commission_type || COMMISSION_TYPES.RATIO).toLowerCase();
-    const commissionValue = n(
-      input.commission_value == null ? input.commission_ratio : input.commission_value,
-      'commission_value'
-    );
-    const hitUnits = n(input.hit_units, 'hit_units');
-    const winRate = n(input.win_rate, 'win_rate');
-    if (xac < 0 || commissionValue < 0 || hitUnits < 0 || winRate < 0) throw new Error('INVALID_CATEGORY_VALUES');
-
+    const commissionD = dec(input.commission_value == null ? input.commission_ratio : input.commission_value, 'commission_value');
+    const hitD = dec(input.hit_units, 'hit_units');
+    const winD = dec(input.win_rate, 'win_rate');
+    if ([xacD, commissionD, hitD, winD].some(v => v.i < 0n)) throw new Error('INVALID_CATEGORY_VALUES');
+    const quaD = commissionQuaCoDecimal(xacD, commissionD, commissionType);
+    const payoutD = decMul(hitD, winD);
+    const exact = Object.freeze({
+      xac: decString(xacD),
+      commission_value: decString(commissionD),
+      hit_units: decString(hitD),
+      win_rate: decString(winD),
+      qua_co: decString(quaD),
+      payout: decString(payoutD)
+    });
     return {
       code: String(input.code || ''),
-      xac,
+      xac: decNumber(xacD),
       commission_type: commissionType,
-      commission_value: commissionValue,
-      commission_ratio: commissionType === COMMISSION_TYPES.RATIO ? commissionValue : null,
-      hit_units: hitUnits,
-      win_rate: winRate,
-      qua_co: commissionQuaCo(xac, commissionValue, commissionType),
-      payout: hitUnits * winRate
+      commission_value: decNumber(commissionD),
+      commission_ratio: commissionType === COMMISSION_TYPES.RATIO ? decNumber(commissionD) : null,
+      hit_units: decNumber(hitD),
+      win_rate: decNumber(winD),
+      qua_co: decNumber(quaD),
+      payout: decNumber(payoutD),
+      exact
     };
   }
 
   function settle(inputs, options) {
     const rows = (inputs || []).map(category);
     const partnerRole = role(options && options.partner_role);
-    const totalPercent = n(options && options.total_percent == null ? 100 : options.total_percent, 'total_percent');
-    const refundPercent = n(options && options.refund_percent == null ? 0 : options.refund_percent, 'refund_percent');
-    if (totalPercent < 0 || totalPercent > 100 || refundPercent < 0 || refundPercent > 100) throw new Error('INVALID_PERCENT');
+    const totalPercentD = dec(options && options.total_percent == null ? 100 : options.total_percent, 'total_percent');
+    const refundPercentD = dec(options && options.refund_percent == null ? 0 : options.refund_percent, 'refund_percent');
+    if (totalPercentD.i < 0n || decCmp(totalPercentD, 100) > 0 || refundPercentD.i < 0n || decCmp(refundPercentD, 100) > 0) throw new Error('INVALID_PERCENT');
 
-    const totalXac = rows.reduce((s, r) => s + r.xac, 0);
-    const totalQuaCo = rows.reduce((s, r) => s + r.qua_co, 0);
-    const totalPayout = rows.reduce((s, r) => s + r.payout, 0);
-    const gross = partnerRole === 'customer' ? totalQuaCo - totalPayout : totalPayout - totalQuaCo;
-    const proportional = gross * totalPercent / HUNDRED;
-    const refundEligible = (partnerRole === 'customer' && proportional > 0) || (partnerRole === 'owner' && proportional < 0);
-    const refundAmount = refundEligible ? Math.abs(proportional) * refundPercent / HUNDRED : 0;
-    const finalNet = proportional > 0 ? proportional - refundAmount : proportional < 0 ? proportional + refundAmount : 0;
+    const totalXacD = decSum(rows.map(r => r.exact.xac));
+    const totalQuaCoD = decSum(rows.map(r => r.exact.qua_co));
+    const totalPayoutD = decSum(rows.map(r => r.exact.payout));
+    const grossD = partnerRole === 'customer' ? decSub(totalQuaCoD, totalPayoutD) : decSub(totalPayoutD, totalQuaCoD);
+    const proportionalD = decDiv100(decMul(grossD, totalPercentD));
+    const refundEligible = (partnerRole === 'customer' && proportionalD.i > 0n) || (partnerRole === 'owner' && proportionalD.i < 0n);
+    const refundD = refundEligible ? decDiv100(decMul(decAbs(proportionalD), refundPercentD)) : dec(0);
+    const finalD = proportionalD.i > 0n ? decSub(proportionalD, refundD) : proportionalD.i < 0n ? decAdd(proportionalD, refundD) : dec(0);
+    const exact = Object.freeze({
+      total_xac: decString(totalXacD),
+      total_qua_co: decString(totalQuaCoD),
+      total_payout: decString(totalPayoutD),
+      gross_net: decString(grossD),
+      total_percent: decString(totalPercentD),
+      refund_percent: decString(refundPercentD),
+      refund_amount: decString(refundD),
+      final_net: decString(finalD)
+    });
 
     return {
       rows,
-      total_xac: totalXac,
-      total_qua_co: totalQuaCo,
-      total_payout: totalPayout,
-      gross_net: gross,
-      total_percent: totalPercent,
-      refund_percent: refundPercent,
-      refund_amount: refundAmount,
-      final_net: finalNet,
-      direction: finalNet > ZERO ? 'THU' : finalNet < ZERO ? 'BU' : 'HOA'
+      total_xac: decNumber(totalXacD),
+      total_qua_co: decNumber(totalQuaCoD),
+      total_payout: decNumber(totalPayoutD),
+      gross_net: decNumber(grossD),
+      total_percent: decNumber(totalPercentD),
+      refund_percent: decNumber(refundPercentD),
+      refund_amount: decNumber(refundD),
+      final_net: decNumber(finalD),
+      direction: finalD.i > 0n ? 'THU' : finalD.i < 0n ? 'BU' : 'HOA',
+      exact
     };
   }
 
@@ -175,7 +240,6 @@
     const c = String(code || '').toUpperCase();
     const stake = n(options && options.stake == null ? 1 : options.stake, 'stake');
     if (stake < 0) throw new Error('INVALID_STAKE');
-
     if (c === 'DAT') {
       const numberCount = n(options && options.number_count, 'number_count');
       return choose2(numberCount) * MN_MT_XAC_UNITS.DAT * stake;
@@ -185,7 +249,6 @@
       const stationCount = n(options && options.station_count, 'station_count');
       return choose2(numberCount) * choose2(stationCount) * MN_MT_XAC_UNITS.DAX * stake;
     }
-
     const unit = MN_MT_XAC_UNITS[c];
     if (unit == null) throw new Error('UNVERIFIED_MN_MT_XAC_CATEGORY:' + c);
     const numberCount = n(options && options.number_count == null ? 1 : options.number_count, 'number_count');
@@ -206,11 +269,11 @@
     if (!cfg) throw new Error('INVALID_MB_XIEN_SIZE');
     return category({
       code: cfg.code,
-      xac: n(stake, 'stake') * cfg.xac_per_ticket,
+      xac: decNumber(decMul(dec(stake, 'stake'), dec(cfg.xac_per_ticket))),
       commission_type: COMMISSION_TYPES.DIRECT,
-      commission_value: n(commissionValue, 'commission_value'),
-      hit_units: n(hitUnits, 'hit_units'),
-      win_rate: n(winRate, 'win_rate')
+      commission_value: commissionValue,
+      hit_units: hitUnits,
+      win_rate: winRate
     });
   }
 
@@ -227,7 +290,7 @@
   }
 
   global.KTS_SETTLEMENT_ENGINE = Object.freeze({
-    version: 'settlement-v1-verified-rules',
+    version: 'settlement-v2-exact-decimal-accounting',
     HIT_MODES,
     COMMISSION_TYPES,
     MN_MT_XAC_UNITS,
@@ -245,6 +308,7 @@
     mnMtSelectors,
     mbXienCategory,
     isUiNeighbor,
-    display1
+    display1,
+    decimalCanonical
   });
 })(typeof window !== 'undefined' ? window : globalThis);
