@@ -1,0 +1,69 @@
+{
+  "format": "kts-shadow-regression-case-v1",
+  "id": "regression:mb-dat-3-number-confirmed",
+  "scope": {
+    "scope_id": "scope:fixture:2026-09-22:mb",
+    "partner_id": "fixture",
+    "business_date": "2026-09-22",
+    "region": "mb"
+  },
+  "partner_role": "customer",
+  "note": "Confirmed MB đá thẳng nhiều cặp: 92 61 40 da 1n => hidden pairs and total hit units 4 for occurrence counts 3,2,1.",
+  "config_snapshot": {
+    "commission_type": "ratio",
+    "total_percent": "100",
+    "refund_percent": "0",
+    "mb_xien_234": false,
+    "tinh_ui": false,
+    "region_pricing": {
+      "mb": {
+        "DAT": { "commission": "0.76", "win": "650" }
+      }
+    }
+  },
+  "lottery_result_snapshot": {
+    "business_date": "2026-09-22",
+    "region": "mb",
+    "complete": true,
+    "stations": [
+      {
+        "code": "mb",
+        "prizes": {
+          "DB": ["31922"],
+          "G1": ["12361"],
+          "G2": ["10001", "20002"],
+          "G3": ["30003", "40004", "50005", "60006", "70007", "80008"],
+          "G4": ["90009", "11110", "22211", "33312"],
+          "G5": ["44592", "55514", "66615", "77716", "88817", "99918"],
+          "G6": ["192", "319", "561"],
+          "G7": ["92", "20", "30", "40"]
+        }
+      }
+    ]
+  },
+  "messages": [
+    {
+      "id": "fixture-message-1",
+      "raw_text": "92 61 40 da 1n",
+      "status": "settled_unverified",
+      "canonical_payload": {
+        "region": "mb",
+        "legs": [
+          { "code": "DAT", "values": ["92", "61", "40"], "stake": "1" }
+        ]
+      }
+    }
+  ],
+  "expected_reference": {
+    "source": "CONFIRMED_RULE",
+    "totals": {
+      "xac": 162,
+      "qua_co": 123.12,
+      "payout": 2600,
+      "final": -2476.88
+    },
+    "categories": [
+      { "code": "DAT", "xac": 162, "qua_co": 123.12, "hit_units": 4, "payout": 2600 }
+    ]
+  }
+}
