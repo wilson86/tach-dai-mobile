@@ -129,6 +129,12 @@ jobs:
       - name: Settlement pre-production review history wiring tests
         run: node tests/settlement-preproduction-review-history-wiring-tests.js
 
+      - name: Settlement portable pre-production review bundle tests
+        run: node tests/settlement-preproduction-review-bundle-tests.js
+
+      - name: Settlement portable pre-production review bundle wiring tests
+        run: node tests/settlement-preproduction-review-bundle-wiring-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
