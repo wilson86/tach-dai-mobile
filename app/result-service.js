@@ -39,13 +39,33 @@
   function normalizeStation(region, station) {
     if (!station || !station.code) throw new Error('RESULT_STATION_CODE_REQUIRED');
     const prizes = normalizePrizeMap(station.prizes);
-    const complete = station.complete == null ? stationComplete(region, { prizes }) : Boolean(station.complete);
+    // Never trust provider `complete:true` if the actual prize shape is incomplete.
+    // An explicit false may keep a station provisional, but true cannot override
+    // deterministic prize-count validation.
+    const computedComplete = stationComplete(region, { prizes });
+    const complete = computedComplete && station.complete !== false;
     return {
       code: String(station.code).toLowerCase(),
       name: String(station.name || station.code),
       prizes,
       complete
     };
+  }
+
+  function normalizeExpectedStationCodes(input) {
+    const raw = Array.isArray(input && input.expected_station_codes) ? input.expected_station_codes : [];
+    const codes = raw.map(x => String(x || '').trim().toLowerCase()).filter(Boolean);
+    if (new Set(codes).size !== codes.length) throw new Error('RESULT_EXPECTED_STATIONS_DUPLICATE');
+    return codes;
+  }
+
+  function stationCoverage(expectedStationCodes, stations) {
+    if (!expectedStationCodes.length) return true;
+    const actual = stations.map(s => String(s.code || '').toLowerCase());
+    if (new Set(actual).size !== actual.length) throw new Error('RESULT_STATION_DUPLICATE');
+    if (actual.length !== expectedStationCodes.length) return false;
+    const actualSet = new Set(actual);
+    return expectedStationCodes.every(code => actualSet.has(code));
   }
 
   function normalizeVerification(input, complete) {
@@ -63,11 +83,14 @@
     if (!PRIZE_COUNTS[region]) throw new Error('RESULT_REGION_REQUIRED');
     const stations = (input.stations || []).map(s => normalizeStation(region, s));
     if (!stations.length) throw new Error('RESULT_STATIONS_REQUIRED');
-    const complete = stations.every(s => s.complete);
+    if (new Set(stations.map(s => s.code)).size !== stations.length) throw new Error('RESULT_STATION_DUPLICATE');
+    const expectedStationCodes = normalizeExpectedStationCodes(input);
+    const coverageComplete = stationCoverage(expectedStationCodes, stations);
+    const complete = coverageComplete && stations.every(s => s.complete);
     const status = complete ? 'complete' : 'partial';
     const verificationStatus = normalizeVerification(input, complete);
     const verified = complete && verificationStatus === 'verified';
-    const core = { business_date: businessDate, region, stations, complete, status, verification_status: verificationStatus };
+    const core = { business_date: businessDate, region, expected_station_codes: expectedStationCodes, stations, complete, status, verification_status: verificationStatus };
     return {
       id: input.id || `${businessDate}:${region}`,
       business_date: businessDate,
@@ -76,9 +99,11 @@
       fetched_at: input.fetched_at || nowIso(),
       status,
       complete,
+      coverage_complete: coverageComplete,
       verified,
       verification_status: verificationStatus,
       verification_sources: Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [],
+      expected_station_codes: expectedStationCodes,
       stations,
       fingerprint: stableStringify(core),
       provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
@@ -136,6 +161,7 @@
           previous: clone(previous),
           provisional: !snapshot.complete,
           complete: snapshot.complete,
+          coverage_complete: snapshot.coverage_complete,
           complete_confirmations: completeStreak,
           complete_confirmations_required: completeConfirmations,
           complete_confirmed: confirmedComplete,
@@ -210,6 +236,8 @@
     normalizePrizeMap,
     stationComplete,
     normalizeStation,
+    normalizeExpectedStationCodes,
+    stationCoverage,
     normalizeSnapshot,
     createPoller
   });
