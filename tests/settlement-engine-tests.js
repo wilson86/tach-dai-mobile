@@ -14,6 +14,11 @@ function row(code, xac, hit_units, win_rate, commission_value = 0.76, commission
   return { code, xac, hit_units, win_rate, commission_value, commission_type };
 }
 
+assert.strictEqual(E.version, 'settlement-v2-exact-decimal-accounting');
+assert.strictEqual(E.decimalCanonical('0013.0500'), '13.05');
+assert.strictEqual(E.decimalCanonical('-0.000'), '0');
+assert.strictEqual(E.decimalCanonical('1.2e2'), '120');
+
 {
   const r = E.settle([
     row('2CB', 18, 2, 75),
@@ -26,6 +31,10 @@ function row(code, xac, hit_units, win_rate, commission_value = 0.76, commission
   assert(Math.abs(r.total_qua_co - 110.96) < 1e-9);
   assert(Math.abs(r.total_payout - 8025) < 1e-9);
   assert(Math.abs(r.final_net - (-7914.04)) < 1e-9);
+  assert.strictEqual(r.exact.total_xac, '146');
+  assert.strictEqual(r.exact.total_qua_co, '110.96');
+  assert.strictEqual(r.exact.total_payout, '8025');
+  assert.strictEqual(r.exact.final_net, '-7914.04');
   assert.strictEqual(r.direction, 'BU');
   assert.strictEqual(E.display1(r.final_net), '-7914');
 }
@@ -52,6 +61,8 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert(Math.abs(r.total_qua_co - 218.88) < 1e-9);
   assert.strictEqual(r.total_payout, 4650);
   assert(Math.abs(r.final_net - (-4431.12)) < 1e-9);
+  assert.strictEqual(r.exact.total_qua_co, '218.88');
+  assert.strictEqual(r.exact.final_net, '-4431.12');
   assert.strictEqual(E.display1(r.final_net), '-4431.1');
 }
 
@@ -63,6 +74,9 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert(Math.abs(r.gross_net - 13.68) < 1e-9);
   assert(Math.abs(r.refund_amount - 0.5472) < 1e-9);
   assert(Math.abs(r.final_net - 10.3968) < 1e-9);
+  assert.strictEqual(r.exact.total_qua_co, '13.68');
+  assert.strictEqual(r.exact.refund_amount, '0.5472');
+  assert.strictEqual(r.exact.final_net, '10.3968');
   assert.strictEqual(E.display1(r.final_net), '10.4');
 }
 
@@ -72,6 +86,8 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   ], { partner_role: 'customer' });
   assert.strictEqual(r.total_qua_co, 1.8);
   assert.strictEqual(r.final_net, 1.8);
+  assert.strictEqual(r.exact.total_qua_co, '1.8');
+  assert.strictEqual(r.exact.final_net, '1.8');
 }
 
 {
@@ -81,6 +97,28 @@ assert.strictEqual(E.daxHitUnits([[2, 2]], 'multi_pair'), 2);
   assert.strictEqual(r.gross_net, -10000);
   assert.strictEqual(r.refund_amount, 500);
   assert.strictEqual(r.final_net, -9500);
+  assert.strictEqual(r.exact.final_net, '-9500');
+}
+
+// Decimal arithmetic must not inherit IEEE-754 drift from repeated 0.1-like inputs.
+{
+  const r = E.settle([
+    row('A', '0.1', 0, 0, '0.1', 'direct'),
+    row('B', '0.2', 0, 0, '0.1', 'direct'),
+    row('C', '0.3', 0, 0, '0.1', 'direct')
+  ], { partner_role: 'customer', total_percent: '100', refund_percent: '0' });
+  assert.strictEqual(r.exact.total_xac, '0.6');
+  assert.strictEqual(r.exact.total_qua_co, '0.06');
+  assert.strictEqual(r.exact.final_net, '0.06');
+}
+
+// Keep the unresolved display-rounding oracle separate: internal accounting still stores 13.05 exactly.
+{
+  const r = E.settle([
+    row('2CB', '18', 0, 75, '0.725', 'ratio')
+  ], { partner_role: 'customer' });
+  assert.strictEqual(r.exact.total_qua_co, '13.05');
+  assert.strictEqual(r.exact.final_net, '13.05');
 }
 
 assert.strictEqual(E.mnMtXacUnits('2CB', { number_count: 1, stake: 1 }), 18);
@@ -104,6 +142,7 @@ assert.deepStrictEqual(Array.from(E.mnMtSelectors('3CXC')), ['G7:0', 'DB:0']);
   ], { partner_role: 'customer' });
   assert.strictEqual(r.total_payout, 700);
   assert(Math.abs(r.final_net - (-698.48)) < 1e-9);
+  assert.strictEqual(r.exact.final_net, '-698.48');
   assert.strictEqual(E.display1(r.final_net), '-698.5');
 }
 
@@ -118,6 +157,7 @@ assert.deepStrictEqual(Array.from(E.mnMtSelectors('3CXC')), ['G7:0', 'DB:0']);
   assert.strictEqual(r.total_qua_co, 153);
   assert.strictEqual(r.total_payout, 15000);
   assert.strictEqual(r.final_net, -14847);
+  assert.strictEqual(r.exact.final_net, '-14847');
 }
 
 assert.strictEqual(E.isUiNeighbor(89, 90), true);
