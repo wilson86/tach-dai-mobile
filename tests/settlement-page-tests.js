@@ -13,6 +13,7 @@ const pipeline = fs.readFileSync(path.join(app, 'settlement-pipeline.js'), 'utf8
 const observation = fs.readFileSync(path.join(app, 'settlement-observation.js'), 'utf8');
 const observationUi = fs.readFileSync(path.join(app, 'settlement-observation-ui.js'), 'utf8');
 const backupUi = fs.readFileSync(path.join(app, 'settlement-backup-ui.js'), 'utf8');
+const messageHistory = fs.readFileSync(path.join(app, 'settlement-message-history.js'), 'utf8');
 const index = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(app, 'sw.js'), 'utf8');
 
@@ -40,6 +41,11 @@ assert(page.includes('src="./settlement-observation.js"'));
 assert(page.includes('src="./settlement-observation-ui.js"'));
 assert(page.includes('src="./result-auto.js"'));
 assert(page.includes('src="./settlement-backup-ui.js"'));
+assert(page.includes('src="./settlement-message-history.js"'));
+assert(messageHistory.includes('Tin đã lưu'));
+assert(messageHistory.includes('Rà lại phạm vi'));
+assert(messageHistory.includes('Nạp lại'));
+assert(messageHistory.includes('pipeline.settleScope(scope)'));
 assert(resultAuto.includes('completeConfirmations: confirmations'));
 assert(resultAuto.includes('pipeline.recalculateDateRegion'));
 assert(resultAuto.includes("getElementById('saveMessage')"));
@@ -61,6 +67,7 @@ assert(backupUi.includes("store.importAll(payload, { replace: false })"));
 assert(sw.includes("'./settlement-observation.js'"));
 assert(sw.includes("'./settlement-observation-ui.js'"));
 assert(sw.includes("'./settlement-backup-ui.js'"));
+assert(sw.includes("'./settlement-message-history.js'"));
 assert(sw.includes("'./result-auto.js'"));
 assert(sw.includes("url.pathname.includes('/api/kqxs')"));
 assert(sw.includes("url.pathname.includes('/api/settlement/parse')"));
