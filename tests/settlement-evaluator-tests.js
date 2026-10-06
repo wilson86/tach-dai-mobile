@@ -53,8 +53,9 @@ assert.strictEqual(evaluated.category_inputs.length, 9);
 const settled = engine.settle(evaluated.category_inputs, { partner_role: 'customer', total_percent: 100, refund_percent: 0 });
 assert.strictEqual(settled.total_xac, 148);
 approx(settled.total_qua_co, 112.48);
-assert.strictEqual(settled.total_payout, 12);
-assert.ok(evaluated.detail_rows.some(x => x.code === 'DAT' && x.numbers === '92-61' && x.hit_units === 1));
+// 92 has 3 occurrences and 61 has 2, so MB fixed `nhiều cặp` DAT contributes 2 hits.
+assert.strictEqual(settled.total_payout, 13);
+assert.ok(evaluated.detail_rows.some(x => x.code === 'DAT' && x.numbers === '92-61' && x.hit_units === 2));
 assert.ok(evaluated.detail_rows.some(x => x.code === '3CXC' && x.selector === '3CXC:dau' && x.hit_units === 1));
 
 const dat3 = E.evaluateCanonicalMessage({
@@ -63,7 +64,8 @@ const dat3 = E.evaluateCanonicalMessage({
   result_snapshot: result
 });
 assert.strictEqual(dat3.category_inputs[0].xac, 162);
-assert.strictEqual(dat3.category_inputs[0].hit_units, 3);
+// Pair hits: 92-61=2, 92-40=1, 61-40=1 => total 4.
+assert.strictEqual(dat3.category_inputs[0].hit_units, 4);
 assert.strictEqual(dat3.detail_rows.length, 3);
 
 assert.throws(() => E.evaluateCanonicalMessage({ canonical_payload: { region: 'xx', legs: [] }, config_snapshot: config, result_snapshot: result }), /SETTLEMENT_REGION_REQUIRED/);
