@@ -26,6 +26,8 @@
       settlement.reference_app_snapshot.comparison.status || ''
     ).toUpperCase();
     const status = direct || nested;
+    if (status === STATUS.BLOCKED) return STATUS.BLOCKED;
+    if (status === STATUS.PROVISIONAL) return STATUS.PROVISIONAL;
     if (status === STATUS.EXACT) return STATUS.EXACT;
     if (status === STATUS.DISPLAY) return STATUS.DISPLAY;
     if (status === STATUS.MISMATCH) return STATUS.MISMATCH;
