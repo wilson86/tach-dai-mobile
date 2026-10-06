@@ -31,5 +31,5 @@ assert(!history.includes('dismissCandidate('));
 assert(sw.includes("'./settlement-build-identity.js'"));
 assert(sw.includes("'./settlement-qualification-history.js'"));
 assert(sw.includes("'./settlement-qualification-history-bridge.js'"));
-assert(sw.includes('v1.0.50-critical-build-identity'));
+assert(sw.includes('v1.0.51-live-parser-backend'));
 console.log('settlement-qualification-history-wiring-tests: PASS');
