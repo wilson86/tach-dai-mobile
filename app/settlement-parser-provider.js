@@ -26,6 +26,16 @@
     return next;
   }
 
+  function identityEndpoint() {
+    const base = global.location && global.location.href ? global.location.href : 'https://localhost/';
+    const url = new URL(endpoint(), base);
+    if (/\/parse\/?$/.test(url.pathname)) url.pathname = url.pathname.replace(/\/parse\/?$/, '/parser-identity');
+    else url.pathname = url.pathname.replace(/\/+$/, '') + '/parser-identity';
+    url.search = '';
+    url.hash = '';
+    return url.toString();
+  }
+
   function normalizeLeg(input) {
     if (!input || typeof input !== 'object') throw new Error('PARSER_LEG_INVALID');
     const code = String(input.code || '').trim().toUpperCase();
@@ -60,6 +70,21 @@
     return out;
   }
 
+  function normalizeBackendIdentityPayload(payload) {
+    if (!payload || typeof payload !== 'object' || payload.ok !== true) throw new Error('PARSER_BACKEND_IDENTITY_INVALID');
+    if (String(payload.identity_contract || '') !== 'kts-parser-identity-v1') throw new Error('PARSER_BACKEND_IDENTITY_CONTRACT_INVALID');
+    const identities = payload.identities;
+    if (!identities || typeof identities !== 'object') throw new Error('PARSER_BACKEND_IDENTITIES_REQUIRED');
+    const mb = normalizeParserIdentity(identities.mb, identities.mb && identities.mb.parser_version);
+    const mnMt = normalizeParserIdentity(identities.mn_mt, identities.mn_mt && identities.mn_mt.parser_version);
+    if (!mb || !mnMt) throw new Error('PARSER_BACKEND_IDENTITIES_REQUIRED');
+    return {
+      api_version: String(payload.api_version || ''),
+      identity_contract: 'kts-parser-identity-v1',
+      identities: { mb, mn_mt: mnMt }
+    };
+  }
+
   function normalizeCanonicalPayload(payload, requestedRegion) {
     if (!payload || typeof payload !== 'object') throw new Error('PARSER_INVALID_JSON');
     const body = payload.canonical_payload || payload.data || payload;
@@ -76,6 +101,24 @@
       parser_identity: normalizeParserIdentity(identityInput, parserVersion),
       legs
     };
+  }
+
+  async function fetchIdentity() {
+    const response = await global.fetch(identityEndpoint(), {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'omit',
+      headers: { Accept: 'application/json' }
+    });
+    if (!response.ok) {
+      let code = 'PARSER_IDENTITY_HTTP_' + response.status;
+      try {
+        const body = await response.json();
+        if (body && body.error) code += ':' + String(body.error);
+      } catch (_) {}
+      throw new Error(code);
+    }
+    return normalizeBackendIdentityPayload(await response.json());
   }
 
   async function fetchCanonical(rawText, region, businessDate) {
@@ -106,13 +149,17 @@
   }
 
   global.KTS_SETTLEMENT_PARSER_PROVIDER = Object.freeze({
+    version: 'settlement-parser-provider-v2-live-identity',
     STORAGE_KEY,
     DEFAULT_ENDPOINT,
     IDENTITY_HASH_FIELDS,
     endpoint,
+    identityEndpoint,
     setEndpoint,
     normalizeParserIdentity,
+    normalizeBackendIdentityPayload,
     normalizeCanonicalPayload,
+    fetchIdentity,
     fetchCanonical
   });
 })(typeof window !== 'undefined' ? window : globalThis);
