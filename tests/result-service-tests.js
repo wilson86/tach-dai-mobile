@@ -75,7 +75,6 @@ assert.strictEqual(R.stationComplete('mb', { prizes: mbPrizes() }), true);
 }
 
 // If backend tells us which stations must draw, all of them must be present.
-// One or two complete provinces can never promote a 3-province MN snapshot.
 {
   const s = R.normalizeSnapshot({
     business_date: '2026-09-22', region: 'mn', source: 'fixture',
@@ -103,6 +102,28 @@ assert.strictEqual(R.stationComplete('mb', { prizes: mbPrizes() }), true);
   });
   assert.strictEqual(s.coverage_complete, true);
   assert.strictEqual(s.complete, true);
+}
+
+// Verification metadata is part of the immutable fingerprint/audit contract.
+{
+  const base = {
+    business_date: '2026-09-22', region: 'mb', source: 'primary',
+    expected_station_codes: ['mb'],
+    stations: [{ code: 'mb', prizes: mbPrizes() }]
+  };
+  const conflict = R.normalizeSnapshot({
+    ...base,
+    verification_status: 'conflict',
+    verification_sources: ['primary', 'secondary'],
+    verification_reason: 'KQXS_SOURCE_CONFLICT',
+    verification_conflicts: ['mb:G7']
+  });
+  const clean = R.normalizeSnapshot({ ...base, verification_status: 'unverified', verification_sources: ['primary'] });
+  assert.strictEqual(conflict.complete, true);
+  assert.strictEqual(conflict.verified, false);
+  assert.strictEqual(conflict.verification_status, 'conflict');
+  assert.deepStrictEqual(Array.from(conflict.verification_conflicts), ['mb:G7']);
+  assert.notStrictEqual(conflict.fingerprint, clean.fingerprint);
 }
 
 assert.throws(() => R.normalizeSnapshot({
@@ -143,6 +164,49 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
   assert.strictEqual(poller.getState().running, false);
   assert.strictEqual(poller.getState().complete_confirmations, 2);
   assert(states.includes('complete'));
+
+  const conflictStates = [];
+  const conflictPoller = R.createPoller({
+    intervalMs: 60000,
+    completeConfirmations: 1,
+    fetchSnapshot: async scope => ({
+      business_date: scope.business_date,
+      region: scope.region,
+      source: 'primary',
+      expected_station_codes: ['mb'],
+      verification_status: 'conflict',
+      verification_sources: ['primary', 'secondary'],
+      verification_reason: 'KQXS_SOURCE_CONFLICT',
+      verification_conflicts: ['mb:G7'],
+      stations: [{ code: 'mb', prizes: mbPrizes() }]
+    }),
+    onStatus: info => conflictStates.push(info.state)
+  });
+  await conflictPoller.start({ business_date: '2026-09-22', region: 'mb' });
+  assert.strictEqual(conflictPoller.getState().running, true, 'source conflict must keep polling');
+  assert(conflictStates.includes('conflict'));
+  conflictPoller.stop();
+
+  const pendingStates = [];
+  const pendingPoller = R.createPoller({
+    intervalMs: 60000,
+    completeConfirmations: 1,
+    fetchSnapshot: async scope => ({
+      business_date: scope.business_date,
+      region: scope.region,
+      source: 'primary',
+      expected_station_codes: ['mb'],
+      verification_status: 'unverified',
+      verification_sources: ['primary'],
+      verification_reason: 'SECONDARY_UNAVAILABLE:TIMEOUT',
+      stations: [{ code: 'mb', prizes: mbPrizes() }]
+    }),
+    onStatus: info => pendingStates.push(info.state)
+  });
+  await pendingPoller.start({ business_date: '2026-09-22', region: 'mb' });
+  assert.strictEqual(pendingPoller.getState().running, true, 'secondary pending must keep polling');
+  assert(pendingStates.includes('verification_pending'));
+  pendingPoller.stop();
 
   console.log('result-service-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
