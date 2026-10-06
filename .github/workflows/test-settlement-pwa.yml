@@ -60,6 +60,9 @@ jobs:
       - name: Settlement shadow observation tests
         run: node tests/settlement-observation-tests.js
 
+      - name: Settlement message history tests
+        run: node tests/settlement-message-history-tests.js
+
       - name: Settlement page tests
         run: node tests/settlement-page-tests.js
 
