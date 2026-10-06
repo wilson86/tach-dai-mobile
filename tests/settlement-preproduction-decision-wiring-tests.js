@@ -6,6 +6,6 @@ assert(dossier.includes('settlement-preproduction-decision-dossier-v1'));assert(
 for(const f of ['./settlement-preproduction-audit-offline-verifier.js','./settlement-preproduction-decision-dossier.js']){assert(bridge.includes(f));assert(sw.includes("'"+f+"'"));}
 assert(bridge.includes("appendScript('./settlement-preproduction-audit-pack.js','data-kts-preproduction-audit-pack',loadPreproductionAuditOfflineVerifier)"));
 assert(bridge.includes("appendScript('./settlement-preproduction-audit-offline-verifier.js','data-kts-preproduction-audit-offline-verifier',loadPreproductionDecisionDossier)"));
-assert(bridge.includes("appendScript('./settlement-preproduction-decision-dossier.js','data-kts-preproduction-decision-dossier',loadPreproductionReviewSession)"));
+assert(bridge.includes("appendScript('./settlement-preproduction-decision-dossier.js','data-kts-preproduction-decision-dossier',loadPreproductionFreezeManifest)"));
 assert(identity.includes("'app/settlement-preproduction-audit-offline-verifier.js'"));assert(identity.includes("'app/settlement-preproduction-decision-dossier.js'"));
 console.log('settlement-preproduction-decision-wiring-tests: PASS');

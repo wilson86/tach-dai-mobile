@@ -184,6 +184,15 @@ jobs:
       - name: Settlement decision handoff wiring tests
         run: node tests/settlement-preproduction-decision-wiring-tests.js
 
+      - name: Settlement code-freeze manifest tests
+        run: node tests/settlement-preproduction-freeze-manifest-tests.js
+
+      - name: Settlement current-state decision recheck tests
+        run: node tests/settlement-preproduction-decision-recheck-tests.js
+
+      - name: Settlement decision recheck wiring tests
+        run: node tests/settlement-preproduction-decision-recheck-wiring-tests.js
+
       - name: Settlement pre-production orchestration wiring tests
         run: node tests/settlement-preproduction-orchestration-wiring-tests.js
 
