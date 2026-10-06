@@ -153,7 +153,27 @@
     if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
     const fetchedAt = input.fetched_at || nowIso();
     const stations = clone(input.stations || []);
-    const core = { business_date: businessDate, region, status, complete, verification_status: verificationStatus, stations };
+    const expectedStationCodes = Array.isArray(input.expected_station_codes)
+      ? input.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    if (new Set(expectedStationCodes).size !== expectedStationCodes.length) throw new Error('RESULT_EXPECTED_STATIONS_DUPLICATE');
+    const verificationSources = Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [];
+    const verificationReason = input.verification_reason == null ? null : String(input.verification_reason);
+    const verificationConflicts = Array.isArray(input.verification_conflicts) ? input.verification_conflicts.map(String) : [];
+    const coverageComplete = input.coverage_complete == null ? null : Boolean(input.coverage_complete);
+    const core = {
+      business_date: businessDate,
+      region,
+      status,
+      complete,
+      coverage_complete: coverageComplete,
+      verification_status: verificationStatus,
+      verification_sources: verificationSources,
+      verification_reason: verificationReason,
+      verification_conflicts: verificationConflicts,
+      expected_station_codes: expectedStationCodes,
+      stations
+    };
     const fingerprint = input.fingerprint || stableStringify(core);
     return {
       id: input.id || `${businessDate}:${region}`,
@@ -163,9 +183,13 @@
       fetched_at: fetchedAt,
       status,
       complete,
+      coverage_complete: coverageComplete,
       verified: complete && verificationStatus === 'verified',
       verification_status: verificationStatus,
-      verification_sources: Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [],
+      verification_sources: verificationSources,
+      verification_reason: verificationReason,
+      verification_conflicts: verificationConflicts,
+      expected_station_codes: expectedStationCodes,
       stations,
       fingerprint,
       provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
