@@ -22,7 +22,8 @@ const state = {
       settlement_result: { total_xac: 1, total_qua_co: 1, total_payout: 0, refund_amount: 0, final_net: 1 }
     }
   },
-  writes: []
+  writes: [],
+  failScope: null
 };
 
 function refNumber(ref, key) {
@@ -51,6 +52,7 @@ const store = {
 const runtime = {
   async compareAndSave(input) {
     const id = `scope:${input.partner_id}:${input.business_date}:${input.region}`;
+    if (state.failScope === id) throw new Error('SIMULATED_SAVE_FAILURE');
     const settlement = state.settlements[id];
     if (!settlement) throw new Error('SETTLEMENT_SCOPE_NOT_FOUND');
     const comparison = shadow.compareSettlement(settlement, input.reference_snapshot);
@@ -66,7 +68,7 @@ vm.runInContext(fs.readFileSync('app/settlement-shadow-batch.js', 'utf8'), ctx, 
 const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
 
 (async () => {
-  assert.strictEqual(B.version, 'settlement-shadow-batch-v1');
+  assert.strictEqual(B.version, 'settlement-shadow-batch-v2-stale-guard');
 
   const tsv = [
     'business_date\tpartner\tregion\txac\tqua_co\tpayout\thoi\tfinal',
@@ -79,6 +81,7 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(parsed[0].partner, 'Hiền');
 
   const preview = await B.preview(tsv);
+  assert.strictEqual(preview.format, 'kts-shadow-batch-preview-v2-stale-guard');
   assert.strictEqual(preview.ready, true);
   assert.strictEqual(preview.counts.total, 2);
   assert.strictEqual(preview.counts.exact, 1);
@@ -86,9 +89,11 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(preview.rows[0].partner_id, 'p-hien');
   assert.strictEqual(preview.rows[0].reference_snapshot.totals.qua_co, '218.88');
   assert.strictEqual(preview.rows[1].comparison.status, 'MISMATCH');
+  assert(preview.rows[0].settlement_fingerprint);
   assert.strictEqual(state.writes.length, 0, 'preview must not persist comparisons');
 
   const applied = await B.apply(preview);
+  assert.strictEqual(applied.format, 'kts-shadow-batch-apply-v2-stale-guard');
   assert.strictEqual(applied.total, 2);
   assert.strictEqual(applied.exact, 1);
   assert.strictEqual(applied.mismatch, 1);
@@ -134,6 +139,29 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
     'business_date\tpartner\tregion\txac\tqua_co\tpayout\tfinal',
     '2026-09-22\tHiền\tmn\t288\t218,88\t4650\t-4431.12'
   ].join('\n')).then(r => { if (r.ready) throw new Error('expected invalid comma'); else throw new Error(r.errors[0].error); }), /BATCH_DECIMAL_COMMA_UNSUPPORTED/);
+
+  // KQXS/config/tin may recalculate money while the operator is reviewing preview.
+  // No row may be written until every scope still matches the preview fingerprint.
+  const stale = await B.preview(tsv);
+  const writesBeforeStale = state.writes.length;
+  state.settlements['scope:p-truc:2026-09-22:mb'].settlement_result.final_net = 9000;
+  await assert.rejects(() => B.apply(stale), /BATCH_PREVIEW_STALE_SCOPE:scope:p-truc:2026-09-22:mb/);
+  assert.strictEqual(state.writes.length, writesBeforeStale, 'stale preflight must reject before first write');
+  state.settlements['scope:p-truc:2026-09-22:mb'].settlement_result.final_net = 9012.52;
+
+  // Unexpected persistence failures after preflight cannot be rolled back by this module;
+  // they must be surfaced explicitly as PARTIAL rather than pretending the whole batch succeeded.
+  const partial = await B.preview(tsv);
+  const writesBeforePartial = state.writes.length;
+  state.failScope = 'scope:p-truc:2026-09-22:mb';
+  let partialError = null;
+  try { await B.apply(partial); } catch (error) { partialError = error; }
+  assert(partialError);
+  assert(String(partialError.message).includes('BATCH_APPLY_PARTIAL:1/2:SIMULATED_SAVE_FAILURE'));
+  assert.strictEqual(partialError.failed_scope_id, 'scope:p-truc:2026-09-22:mb');
+  assert.strictEqual(partialError.applied_results.length, 1);
+  assert.strictEqual(state.writes.length, writesBeforePartial + 1);
+  state.failScope = null;
 
   console.log('settlement-shadow-batch-tests: PASS');
 })().catch(error => { console.error(error); process.exit(1); });
