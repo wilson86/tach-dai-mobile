@@ -70,6 +70,9 @@
         const result=await runtime.compareAndSave(Object.assign({},s,{reference_snapshot:{source:'HIOSKT_MANUAL',totals:{xac:value('shadowXac'),qua_co:value('shadowQuaCo'),payout:value('shadowPayout'),hoi:value('shadowRefund'),final:value('shadowFinal')},categories}}));
         render(result.comparison);
         status(result.comparison.safe_to_promote?'Đã lưu đối chiếu exact. Scope này đạt gate shadow hiện tại.':'Đã lưu đối chiếu. Chưa được promotion nếu còn thiếu/khớp hiển thị/lệch.',result.comparison.safe_to_promote?'ok':result.comparison.status==='MISMATCH'?'err':'warn');
+        if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+          global.dispatchEvent(new global.CustomEvent('kts:shadow-saved', { detail: Object.assign({}, s, { comparison_status: result.comparison.status }) }));
+        }
       }catch(e){status(String(e.message||e),'err');}
     });
 
