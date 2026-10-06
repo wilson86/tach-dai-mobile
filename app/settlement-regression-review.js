@@ -14,11 +14,19 @@
       .map(([field]) => String(field))
       .sort();
   }
+  function replayComparison(kase) {
+    const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
+    if (!regression || typeof regression.replayCase !== 'function' || !kase) return null;
+    try {
+      const replay = regression.replayCase(kase);
+      return replay && replay.comparison || null;
+    } catch (_) { return null; }
+  }
   function candidateIssueShape(candidate) {
     const c = candidate || {};
     const kase = c.case || {};
     const scope = kase.scope || {};
-    const comparison = kase.expected_comparison || {};
+    const comparison = kase.expected_comparison || replayComparison(kase) || {};
     const categoryParts = (comparison.categories || [])
       .filter(row => row && !['MATCH_EXACT', 'NOT_COMPARABLE'].includes(String(row.status || '').toUpperCase()))
       .map(row => `${String(row.code || '').toUpperCase()}:${fieldNames(row.fields).join(',') || String(row.status || '').toUpperCase()}`)
@@ -148,6 +156,7 @@
 
   global.KTS_SETTLEMENT_REGRESSION_REVIEW = Object.freeze({
     version: 'settlement-regression-review-v2-repair-link',
+    replayComparison,
     candidateIssueShape,
     signatureForCandidate,
     summarizeCandidates
