@@ -6,11 +6,15 @@ function makeCtx(){
   const qualification={version:'q-v2',messageInWindow(){return true;}};
   const regression={version:'r-v1',async listPinnedCases(){return[];}};
   const candidates={async listCandidates(){return[];}};
-  const ctx={console,globalThis:null,crypto:webcrypto,TextEncoder,Uint8Array,Date,Math,JSON,KTS_SETTLEMENT_STORE:store,KTS_SETTLEMENT_QUALIFICATION:qualification,KTS_SETTLEMENT_REGRESSION_CASES:regression,KTS_SETTLEMENT_REGRESSION_CANDIDATES:candidates,KTS_SETTLEMENT_ENGINE:{version:'e-v1'},KTS_SETTLEMENT_EVALUATOR:{version:'eval-v1'},KTS_SETTLEMENT_PARSER_PROVIDER:{version:'parser-v1'},KTS_SETTLEMENT_SHADOW:{version:'shadow-v1'},KTS_SETTLEMENT_OBSERVATION:{version:'obs-v1'},KTS_SETTLEMENT_REPAIR_READINESS:{version:'ready-v1'},KTS_RESULT_SERVICE:{version:'result-v1'}};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('app/settlement-qualification-history.js','utf8'),ctx,{filename:'settlement-qualification-history.js'});return ctx.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
+  const ctx={console,globalThis:null,crypto:webcrypto,TextEncoder,Uint8Array,Date,Math,JSON,KTS_SETTLEMENT_STORE:store,KTS_SETTLEMENT_QUALIFICATION:qualification,KTS_SETTLEMENT_REGRESSION_CASES:regression,KTS_SETTLEMENT_REGRESSION_CANDIDATES:candidates,KTS_SETTLEMENT_ENGINE:{version:'e-v1'},KTS_SETTLEMENT_EVALUATOR:{version:'eval-v1'},KTS_SETTLEMENT_PARSER_PROVIDER:{version:'parser-v1'},KTS_SETTLEMENT_SHADOW:{version:'shadow-v1'},KTS_SETTLEMENT_OBSERVATION:{version:'obs-v1'},KTS_SETTLEMENT_REPAIR_READINESS:{version:'ready-v1'},KTS_RESULT_SERVICE:{version:'result-v1'}};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('app/settlement-build-identity.js','utf8'),ctx,{filename:'settlement-build-identity.js'});vm.runInContext(fs.readFileSync('app/settlement-qualification-history.js','utf8'),ctx,{filename:'settlement-qualification-history.js'});return {H:ctx.KTS_SETTLEMENT_QUALIFICATION_HISTORY,ctx};
 }
 (async()=>{
-  const H=makeCtx();assert.strictEqual(H.version,'settlement-qualification-history-v1-fingerprint');
+  const {H,ctx}=makeCtx();assert.strictEqual(H.version,'settlement-qualification-history-v2-code-identity');
+  assert.strictEqual(H.validateBuildIdentity(ctx.KTS_SETTLEMENT_BUILD_IDENTITY),ctx.KTS_SETTLEMENT_BUILD_IDENTITY);
+  assert.throws(()=>H.validateBuildIdentity(null),/QUALIFICATION_BUILD_IDENTITY_MISSING/);
+  assert.throws(()=>H.validateBuildIdentity({version:'settlement-build-identity-v1',algorithm:'bad',critical_git_blobs:{}}),/ALGORITHM_INVALID/);
   const a=await H.sha256Hex({b:2,a:1}),b=await H.sha256Hex({a:1,b:2});assert.strictEqual(a,b);assert(/^[0-9a-f]{64}$/.test(a));
+  const runtime=H.runtimeSignature();assert.strictEqual(runtime.build_identity.version,'settlement-build-identity-v1');assert(Object.keys(runtime.build_identity.critical_git_blobs).length>=15);assert.strictEqual(runtime.modules.engine,'e-v1');
   const components={};for(const n of H.COMPONENTS)components[n]='1'.repeat(64);
   const changed={...components,results:'2'.repeat(64)};
   assert.deepStrictEqual(Array.from(H.changedComponents(components,changed)),['results']);
