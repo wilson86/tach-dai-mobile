@@ -23,6 +23,9 @@
 
   function deriveState(message, settlement) {
     if (!message) return { code: 'UNKNOWN', label: 'Không rõ', kind: 'warn' };
+    if (String(message.status || '') === 'cancelled') {
+      return { code: 'CANCELLED', label: 'Đã hủy', kind: 'err' };
+    }
     if (message.parser_error || String(message.status || '') === 'parser_error') {
       return { code: 'PARSER_ERROR', label: 'Lỗi parser', kind: 'err' };
     }
@@ -104,9 +107,13 @@
       }
       host.innerHTML = rows.map(row => {
         const m = row.message;
+        const cancelled = row.state.code === 'CANCELLED';
         const stateClass = row.state.kind === 'err' ? 'err' : row.state.kind === 'ok' ? 'ok' : 'warn';
-        const reason = m.parser_error || row.blocked_reasons.join(' · ');
-        return `<div class="report-message" data-message-id="${esc(m.id)}"><div class="row" style="justify-content:space-between"><div><span class="tag ${stateClass}">${esc(row.state.label)}</span> <span class="hint">${esc(m.created_at || '')}</span></div><button class="btn soft" data-reuse-message="${esc(m.id)}">Nạp lại</button></div><div class="raw">${esc(m.raw_text || '')}</div>${reason ? `<div class="status ${stateClass}">${esc(reason)}</div>` : ''}</div>`;
+        const reason = cancelled ? 'Tin này được giữ để audit nhưng không tham gia tính tiền.' : (m.parser_error || row.blocked_reasons.join(' · '));
+        const action = cancelled
+          ? `<button class="btn soft" data-restore-message="${esc(m.id)}">Khôi phục</button>`
+          : `<button class="btn danger" data-cancel-message="${esc(m.id)}">Hủy tin</button>`;
+        return `<div class="report-message" data-message-id="${esc(m.id)}"><div class="row" style="justify-content:space-between"><div><span class="tag ${stateClass}">${esc(row.state.label)}</span> <span class="hint">${esc(m.created_at || '')}</span></div><div class="row"><button class="btn soft" data-reuse-message="${esc(m.id)}">Nạp lại</button>${action}</div></div><div class="raw">${esc(m.raw_text || '')}</div>${reason ? `<div class="status ${stateClass}">${esc(reason)}</div>` : ''}</div>`;
       }).join('');
       host.querySelectorAll('[data-reuse-message]').forEach(btn => btn.addEventListener('click', () => {
         const row = rows.find(x => x.message.id === btn.dataset.reuseMessage);
@@ -117,7 +124,30 @@
           setStatus('Đã nạp tin cũ vào ô nhập. Bấm “Lưu + tính” sẽ tạo một tin mới; tin cũ không bị sửa.', 'warn');
         }
       }));
-      setStatus(`${rows.length} tin · ${scope.region.toUpperCase()} ${scope.business_date}.`, 'ok');
+      host.querySelectorAll('[data-cancel-message]').forEach(btn => btn.addEventListener('click', async () => {
+        const id = btn.dataset.cancelMessage;
+        const row = rows.find(x => x.message.id === id);
+        if (!row) return;
+        if (typeof global.confirm === 'function' && !global.confirm(`Hủy tin này khỏi tính tiền?\n\n${row.message.raw_text || ''}\n\nTin vẫn được giữ trong lịch sử và có thể khôi phục.`)) return;
+        setStatus('Đang hủy tin và tính lại phạm vi…', 'warn');
+        try {
+          const result = await pipeline.cancelMessage(id);
+          setStatus(result.settlement && result.settlement.status === 'empty' ? 'Đã hủy tin. Phạm vi hiện không còn tin đang tính.' : 'Đã hủy tin và tính lại phạm vi.', 'ok');
+          await refresh();
+        } catch (error) { setStatus(`Hủy tin lỗi: ${String(error && error.message || error)}`, 'err'); }
+      }));
+      host.querySelectorAll('[data-restore-message]').forEach(btn => btn.addEventListener('click', async () => {
+        const id = btn.dataset.restoreMessage;
+        setStatus('Đang khôi phục tin và tính lại phạm vi…', 'warn');
+        try {
+          await pipeline.restoreMessage(id);
+          setStatus('Đã khôi phục tin và tính lại phạm vi.', 'ok');
+          await refresh();
+        } catch (error) { setStatus(`Khôi phục tin lỗi: ${String(error && error.message || error)}`, 'err'); }
+      }));
+      const activeCount = rows.filter(row => row.state.code !== 'CANCELLED').length;
+      const cancelledCount = rows.length - activeCount;
+      setStatus(`${activeCount} tin đang tính${cancelledCount ? ` · ${cancelledCount} tin đã hủy` : ''} · ${scope.region.toUpperCase()} ${scope.business_date}.`, 'ok');
       return rows;
     }
 
@@ -130,7 +160,7 @@
         if (result.status === 'blocked') setStatus(`Phạm vi đang fail-closed: ${result.reason || 'BLOCKED'}`, 'err');
         else if (result.status === 'provisional') setStatus('Đã rà lại · settlement đang TẠM TÍNH vì KQXS chưa hoàn tất.', 'warn');
         else if (result.status === 'complete_unverified') setStatus('Đã rà lại · tiền đã tính, đang chờ đối chiếu HIOSKT.', 'ok');
-        else if (result.status === 'empty') setStatus('Phạm vi chưa có tin.', 'warn');
+        else if (result.status === 'empty') setStatus('Phạm vi không còn tin đang tính.', 'warn');
         else setStatus(`Đã rà lại: ${result.status}.`, 'ok');
         await refresh();
       } catch (error) {
@@ -147,14 +177,17 @@
       const el = doc.getElementById(id);
       if (el) el.addEventListener('change', () => refresh().catch(() => {}));
     }
-    const save = doc.getElementById('saveMessage');
-    if (save) save.addEventListener('click', () => setTimeout(() => refresh().catch(() => {}), 0));
+    const messageStatus = doc.getElementById('messageStatus');
+    if (messageStatus && typeof global.MutationObserver === 'function') {
+      const observer = new global.MutationObserver(() => refresh().catch(() => {}));
+      observer.observe(messageStatus, { childList: true, characterData: true, subtree: true });
+    }
     for (const button of doc.querySelectorAll('.nav button[data-pane="message"]')) {
       button.addEventListener('click', () => refresh().catch(() => {}));
     }
   }
 
-  global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({ version: 'message-history-v1', scopeMatch, deriveState, buildRows });
+  global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({ version: 'message-history-v2-soft-cancel', scopeMatch, deriveState, buildRows });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
