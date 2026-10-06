@@ -1,6 +1,6 @@
 {
-  "version": "1.0.4",
-  "updated": "2026-10-05",
+  "version": "1.0.5",
+  "updated": "2026-10-06",
   "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c",
   "contract": "DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2",
   "modes": [
@@ -24,6 +24,8 @@
     "davong_tap_select_wager_rows",
     "davong_nonselectable_group_headers",
     "davong_group_select_button",
-    "davong_selected_and_remaining_counts"
+    "davong_selected_and_remaining_counts",
+    "shared_input_across_modes",
+    "desktop_phone_same_davong_group_ui"
   ]
 }

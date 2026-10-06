@@ -170,7 +170,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.4';
+  const UX_VERSION='1.0.5';
 
   function selectAllText(el){
     if(!el) return;
@@ -371,6 +371,68 @@
     if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();render();});
     list.addEventListener('selectstart',event=>event.preventDefault());
     rebuildFromDisplay();
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
+})();
+
+
+// Unified source-input authority: Tách Đài, Tách Ngang and Đá Vòng share the
+// same raw source text on phone and desktop browsers. Result state remains
+// mode-local; only the operator's source text is synchronized.
+;(function installUnifiedSharedInput(){
+  'use strict';
+  if(typeof document==='undefined') return;
+  const SESSION_KEY='KTS_UNIFIED_SHARED_INPUT_V1';
+  let shared='';
+  let syncing=false;
+  const seen=new WeakMap();
+  function saved(){try{return sessionStorage.getItem(SESSION_KEY)||''}catch(_){return ''}}
+  function persist(value){try{sessionStorage.setItem(SESSION_KEY,value)}catch(_){}}
+  function activeMode(){return document.querySelector('.tab.active')?.dataset?.mode||'tach'}
+  function sources(){
+    const list=[];
+    try{const el=document.getElementById('tachFrame')?.contentDocument?.getElementById('input');if(el)list.push({mode:'tach',el})}catch(_){}
+    try{const el=document.getElementById('ngangFrame')?.contentDocument?.getElementById('input');if(el)list.push({mode:'ngang',el})}catch(_){}
+    const dv=document.getElementById('dvInput');if(dv)list.push({mode:'davong',el:dv});
+    return list;
+  }
+  function publish(value,origin){
+    if(syncing)return;
+    shared=String(value??'');persist(shared);syncing=true;
+    try{
+      for(const item of sources()){
+        if(item.el!==origin&&String(item.el.value||'')!==shared)item.el.value=shared;
+        seen.set(item.el,String(item.el.value||''));
+      }
+    }finally{syncing=false}
+  }
+  function attach(item){
+    const el=item.el;
+    if(!el.__KTS_UNIFIED_SHARED_INPUT_V1__){
+      el.addEventListener('input',()=>publish(el.value,el));
+      el.addEventListener('change',()=>publish(el.value,el));
+      el.__KTS_UNIFIED_SHARED_INPUT_V1__=true;
+    }
+    if(!seen.has(el)){
+      const now=String(el.value||'');
+      if(!shared&&now)publish(now,el);else if(now!==shared)el.value=shared;
+      seen.set(el,String(el.value||''));
+    }
+  }
+  function refresh(){
+    const list=sources();for(const item of list)attach(item);
+    const mode=activeMode();
+    const ordered=[...list.filter(x=>x.mode===mode),...list.filter(x=>x.mode!==mode)];
+    for(const item of ordered){
+      const now=String(item.el.value||''),before=seen.get(item.el);
+      if(before!==undefined&&now!==before){publish(now,item.el);break;}
+    }
+  }
+  function install(){
+    shared=saved();refresh();
+    for(const id of ['tachFrame','ngangFrame'])document.getElementById(id)?.addEventListener('load',()=>setTimeout(refresh,0));
+    document.querySelector('.tabs')?.addEventListener('click',()=>setTimeout(refresh,0));
+    setInterval(refresh,300);
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();
