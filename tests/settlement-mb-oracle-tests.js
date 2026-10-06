@@ -66,8 +66,9 @@ assert.strictEqual(M.mbXacUnits('3CXC', { number_count: 1, position: 'duoi' }), 
 }
 
 assert.deepStrictEqual(Array.from(M.mbSelectors('2CB')), ['G7:*', 'G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']);
-assert.deepStrictEqual(Array.from(M.mbSelectors('2CD', { position: 'dau' })), ['G7:*']);
-assert.deepStrictEqual(Array.from(M.mbSelectors('2CD', { position: 'duoi' })), ['DB:0']);
+// HIOSKT 2026-09-25 detail labels: DB tail is `dau`; G7×4 are `duoi`.
+assert.deepStrictEqual(Array.from(M.mbSelectors('2CD', { position: 'dau' })), ['DB:0']);
+assert.deepStrictEqual(Array.from(M.mbSelectors('2CD', { position: 'duoi' })), ['G7:*']);
 assert.deepStrictEqual(Array.from(M.mbSelectors('2CB8')), ['G6:*', 'G7:*', 'DB:0']);
 assert.deepStrictEqual(Array.from(M.mbSelectors('3CB')), ['G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']);
 assert.deepStrictEqual(Array.from(M.mbSelectors('3CB7')), ['G6:*', 'G5:3', 'G5:4', 'G5:5', 'DB:0']);
