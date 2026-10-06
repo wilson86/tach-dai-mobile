@@ -3,7 +3,7 @@
 
   const HASH_RE = /^[0-9a-f]{64}$/i;
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
-  function esc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
   function validDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
   function scopeKey(v) { return [String(v && v.partner_id || ''), String(v && v.business_date || ''), String(v && v.region || '').toLowerCase()].join(':'); }
   function deps() {
@@ -200,13 +200,26 @@
         on_progress:p=>status(`Qualification: parser ${p.index}/${p.total} · ${p.candidate_id||'—'} · ${p.status}`,'warn')
       };
     }
-    doc.getElementById('finalQualificationRun').addEventListener('click',async event=>{const btn=event.currentTarget;try{btn.disabled=true;status('Đang chạy toàn bộ qualification gate…','warn');latest=await runQualification(observationOptions());render(latest);}catch(e){status(String(e&&e.message||e),'err');}finally{btn.disabled=false;}});
+    function emitCompleted(qualification, options) {
+      if (typeof global.dispatchEvent !== 'function' || typeof global.CustomEvent !== 'function') return;
+      global.dispatchEvent(new global.CustomEvent('kts:qualification-completed', { detail: {
+        qualification: clone(qualification),
+        options: {
+          from_date: String(options && options.from_date || ''),
+          to_date: String(options && options.to_date || ''),
+          required_observation_days: String(options && options.required_observation_days || ''),
+          partner_id: String(options && options.partner_id || ''),
+          regions: Array.isArray(options && options.regions) ? options.regions.slice() : []
+        }
+      }}));
+    }
+    doc.getElementById('finalQualificationRun').addEventListener('click',async event=>{const btn=event.currentTarget;try{btn.disabled=true;status('Đang chạy toàn bộ qualification gate…','warn');const options=observationOptions();latest=await runQualification(options);render(latest);emitCompleted(latest,options);}catch(e){status(String(e&&e.message||e),'err');}finally{btn.disabled=false;}});
     doc.getElementById('finalQualificationExport').addEventListener('click',()=>{try{if(!latest)throw new Error('QUALIFICATION_SNAPSHOT_REQUIRED');const blob=new Blob([JSON.stringify(latest,null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=doc.createElement('a');a.href=url;a.download='kts-final-qualification-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0);status('Đã xuất snapshot qualification đọc-only.','ok');}catch(e){status(String(e&&e.message||e),'err');}});
     doc.getElementById('finalQualificationCandidates').addEventListener('click',()=>{const target=doc.getElementById('repairReadinessPanel')||doc.getElementById('regressionCandidatePanel');if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'start'});});
   }
 
   global.KTS_SETTLEMENT_QUALIFICATION = Object.freeze({
-    version:'settlement-qualification-dashboard-v1',
+    version:'settlement-qualification-dashboard-v2-evidence-event',
     normalizeWindow, messageInWindow, kqxsVerificationGate, parserProvenanceGate,
     unverifiedFeatureGate, candidateSummary, combineQualification, runQualification
   });
