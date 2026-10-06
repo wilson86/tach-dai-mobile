@@ -51,6 +51,9 @@ jobs:
       - name: Settlement report tests
         run: node tests/settlement-report-tests.js
 
+      - name: Settlement report dashboard tests
+        run: node tests/settlement-report-dashboard-tests.js
+
       - name: Settlement shadow comparison tests
         run: node tests/settlement-shadow-tests.js
 
