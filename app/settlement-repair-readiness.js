@@ -68,7 +68,7 @@
   function summarize(rows) {
     const list = Array.isArray(rows) ? rows : [];
     const count = key => list.filter(x => x && x.status === key).length;
-    return {
+    const out = {
       total:list.length,
       ready:count('READY_HUMAN_CONFIRM'),
       unresolved:count('UNRESOLVED') + count('PARSER_UNRESOLVED'),
@@ -76,6 +76,9 @@
       parser_risk:count('PARSER_REGRESSION_RISK'),
       errors:count('ENGINE_REPLAY_ERROR') + count('PARSER_ERROR')
     };
+    out.blocked = out.total - out.ready;
+    out.all_ready = out.total > 0 && out.ready === out.total;
+    return out;
   }
   async function loadLocalQueue() {
     const d = deps();
@@ -93,6 +96,29 @@
     const parserResult = await d.parserReplay.replayCandidateId(candidate.id);
     return { candidate, assessment:combineAssessment(local, parserResult), parser_skipped:false };
   }
+  async function checkParserRows(rows, onProgress) {
+    const source = Array.isArray(rows) ? rows : [];
+    const out = [];
+    for (let i=0;i<source.length;i++) {
+      const row = source[i];
+      const id = row && row.candidate && row.candidate.id;
+      if (!id || !row.assessment || row.assessment.local && row.assessment.local.exact !== true) {
+        out.push(row);
+        if (typeof onProgress === 'function') onProgress({ index:i+1, total:source.length, candidate_id:id || null, status:'SKIPPED_ENGINE_NOT_EXACT' });
+        continue;
+      }
+      try {
+        const checked = await checkParser(id);
+        out.push(checked);
+        if (typeof onProgress === 'function') onProgress({ index:i+1, total:source.length, candidate_id:id, status:checked.assessment.status });
+      } catch (error) {
+        const parserError = { resolution_state:'PARSER_PATH_ERROR', status:'PARSER_REPLAY_ERROR', error:String(error && error.message || error), candidate_id:String(id) };
+        out.push({ candidate:clone(row.candidate), assessment:combineAssessment(row.assessment.local, parserError), parser_skipped:false });
+        if (typeof onProgress === 'function') onProgress({ index:i+1, total:source.length, candidate_id:id, status:'PARSER_ERROR' });
+      }
+    }
+    return out;
+  }
   function readinessReport(rows) {
     const items = (Array.isArray(rows) ? rows : []).map(row => ({
       candidate_id:String(row && row.candidate && row.candidate.id || row && row.assessment && row.assessment.candidate_id || ''),
@@ -102,7 +128,8 @@
       local:clone(row && row.assessment && row.assessment.local || null),
       parser:clone(row && row.assessment && row.assessment.parser || null)
     }));
-    return { format:'kts-repair-readiness-report-v1', generated_at:new Date().toISOString(), summary:summarize(items), items };
+    const summary = summarize(items);
+    return { format:'kts-repair-readiness-report-v2-bulk', generated_at:new Date().toISOString(), qualification_state:summary.all_ready?'READY_FOR_OPERATOR_REVIEW':'BLOCKED_PENDING_REPAIR', summary, items };
   }
 
   function installUi() {
@@ -111,7 +138,7 @@
     const card = doc.createElement('div'); card.className='card'; card.id='repairReadinessPanel';
     card.innerHTML = `<div class="section-title">Queue xác nhận sau sửa</div>
       <div class="hint">Tự replay engine hiện tại bằng evidence đã chụp. Chỉ khi engine đã MATCH_EXACT mới cho chạy kiểm parser hiện tại. Kết quả “Sẵn sàng xác nhận” vẫn <b>không tự xác nhận HIOSKT, không ghim golden, không dismiss candidate</b>.</div>
-      <div class="row" style="margin-top:8px"><button id="repairReadinessRefresh" class="btn soft">Cập nhật queue</button><button id="repairReadinessExport" class="btn soft">Xuất báo cáo JSON</button></div>
+      <div class="row" style="margin-top:8px"><button id="repairReadinessRefresh" class="btn soft">Cập nhật queue</button><button id="repairReadinessCheckAll" class="btn soft">Kiểm parser các case engine exact</button><button id="repairReadinessExport" class="btn soft">Xuất báo cáo JSON</button></div>
       <div id="repairReadinessStatus" class="status"></div><div id="repairReadinessOutput" class="hint"></div>`;
     pane.appendChild(card);
     let rows = [];
@@ -126,19 +153,20 @@
       host.innerHTML=rows.map((row,index)=>{const c=row.candidate,a=row.assessment,s=c.case&&c.case.scope||{};return `<div class="report-message" data-readiness-index="${index}"><div><span class="tag ${kind(a)}">${esc(label(a))}</span> <b>${esc(s.business_date||'')} ${esc(String(s.region||'').toUpperCase())}</b> · ${esc(s.partner_id||'')}</div><div class="hint">engine ${esc(a.local&&a.local.engine_version||'—')} · delta hiện tại ${esc(a.local&&a.local.final_delta!=null?a.local.final_delta:'—')}</div><div class="row" style="margin-top:6px">${a.local&&a.local.exact?`<button class="btn soft" data-action="check-parser" data-id="${esc(c.id)}">Kiểm parser hiện tại</button>`:''}<button class="btn soft" data-action="open-candidate" data-id="${esc(c.id)}">Mở candidate</button></div></div>`;}).join('');
       host.querySelectorAll('[data-action="check-parser"]').forEach(btn=>btn.addEventListener('click',async()=>{const id=btn.getAttribute('data-id');try{btn.disabled=true;status('Đang chạy raw_text → parser hiện tại → engine hiện tại…','warn');const checked=await checkParser(id);const i=rows.findIndex(x=>String(x.candidate.id)===String(id));if(i>=0)rows[i]=checked;render();status(checked.assessment.ready_for_human_confirmation?'Case đã exact cả engine + parser. Chỉ còn bước người vận hành xác nhận reference HIOSKT.':'Parser replay chưa đạt điều kiện xác nhận.','warn');}catch(e){status(String(e&&e.message||e),'err');}finally{btn.disabled=false;}}));
       host.querySelectorAll('[data-action="open-candidate"]').forEach(btn=>btn.addEventListener('click',()=>{const target=doc.querySelector(`[data-candidate="${String(btn.getAttribute('data-id')).replace(/"/g,'\\"')}"]`);if(target&&target.scrollIntoView)target.scrollIntoView({behavior:'smooth',block:'center'});}));
-      const sum=summarize(rows.map(x=>x.assessment));status(`${sum.total} candidate · ${sum.ready} sẵn sàng xác nhận · ${sum.parser_unchecked} engine exact/chưa kiểm parser · ${sum.unresolved} còn lệch · ${sum.parser_risk} parser risk · ${sum.errors} lỗi replay`,sum.ready&&sum.unresolved===0&&sum.parser_risk===0&&sum.errors===0?'ok':'warn');
+      const sum=summarize(rows.map(x=>x.assessment));status(`${sum.total} candidate · ${sum.ready} sẵn sàng xác nhận · ${sum.parser_unchecked} engine exact/chưa kiểm parser · ${sum.unresolved} còn lệch · ${sum.parser_risk} parser risk · ${sum.errors} lỗi replay`,sum.all_ready?'ok':'warn');
     }
     async function refresh(){rows=await loadLocalQueue();render();return rows;}
     doc.getElementById('repairReadinessRefresh').addEventListener('click',()=>refresh().catch(e=>status(String(e&&e.message||e),'err')));
+    doc.getElementById('repairReadinessCheckAll').addEventListener('click',async event=>{const btn=event.currentTarget;try{btn.disabled=true;status('Đang kiểm parser tuần tự cho các case engine exact…','warn');rows=await checkParserRows(rows,p=>status(`Kiểm parser ${p.index}/${p.total} · ${p.candidate_id||'—'} · ${p.status}`,'warn'));render();const sum=summarize(rows.map(x=>x.assessment));status(sum.all_ready?'Tất cả candidate kỹ thuật đã exact. Chờ người vận hành xác nhận HIOSKT/reference từng case.':`Đã kiểm xong: ${sum.ready}/${sum.total} case sẵn sàng xác nhận; còn ${sum.blocked} case bị chặn.` ,sum.all_ready?'ok':'warn');}catch(e){status(String(e&&e.message||e),'err');}finally{btn.disabled=false;}});
     doc.getElementById('repairReadinessExport').addEventListener('click',()=>{try{const report=readinessReport(rows);const blob=new Blob([JSON.stringify(report,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=doc.createElement('a');a.href=url;a.download='kts-repair-readiness-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),0);status('Đã xuất báo cáo readiness đọc-only.','ok');}catch(e){status(String(e&&e.message||e),'err');}});
     if(typeof global.addEventListener==='function')global.addEventListener('kts:regression-candidates-changed',()=>refresh().catch(()=>{}));
     refresh().catch(()=>{});
   }
 
   global.KTS_SETTLEMENT_REPAIR_READINESS = Object.freeze({
-    version:'settlement-repair-readiness-v1',
+    version:'settlement-repair-readiness-v2-bulk',
     localAssessment, parserAssessment, combineAssessment, summarize,
-    loadLocalQueue, checkParser, readinessReport
+    loadLocalQueue, checkParser, checkParserRows, readinessReport
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
