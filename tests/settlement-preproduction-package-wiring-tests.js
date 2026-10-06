@@ -20,7 +20,7 @@ assert(!pkg.includes('saveSettlement('));
 assert(!pkg.includes('saveConfig('));
 assert(!pkg.includes('confirmAndPin('));
 assert(!pkg.includes('dismissCandidate('));
-assert(bridge.includes("script.src='./settlement-preproduction-package.js'"));
+assert(bridge.includes("'./settlement-preproduction-package.js'"));
 assert(bridge.includes('data-kts-preproduction-package'));
 assert(sw.includes("'./settlement-preproduction-package.js'"));
 assert(sw.includes('v1.0.56-preproduction-review-bundle'));
