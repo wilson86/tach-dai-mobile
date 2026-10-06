@@ -99,6 +99,7 @@
       <div id="regressionReviewStatus" class="status"></div>
       <div id="regressionReviewOutput" class="hint"></div>`;
     pane.appendChild(card);
+    let lastGroups = [];
 
     function status(text, kind) {
       const el = doc.getElementById('regressionReviewStatus');
@@ -109,6 +110,7 @@
     async function render() {
       const pending = await candidates.listCandidates({ state: candidates.STATES.PENDING });
       const groups = summarizeCandidates(pending);
+      lastGroups = groups;
       const host = doc.getElementById('regressionReviewOutput');
       if (!groups.length) {
         host.innerHTML = '<div class="hint">Không có mismatch candidate đang chờ xử lý.</div>';
@@ -121,8 +123,17 @@
         return `<div class="report-message"><div><span class="tag err">#${index + 1}</span> <b>${esc(String(g.region || '').toUpperCase())}</b> · ${esc(g.partner_role)} · <b>${g.count}</b> case</div>`+
           `<div class="hint" style="margin-top:4px">${esc(issue)}</div>`+
           `<div class="hint">Ngày: ${esc(g.dates.join(', ') || '—')} · đối tác ${g.partners.length} · tổng |lệch THU/BÙ| ${esc(deltaText)}</div>`+
+          `<div class="row" style="margin-top:6px"><button class="btn soft" data-repair-group="${index}">Mở hồ sơ sửa</button></div>`+
           `<details style="margin-top:4px"><summary class="hint">Candidate ID</summary><div class="raw">${esc(g.candidate_ids.join('\n'))}</div></details></div>`;
       }).join('');
+      host.querySelectorAll('[data-repair-group]').forEach(btn => btn.addEventListener('click', () => {
+        const index = Number(btn.getAttribute('data-repair-group'));
+        const group = lastGroups[index];
+        if (!group || !group.candidate_ids.length) return;
+        if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+          global.dispatchEvent(new global.CustomEvent('kts:repair-open', { detail: { signature: group.signature, candidate_ids: group.candidate_ids.slice() } }));
+        }
+      }));
       status(`${pending.length} candidate đang chờ · gom thành ${groups.length} nhóm lỗi. Ưu tiên nhóm lặp nhiều trước.`, 'warn');
       return groups;
     }
@@ -136,7 +147,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_REVIEW = Object.freeze({
-    version: 'settlement-regression-review-v1',
+    version: 'settlement-regression-review-v2-repair-link',
     candidateIssueShape,
     signatureForCandidate,
     summarizeCandidates
