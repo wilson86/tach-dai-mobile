@@ -70,8 +70,9 @@ function fakeStore(messages) {
   assert.deepStrictEqual(Array.from(out.settlement.message_ids), ['m1','m2']);
   assert.strictEqual(out.settlement.result_snapshot.total_xac, 81);
   approx(out.settlement.result_snapshot.total_qua_co, 61.56);
-  assert.strictEqual(out.settlement.result_snapshot.total_payout, 4);
-  approx(out.settlement.result_snapshot.final_net, 57.56);
+  // 2CB 92 hits 3 times; DAT 92-61 uses fixed nhiều-cặp min(3,2)=2 => total 5.
+  assert.strictEqual(out.settlement.result_snapshot.total_payout, 5);
+  approx(out.settlement.result_snapshot.final_net, 56.56);
   assert.strictEqual(out.settlement.message_breakdown.length, 2);
 
   store.state.messages.push({ id: 'm3', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: 'bad', status: 'parser_error', canonical_payload: null });
@@ -91,6 +92,7 @@ function fakeStore(messages) {
   const onlyM2 = store.state.settlements[0];
   assert.deepStrictEqual(Array.from(onlyM2.message_ids), ['m2']);
   assert.strictEqual(onlyM2.result_snapshot.total_xac, 54);
+  assert.strictEqual(onlyM2.result_snapshot.total_payout, 2);
 
   const lastCancelled = await P.cancelMessage('m2');
   assert.strictEqual(lastCancelled.settlement.status, 'empty');
