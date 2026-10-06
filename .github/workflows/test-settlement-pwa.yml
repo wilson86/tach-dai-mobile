@@ -166,6 +166,9 @@ jobs:
       - name: Settlement final pre-production boundary wiring tests
         run: node tests/settlement-preproduction-boundary-wiring-tests.js
 
+      - name: Settlement resumable review-session tests
+        run: node tests/settlement-preproduction-review-session-tests.js
+
       - name: Settlement pre-production orchestrator tests
         run: node tests/settlement-preproduction-orchestrator-tests.js
 
