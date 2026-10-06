@@ -1,11 +1,11 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.52-live-ready-validity';
+const CACHE='kts-tach-unified-v1.0.53-preproduction-package';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
   './settlement-category-map.js','./settlement-research-defaults.js','./settlement-feature-gates.js',
   './settlement-runtime.js','./settlement-evaluator.js','./settlement-parser-provider.js','./settlement-pipeline.js',
-  './settlement-report.js','./settlement-report-dashboard.js','./settlement-shadow.js','./settlement-shadow-runtime.js','./settlement-regression-cases.js','./settlement-shadow-guard.js','./settlement-shadow-ui.js','./settlement-shadow-batch.js','./settlement-regression-candidates.js','./settlement-regression-review.js','./settlement-repair-workflow.js','./settlement-parser-replay.js','./settlement-repair-readiness.js','./settlement-qualification-dashboard.js','./settlement-build-identity.js','./settlement-qualification-history.js','./settlement-qualification-history-bridge.js','./settlement-attention-ui.js',
+  './settlement-report.js','./settlement-report-dashboard.js','./settlement-shadow.js','./settlement-shadow-runtime.js','./settlement-regression-cases.js','./settlement-shadow-guard.js','./settlement-shadow-ui.js','./settlement-shadow-batch.js','./settlement-regression-candidates.js','./settlement-regression-review.js','./settlement-repair-workflow.js','./settlement-parser-replay.js','./settlement-repair-readiness.js','./settlement-qualification-dashboard.js','./settlement-build-identity.js','./settlement-qualification-history.js','./settlement-qualification-history-bridge.js','./settlement-preproduction-package.js','./settlement-attention-ui.js',
   './settlement-observation.js','./settlement-observation-ui.js','./settlement-backup-ui.js','./settlement-message-history.js','./settlement-scope-sync.js',
   './result-service.js','./result-provider.js','./result-auto.js','./result-audit-ui.js','./settlement-ui.js',
   '../icon-192.png','../icon-512.png'
@@ -14,7 +14,7 @@ self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(c
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{
   const req=event.request, url=new URL(req.url);
-  if(url.pathname.includes('/api/settlement/parse')||url.pathname.includes('/kts-api/settlement/parse')){
+  if(url.pathname.includes('/api/settlement/parse')||url.pathname.includes('/kts-api/settlement/parse')||url.pathname.includes('/api/settlement/parser-identity')||url.pathname.includes('/kts-api/settlement/parser-identity')){
     event.respondWith(fetch(req,{cache:'no-store'}));return;
   }
   if(req.method!=='GET') return;
