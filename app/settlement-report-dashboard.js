@@ -6,10 +6,9 @@
       .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
       .replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   }
-  function money(v) {
-    const n = Number(v || 0);
-    return Number.isFinite(n) ? new Intl.NumberFormat('vi-VN',{maximumFractionDigits:4}).format(n) : '0';
-  }
+  function num(v) { const n = Number(v || 0); return Number.isFinite(n) ? n : 0; }
+  function money(v) { return new Intl.NumberFormat('vi-VN',{maximumFractionDigits:4}).format(num(v)); }
+  function direction(v) { const n = num(v); return n > 0 ? 'THU' : n < 0 ? 'BÙ' : 'HÒA'; }
   function roleLabel(role) { return role === 'owner' ? 'Chủ' : role === 'customer' ? 'Khách' : '—'; }
   function shadowLabel(status) {
     return ({
@@ -34,6 +33,33 @@
     })[status] || [String(status || 'UNKNOWN'),'warn'];
   }
 
+  function emptyTotals() { return { xac:0, qua_co:0, payout:0, refund_amount:0, final_net:0, direction:'HÒA' }; }
+  function addTotals(target, source) {
+    target.xac += num(source && source.xac);
+    target.qua_co += num(source && source.qua_co);
+    target.payout += num(source && source.payout);
+    target.refund_amount += num(source && source.refund_amount);
+    target.final_net += num(source && source.final_net);
+    target.direction = direction(target.final_net);
+    return target;
+  }
+  function buildBreakdown(model) {
+    const roleTotals = { customer:emptyTotals(), owner:emptyTotals(), unknown:emptyTotals() };
+    const regionTotals = { mn:emptyTotals(), mt:emptyTotals(), mb:emptyTotals() };
+    for (const report of (model && model.partners) || []) {
+      const role = report.partner && report.partner.role === 'owner' ? 'owner' : report.partner && report.partner.role === 'customer' ? 'customer' : 'unknown';
+      addTotals(roleTotals[role], report.totals || {});
+      for (const region of report.regions || []) {
+        if (!regionTotals[region.region]) regionTotals[region.region] = emptyTotals();
+        addTotals(regionTotals[region.region], {
+          xac:region.total_xac, qua_co:region.total_qua_co, payout:region.total_payout,
+          refund_amount:region.refund_amount, final_net:region.final_net
+        });
+      }
+    }
+    return { role_totals:roleTotals, region_totals:regionTotals };
+  }
+
   function install() {
     const doc = global.document;
     const store = global.KTS_SETTLEMENT_STORE;
@@ -47,7 +73,7 @@
     card.id = 'dailyOpsDashboard';
     card.innerHTML = `
       <div class="row" style="justify-content:space-between">
-        <div class="section-title">Tổng quan vận hành trong ngày</div>
+        <div><div class="section-title">Tổng quan vận hành trong ngày</div><div class="hint">Tổng tất cả khách/chủ · tách theo vai trò và miền · giữ cảnh báo shadow/fail-closed.</div></div>
         <button id="refreshDailyOps" class="btn soft">Làm mới</button>
       </div>
       <div id="dailyOpsStatus" class="status"></div>
@@ -62,18 +88,19 @@
       el.textContent = text || '';
       el.className = 'status ' + (kind || '');
     }
-
     function scopeDate() {
       const el = doc.getElementById('reportDate');
       return el ? String(el.value || '') : '';
     }
-
     function regionSummary(report) {
       return (report.regions || []).map(r => {
         const cls = r.blocked ? 'err' : r.provisional ? 'warn' : shadowKind(r.shadow_status);
         const state = r.blocked ? 'BLOCKED' : r.provisional ? 'TẠM' : shadowLabel(r.shadow_status);
         return `<span class="tag ${cls}">${esc(r.region.toUpperCase())} · ${esc(state)}</span>`;
       }).join(' ');
+    }
+    function totalsRow(label, t) {
+      return `<tr><td><b>${esc(label)}</b></td><td>${money(t.xac)}</td><td>${money(t.qua_co)}</td><td>${money(t.payout)}</td><td>${money(t.refund_amount)}</td><td>${esc(direction(t.final_net))} ${money(Math.abs(num(t.final_net)))}</td></tr>`;
     }
 
     function render(model) {
@@ -88,11 +115,14 @@
         return;
       }
 
+      const breakdown = buildBreakdown(model);
       totals.innerHTML = `
         <div style="margin:6px 0"><b>Tổng đang tính:</b> XÁC <span class="money">${money(model.totals.xac)}</span> · QUA CÒ <span class="money">${money(model.totals.qua_co)}</span> · TRẢ <span class="money">${money(model.totals.payout)}</span> · HỒI <span class="money">${money(model.totals.refund_amount)}</span></div>
-        <div class="status ${model.totals.direction === 'THU' ? 'ok' : model.totals.direction === 'BU' ? 'err' : ''}">${esc(model.totals.direction)}: ${money(model.totals.final_net)}</div>
+        <div class="status ${model.totals.direction === 'THU' ? 'ok' : model.totals.direction === 'BU' ? 'err' : ''}">${esc(direction(model.totals.final_net))}: ${money(Math.abs(num(model.totals.final_net)))}</div>
         <div class="hint">Đã exact ${model.counts.exact}/${model.counts.partners} đối tác · blocked ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch} · khớp hiển thị ${model.counts.display_only}.</div>
-        <details style="margin-top:6px"><summary class="hint">Tổng chỉ các đối tác đã khớp exact</summary><div class="hint" style="margin-top:5px">XÁC ${money(model.exact_totals.xac)} · QUA CÒ ${money(model.exact_totals.qua_co)} · TRẢ ${money(model.exact_totals.payout)} · HỒI ${money(model.exact_totals.refund_amount)} · ${esc(model.exact_totals.direction)} ${money(model.exact_totals.final_net)}</div></details>`;
+        <details style="margin-top:6px"><summary class="hint">Tổng chỉ các đối tác đã khớp exact</summary><div class="hint" style="margin-top:5px">XÁC ${money(model.exact_totals.xac)} · QUA CÒ ${money(model.exact_totals.qua_co)} · TRẢ ${money(model.exact_totals.payout)} · HỒI ${money(model.exact_totals.refund_amount)} · ${esc(direction(model.exact_totals.final_net))} ${money(Math.abs(num(model.exact_totals.final_net)))}</div></details>
+        <details open style="margin-top:8px"><summary class="hint"><b>Tách Khách / Chủ</b></summary><div class="result-grid" style="margin-top:5px"><table><thead><tr><th>Vai trò</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${totalsRow('Khách', breakdown.role_totals.customer)}${totalsRow('Chủ', breakdown.role_totals.owner)}</tbody></table></div></details>
+        <details open style="margin-top:8px"><summary class="hint"><b>Tách theo miền</b></summary><div class="result-grid" style="margin-top:5px"><table><thead><tr><th>Miền</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${[['mn','MN'],['mt','MT'],['mb','MB']].filter(x => { const t=breakdown.region_totals[x[0]]; return t && (t.xac || t.qua_co || t.payout || t.refund_amount || t.final_net); }).map(x => totalsRow(x[1], breakdown.region_totals[x[0]])).join('')}</tbody></table></div></details>`;
 
       partners.innerHTML = model.partners.map(report => {
         const cls = report.blocked ? 'err' : report.provisional ? 'warn' : shadowKind(report.shadow_status);
@@ -110,7 +140,7 @@
           </div>
           <div style="margin-top:6px">${regionSummary(report)}</div>
           <div class="hint" style="margin-top:6px">XÁC ${money(report.totals.xac)} · QUA CÒ ${money(report.totals.qua_co)} · TRẢ ${money(report.totals.payout)} · HỒI ${money(report.totals.refund_amount)}</div>
-          <div class="status ${report.totals.direction === 'THU' ? 'ok' : report.totals.direction === 'BU' ? 'err' : ''}">${esc(report.totals.direction)} ${money(report.totals.final_net)}</div>
+          <div class="status ${report.totals.direction === 'THU' ? 'ok' : report.totals.direction === 'BU' ? 'err' : ''}">${esc(direction(report.totals.final_net))} ${money(Math.abs(num(report.totals.final_net)))}</div>
           ${warning}
           <button class="btn soft" data-open-partner="${esc(report.partner.id)}" style="margin-top:6px">Xem chi tiết</button>
         </div>`;
@@ -152,7 +182,9 @@
     for (const button of doc.querySelectorAll('.nav button[data-pane="report"]')) button.addEventListener('click', refresh);
   }
 
-  global.KTS_SETTLEMENT_REPORT_DASHBOARD = Object.freeze({ version:'settlement-report-dashboard-v1', shadowLabel, shadowKind, dayStatus });
+  global.KTS_SETTLEMENT_REPORT_DASHBOARD = Object.freeze({
+    version:'settlement-report-dashboard-v2', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown
+  });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
