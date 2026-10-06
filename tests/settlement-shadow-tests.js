@@ -20,6 +20,10 @@ const local = {
   category_rows: [
     { code: 'DAT', xac: 72, qua_co: 54.72, hit_units: 4, payout: 3000 },
     { code: 'DAX', xac: 216, qua_co: 164.16, hit_units: 3, payout: 1650 }
+  ],
+  message_breakdown: [
+    { message_id: 'm-dat', category_rows: [{ code: 'DAT', xac: 72, qua_co: 54.72, hit_units: 4, payout: 3000 }] },
+    { message_id: 'm-dax', category_rows: [{ code: 'DAX', xac: 216, qua_co: 164.16, hit_units: 3, payout: 1650 }] }
   ]
 };
 
@@ -32,15 +36,36 @@ const exact = S.compareSettlement(local, {
 });
 assert.strictEqual(exact.status, 'MATCH_EXACT');
 assert.strictEqual(exact.safe_to_promote, true);
+assert.strictEqual(S.buildMismatchDiagnostics(local, exact).category_issues.length, 0);
 
 const displayOnly = S.compareSettlement(local, { totals: { final: -4431.1 } }, { display_digits: 1 });
 assert.strictEqual(displayOnly.status, 'MATCH_DISPLAY_ONLY');
 assert.strictEqual(displayOnly.safe_to_promote, false);
 
-const mismatch = S.compareSettlement(local, { totals: { xac: 288, qua_co: 219.88, final: -4430.12 } });
+const mismatch = S.compareSettlement(local, {
+  totals: { xac: 288, qua_co: 219.88, payout: 4650, final: -4430.12 },
+  categories: [
+    { code: 'DAT', xac: 72, qua_co: 55.72, hit_units: 4, payout: 3000 },
+    { code: 'DAX', xac: 216, qua_co: 164.16, hit_units: 3, payout: 1650 }
+  ]
+});
 assert.strictEqual(mismatch.status, 'MISMATCH');
 assert.strictEqual(mismatch.safe_to_promote, false);
 assert.strictEqual(mismatch.totals.total_qua_co.status, 'MISMATCH');
+const diag = S.buildMismatchDiagnostics(local, mismatch);
+assert.strictEqual(diag.category_reference_missing, false);
+assert.strictEqual(diag.has_actionable_category_issue, true);
+assert.strictEqual(diag.category_issues.length, 1);
+assert.strictEqual(diag.category_issues[0].code, 'DAT');
+assert.deepStrictEqual(Array.from(diag.category_issues[0].message_ids), ['m-dat']);
+assert.strictEqual(diag.category_issues[0].fields[0].field, 'qua_co');
+assert.strictEqual(diag.category_issues[0].fields[0].delta, -1);
+assert(diag.total_issues.some(x => x.field === 'total_qua_co'));
+
+const noCategoryRef = S.compareSettlement(local, { totals: { xac: 288, qua_co: 219.88, final: -4430.12 } });
+const noCategoryDiag = S.buildMismatchDiagnostics(local, noCategoryRef);
+assert.strictEqual(noCategoryDiag.category_reference_missing, true);
+assert.strictEqual(noCategoryDiag.category_issues.length, 0);
 
 const incomplete = S.compareSettlement(local, {});
 assert.strictEqual(incomplete.status, 'INCOMPLETE_REFERENCE');
