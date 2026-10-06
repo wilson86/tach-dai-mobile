@@ -78,6 +78,9 @@ jobs:
       - name: Settlement scope synchronization tests
         run: node tests/settlement-scope-sync-tests.js
 
+      - name: Settlement store normalization tests
+        run: node tests/settlement-store-normalization-tests.js
+
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
 
