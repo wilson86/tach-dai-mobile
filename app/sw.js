@@ -1,11 +1,11 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.15-soft-cancel';
+const CACHE='kts-tach-unified-v1.0.16-report-dashboard';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
   './settlement-category-map.js','./settlement-research-defaults.js','./settlement-feature-gates.js',
   './settlement-runtime.js','./settlement-evaluator.js','./settlement-parser-provider.js','./settlement-pipeline.js',
-  './settlement-report.js','./settlement-shadow.js','./settlement-shadow-runtime.js','./settlement-shadow-ui.js',
+  './settlement-report.js','./settlement-report-dashboard.js','./settlement-shadow.js','./settlement-shadow-runtime.js','./settlement-shadow-ui.js',
   './settlement-observation.js','./settlement-observation-ui.js','./settlement-backup-ui.js','./settlement-message-history.js',
   './result-service.js','./result-provider.js','./result-auto.js','./result-audit-ui.js','./settlement-ui.js',
   '../icon-192.png','../icon-512.png'
