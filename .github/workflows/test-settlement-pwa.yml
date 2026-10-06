@@ -78,6 +78,12 @@ jobs:
       - name: Settlement regression review wiring tests
         run: node tests/settlement-regression-review-wiring-tests.js
 
+      - name: Settlement shadow repair workflow tests
+        run: node tests/settlement-repair-workflow-tests.js
+
+      - name: Settlement shadow repair wiring tests
+        run: node tests/settlement-repair-wiring-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
