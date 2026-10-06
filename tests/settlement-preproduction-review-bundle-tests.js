@@ -1,0 +1,32 @@
+'use strict';
+const fs=require('fs');const vm=require('vm');const assert=require('assert');const crypto=require('crypto');
+function clone(v){return v==null?v:JSON.parse(JSON.stringify(v));}
+function stable(v){if(v===null||typeof v!=='object')return JSON.stringify(v);if(Array.isArray(v))return '['+v.map(stable).join(',')+']';return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';}
+async function sha(v){return crypto.createHash('sha256').update(typeof v==='string'?v:stable(v)).digest('hex');}
+const COMPONENTS=['runtime','parser_backend'];
+const componentFingerprints={runtime:'a'.repeat(64),parser_backend:'b'.repeat(64)};
+const inputFingerprint='c'.repeat(64);
+const qEvent={id:'qualification_event_1',qualification_state:'READY_FOR_PRODUCTION_REVIEW',ready_for_production_review:true,production_enabled:false,merge_authorized:false,input_fingerprint_sha256:inputFingerprint,component_fingerprints:clone(componentFingerprints)};
+function eventWithoutIntegrity(e){const x=clone(e);delete x.integrity;return x;}
+async function makeEvent(sequence,previous,idSuffix){
+  const event={format:'kts-preproduction-review-history-event-v1',id:'review_event_'+idSuffix,sequence,recorded_at:'2026-10-07T00:00:0'+sequence+'.000Z',authority:{evidence_only:true,read_only_review:true,production_enabled:false,merge_authorized:false,deploy_authorized:false,mutates_settlement:false,production_approval_recorded:false},qualification_link:{source_event_id:qEvent.id,status:'VERIFIED',input_fingerprint_sha256:inputFingerprint},package_link:{format:'kts-preproduction-dry-run-package-v1',package_payload_sha256:String(sequence).repeat(64),input_fingerprint_sha256:inputFingerprint,component_fingerprints:clone(componentFingerprints)},review_link:{record_sha256:String(sequence+2).repeat(64),verdict:'CURRENT',reviewed_at:'2026-10-07T00:00:00.000Z',reviewer:'tester'},context:{scope:{from_date:'2026-10-01',to_date:'2026-10-07'},qualification_snapshot:{ready_for_production_review:true},component_fingerprints:clone(componentFingerprints)},record:{integrity:{record_sha256:String(sequence+2).repeat(64)},package:{package_payload_sha256:String(sequence).repeat(64),source_ready_event_id:qEvent.id}},previous_event_id:previous?previous.id:null,previous_event_sha256:previous?previous.integrity.event_sha256:null};
+  event.integrity={algorithm:'sha256',event_sha256:await sha(eventWithoutIntegrity(event))};return event;
+}
+async function verifyChain(events){const errors=[];for(let i=0;i<events.length;i++){const e=events[i],p=i?events[i-1]:null;if(Number(e.sequence)!==i+1)errors.push('SEQ');if(i===0&&(e.previous_event_id!=null||e.previous_event_sha256!=null))errors.push('GENESIS');if(p&&(e.previous_event_id!==p.id||e.previous_event_sha256!==p.integrity.event_sha256))errors.push('LINK');if(await sha(eventWithoutIntegrity(e))!==e.integrity.event_sha256)errors.push('SHA');}return {valid:errors.length===0,errors,count:events.length,head_event_sha256:events.length?events[events.length-1].integrity.event_sha256:null};}
+(async()=>{
+  const e1=await makeEvent(1,null,'1'),e2=await makeEvent(2,e1,'2');let localEvents=[e1,e2];
+  const qualification={COMPONENTS,sha256Hex:sha,async listEvents(){return [clone(qEvent)];}};
+  const reviewHistory={async listEvents(){return {events:clone(localEvents),chain:await verifyChain(localEvents)};},verifyChain};
+  const ctx={console,globalThis:null,KTS_SETTLEMENT_QUALIFICATION_HISTORY:qualification,KTS_SETTLEMENT_PREPRODUCTION_REVIEW_HISTORY:reviewHistory,KTS_SETTLEMENT_BUILD_IDENTITY:{version:'settlement-build-identity-v1'},Date,JSON};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('app/settlement-preproduction-review-bundle.js','utf8'),ctx,{filename:'settlement-preproduction-review-bundle.js'});const B=ctx.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_BUNDLE;
+  assert.strictEqual(B.version,'settlement-preproduction-review-bundle-v1');
+  const bundle=await B.buildBundle();assert.strictEqual(bundle.format,'kts-preproduction-review-bundle-v1');assert.strictEqual(bundle.mode,'PORTABLE_EVIDENCE_ONLY');assert.strictEqual(bundle.authority.production_enabled,false);assert.strictEqual(bundle.authority.merge_authorized,false);assert.strictEqual(bundle.authority.deploy_authorized,false);assert.strictEqual(bundle.authority.mutates_settlement,false);assert.strictEqual(bundle.authority.import_mutates_local_history,false);assert.strictEqual(bundle.content_policy.contains_settlement_store,false);assert.strictEqual(bundle.content_policy.contains_package_payload,false);assert.strictEqual(bundle.review_events.length,2);assert.strictEqual(bundle.qualification_evidence.length,1);assert(/^[0-9a-f]{64}$/.test(bundle.integrity.bundle_sha256));
+  let v=await B.verifyBundle(bundle);assert.strictEqual(v.valid,true);assert.deepStrictEqual(Array.from(v.errors),[]);
+  const outer=clone(bundle);outer.chain.head_event_id='changed';v=await B.verifyBundle(outer);assert.strictEqual(v.valid,false);assert(v.errors.includes('PREPRODUCTION_REVIEW_BUNDLE_SHA_MISMATCH'));
+  const inner=clone(bundle);inner.review_events[1].package_link.package_payload_sha256='9'.repeat(64);inner.integrity.bundle_sha256=await sha(B.bundleWithoutIntegrity(inner));v=await B.verifyBundle(inner);assert.strictEqual(v.valid,false);assert(v.errors.includes('PREPRODUCTION_REVIEW_BUNDLE_CHAIN_INVALID'));
+  const qTamper=clone(bundle);qTamper.qualification_evidence[0].event.input_fingerprint_sha256='d'.repeat(64);qTamper.qualification_evidence[0].event_sha256=await sha(qTamper.qualification_evidence[0].event);qTamper.integrity.bundle_sha256=await sha(B.bundleWithoutIntegrity(qTamper));v=await B.verifyBundle(qTamper);assert.strictEqual(v.valid,false);assert(v.errors.some(x=>x.startsWith('PREPRODUCTION_REVIEW_BUNDLE_QUALIFICATION_FINGERPRINT_MISMATCH')));
+  let cmp=await B.compareWithLocalHistory(bundle);assert.strictEqual(cmp.status,'LOCAL_CHAIN_MATCH');
+  const e3=await makeEvent(3,e2,'3');localEvents=[e1,e2,e3];cmp=await B.compareWithLocalHistory(bundle);assert.strictEqual(cmp.status,'LOCAL_CHAIN_AHEAD');
+  localEvents=[e1];cmp=await B.compareWithLocalHistory(bundle);assert.strictEqual(cmp.status,'BUNDLE_CHAIN_AHEAD');
+  localEvents=[];cmp=await B.compareWithLocalHistory(bundle);assert.strictEqual(cmp.status,'LOCAL_CHAIN_ABSENT');
+  console.log('settlement-preproduction-review-bundle-tests: PASS');
+})().catch(e=>{console.error(e);process.exit(1);});
