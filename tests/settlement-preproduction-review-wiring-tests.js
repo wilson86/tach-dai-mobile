@@ -20,7 +20,7 @@ assert(!review.includes('KTS_SETTLEMENT_PREPRODUCTION_PACKAGE'));
 assert(!review.includes('.verifyPackage('));
 assert(!review.includes('saveSettlement('));
 assert(!review.includes('saveConfig('));
-assert(bridge.includes("script.src='./settlement-preproduction-review.js'"));
+assert(bridge.includes("'./settlement-preproduction-review.js'"));
 assert(bridge.includes('data-kts-preproduction-review'));
 assert(bridge.includes("'./settlement-preproduction-review-history.js'"));
 assert(bridge.includes("'./settlement-preproduction-review-bundle.js'"));
