@@ -14,6 +14,7 @@
   function scopeId(partnerId, businessDate, region) {
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
+  function isCancelled(message) { return String(message && message.status || '') === 'cancelled'; }
 
   function zeroResult(reason) {
     return {
@@ -26,13 +27,38 @@
   async function findScopeMessages(partnerId, businessDate, region) {
     const d = deps();
     const all = await d.store.getAll(d.store.STORES.messages);
-    return all.filter(m => m.partner_id === partnerId && m.business_date === businessDate && String(m.region || '').toLowerCase() === String(region || '').toLowerCase())
+    return all.filter(m => !isCancelled(m) && m.partner_id === partnerId && m.business_date === businessDate && String(m.region || '').toLowerCase() === String(region || '').toLowerCase())
       .sort((a, b) => String(a.created_at || '').localeCompare(String(b.created_at || '')));
   }
 
   async function findResult(businessDate, region) {
     const d = deps();
     return await d.store.get(d.store.STORES.results, `${businessDate}:${String(region || '').toLowerCase()}`);
+  }
+
+  async function saveEmptyScope(input) {
+    const d = deps();
+    const result = zeroResult(null);
+    const saved = await d.store.saveSettlement({
+      id: scopeId(input.partner_id, input.business_date, input.region),
+      partner_id: input.partner_id,
+      message_id: null,
+      message_ids: [],
+      business_date: input.business_date,
+      region: input.region,
+      engine_version: d.engine.version,
+      config_snapshot: null,
+      lottery_result_snapshot: null,
+      result_snapshot: result,
+      settlement_result: result,
+      detail_rows: [],
+      category_rows: [],
+      message_breakdown: [],
+      scope_status: 'empty',
+      blocked_reasons: [],
+      comparison_status: 'empty'
+    });
+    return { status: 'empty', settlement: saved };
   }
 
   async function saveBlockedScope(input) {
@@ -69,7 +95,7 @@
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('SETTLEMENT_REGION_REQUIRED');
 
     const messages = input.messages || await findScopeMessages(partnerId, businessDate, region);
-    if (!messages.length) return { status: 'empty', settlement: null };
+    if (!messages.length) return saveEmptyScope({ partner_id: partnerId, business_date: businessDate, region });
 
     let config;
     try { config = await d.store.resolveConfigForDate(partnerId, businessDate); }
@@ -211,14 +237,39 @@
     return { status: settlement ? settlement.status : 'parsed_waiting_result', message: saved, settlement };
   }
 
+  async function cancelMessage(messageId) {
+    const d = deps();
+    const message = await d.store.get(d.store.STORES.messages, messageId);
+    if (!message) throw new Error('MESSAGE_NOT_FOUND');
+    if (!isCancelled(message)) {
+      await d.store.saveMessage(Object.assign({}, message, { status: 'cancelled' }));
+    }
+    const settlement = await settleScope({ partner_id: message.partner_id, business_date: message.business_date, region: message.region });
+    return { status: 'cancelled', message_id: messageId, settlement };
+  }
+
+  async function restoreMessage(messageId) {
+    const d = deps();
+    const message = await d.store.get(d.store.STORES.messages, messageId);
+    if (!message) throw new Error('MESSAGE_NOT_FOUND');
+    if (!isCancelled(message)) return { status: 'not_cancelled', message_id: messageId, settlement: null };
+    const restoredStatus = message.parser_error ? 'parser_error' : message.canonical_payload ? 'parsed_waiting_result' : 'pending_parser';
+    await d.store.saveMessage(Object.assign({}, message, { status: restoredStatus }));
+    const settlement = await settleScope({ partner_id: message.partner_id, business_date: message.business_date, region: message.region });
+    return { status: 'restored', message_id: messageId, settlement };
+  }
+
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v1',
+    version: 'settlement-pipeline-v2-soft-cancel',
     scopeId,
+    isCancelled,
     findScopeMessages,
     findResult,
     settleScope,
     recalculateDateRegion,
     recalculatePartnerFromDate,
-    parseAndSaveMessage
+    parseAndSaveMessage,
+    cancelMessage,
+    restoreMessage
   });
 })(typeof window !== 'undefined' ? window : globalThis);
