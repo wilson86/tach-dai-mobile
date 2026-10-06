@@ -9,7 +9,7 @@ const sandbox = { globalThis: {} };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const O = sandbox.globalThis.KTS_SETTLEMENT_OBSERVATION;
-assert.strictEqual(O.version, 'settlement-observation-v3-regression-gate');
+assert.strictEqual(O.version, 'settlement-observation-v4-candidate-review-gate');
 
 function scope(date, region, comparison, extra) {
   return Object.assign({
@@ -39,6 +39,7 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(s.counts.exact, 5);
   assert.strictEqual(s.exact_days, 3);
   assert.strictEqual(s.regression_gate.enabled, false);
+  assert.strictEqual(s.candidate_gate.enabled, false);
   assert.strictEqual(s.promotion_ready, true);
   assert.deepStrictEqual(Array.from(s.blockers), []);
 }
@@ -165,8 +166,38 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(s.promotion_ready, true);
 }
 
+// An unexplained historical mismatch candidate blocks promotion until it is reviewed.
+{
+  const rows = [scope('2026-10-01', 'mn', 'MATCH_EXACT')];
+  const s = O.buildObservation(rows, {
+    required_observation_days: 1,
+    regression_summary: { total: 1, passed: 1, failed: 0 },
+    candidate_summary: { pending: 1, promoted: 0, dismissed: 0 }
+  });
+  assert.strictEqual(s.all_scopes_exact, true);
+  assert.strictEqual(s.candidate_gate.enabled, true);
+  assert.strictEqual(s.candidate_gate.met, false);
+  assert.strictEqual(s.candidate_gate.pending, 1);
+  assert.strictEqual(s.promotion_ready, false);
+  assert(s.blockers.includes('REGRESSION_CANDIDATE_PENDING:1'));
+}
+
+// Reviewed candidates no longer block; promoted cases are then governed by regression replay.
+{
+  const rows = [scope('2026-10-01', 'mn', 'MATCH_EXACT')];
+  const s = O.buildObservation(rows, {
+    required_observation_days: 1,
+    regression_summary: { total: 1, passed: 1, failed: 0 },
+    candidate_summary: { pending: 0, promoted: 1, dismissed: 1 }
+  });
+  assert.strictEqual(s.candidate_gate.enabled, true);
+  assert.strictEqual(s.candidate_gate.met, true);
+  assert.strictEqual(s.promotion_ready, true);
+}
+
 assert.throws(() => O.buildObservation([], { from_date: '2026-10-03', to_date: '2026-10-01' }), /DATE_RANGE/);
 assert.throws(() => O.buildObservation([], { required_observation_days: -1 }), /REQUIRED_OBSERVATION_DAYS/);
 assert.throws(() => O.buildObservation([], { regression_summary: { total: 1, passed: 1, failed: 1 } }), /INVALID_REGRESSION_SUMMARY/);
+assert.throws(() => O.buildObservation([], { candidate_summary: { pending: -1 } }), /INVALID_REGRESSION_CANDIDATE_SUMMARY/);
 
 console.log('settlement-observation-tests: PASS');
