@@ -24,7 +24,7 @@ const event = {
     }]
   },
   local_snapshot: {
-    engine_version: 'settlement-test',
+    engine_version: 'settlement-old-v1',
     settlement_result: { final_net: -4430.12 },
     category_rows: [{ code: 'DAT', xac: 72, qua_co: 55.72, payout: 3000 }],
     messages: [
@@ -47,9 +47,9 @@ const event = {
 
 const candidate = {
   id: 'candidate:ev1', source_event_id: 'ev1', state: 'pending',
-  case: { partner_role: 'customer', scope: { partner_id: 'p1', business_date: '2026-09-22', region: 'mn' } }
+  case: { partner_role: 'customer', engine_version: 'settlement-old-v1', scope: { partner_id: 'p1', business_date: '2026-09-22', region: 'mn' } }
 };
-const state = { candidates: [candidate] };
+const state = { candidates: [candidate], replayMode: 'exact' };
 const candidatesApi = {
   STATES: { PENDING: 'pending' },
   async listCandidates() { return JSON.parse(JSON.stringify(state.candidates)); }
@@ -64,15 +64,50 @@ const store = {
   STORES: { partners: 'partners' },
   async get(name, id) { return name === 'partners' && id === 'p1' ? { id: 'p1', name: 'Hiền', role: 'customer' } : null; }
 };
+const regression = {
+  replayCase() {
+    if (state.replayMode === 'error') throw new Error('CURRENT_REPLAY_FAILED');
+    if (state.replayMode === 'mismatch') {
+      return {
+        pass: false,
+        settlement: { engine_version: 'settlement-current-v2', settlement_result: { final_net: -4430.62 } },
+        comparison: {
+          status: 'MISMATCH', safe_to_promote: false,
+          totals: { final_net: { status: 'MISMATCH', local: -4430.62, reference: -4431.12, delta: 0.5 } },
+          categories: [{ code: 'DAT', status: 'MISMATCH', fields: { payout: { status: 'MISMATCH', local: 2999, reference: 3000, delta: -1 } } }]
+        }
+      };
+    }
+    return {
+      pass: true,
+      settlement: { engine_version: 'settlement-current-v2', settlement_result: { final_net: -4431.12 } },
+      comparison: {
+        status: 'MATCH_EXACT', safe_to_promote: true,
+        totals: {
+          total_xac: { status: 'MATCH_EXACT', local: 288, reference: 288, delta: 0 },
+          total_qua_co: { status: 'MATCH_EXACT', local: 218.88, reference: 218.88, delta: 0 },
+          final_net: { status: 'MATCH_EXACT', local: -4431.12, reference: -4431.12, delta: 0 }
+        },
+        categories: [{ code: 'DAT', status: 'MATCH_EXACT', fields: { qua_co: { status: 'MATCH_EXACT', local: 54.72, reference: 54.72, delta: 0 } } }]
+      }
+    };
+  }
+};
 
-const ctx = { console, globalThis: null, KTS_SETTLEMENT_REGRESSION_CANDIDATES: candidatesApi, KTS_SETTLEMENT_SHADOW_RUNTIME: runtime, KTS_SETTLEMENT_STORE: store };
+const ctx = {
+  console, globalThis: null,
+  KTS_SETTLEMENT_REGRESSION_CANDIDATES: candidatesApi,
+  KTS_SETTLEMENT_SHADOW_RUNTIME: runtime,
+  KTS_SETTLEMENT_STORE: store,
+  KTS_SETTLEMENT_REGRESSION_CASES: regression
+};
 ctx.globalThis = ctx;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/settlement-repair-workflow.js', 'utf8'), ctx, { filename: 'settlement-repair-workflow.js' });
 const W = ctx.KTS_SETTLEMENT_REPAIR_WORKFLOW;
 
 (async () => {
-  assert.strictEqual(W.version, 'settlement-repair-workflow-v1');
+  assert.strictEqual(W.version, 'settlement-repair-workflow-v2-current-replay');
   const issues = W.issueRowsFromEvent(event);
   assert.strictEqual(issues.length, 3);
   assert(issues.some(x => x.kind === 'category' && x.code === 'DAT' && x.field === 'qua_co'));
@@ -89,20 +124,48 @@ const W = ctx.KTS_SETTLEMENT_REPAIR_WORKFLOW;
   assert(hints.some(x => x.includes('commission_type')));
 
   const packet = W.buildRepairPacket(candidate, event, { id: 'p1', name: 'Hiền', role: 'customer' });
-  assert.strictEqual(packet.format, 'kts-shadow-repair-packet-v1');
+  assert.strictEqual(packet.format, 'kts-shadow-repair-packet-v2-current-replay');
   assert.strictEqual(packet.partner.name, 'Hiền');
   assert.strictEqual(packet.config_summary.version, 4);
   assert.strictEqual(packet.config_summary.relevant_pricing.DAT.win, '750');
   assert.strictEqual(packet.result_summary.verification_status, 'verified');
   assert.deepStrictEqual(Array.from(packet.issue_codes), ['DAT']);
   assert.strictEqual(packet.messages.length, 1);
+  assert.strictEqual(packet.current_replay, null);
+
+  const exactAssessment = W.replayCurrent(candidate, event, regression);
+  assert.strictEqual(exactAssessment.basis, 'CAPTURED_CANONICAL');
+  assert.strictEqual(exactAssessment.status, 'MATCH_EXACT');
+  assert.strictEqual(exactAssessment.pass, true);
+  assert.strictEqual(exactAssessment.original_issue_count, 3);
+  assert.strictEqual(exactAssessment.current_issue_count, 0);
+  assert.strictEqual(exactAssessment.resolved_issue_keys.length, 3);
+  assert.strictEqual(exactAssessment.current_engine_version, 'settlement-current-v2');
+  assert.strictEqual(exactAssessment.current_final_delta, 0);
 
   const loaded = await W.loadCandidatePacket(candidate);
   assert.strictEqual(loaded.source_event_id, 'ev1');
+  assert.strictEqual(loaded.current_replay.status, 'MATCH_EXACT');
   const group = await W.loadGroup(['candidate:ev1']);
+  assert.strictEqual(group.format, 'kts-shadow-repair-group-v2-current-replay');
   assert.strictEqual(group.total, 1);
   assert.strictEqual(group.loaded, 1);
   assert.strictEqual(group.errors.length, 0);
+  assert.strictEqual(group.packets[0].current_replay.pass, true);
+
+  state.replayMode = 'mismatch';
+  const stillWrong = await W.loadCandidatePacket(candidate);
+  assert.strictEqual(stillWrong.current_replay.status, 'MISMATCH');
+  assert.strictEqual(stillWrong.current_replay.current_issue_count, 2);
+  assert(stillWrong.current_replay.remaining_issue_keys.includes('total::final_net'));
+  assert(stillWrong.current_replay.new_issue_keys.includes('category:DAT:payout'));
+  assert.strictEqual(stillWrong.current_replay.current_final_delta, 0.5);
+
+  state.replayMode = 'error';
+  const replayError = await W.loadCandidatePacket(candidate);
+  assert.strictEqual(replayError.current_replay.status, 'REPLAY_ERROR');
+  assert.match(replayError.current_replay.error, /CURRENT_REPLAY_FAILED/);
+  assert.strictEqual(replayError.current_replay.pass, false);
 
   await assert.rejects(() => W.loadGroup(['missing']), /REPAIR_GROUP_EMPTY/);
   const missingEvent = JSON.parse(JSON.stringify(candidate));
