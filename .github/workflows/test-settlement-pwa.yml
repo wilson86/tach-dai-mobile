@@ -147,6 +147,18 @@ jobs:
       - name: Settlement portable handoff wiring tests
         run: node tests/settlement-preproduction-handoff-wiring-tests.js
 
+      - name: Settlement independent offline handoff verifier tests
+        run: node tests/settlement-preproduction-offline-verifier-tests.js
+
+      - name: Settlement independent offline handoff verifier wiring tests
+        run: node tests/settlement-preproduction-offline-verifier-wiring-tests.js
+
+      - name: Settlement technical release-candidate tests
+        run: node tests/settlement-preproduction-candidate-tests.js
+
+      - name: Settlement technical release-candidate wiring tests
+        run: node tests/settlement-preproduction-candidate-wiring-tests.js
+
       - name: Settlement final pre-production boundary tests
         run: node tests/settlement-preproduction-boundary-tests.js
 
