@@ -31,7 +31,7 @@ const report = R.buildDailyPartnerReport({
         { station: 'tg', numbers: '74', selector: 'duoi', points: 1 }
       ],
       result_snapshot: { total_xac: 22, total_qua_co: 16.72, total_payout: 300, refund_amount: 0, final_net: -283.28 },
-      comparison_status: 'match'
+      comparison_status: 'MATCH_EXACT'
     },
     {
       id: 's2', partner_id: 'hien', message_id: 'm2', business_date: '2026-10-04', region: 'mn',
@@ -42,7 +42,7 @@ const report = R.buildDailyPartnerReport({
         { station: 'tg', numbers: '32-75', selector: 'dat', points: 1.5 }
       ],
       result_snapshot: { total_xac: 36, total_qua_co: 27.36, total_payout: 1125, refund_amount: 0, final_net: -1097.64 },
-      comparison_status: 'unverified'
+      comparison_status: 'MATCH_EXACT'
     }
   ]
 });
@@ -51,6 +51,7 @@ assert.strictEqual(report.partner.name, 'Hiền');
 assert.strictEqual(report.regions.length, 1);
 assert.strictEqual(report.regions[0].region, 'mn');
 assert.deepStrictEqual(Array.from(report.categories, x => x.code), ['2CB', '2CD', 'DAT']);
+assert.strictEqual(report.categories[0].label, '2C lô');
 assert.strictEqual(report.messages.length, 2);
 assert.strictEqual(report.messages[0].detail_rows.length, 3);
 assert.strictEqual(report.totals.xac, 58);
@@ -58,5 +59,50 @@ assert(Math.abs(report.totals.qua_co - 44.08) < 1e-9);
 assert.strictEqual(report.totals.payout, 1425);
 assert(Math.abs(report.totals.final_net - (-1380.92)) < 1e-9);
 assert.strictEqual(report.totals.direction, 'BU');
+assert.strictEqual(report.shadow_status, 'MATCH_EXACT');
+assert.strictEqual(report.regions[0].shadow_status, 'MATCH_EXACT');
+
+const ops = R.buildDailyOperationsReport({
+  business_date: '2026-10-04',
+  partners: [
+    { id: 'hien', name: 'Hiền', role: 'customer' },
+    { id: 'truc', name: 'Trúc', role: 'owner' },
+    { id: 'thai', name: 'Thái', role: 'owner' }
+  ],
+  messages: [
+    { id: 'h1', partner_id: 'hien', business_date: '2026-10-04', region: 'mn', raw_text: 'tg 75 b 1n' },
+    { id: 't1', partner_id: 'truc', business_date: '2026-10-04', region: 'mb', raw_text: '92 b 1n' },
+    { id: 'a1', partner_id: 'thai', business_date: '2026-10-04', region: 'mb', raw_text: '61 b 1n' }
+  ],
+  settlements: [
+    {
+      id:'scope:hien', partner_id:'hien', business_date:'2026-10-04', region:'mn', message_ids:['h1'],
+      scope_status:'complete_unverified', comparison_status:'MATCH_EXACT', category_rows:[{code:'2CB',xac:18,qua_co:13.68,hit_units:1,payout:75}],
+      result_snapshot:{total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32}
+    },
+    {
+      id:'scope:truc', partner_id:'truc', business_date:'2026-10-04', region:'mb', message_ids:['t1'],
+      scope_status:'complete_unverified', comparison_status:'MISMATCH', category_rows:[{code:'2CB',xac:27,qua_co:20.52,hit_units:1,payout:70}],
+      result_snapshot:{total_xac:27,total_qua_co:20.52,total_payout:70,refund_amount:0,final_net:49.48}
+    },
+    {
+      id:'scope:thai', partner_id:'thai', business_date:'2026-10-04', region:'mb', message_ids:['a1'],
+      scope_status:'blocked', comparison_status:'blocked', blocked_reasons:['PENDING_PARSER:a1'], category_rows:[],
+      result_snapshot:{total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0}
+    }
+  ]
+});
+
+assert.strictEqual(ops.status, 'BLOCKED', 'blocked outranks mismatch in daily operator status');
+assert.strictEqual(ops.counts.partners, 3);
+assert.strictEqual(ops.counts.exact, 1);
+assert.strictEqual(ops.counts.mismatch, 1);
+assert.strictEqual(ops.counts.blocked, 1);
+assert.strictEqual(ops.totals.xac, 45);
+assert(Math.abs(ops.totals.final_net - (-11.84)) < 1e-9);
+assert.strictEqual(ops.exact_totals.xac, 18, 'exact totals must exclude mismatch/blocked scopes');
+assert(Math.abs(ops.exact_totals.final_net - (-61.32)) < 1e-9);
+assert.deepStrictEqual(Array.from(ops.partners, x => x.partner.name), ['Hiền','Thái','Trúc']);
+assert.strictEqual(R.categoryLabel('MB_XIEN3'), 'Xiên 3');
 
 console.log('settlement-report-tests: PASS');
