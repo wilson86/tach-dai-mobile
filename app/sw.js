@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.26-shadow-refresh';
+const CACHE='kts-tach-unified-v1.0.27-attention-diagnostics';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
