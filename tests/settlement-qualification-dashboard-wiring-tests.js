@@ -20,5 +20,5 @@ assert(!q.includes('saveConfig('));
 assert(!q.includes('confirmAndPin('));
 assert(!q.includes('dismissCandidate('));
 assert(sw.includes("'./settlement-qualification-dashboard.js'"));
-assert(sw.includes('v1.0.48-qualification-evidence-bridge'));
+assert(sw.includes('v1.0.49-qualification-evidence-safe'));
 console.log('settlement-qualification-dashboard-wiring-tests: PASS');
