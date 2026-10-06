@@ -12,23 +12,21 @@
     if(finalEl){finalEl.textContent='Gate đã chạy nhưng KHÔNG LƯU được evidence SHA-256: '+message+'. Chưa dùng kết quả này làm bằng chứng qualification.';finalEl.className='status err';}
     if(typeof global.dispatchEvent==='function'&&typeof global.CustomEvent==='function')global.dispatchEvent(new global.CustomEvent('kts:qualification-evidence-error',{detail:{error:message}}));
   }
-  function loadPreproductionPackage(){
-    const doc=global.document;
-    if(!doc||global.KTS_SETTLEMENT_PREPRODUCTION_PACKAGE||doc.querySelector('script[data-kts-preproduction-package]'))return;
-    const script=doc.createElement('script');
-    script.src='./settlement-preproduction-package.js';
-    script.async=false;
-    script.setAttribute('data-kts-preproduction-package','1');
-    (doc.body||doc.head||doc.documentElement).appendChild(script);
+  function appendScript(src,attr,onload){
+    const doc=global.document;if(!doc||doc.querySelector('script['+attr+']'))return;
+    const script=doc.createElement('script');script.src=src;script.async=false;script.setAttribute(attr,'1');if(onload)script.addEventListener('load',onload,{once:true});(doc.body||doc.head||doc.documentElement).appendChild(script);
+  }
+  function loadPreproductionReviewHistory(){
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_HISTORY)return;
+    appendScript('./settlement-preproduction-review-history.js','data-kts-preproduction-review-history');
   }
   function loadPreproductionReview(){
-    const doc=global.document;
-    if(!doc||global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW||doc.querySelector('script[data-kts-preproduction-review]'))return;
-    const script=doc.createElement('script');
-    script.src='./settlement-preproduction-review.js';
-    script.async=false;
-    script.setAttribute('data-kts-preproduction-review','1');
-    (doc.body||doc.head||doc.documentElement).appendChild(script);
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW){loadPreproductionReviewHistory();return;}
+    appendScript('./settlement-preproduction-review.js','data-kts-preproduction-review',loadPreproductionReviewHistory);
+  }
+  function loadPreproductionPackage(){
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_PACKAGE){loadPreproductionReview();return;}
+    appendScript('./settlement-preproduction-package.js','data-kts-preproduction-package',loadPreproductionReview);
   }
   if(typeof global.addEventListener==='function'){
     global.addEventListener('kts:qualification-completed',event=>{
@@ -43,5 +41,4 @@
     });
   }
   loadPreproductionPackage();
-  loadPreproductionReview();
 })(typeof window!=='undefined'?window:globalThis);
