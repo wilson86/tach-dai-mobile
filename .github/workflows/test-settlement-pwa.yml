@@ -93,6 +93,9 @@ jobs:
       - name: Settlement repair readiness queue tests
         run: node tests/settlement-repair-readiness-tests.js
 
+      - name: Settlement repair readiness wiring tests
+        run: node tests/settlement-repair-readiness-wiring-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
