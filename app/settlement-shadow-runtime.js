@@ -43,7 +43,7 @@
     return normalized;
   }
 
-  function localEvidence(settlement) {
+  function localEvidence(settlement, messages) {
     const result = settlement && (settlement.settlement_result || settlement.result_snapshot) || null;
     const lottery = settlement && settlement.lottery_result_snapshot || null;
     const config = settlement && settlement.config_snapshot || null;
@@ -51,17 +51,38 @@
       settlement_result: clone(result),
       category_rows: clone(settlement && settlement.category_rows || []),
       message_ids: clone(settlement && settlement.message_ids || []),
+      messages: clone(messages || []),
       engine_version: String(settlement && settlement.engine_version || ''),
       config_version: config && config.version != null ? Number(config.version) : null,
       config_effective_from_date: config && config.effective_from_date ? String(config.effective_from_date) : null,
+      config_snapshot: clone(config),
       result_fingerprint: lottery && lottery.fingerprint ? String(lottery.fingerprint) : null,
       result_verification_status: lottery && lottery.verification_status ? String(lottery.verification_status) : null,
+      lottery_result_snapshot: clone(lottery),
       scope_status: String(settlement && settlement.scope_status || '')
     };
   }
 
+  async function loadMessageEvidence(store, settlement) {
+    if (!store || !store.STORES || !store.STORES.messages || typeof store.get !== 'function') return [];
+    const ids = Array.isArray(settlement && settlement.message_ids)
+      ? settlement.message_ids.map(String)
+      : settlement && settlement.message_id ? [String(settlement.message_id)] : [];
+    const rows = await Promise.all(ids.map(id => store.get(store.STORES.messages, id).catch(() => null)));
+    return rows.filter(Boolean).map(message => ({
+      id: String(message.id || ''),
+      raw_text: String(message.raw_text || ''),
+      region: String(message.region || ''),
+      status: String(message.status || ''),
+      canonical_version: message.canonical_version == null ? null : String(message.canonical_version),
+      canonical_payload: clone(message.canonical_payload || null),
+      parser_error: message.parser_error == null ? null : String(message.parser_error)
+    }));
+  }
+
   async function saveEvidence(store, settlement, reference, comparison, input) {
     if (!store || typeof store.saveShadowEvent !== 'function') return null;
+    const messages = await loadMessageEvidence(store, settlement);
     return store.saveShadowEvent({
       scope_id: settlement.id,
       partner_id: settlement.partner_id,
@@ -69,7 +90,7 @@
       region: settlement.region,
       trigger: String(input && input.trigger || 'MANUAL_COMPARE').toUpperCase(),
       reason: input && input.reason != null ? String(input.reason) : null,
-      local_snapshot: localEvidence(settlement),
+      local_snapshot: localEvidence(settlement, messages),
       reference_snapshot: clone(reference),
       comparison: clone(comparison),
       comparison_status: comparison.status
@@ -145,14 +166,52 @@
       .sort((a, b) => String(a.observed_at || '').localeCompare(String(b.observed_at || '')));
   }
 
+  function buildReplayCase(event) {
+    if (!event || !event.scope_id) throw new Error('SHADOW_EVIDENCE_REQUIRED');
+    const local = event.local_snapshot || {};
+    return {
+      format: 'kts-shadow-replay-case-v1',
+      scope: {
+        scope_id: String(event.scope_id),
+        partner_id: String(event.partner_id || ''),
+        business_date: String(event.business_date || ''),
+        region: String(event.region || '').toLowerCase()
+      },
+      captured_at: event.observed_at || null,
+      trigger: event.trigger || null,
+      engine_version: local.engine_version || null,
+      config_snapshot: clone(local.config_snapshot || null),
+      lottery_result_snapshot: clone(local.lottery_result_snapshot || null),
+      messages: clone(local.messages || []),
+      expected_reference: clone(event.reference_snapshot || null),
+      expected_comparison_status: String(event.comparison_status || event.comparison && event.comparison.status || 'UNVERIFIED'),
+      expected_comparison: clone(event.comparison || null),
+      observed_settlement_result: clone(local.settlement_result || null),
+      observed_category_rows: clone(local.category_rows || [])
+    };
+  }
+
+  async function getReplayCase(input) {
+    const history = await getHistory(input);
+    if (!history.length) throw new Error('SHADOW_EVIDENCE_NOT_FOUND');
+    const target = input && input.event_id
+      ? history.find(row => String(row.id) === String(input.event_id))
+      : history[history.length - 1];
+    if (!target) throw new Error('SHADOW_EVIDENCE_NOT_FOUND');
+    return buildReplayCase(target);
+  }
+
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v3-evidence-history',
+    version: 'settlement-shadow-runtime-v4-replay-evidence',
     scopeId,
     normalizeReference,
     localEvidence,
+    loadMessageEvidence,
     compareAndSave,
     getComparison,
     getDiagnostics,
-    getHistory
+    getHistory,
+    buildReplayCase,
+    getReplayCase
   });
 })(typeof window !== 'undefined' ? window : globalThis);
