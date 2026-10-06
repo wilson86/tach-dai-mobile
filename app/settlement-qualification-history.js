@@ -4,8 +4,9 @@
   const META_KEY = 'qualification_history_v1';
   const FORMAT = 'kts-qualification-evidence-v1';
   const READY = 'READY_FOR_PRODUCTION_REVIEW';
-  const COMPONENTS = Object.freeze(['runtime','messages','settlements','results','configs','regression_cases','candidates','qualification']);
+  const COMPONENTS = Object.freeze(['runtime','parser_backend','messages','settlements','results','configs','regression_cases','candidates','qualification']);
   const GIT_BLOB_RE = /^[0-9a-f]{40}$/i;
+  const SHA256_RE = /^[0-9a-f]{64}$/i;
 
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
@@ -26,9 +27,10 @@
     const qualification = global.KTS_SETTLEMENT_QUALIFICATION;
     const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
     const candidates = global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    const parserProvider = global.KTS_SETTLEMENT_PARSER_PROVIDER;
     const buildIdentity = validateBuildIdentity(global.KTS_SETTLEMENT_BUILD_IDENTITY);
-    if (!store || !qualification || !regression || !candidates) throw new Error('QUALIFICATION_HISTORY_DEPENDENCY_MISSING');
-    return { store, qualification, regression, candidates, buildIdentity };
+    if (!store || !qualification || !regression || !candidates || !parserProvider || typeof parserProvider.fetchIdentity !== 'function') throw new Error('QUALIFICATION_HISTORY_DEPENDENCY_MISSING');
+    return { store, qualification, regression, candidates, parserProvider, buildIdentity };
   }
   function stable(value) {
     const store = global.KTS_SETTLEMENT_STORE;
@@ -54,6 +56,39 @@
   }
   function semanticConfig(c) {
     return { id:c.id, partner_id:c.partner_id, version:c.version, effective_from_date:c.effective_from_date, region_pricing:clone(c.region_pricing||{}), dat_hit_mode:c.dat_hit_mode, dax_hit_mode:c.dax_hit_mode, mb_xien_234:Boolean(c.mb_xien_234), tinh_ui:Boolean(c.tinh_ui), total_percent:String(c.total_percent==null?'100':c.total_percent), refund_percent:String(c.refund_percent==null?'0':c.refund_percent), commission_type:c.commission_type };
+  }
+  function semanticParserBackendIdentity(value) {
+    const input = value && value.identities ? value : null;
+    if (!input || String(input.identity_contract || '') !== 'kts-parser-identity-v1') return null;
+    const normalize = x => {
+      if (!x || !SHA256_RE.test(String(x.identity_sha256 || ''))) return null;
+      return {
+        parser_version:String(x.parser_version || ''),
+        identity_sha256:String(x.identity_sha256).toLowerCase(),
+        parser_source_sha256:x.parser_source_sha256==null?null:String(x.parser_source_sha256).toLowerCase(),
+        grammar_sha256:x.grammar_sha256==null?null:String(x.grammar_sha256).toLowerCase(),
+        business_engine_sha256:x.business_engine_sha256==null?null:String(x.business_engine_sha256).toLowerCase()
+      };
+    };
+    const mb=normalize(input.identities.mb), mnMt=normalize(input.identities.mn_mt);
+    if (!mb || !mnMt) return null;
+    return { api_version:String(input.api_version || ''), identity_contract:'kts-parser-identity-v1', identities:{mb,mn_mt:mnMt} };
+  }
+  function parserBackendFromQualification(q) {
+    const gate=q&&q.parser_backend;
+    const identity=semanticParserBackendIdentity(gate&&gate.live_identity);
+    if (gate&&gate.met===true&&identity) return {status:'available',identity};
+    return {status:'unavailable',error:String(gate&&gate.error||'PARSER_BACKEND_NOT_VERIFIED')};
+  }
+  async function currentParserBackendMaterial(parserProvider) {
+    try {
+      const live=await parserProvider.fetchIdentity();
+      const identity=semanticParserBackendIdentity(live);
+      if (!identity) return {status:'unavailable',error:'PARSER_BACKEND_IDENTITY_INVALID'};
+      return {status:'available',identity};
+    } catch (error) {
+      return {status:'unavailable',error:String(error&&error.message||error||'PARSER_BACKEND_IDENTITY_UNAVAILABLE')};
+    }
   }
   function qualificationCore(q) {
     const copy = clone(q || {});
@@ -94,7 +129,7 @@
     }
     return sortById(out.filter((x,i,a)=>a.findIndex(y=>String(y.id)===String(x.id))===i));
   }
-  async function collectMaterial(qualificationSnapshot, options) {
+  async function collectMaterial(qualificationSnapshot, options, materialOptions) {
     const d = deps();
     const [messagesAll, settlementsAll, resultsAll, configsAll, pinned, candidateRows] = await Promise.all([
       d.store.getAll(d.store.STORES.messages), d.store.getAll(d.store.STORES.settlements),
@@ -107,8 +142,11 @@
     const dateRegions = new Set(activeMessages.map(m=>`${m.business_date}:${String(m.region||'').toLowerCase()}`));
     const results = resultsAll.filter(r=>dateRegions.has(`${r.business_date}:${String(r.region||'').toLowerCase()}`)).map(semanticResult);
     const configs = relevantConfigs(configsAll,activeMessages,options).map(semanticConfig);
+    const parserBackend = materialOptions&&materialOptions.probe_parser_backend
+      ? await currentParserBackendMaterial(d.parserProvider)
+      : parserBackendFromQualification(qualificationSnapshot);
     return {
-      runtime:runtimeSignature(),
+      runtime:runtimeSignature(), parser_backend:parserBackend,
       messages:sortById(activeMessages), settlements:sortById(settlements), results:sortById(results), configs:sortById(configs),
       regression_cases:sortById((pinned||[]).map(clone)), candidates:sortById((candidateRows||[]).map(c=>({ id:c.id, source_event_id:c.source_event_id, state:c.state, confirmation_note:c.confirmation_note||'', dismiss_reason:c.dismiss_reason||'', case:clone(c.case) }))),
       qualification:qualificationCore(qualificationSnapshot)
@@ -120,11 +158,21 @@
     return out;
   }
   async function overallFingerprint(options, components) {
-    return sha256Hex({ format:'kts-qualification-input-v1', options:{ from_date:String(options&&options.from_date||''), to_date:String(options&&options.to_date||''), required_observation_days:String(options&&options.required_observation_days||''), partner_id:String(options&&options.partner_id||''), regions:Array.isArray(options&&options.regions)?options.regions.slice().sort():[] }, components });
+    return sha256Hex({ format:'kts-qualification-input-v2-live-parser', options:{ from_date:String(options&&options.from_date||''), to_date:String(options&&options.to_date||''), required_observation_days:String(options&&options.required_observation_days||''), partner_id:String(options&&options.partner_id||''), regions:Array.isArray(options&&options.regions)?options.regions.slice().sort():[] }, components });
   }
   function changedComponents(previous, current) {
     if (!previous) return COMPONENTS.slice();
     return COMPONENTS.filter(name=>String(previous[name]||'')!==String(current[name]||''));
+  }
+  function classifyReadyValidity(lastReady, components, fingerprint, parserBackend) {
+    if (!lastReady) return {status:'NO_READY_EVIDENCE',current:false,changed_components:[]};
+    const changed=changedComponents(lastReady.component_fingerprints,components);
+    if (!parserBackend || parserBackend.status!=='available') {
+      if (!changed.includes('parser_backend')) changed.unshift('parser_backend');
+      return {status:'READY_EVIDENCE_UNVERIFIABLE',current:false,changed_components:changed,parser_backend_error:String(parserBackend&&parserBackend.error||'PARSER_BACKEND_IDENTITY_UNAVAILABLE')};
+    }
+    const current=String(fingerprint)===String(lastReady.input_fingerprint_sha256||'');
+    return {status:current?'READY_EVIDENCE_CURRENT':'READY_EVIDENCE_STALE',current,changed_components:changed,parser_backend_error:null};
   }
   async function readRow() {
     const {store}=deps();
@@ -169,7 +217,8 @@
   }
   async function recordQualification(qualificationSnapshot, options) {
     if (!qualificationSnapshot || typeof qualificationSnapshot!=='object') throw new Error('QUALIFICATION_SNAPSHOT_REQUIRED');
-    const material=await collectMaterial(qualificationSnapshot,options||{});
+    const material=await collectMaterial(qualificationSnapshot,options||{},{probe_parser_backend:false});
+    if (qualificationSnapshot.ready_for_production_review===true && material.parser_backend.status!=='available') throw new Error('QUALIFICATION_READY_WITHOUT_PARSER_BACKEND_EVIDENCE');
     const components=await componentFingerprints(material);
     const fingerprint=await overallFingerprint(options||{},components);
     const row=await readRow();
@@ -187,31 +236,32 @@
     const lastReady=[...events].reverse().find(x=>x.ready_for_production_review===true);
     if (!lastReady) return { status:'NO_READY_EVIDENCE', current:false, changed_components:[], ready_event:null };
     const options={from_date:lastReady.from_date,to_date:lastReady.to_date,required_observation_days:lastReady.required_observation_days};
-    const material=await collectMaterial(lastReady.qualification_snapshot,options);
+    const material=await collectMaterial(lastReady.qualification_snapshot,options,{probe_parser_backend:true});
     const components=await componentFingerprints(material);
     const fingerprint=await overallFingerprint(options,components);
-    const changed=changedComponents(lastReady.component_fingerprints,components);
-    return { status:fingerprint===lastReady.input_fingerprint_sha256?'READY_EVIDENCE_CURRENT':'READY_EVIDENCE_STALE', current:fingerprint===lastReady.input_fingerprint_sha256, changed_components:changed, ready_event:clone(lastReady), current_fingerprint_sha256:fingerprint };
+    const verdict=classifyReadyValidity(lastReady,components,fingerprint,material.parser_backend);
+    return Object.assign({},verdict,{ready_event:clone(lastReady),current_fingerprint_sha256:fingerprint,current_parser_backend:clone(material.parser_backend)});
   }
 
   function installUi() {
     const doc=global.document,pane=doc&&doc.getElementById('pane-report');
     if(!pane||doc.getElementById('qualificationHistoryPanel'))return;
     const card=doc.createElement('div');card.className='card';card.id='qualificationHistoryPanel';
-    card.innerHTML=`<div class="section-title">Lịch sử qualification · evidence bất biến</div><div class="hint">Mỗi lần chạy gate cuối được append thành một mốc riêng với SHA-256 theo component. Runtime fingerprint gắn với manifest Git blob của các file settlement/KQXS trọng yếu; sửa code mà quên cập nhật identity sẽ bị CI chặn. READY cũ không bị xóa.</div><div class="row" style="margin-top:8px"><button id="qualificationHistoryRefresh" class="btn soft">Nạp lịch sử</button><button id="qualificationHistoryCheck" class="btn soft">Kiểm hiệu lực READY gần nhất</button></div><div id="qualificationHistoryStatus" class="status"></div><div id="qualificationHistoryOutput" class="hint"></div>`;
+    card.innerHTML=`<div class="section-title">Lịch sử qualification · evidence bất biến</div><div class="hint">Mỗi lần chạy gate cuối được append thành một mốc riêng với SHA-256 theo component. Runtime fingerprint gắn với manifest Git blob của các file settlement/KQXS trọng yếu và identity parser backend đang online. READY cũ không bị xóa; backend parser đổi hoặc không kiểm chứng được sẽ làm READY fail-closed.</div><div class="row" style="margin-top:8px"><button id="qualificationHistoryRefresh" class="btn soft">Nạp lịch sử</button><button id="qualificationHistoryCheck" class="btn soft">Kiểm hiệu lực READY gần nhất</button></div><div id="qualificationHistoryStatus" class="status"></div><div id="qualificationHistoryOutput" class="hint"></div>`;
     const anchor=doc.getElementById('finalQualificationPanel');pane.insertBefore(card,anchor&&anchor.nextSibling||pane.firstChild);
     function status(text,kind){const el=doc.getElementById('qualificationHistoryStatus');el.textContent=text||'';el.className='status '+(kind||'');}
     async function render(){const events=await listEvents(),host=doc.getElementById('qualificationHistoryOutput');if(!events.length){host.innerHTML='<div class="hint">Chưa có mốc qualification nào được lưu.</div>';return events;}const rows=[...events].reverse().slice(0,20);host.innerHTML=rows.map(e=>`<div class="report-message"><div><span class="tag ${e.ready_for_production_review?'ok':'warn'}">${esc(e.qualification_state)}</span> <b>${esc(e.observed_at)}</b></div><div class="hint">${esc(e.from_date||'—')} → ${esc(e.to_date||'—')} · SHA ${esc(String(e.input_fingerprint_sha256||'').slice(0,16))}…</div><div class="hint">đổi từ lần trước: ${esc((e.changed_components_from_previous||[]).join(', ')||'không')} ${e.invalidates_previous_ready?'· READY cũ MẤT HIỆU LỰC':''}${e.requalifies_after_change?'· đã RE-QUALIFY':''}</div></div>`).join('');status(`${events.length} mốc qualification được giữ append-only trên thiết bị.`,'ok');return events;}
     doc.getElementById('qualificationHistoryRefresh').addEventListener('click',()=>render().catch(e=>status(String(e&&e.message||e),'err')));
-    doc.getElementById('qualificationHistoryCheck').addEventListener('click',async()=>{try{status('Đang tính lại fingerprint hiện tại so với READY gần nhất…','warn');const v=await checkLastReadyValidity();if(v.status==='NO_READY_EVIDENCE')status('Chưa có READY evidence để kiểm.','warn');else if(v.current)status('READY gần nhất vẫn CURRENT: dữ liệu + critical code identity chưa đổi.','ok');else status(`READY gần nhất đã STALE · thay đổi: ${v.changed_components.join(', ')||'unknown'}. Phải chạy qualification lại.`, 'err');}catch(e){status(String(e&&e.message||e),'err');}});
+    doc.getElementById('qualificationHistoryCheck').addEventListener('click',async()=>{try{status('Đang kiểm dữ liệu, critical code và parser backend hiện tại so với READY gần nhất…','warn');const v=await checkLastReadyValidity();if(v.status==='NO_READY_EVIDENCE')status('Chưa có READY evidence để kiểm.','warn');else if(v.status==='READY_EVIDENCE_UNVERIFIABLE')status(`READY gần nhất KHÔNG THỂ XÁC MINH · parser backend: ${v.parser_backend_error}. Không được dùng READY cũ.`, 'err');else if(v.current)status('READY gần nhất vẫn CURRENT: dữ liệu + critical code + parser backend identity chưa đổi.','ok');else status(`READY gần nhất đã STALE · thay đổi: ${v.changed_components.join(', ')||'unknown'}. Phải chạy qualification lại.`, 'err');}catch(e){status(String(e&&e.message||e),'err');}});
     if(typeof global.addEventListener==='function')global.addEventListener('kts:qualification-evidence-saved',()=>render().catch(()=>{}));
     render().catch(()=>{});
   }
 
   global.KTS_SETTLEMENT_QUALIFICATION_HISTORY=Object.freeze({
-    version:'settlement-qualification-history-v2-code-identity',META_KEY,FORMAT,COMPONENTS,
-    validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,qualificationCore,runtimeSignature,relevantConfigs,
-    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+    version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
+    validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
+    parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
+    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
