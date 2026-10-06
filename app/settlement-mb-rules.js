@@ -13,10 +13,12 @@
     '4C': 20
   });
 
+  // HIOSKT 2026-09-25 detail rows label DB trailing-2 as `dau` and all
+  // four G7 values as `duoi`. Preserve reference-app naming exactly.
   const MB_SELECTORS = Object.freeze({
     '2CB': Object.freeze(['G7:*', 'G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']),
-    '2CD_DAU': Object.freeze(['G7:*']),
-    '2CD_DUOI': Object.freeze(['DB:0']),
+    '2CD_DAU': Object.freeze(['DB:0']),
+    '2CD_DUOI': Object.freeze(['G7:*']),
     '2CD': Object.freeze(['G7:*', 'DB:0']),
     '2CB8': Object.freeze(['G6:*', 'G7:*', 'DB:0']),
     'DAT': Object.freeze(['G7:*', 'G6:*', 'G5:*', 'G4:*', 'G3:*', 'G2:*', 'G1:*', 'DB:*']),
@@ -107,7 +109,7 @@
   }
 
   global.KTS_SETTLEMENT_MB_RULES = Object.freeze({
-    version: 'mb-business-2026-10-05-straight-da-v2',
+    version: 'mb-business-2026-10-06-dd-label-fix-v3',
     MB_XAC_UNITS,
     MB_SELECTORS,
     MB_POSITION_XAC_UNITS,
