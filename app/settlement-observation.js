@@ -45,6 +45,15 @@
     return true;
   }
 
+  function normalizeRegressionSummary(value) {
+    if (!value || typeof value !== 'object') return null;
+    const total = Number(value.total || 0), passed = Number(value.passed || 0), failed = Number(value.failed || 0);
+    if (![total, passed, failed].every(Number.isInteger) || total < 0 || passed < 0 || failed < 0 || passed + failed > total) {
+      throw new Error('INVALID_REGRESSION_SUMMARY');
+    }
+    return { total, passed, failed };
+  }
+
   function normalizeOptions(options) {
     const o = options || {};
     const fromDate = o.from_date ? String(o.from_date).slice(0, 10) : '';
@@ -60,7 +69,8 @@
       to_date: toDate,
       partner_id: o.partner_id ? String(o.partner_id) : '',
       regions,
-      required_observation_days: requiredDays
+      required_observation_days: requiredDays,
+      regression_summary: normalizeRegressionSummary(o.regression_summary)
     };
   }
 
@@ -158,6 +168,8 @@
     const allExact = counts.total > 0 && counts.exact === counts.total && missingScopes.length === 0;
     const durationConfigured = o.required_observation_days > 0;
     const durationMet = durationConfigured && exactDays >= o.required_observation_days;
+    const regressionEnabled = Boolean(o.regression_summary && o.regression_summary.total > 0);
+    const regressionMet = !regressionEnabled || o.regression_summary.failed === 0;
     const blockers = [];
     if (!counts.total) blockers.push('NO_SHADOW_SCOPES');
     if (missingScopes.length) blockers.push(`MISSING_SCOPE:${missingScopes.length}`);
@@ -166,11 +178,12 @@
     if (counts.blocked) blockers.push(`BLOCKED:${counts.blocked}`);
     if (counts.provisional) blockers.push(`PROVISIONAL:${counts.provisional}`);
     if (counts.unverified) blockers.push(`UNVERIFIED:${counts.unverified}`);
+    if (regressionEnabled && !regressionMet) blockers.push(`REGRESSION_FAILED:${o.regression_summary.failed}/${o.regression_summary.total}`);
     if (!durationConfigured) blockers.push('OBSERVATION_DURATION_NOT_CONFIGURED');
     else if (!durationMet) blockers.push(`OBSERVATION_DAYS:${exactDays}/${o.required_observation_days}`);
 
     return {
-      version: 'settlement-observation-v2-active-scope-coverage',
+      version: 'settlement-observation-v3-regression-gate',
       options: clone(o),
       counts,
       coverage: {
@@ -179,13 +192,20 @@
         present_scopes: rows.length,
         missing_scopes: missingScopes
       },
+      regression_gate: {
+        enabled: regressionEnabled,
+        met: regressionMet,
+        total: o.regression_summary ? o.regression_summary.total : 0,
+        passed: o.regression_summary ? o.regression_summary.passed : 0,
+        failed: o.regression_summary ? o.regression_summary.failed : 0
+      },
       exact_days: exactDays,
       observed_days: dates.length,
       all_scopes_exact: allExact,
       zero_money_mismatch: counts.mismatch === 0 && counts.display_only === 0,
       duration_gate_configured: durationConfigured,
       duration_gate_met: durationMet,
-      promotion_ready: allExact && durationMet,
+      promotion_ready: allExact && durationMet && regressionMet,
       blockers,
       dates,
       scopes: rows
@@ -193,10 +213,11 @@
   }
 
   global.KTS_SETTLEMENT_OBSERVATION = Object.freeze({
-    version: 'settlement-observation-v2-active-scope-coverage',
+    version: 'settlement-observation-v3-regression-gate',
     STATUS,
     comparisonStatus,
     scopeKey,
+    normalizeRegressionSummary,
     messageScopeCoverage,
     buildObservation
   });
