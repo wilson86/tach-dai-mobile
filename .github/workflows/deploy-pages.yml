@@ -11,13 +11,13 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: settlement-test-pages
   cancel-in-progress: false
 
 jobs:
   deploy:
     environment:
-      name: github-pages
+      name: settlement-test-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
