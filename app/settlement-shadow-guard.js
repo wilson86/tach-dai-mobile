@@ -74,7 +74,7 @@
       }));
     }
 
-    async function reconcileOne(id, priorReference) {
+    async function reconcileOne(id, priorReference, trigger) {
       let current = await store.get(store.STORES.settlements, id);
       if (!current) return null;
       const reference = current.reference_app_snapshot || priorReference || null;
@@ -132,7 +132,11 @@
         business_date: String(current.business_date || ''),
         region: String(current.region || '').toLowerCase()
       };
-      const refreshed = await shadowRuntime.compareAndSave(Object.assign({}, scope, { reference_snapshot: reference }));
+      const refreshed = await shadowRuntime.compareAndSave(Object.assign({}, scope, {
+        reference_snapshot: reference,
+        trigger: `AUTO_${String(trigger || 'RECALCULATE').toUpperCase()}`,
+        reason: `shadow-guard:${String(trigger || 'recalculate')}`
+      }));
       return refreshed && refreshed.settlement ? refreshed.settlement : current;
     }
 
@@ -150,7 +154,7 @@
       const records = new Map();
       for (const id of ids) {
         try {
-          const row = await reconcileOne(id, priorRefs.get(id) || null);
+          const row = await reconcileOne(id, priorRefs.get(id) || null, name);
           if (row) records.set(id, row);
         } catch (error) {
           const row = await reconcileFailure(id, priorRefs.get(id) || null, error);
@@ -161,7 +165,7 @@
     }
 
     const wrapped = Object.assign({}, base, {
-      version: String(base.version || 'settlement-pipeline') + '+shadow-guard-v1',
+      version: String(base.version || 'settlement-pipeline') + '+shadow-guard-v2-evidence',
       __shadow_guarded: true,
       settleScope: (...args) => guardedCall('settleScope', args),
       recalculateDateRegion: (...args) => guardedCall('recalculateDateRegion', args),
@@ -174,7 +178,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_GUARD = Object.freeze({
-    version: 'settlement-shadow-guard-v1',
+    version: 'settlement-shadow-guard-v2-evidence',
     isConflict,
     staleReference,
     collectScopeIds,
