@@ -5,16 +5,30 @@
   const FORMAT = 'kts-qualification-evidence-v1';
   const READY = 'READY_FOR_PRODUCTION_REVIEW';
   const COMPONENTS = Object.freeze(['runtime','messages','settlements','results','configs','regression_cases','candidates','qualification']);
+  const GIT_BLOB_RE = /^[0-9a-f]{40}$/i;
 
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
+  function validateBuildIdentity(identity) {
+    if (!identity || identity.version !== 'settlement-build-identity-v1') throw new Error('QUALIFICATION_BUILD_IDENTITY_MISSING');
+    if (identity.algorithm !== 'git-blob-sha1') throw new Error('QUALIFICATION_BUILD_IDENTITY_ALGORITHM_INVALID');
+    const files = identity.critical_git_blobs;
+    if (!files || typeof files !== 'object' || Array.isArray(files)) throw new Error('QUALIFICATION_BUILD_IDENTITY_FILES_MISSING');
+    const entries = Object.entries(files);
+    if (entries.length < 15) throw new Error('QUALIFICATION_BUILD_IDENTITY_INCOMPLETE');
+    for (const [path, hash] of entries) {
+      if (!/^app\/.+\.js$/.test(String(path)) || !GIT_BLOB_RE.test(String(hash || ''))) throw new Error('QUALIFICATION_BUILD_IDENTITY_ENTRY_INVALID:' + String(path));
+    }
+    return identity;
+  }
   function deps() {
     const store = global.KTS_SETTLEMENT_STORE;
     const qualification = global.KTS_SETTLEMENT_QUALIFICATION;
     const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
     const candidates = global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    const buildIdentity = validateBuildIdentity(global.KTS_SETTLEMENT_BUILD_IDENTITY);
     if (!store || !qualification || !regression || !candidates) throw new Error('QUALIFICATION_HISTORY_DEPENDENCY_MISSING');
-    return { store, qualification, regression, candidates };
+    return { store, qualification, regression, candidates, buildIdentity };
   }
   function stable(value) {
     const store = global.KTS_SETTLEMENT_STORE;
@@ -48,18 +62,19 @@
     return copy;
   }
   function runtimeSignature() {
+    const buildIdentity = validateBuildIdentity(global.KTS_SETTLEMENT_BUILD_IDENTITY);
     const names = [
       ['engine','KTS_SETTLEMENT_ENGINE'], ['mb_rules','KTS_SETTLEMENT_MB_RULES'], ['category_map','KTS_SETTLEMENT_CATEGORY_MAP'],
       ['runtime','KTS_SETTLEMENT_RUNTIME'], ['evaluator','KTS_SETTLEMENT_EVALUATOR'], ['parser_provider','KTS_SETTLEMENT_PARSER_PROVIDER'],
       ['shadow','KTS_SETTLEMENT_SHADOW'], ['observation','KTS_SETTLEMENT_OBSERVATION'], ['regression_cases','KTS_SETTLEMENT_REGRESSION_CASES'],
       ['repair_readiness','KTS_SETTLEMENT_REPAIR_READINESS'], ['qualification','KTS_SETTLEMENT_QUALIFICATION'], ['result_service','KTS_RESULT_SERVICE']
     ];
-    const out = {};
+    const modules = {};
     for (const [key, globalName] of names) {
       const api = global[globalName];
-      out[key] = api && api.version ? String(api.version) : null;
+      modules[key] = api && api.version ? String(api.version) : null;
     }
-    return out;
+    return { build_identity:clone(buildIdentity), modules };
   }
   function sortById(rows) { return rows.slice().sort((a,b)=>String(a.id||'').localeCompare(String(b.id||''))); }
   function scopeKey(x) { return [String(x&&x.partner_id||''),String(x&&x.business_date||''),String(x&&x.region||'').toLowerCase()].join(':'); }
@@ -183,19 +198,19 @@
     const doc=global.document,pane=doc&&doc.getElementById('pane-report');
     if(!pane||doc.getElementById('qualificationHistoryPanel'))return;
     const card=doc.createElement('div');card.className='card';card.id='qualificationHistoryPanel';
-    card.innerHTML=`<div class="section-title">Lịch sử qualification · evidence bất biến</div><div class="hint">Mỗi lần chạy gate cuối được append thành một mốc riêng với SHA-256 theo component. READY cũ không bị xóa; nếu tin/config/KQXS/regression/candidate/runtime thay đổi, fingerprint mới cho biết READY trước đó đã stale hay đã được re-qualify.</div><div class="row" style="margin-top:8px"><button id="qualificationHistoryRefresh" class="btn soft">Nạp lịch sử</button><button id="qualificationHistoryCheck" class="btn soft">Kiểm hiệu lực READY gần nhất</button></div><div id="qualificationHistoryStatus" class="status"></div><div id="qualificationHistoryOutput" class="hint"></div>`;
+    card.innerHTML=`<div class="section-title">Lịch sử qualification · evidence bất biến</div><div class="hint">Mỗi lần chạy gate cuối được append thành một mốc riêng với SHA-256 theo component. Runtime fingerprint gắn với manifest Git blob của các file settlement/KQXS trọng yếu; sửa code mà quên cập nhật identity sẽ bị CI chặn. READY cũ không bị xóa.</div><div class="row" style="margin-top:8px"><button id="qualificationHistoryRefresh" class="btn soft">Nạp lịch sử</button><button id="qualificationHistoryCheck" class="btn soft">Kiểm hiệu lực READY gần nhất</button></div><div id="qualificationHistoryStatus" class="status"></div><div id="qualificationHistoryOutput" class="hint"></div>`;
     const anchor=doc.getElementById('finalQualificationPanel');pane.insertBefore(card,anchor&&anchor.nextSibling||pane.firstChild);
     function status(text,kind){const el=doc.getElementById('qualificationHistoryStatus');el.textContent=text||'';el.className='status '+(kind||'');}
     async function render(){const events=await listEvents(),host=doc.getElementById('qualificationHistoryOutput');if(!events.length){host.innerHTML='<div class="hint">Chưa có mốc qualification nào được lưu.</div>';return events;}const rows=[...events].reverse().slice(0,20);host.innerHTML=rows.map(e=>`<div class="report-message"><div><span class="tag ${e.ready_for_production_review?'ok':'warn'}">${esc(e.qualification_state)}</span> <b>${esc(e.observed_at)}</b></div><div class="hint">${esc(e.from_date||'—')} → ${esc(e.to_date||'—')} · SHA ${esc(String(e.input_fingerprint_sha256||'').slice(0,16))}…</div><div class="hint">đổi từ lần trước: ${esc((e.changed_components_from_previous||[]).join(', ')||'không')} ${e.invalidates_previous_ready?'· READY cũ MẤT HIỆU LỰC':''}${e.requalifies_after_change?'· đã RE-QUALIFY':''}</div></div>`).join('');status(`${events.length} mốc qualification được giữ append-only trên thiết bị.`,'ok');return events;}
     doc.getElementById('qualificationHistoryRefresh').addEventListener('click',()=>render().catch(e=>status(String(e&&e.message||e),'err')));
-    doc.getElementById('qualificationHistoryCheck').addEventListener('click',async()=>{try{status('Đang tính lại fingerprint hiện tại so với READY gần nhất…','warn');const v=await checkLastReadyValidity();if(v.status==='NO_READY_EVIDENCE')status('Chưa có READY evidence để kiểm.','warn');else if(v.current)status('READY gần nhất vẫn CURRENT: các input fingerprint chưa đổi.','ok');else status(`READY gần nhất đã STALE · thay đổi: ${v.changed_components.join(', ')||'unknown'}. Phải chạy qualification lại.`, 'err');}catch(e){status(String(e&&e.message||e),'err');}});
+    doc.getElementById('qualificationHistoryCheck').addEventListener('click',async()=>{try{status('Đang tính lại fingerprint hiện tại so với READY gần nhất…','warn');const v=await checkLastReadyValidity();if(v.status==='NO_READY_EVIDENCE')status('Chưa có READY evidence để kiểm.','warn');else if(v.current)status('READY gần nhất vẫn CURRENT: dữ liệu + critical code identity chưa đổi.','ok');else status(`READY gần nhất đã STALE · thay đổi: ${v.changed_components.join(', ')||'unknown'}. Phải chạy qualification lại.`, 'err');}catch(e){status(String(e&&e.message||e),'err');}});
     if(typeof global.addEventListener==='function')global.addEventListener('kts:qualification-evidence-saved',()=>render().catch(()=>{}));
     render().catch(()=>{});
   }
 
   global.KTS_SETTLEMENT_QUALIFICATION_HISTORY=Object.freeze({
-    version:'settlement-qualification-history-v1-fingerprint',META_KEY,FORMAT,COMPONENTS,
-    sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,qualificationCore,runtimeSignature,relevantConfigs,
+    version:'settlement-qualification-history-v2-code-identity',META_KEY,FORMAT,COMPONENTS,
+    validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,qualificationCore,runtimeSignature,relevantConfigs,
     collectMaterial,componentFingerprints,overallFingerprint,changedComponents,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
