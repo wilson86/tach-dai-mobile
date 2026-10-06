@@ -61,5 +61,19 @@ function fixture() {
   assert.strictEqual(A.normalizeViewMode('realtime'), 'realtime');
   assert.strictEqual(A.normalizeViewMode('anything-else'), 'realtime');
   assert.strictEqual(A.VIEW_MODE_KEY, 'kts_kqxs_view_mode_v1');
+
+  const conflict = {
+    verification_status: 'conflict',
+    verification_sources: ['primary', 'secondary'],
+    verification_reason: 'KQXS_SOURCE_CONFLICT',
+    verification_conflicts: ['mb:G7']
+  };
+  assert.strictEqual(A.verificationConflict(conflict), true);
+  assert.strictEqual(A.verificationConflict({ verification_status: 'unverified' }), false);
+  const details = A.verificationDetails(conflict);
+  assert.deepStrictEqual(Array.from(details.sources), ['primary', 'secondary']);
+  assert.deepStrictEqual(Array.from(details.conflicts), ['mb:G7']);
+  assert.strictEqual(details.reason, 'KQXS_SOURCE_CONFLICT');
+
   console.log('result-auto-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
