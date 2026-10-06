@@ -29,6 +29,9 @@
     const body = payload.data && typeof payload.data === 'object' ? payload.data : payload;
     const stations = body.stations || body.results || [];
     if (!Array.isArray(stations) || !stations.length) throw new Error('KQXS_PROVIDER_STATIONS_REQUIRED');
+    const expectedStationCodes = Array.isArray(body.expected_station_codes)
+      ? body.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
     return {
       business_date: scope.business_date,
       region: scope.region,
@@ -38,6 +41,7 @@
       verified: body.verified === true,
       verification_status: body.verification_status || (body.verified === true ? 'verified' : 'unverified'),
       verification_sources: Array.isArray(body.verification_sources) ? body.verification_sources.map(String) : [],
+      expected_station_codes: expectedStationCodes,
       stations
     };
   }
