@@ -111,6 +111,12 @@ jobs:
       - name: Settlement qualification evidence wiring tests
         run: node tests/settlement-qualification-history-wiring-tests.js
 
+      - name: Settlement pre-production dry-run package tests
+        run: node tests/settlement-preproduction-package-tests.js
+
+      - name: Settlement pre-production package wiring tests
+        run: node tests/settlement-preproduction-package-wiring-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
