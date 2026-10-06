@@ -41,6 +41,8 @@
       verified: body.verified === true,
       verification_status: body.verification_status || (body.verified === true ? 'verified' : 'unverified'),
       verification_sources: Array.isArray(body.verification_sources) ? body.verification_sources.map(String) : [],
+      verification_reason: body.verification_reason == null ? null : String(body.verification_reason),
+      verification_conflicts: Array.isArray(body.verification_conflicts) ? body.verification_conflicts.map(String) : [],
       expected_station_codes: expectedStationCodes,
       stations
     };
