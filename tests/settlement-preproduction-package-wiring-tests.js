@@ -23,6 +23,6 @@ assert(!pkg.includes('dismissCandidate('));
 assert(bridge.includes("script.src='./settlement-preproduction-package.js'"));
 assert(bridge.includes('data-kts-preproduction-package'));
 assert(sw.includes("'./settlement-preproduction-package.js'"));
-assert(sw.includes('v1.0.53-preproduction-package'));
+assert(sw.includes('v1.0.54-preproduction-review'));
 assert(identity.includes("'app/settlement-preproduction-package.js'"));
 console.log('settlement-preproduction-package-wiring-tests: PASS');
