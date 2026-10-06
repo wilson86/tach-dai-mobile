@@ -42,8 +42,46 @@
     return 'shadow';
   }
 
+  function actionForItem(status, reasons) {
+    const list = Array.isArray(reasons) ? reasons.map(String) : [];
+    if (String(status || '').toUpperCase() === 'BLOCKED' && list.some(x => x.startsWith('KQXS_'))) return 'result';
+    return actionFor(status);
+  }
+
   function actionLabel(action) {
     return action === 'message' ? 'Mở tin' : action === 'result' ? 'Mở KQXS' : 'Đối chiếu';
+  }
+
+  function fieldLabel(field) {
+    return ({ total_xac:'XÁC', total_qua_co:'QUA CÒ', total_payout:'TRẢ', refund_amount:'HỒI', final_net:'THU/BÙ', xac:'XÁC', qua_co:'QUA CÒ', hit_units:'TRÚNG', payout:'TRẢ' })[String(field || '')] || String(field || '');
+  }
+
+  function formatDelta(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return '—';
+    const rounded = Math.round(n * 10000) / 10000;
+    return `${rounded > 0 ? '+' : ''}${rounded}`;
+  }
+
+  function diagnosticSummary(diagnostics) {
+    if (!diagnostics) return { lines: [], messages: [] };
+    const lines = [];
+    const messages = [];
+    for (const issue of diagnostics.category_issues || []) {
+      const fields = (issue.fields || []).map(f => `${fieldLabel(f.field)} ${formatDelta(f.delta)}`);
+      lines.push(`${String(issue.code || '').toUpperCase()}${fields.length ? ' · ' + fields.join(' · ') : ''}`);
+      for (const message of issue.messages || []) {
+        const raw = String(message.raw_text || '').trim();
+        if (raw && !messages.includes(raw)) messages.push(raw);
+      }
+    }
+    if (!lines.length && diagnostics.category_reference_missing && diagnostics.status === 'MISMATCH') {
+      lines.push('Lệch tổng nhưng HIOSKT chưa có chi tiết theo loại cược');
+    }
+    if (!lines.length) {
+      for (const issue of diagnostics.total_issues || []) lines.push(`${fieldLabel(issue.field)} ${formatDelta(issue.delta)}`);
+    }
+    return { lines, messages };
   }
 
   function normalizedRegionStatus(report, region) {
@@ -75,9 +113,10 @@
           region: code,
           status,
           kind: statusKind(status),
-          action: actionFor(status),
+          action: actionForItem(status, reasons),
           reasons,
-          priority: PRIORITY[status] || 99
+          priority: PRIORITY[status] || 99,
+          diagnostics: null
         });
       }
       for (const blocked of report.blocked_scopes || []) {
@@ -86,10 +125,11 @@
         const key = `${partner.id || ''}:${code}:BLOCKED`;
         if (seen.has(key)) continue;
         seen.add(key);
+        const reasons = Array.isArray(blocked.reasons) ? blocked.reasons.slice() : [];
         items.push({
           partner_id: String(partner.id || ''), partner_name: String(partner.name || partner.id || ''),
-          partner_role: String(partner.role || 'unknown'), region: code, status:'BLOCKED', kind:'err', action:'message',
-          reasons: Array.isArray(blocked.reasons) ? blocked.reasons.slice() : [], priority: PRIORITY.BLOCKED
+          partner_role: String(partner.role || 'unknown'), region: code, status:'BLOCKED', kind:'err', action:actionForItem('BLOCKED', reasons),
+          reasons, priority: PRIORITY.BLOCKED, diagnostics: null
         });
       }
     }
@@ -104,6 +144,7 @@
     const doc = global.document;
     const store = global.KTS_SETTLEMENT_STORE;
     const reportApi = global.KTS_SETTLEMENT_REPORT;
+    const shadowRuntime = global.KTS_SETTLEMENT_SHADOW_RUNTIME;
     const pane = doc && doc.getElementById('pane-report');
     if (!doc || !store || !reportApi || !pane || doc.getElementById('dailyAttention')) return;
 
@@ -171,12 +212,35 @@
       setStatus(`${attention.items.length} phạm vi cần xử lý.`, attention.items.some(x => x.kind === 'err') ? 'err' : 'warn');
       host.innerHTML = attention.items.map((item, index) => {
         const reason = item.reasons.length ? `<div class="hint">${esc(item.reasons.join(' · '))}</div>` : '';
-        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>${esc(item.partner_name)}</b> <span class="tag">${esc(item.region.toUpperCase())}</span> <span class="tag ${esc(item.kind)}">${esc(statusLabel(item.status))}</span></div><button class="btn soft" data-attention-index="${index}">${esc(actionLabel(item.action))}</button></div>${reason}</div>`;
+        const diag = diagnosticSummary(item.diagnostics);
+        const diagHtml = diag.lines.length
+          ? `<div class="status ${item.status === 'MISMATCH' ? 'err' : 'warn'}">Khoanh vùng: ${diag.lines.map(esc).join('<br>')}</div>`
+          : '';
+        const messageHtml = diag.messages.length
+          ? `<details style="margin-top:5px"><summary class="hint">Tin liên quan (${diag.messages.length})</summary>${diag.messages.slice(0, 5).map(raw => `<div class="raw" style="margin-top:4px">${esc(raw)}</div>`).join('')}</details>`
+          : '';
+        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>${esc(item.partner_name)}</b> <span class="tag">${esc(item.region.toUpperCase())}</span> <span class="tag ${esc(item.kind)}">${esc(statusLabel(item.status))}</span></div><button class="btn soft" data-attention-index="${index}">${esc(actionLabel(item.action))}</button></div>${reason}${diagHtml}${messageHtml}</div>`;
       }).join('');
       host.querySelectorAll('[data-attention-index]').forEach(btn => btn.addEventListener('click', () => {
         const item = attention.items[Number(btn.dataset.attentionIndex)];
         if (item) openItem(item, attention.business_date);
       }));
+    }
+
+    async function enrichDiagnostics(attention) {
+      if (!shadowRuntime || typeof shadowRuntime.getDiagnostics !== 'function') return attention;
+      await Promise.all(attention.items.map(async item => {
+        if (!['MISMATCH','MATCH_DISPLAY_ONLY'].includes(String(item.status || '').toUpperCase())) return;
+        try {
+          const loaded = await shadowRuntime.getDiagnostics({
+            partner_id: item.partner_id,
+            business_date: attention.business_date,
+            region: item.region
+          });
+          if (loaded && loaded.diagnostics) item.diagnostics = loaded.diagnostics;
+        } catch (_) {}
+      }));
+      return attention;
     }
 
     async function refresh() {
@@ -188,7 +252,7 @@
           store.getAll(store.STORES.partners), store.getAll(store.STORES.settlements), store.getAll(store.STORES.messages)
         ]);
         const model = reportApi.buildDailyOperationsReport({ business_date: businessDate, partners, settlements, messages });
-        const attention = buildAttention(model);
+        const attention = await enrichDiagnostics(buildAttention(model));
         render(attention);
         return attention;
       } catch (e) {
@@ -209,7 +273,7 @@
   }
 
   global.KTS_SETTLEMENT_ATTENTION = Object.freeze({
-    version:'settlement-attention-v1', PRIORITY, statusLabel, statusKind, actionFor, actionLabel, buildAttention
+    version:'settlement-attention-v2-diagnostics', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once:true });
   else install();
