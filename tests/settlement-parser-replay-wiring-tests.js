@@ -23,5 +23,5 @@ assert(!replay.includes('saveConfig('));
 assert(!replay.includes('dismissCandidate('));
 assert(!replay.includes('confirmAndPin('));
 assert(sw.includes("'./settlement-parser-replay.js'"));
-assert(sw.includes('v1.0.43-parser-provenance'));
+assert(sw.includes("const CACHE='kts-tach-unified-v1.0."));
 console.log('settlement-parser-replay-wiring-tests: PASS');
