@@ -12,8 +12,9 @@
     const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
     const candidates = global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
     const readiness = global.KTS_SETTLEMENT_REPAIR_READINESS;
-    if (!store || !observation || !regression || !candidates || !readiness) throw new Error('QUALIFICATION_DEPENDENCY_MISSING');
-    return { store, observation, regression, candidates, readiness };
+    const parserProvider = global.KTS_SETTLEMENT_PARSER_PROVIDER;
+    if (!store || !observation || !regression || !candidates || !readiness || !parserProvider) throw new Error('QUALIFICATION_DEPENDENCY_MISSING');
+    return { store, observation, regression, candidates, readiness, parserProvider };
   }
   function normalizeWindow(options) {
     const o = options || {};
@@ -74,6 +75,43 @@
       met:active.length > 0 && known === active.length
     };
   }
+  async function parserBackendGate(messages, options, parserProvider) {
+    const active = (Array.isArray(messages) ? messages : []).filter(m => messageInWindow(m, options));
+    if (!active.length) return { met:false, total:0, matched:0, mismatched:0, unreachable:false, error:'NO_ACTIVE_MESSAGES', bad_messages:[], live_identity:null };
+    let live;
+    try {
+      live = await parserProvider.fetchIdentity();
+    } catch (error) {
+      return {
+        met:false, total:active.length, matched:0, mismatched:active.length, unreachable:true,
+        error:String(error && error.message || error || 'PARSER_BACKEND_IDENTITY_UNAVAILABLE'),
+        bad_messages:active.map(m=>({id:String(m && m.id || ''),reason:'PARSER_BACKEND_IDENTITY_UNAVAILABLE'})), live_identity:null
+      };
+    }
+    let matched = 0;
+    const bad_messages = [];
+    for (const message of active) {
+      const id = String(message && message.id || '');
+      const region = String(message && message.region || '').toLowerCase();
+      const identityKey = region === 'mb' ? 'mb' : (region === 'mn' || region === 'mt' ? 'mn_mt' : '');
+      const stored = message && message.canonical_payload && message.canonical_payload.parser_identity;
+      const liveIdentity = identityKey && live && live.identities && live.identities[identityKey];
+      const storedHash = stored && stored.identity_sha256 ? String(stored.identity_sha256).toLowerCase() : '';
+      const liveHash = liveIdentity && liveIdentity.identity_sha256 ? String(liveIdentity.identity_sha256).toLowerCase() : '';
+      if (identityKey && HASH_RE.test(storedHash) && HASH_RE.test(liveHash) && storedHash === liveHash) matched += 1;
+      else bad_messages.push({ id, region, identity_key:identityKey || null, stored_identity_sha256:storedHash || null, live_identity_sha256:liveHash || null, reason:'PARSER_BACKEND_IDENTITY_MISMATCH' });
+    }
+    return {
+      met:active.length > 0 && matched === active.length,
+      total:active.length,
+      matched,
+      mismatched:active.length - matched,
+      unreachable:false,
+      error:null,
+      bad_messages,
+      live_identity:clone(live)
+    };
+  }
   function unverifiedFeatureGate(settlements, observationSummary) {
     const scopes = new Set((observationSummary && observationSummary.scopes || []).map(scopeKey));
     const unsafe = [];
@@ -97,6 +135,7 @@
     const x = input || {}, observation = x.observation || {}, regression = x.regression || {total:0,passed:0,failed:0}, candidates = x.candidates || {pending:0,promoted:0,dismissed:0};
     const kqxs = x.kqxs || {met:false,total:0,verified:0,conflict:0,unverified:0};
     const provenance = x.parser_provenance || {met:false,total:0,known:0,unknown:0,invalid:0,parser_errors:0,missing_canonical:0};
+    const parserBackend = x.parser_backend || {met:false,total:0,matched:0,mismatched:0,unreachable:true,error:'NOT_CHECKED'};
     const features = x.feature_safety || {met:true,unsafe_count:0};
     const readiness = x.repair_readiness || {summary:{total:0,ready:0,blocked:0,all_ready:false},items:[]};
     const blockers = new Set(Array.isArray(observation.blockers) ? observation.blockers : []);
@@ -109,10 +148,14 @@
     }
     if (!kqxs.met) blockers.add(`KQXS_NOT_FULLY_VERIFIED:${Number(kqxs.verified||0)}/${Number(kqxs.total||0)}`);
     if (!provenance.met) blockers.add(`PARSER_PROVENANCE_INCOMPLETE:${Number(provenance.known||0)}/${Number(provenance.total||0)}`);
+    if (!parserBackend.met) {
+      if (parserBackend.unreachable) blockers.add('PARSER_BACKEND_IDENTITY_UNAVAILABLE');
+      else blockers.add(`PARSER_BACKEND_IDENTITY_MISMATCH:${Number(parserBackend.matched||0)}/${Number(parserBackend.total||0)}`);
+    }
     if (!features.met) blockers.add(`UNVERIFIED_UI_FEATURE_ACTIVE:${Number(features.unsafe_count||0)}`);
-    const ready = observation.promotion_ready === true && regression.total > 0 && regression.failed === 0 && candidates.pending === 0 && kqxs.met === true && provenance.met === true && features.met === true;
+    const ready = observation.promotion_ready === true && regression.total > 0 && regression.failed === 0 && candidates.pending === 0 && kqxs.met === true && provenance.met === true && parserBackend.met === true && features.met === true;
     return {
-      format:'kts-final-qualification-v1',
+      format:'kts-final-qualification-v2-live-parser',
       generated_at:new Date().toISOString(),
       qualification_state:ready ? 'READY_FOR_PRODUCTION_REVIEW' : 'BLOCKED_SHADOW_QUALIFICATION',
       ready_for_production_review:ready,
@@ -121,6 +164,7 @@
       observation:clone(observation),
       kqxs_verification:clone(kqxs),
       parser_provenance:clone(provenance),
+      parser_backend:clone(parserBackend),
       regression_gate:{ total:Number(regression.total||0), passed:Number(regression.passed||0), failed:Number(regression.failed||0), met:regression.total>0&&regression.failed===0 },
       candidate_gate:Object.assign({}, clone(candidates), { met:candidates.pending===0 }),
       repair_readiness:clone(readiness),
@@ -150,12 +194,14 @@
     let readinessRows = await d.readiness.loadLocalQueue();
     if (o.check_parser !== false && readinessRows.length) readinessRows = await d.readiness.checkParserRows(readinessRows, o.on_progress);
     const readinessReport = d.readiness.readinessReport(readinessRows);
+    const backendGate = await parserBackendGate(messages, o, d.parserProvider);
     return combineQualification({
       observation:observationSummary,
       regression:regressionSummary,
       candidates:cs,
       kqxs:kqxsVerificationGate(observationSummary),
       parser_provenance:parserProvenanceGate(messages, o),
+      parser_backend:backendGate,
       feature_safety:unverifiedFeatureGate(settlements, observationSummary),
       repair_readiness:readinessReport
     });
@@ -166,7 +212,7 @@
     if (!pane || doc.getElementById('finalQualificationPanel')) return;
     const card = doc.createElement('div'); card.className='card'; card.id='finalQualificationPanel';
     card.innerHTML = `<div class="section-title">Qualification cuối · một gate duy nhất</div>
-      <div class="hint">Gom Shadow coverage + HIOSKT exact + KQXS 2 nguồn + parser provenance + golden regression + candidate/repair + feature chưa xác minh. Chỉ tạo trạng thái <b>READY_FOR_PRODUCTION_REVIEW</b>; tuyệt đối không tự bật production, merge main, xác nhận HIOSKT hay ghi lại tiền.</div>
+      <div class="hint">Gom Shadow coverage + HIOSKT exact + KQXS 2 nguồn + parser provenance + parser backend đang chạy + golden regression + candidate/repair + feature chưa xác minh. Chỉ tạo trạng thái <b>READY_FOR_PRODUCTION_REVIEW</b>; tuyệt đối không tự bật production, merge main, xác nhận HIOSKT hay ghi lại tiền.</div>
       <div class="row" style="margin-top:8px"><button id="finalQualificationRun" class="btn primary">Chạy gate cuối + kiểm parser</button><button id="finalQualificationExport" class="btn soft">Xuất snapshot JSON</button><button id="finalQualificationCandidates" class="btn soft">Mở queue xác nhận</button></div>
       <div id="finalQualificationStatus" class="status"></div><div id="finalQualificationOutput" class="hint"></div>`;
     pane.insertBefore(card, pane.firstChild);
@@ -174,12 +220,14 @@
     function status(text,kind){const el=doc.getElementById('finalQualificationStatus');el.textContent=text||'';el.className='status '+(kind||'');}
     function gateRow(name, met, detail) { return `<tr><td><b>${esc(name)}</b></td><td class="${met?'ok':'err'}">${met?'PASS':'BLOCK'}</td><td>${esc(detail)}</td></tr>`; }
     function render(q) {
-      const obs=q.observation||{}, oc=obs.counts||{}, kg=q.kqxs_verification||{}, pg=q.parser_provenance||{}, rg=q.regression_gate||{}, cg=q.candidate_gate||{}, fs=q.feature_safety||{}, rr=q.repair_readiness&&q.repair_readiness.summary||{};
+      const obs=q.observation||{}, oc=obs.counts||{}, kg=q.kqxs_verification||{}, pg=q.parser_provenance||{}, pb=q.parser_backend||{}, rg=q.regression_gate||{}, cg=q.candidate_gate||{}, fs=q.feature_safety||{}, rr=q.repair_readiness&&q.repair_readiness.summary||{};
       const shadowMet=obs.promotion_ready===true;
+      const parserBackendDetail=pb.unreachable?`không đọc được identity backend · ${pb.error||'unknown'}`:`${pb.matched||0}/${pb.total||0} tin trùng parser backend hiện tại · lệch ${pb.mismatched||0}`;
       const rows=[
         gateRow('Shadow + thời gian quan sát',shadowMet,`${obs.exact_days||0} ngày exact · ${oc.exact||0}/${oc.total||0} scope exact · thiếu ${oc.missing_scopes||0}`),
         gateRow('KQXS cross-source',kg.met===true,`${kg.verified||0}/${kg.total||0} scope verified · conflict ${kg.conflict||0} · unverified ${kg.unverified||0}`),
         gateRow('Parser provenance',pg.met===true,`${pg.known||0}/${pg.total||0} tin có identity SHA · unknown ${pg.unknown||0} · error ${pg.parser_errors||0}`),
+        gateRow('Parser backend hiện tại',pb.met===true,parserBackendDetail),
         gateRow('Golden regression',rg.met===true,`${rg.passed||0}/${rg.total||0} PASS · fail ${rg.failed||0}`),
         gateRow('Mismatch candidate',cg.met===true,`pending ${cg.pending||0} · promoted ${cg.promoted||0} · dismissed ${cg.dismissed||0}`),
         gateRow('Repair readiness',!(cg.pending>0) || (rr.total>0&&rr.ready===rr.total),cg.pending>0?`${rr.ready||0}/${rr.total||0} kỹ thuật sẵn sàng cho operator confirm`:'không còn pending candidate'),
@@ -219,8 +267,8 @@
   }
 
   global.KTS_SETTLEMENT_QUALIFICATION = Object.freeze({
-    version:'settlement-qualification-dashboard-v2-evidence-event',
-    normalizeWindow, messageInWindow, kqxsVerificationGate, parserProvenanceGate,
+    version:'settlement-qualification-dashboard-v3-live-parser-backend',
+    normalizeWindow, messageInWindow, kqxsVerificationGate, parserProvenanceGate, parserBackendGate,
     unverifiedFeatureGate, candidateSummary, combineQualification, runQualification
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
