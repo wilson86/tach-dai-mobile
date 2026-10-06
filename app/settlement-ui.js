@@ -22,6 +22,7 @@
 
   let partners = [];
   let poller = null;
+  let savingMessage = false;
 
   function today() {
     const d = new Date();
@@ -185,8 +186,14 @@
   async function saveMessage() {
     const partnerId = currentPartnerId();
     const raw = $('messageText').value.trim();
+    const button = $('saveMessage');
     if (!partnerId) return status('messageStatus', 'Chưa chọn đối tác.', 'err');
     if (!raw) return status('messageStatus', 'Chưa có tin.', 'err');
+    if (savingMessage) return status('messageStatus', 'Tin trước đang được lưu. Chờ hoàn tất để tránh gửi trùng.', 'warn');
+
+    savingMessage = true;
+    const originalLabel = button ? button.textContent : '';
+    if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
     status('messageStatus', 'Đang chạy canonical parser…', '');
     try {
       const outcome = await pipeline.parseAndSaveMessage({
@@ -198,18 +205,33 @@
       });
       if (outcome.status === 'parser_error') {
         status('messageStatus', `Đã giữ tin ${outcome.message.id} nhưng KHÔNG tính tiền: ${outcome.error}`, 'err');
-        return;
+        return outcome;
       }
+
+      // Canonical message was accepted and is already durable. Clear the editor
+      // so a fast second tap cannot accidentally create another identical bet.
+      // Intentionally retyping/pasting the same line after this completes still
+      // creates a new message, because identical real bets are valid business data.
+      $('messageText').value = '';
+      $('messageText').focus();
+
       if (outcome.status === 'parsed_waiting_result') {
         status('messageStatus', `Đã parse tin ${outcome.message.id}. Chờ KQXS trước khi tính tiền.`, 'warn');
-        return;
+        return outcome;
       }
       if (outcome.status === 'blocked') {
         status('messageStatus', `Tin đã parse nhưng settlement đang chặn: ${outcome.settlement && outcome.settlement.reason ? outcome.settlement.reason : 'xem báo cáo'}`, 'err');
-        return;
+        return outcome;
       }
       status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.`, outcome.status === 'provisional' ? 'warn' : 'ok');
-    } catch (e) { status('messageStatus', String(e.message || e), 'err'); }
+      return outcome;
+    } catch (e) {
+      status('messageStatus', String(e.message || e), 'err');
+      return null;
+    } finally {
+      savingMessage = false;
+      if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu + tính'; }
+    }
   }
 
   async function recalcAfterResult(snapshot) {
@@ -314,6 +336,12 @@
     $('addPartner').addEventListener('click', addPartner);
     $('saveConfig').addEventListener('click', saveConfig);
     $('saveMessage').addEventListener('click', saveMessage);
+    $('messageText').addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        saveMessage();
+      }
+    });
     $('clearMessage').addEventListener('click', () => { $('messageText').value = ''; status('messageStatus', '', ''); });
     $('saveParserEndpoint').addEventListener('click', () => {
       try { $('parserEndpoint').value = parserProvider.setEndpoint($('parserEndpoint').value); status('messageStatus', 'Đã lưu endpoint canonical parser.', 'ok'); }
