@@ -47,6 +47,7 @@ assert.strictEqual(R.stationComplete('mb', { prizes: mbPrizes() }), true);
   });
   assert.strictEqual(s.complete, true);
   assert.strictEqual(s.status, 'complete');
+  assert.strictEqual(s.coverage_complete, true);
   assert.strictEqual(s.stations[0].complete, true);
 }
 
@@ -61,6 +62,61 @@ assert.strictEqual(R.stationComplete('mb', { prizes: mbPrizes() }), true);
   assert.strictEqual(s.status, 'partial');
 }
 
+// Provider `complete:true` must never override deterministic prize counts.
+{
+  const partial = mnPrizes();
+  delete partial.DB;
+  const s = R.normalizeSnapshot({
+    business_date: '2026-09-22', region: 'mn', source: 'fixture',
+    stations: [{ code: 'bli', complete: true, prizes: partial }]
+  });
+  assert.strictEqual(s.stations[0].complete, false);
+  assert.strictEqual(s.complete, false);
+}
+
+// If backend tells us which stations must draw, all of them must be present.
+// One or two complete provinces can never promote a 3-province MN snapshot.
+{
+  const s = R.normalizeSnapshot({
+    business_date: '2026-09-22', region: 'mn', source: 'fixture',
+    expected_station_codes: ['bt', 'vt', 'bli'],
+    stations: [
+      { code: 'bt', prizes: mnPrizes() },
+      { code: 'vt', prizes: mnPrizes() }
+    ]
+  });
+  assert.strictEqual(s.coverage_complete, false);
+  assert.strictEqual(s.complete, false);
+  assert.strictEqual(s.status, 'partial');
+  assert.deepStrictEqual(Array.from(s.expected_station_codes), ['bt', 'vt', 'bli']);
+}
+
+{
+  const s = R.normalizeSnapshot({
+    business_date: '2026-09-22', region: 'mn', source: 'fixture',
+    expected_station_codes: ['bt', 'vt', 'bli'],
+    stations: [
+      { code: 'bt', prizes: mnPrizes() },
+      { code: 'vt', prizes: mnPrizes() },
+      { code: 'bli', prizes: mnPrizes() }
+    ]
+  });
+  assert.strictEqual(s.coverage_complete, true);
+  assert.strictEqual(s.complete, true);
+}
+
+assert.throws(() => R.normalizeSnapshot({
+  business_date: '2026-09-22', region: 'mn',
+  expected_station_codes: ['bt', 'bt'],
+  stations: [{ code: 'bt', prizes: mnPrizes() }]
+}), /EXPECTED_STATIONS_DUPLICATE/);
+
+assert.throws(() => R.normalizeSnapshot({
+  business_date: '2026-09-22', region: 'mn',
+  expected_station_codes: ['bt'],
+  stations: [{ code: 'bt', prizes: mnPrizes() }, { code: 'bt', prizes: mnPrizes() }]
+}), /STATION_DUPLICATE/);
+
 assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), intervalMs: 30000 }), /60_TO_120/);
 assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeConfirmations: 0 }), /CONFIRMATIONS_MUST_BE_1_TO_10/);
 
@@ -73,6 +129,7 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
       business_date: scope.business_date,
       region: scope.region,
       source: 'fixture',
+      expected_station_codes: ['bli'],
       stations: [{ code: 'bli', name: 'Bạc Liêu', prizes: mnPrizes() }]
     }),
     onStatus: info => states.push(info.state)
