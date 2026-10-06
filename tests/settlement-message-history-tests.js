@@ -18,10 +18,10 @@ const messages = [
   { id: 'm3', partner_id: 'p2', business_date: '2026-10-06', region: 'mn', raw_text: 'x', status: 'parsed_waiting_result', created_at: '2026-10-06T03:00:00Z' }
 ];
 const settlements = [
-  { id: 's1', message_ids: ['m1'], scope_status: 'complete_unverified', blocked_reasons: [] },
-  { id: 's2', message_ids: ['m2'], scope_status: 'blocked', blocked_reasons: ['PENDING_PARSER:m2'] }
+  { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
+assert.strictEqual(H.version, 'message-history-v3-live-scope');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -29,10 +29,41 @@ assert.strictEqual(rows.length, 3);
 assert.strictEqual(rows[0].message.id, 'm4', 'newest first');
 assert.strictEqual(rows[0].state.code, 'CANCELLED');
 assert.strictEqual(rows[1].state.code, 'PARSER_ERROR');
-assert.strictEqual(rows[2].state.code, 'UNVERIFIED');
+assert.strictEqual(rows[2].state.code, 'BLOCKED');
 assert.strictEqual(H.deriveState({ status: 'parsed_waiting_result' }, null).code, 'WAITING_RESULT');
 assert.strictEqual(H.deriveState({ status: 'settled_provisional' }, { scope_status: 'provisional' }).code, 'PROVISIONAL');
 assert.strictEqual(H.deriveState({ status: 'parsed_waiting_result' }, { scope_status: 'blocked' }).code, 'BLOCKED');
 assert.strictEqual(H.deriveState({ status: 'cancelled', parser_error: 'old error' }, { scope_status: 'blocked' }).code, 'CANCELLED');
+assert.strictEqual(H.settlementForScope(scope, settlements).id, 'scope:p1:2026-10-06:mn');
+
+const blockedSummary = H.buildScopeSummary(scope, messages, settlements, {
+  id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true, verification_status:'verified'
+});
+assert.strictEqual(blockedSummary.counts.total, 3);
+assert.strictEqual(blockedSummary.counts.active, 2);
+assert.strictEqual(blockedSummary.counts.cancelled, 1);
+assert.strictEqual(blockedSummary.counts.parser_errors, 1);
+assert.strictEqual(blockedSummary.state.code, 'BLOCKED');
+assert.strictEqual(blockedSummary.kqxs.label, 'ĐÃ XÁC MINH');
+assert.deepStrictEqual(Array.from(blockedSummary.blocked_reasons), ['PENDING_PARSER:m2']);
+
+const goodMessages = [messages[0], messages[2]];
+const exactSettlement = [{
+  id:'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids:['m1'],
+  scope_status:'complete_unverified', comparison_status:'MATCH_EXACT', blocked_reasons:[],
+  settlement_result:{ total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32 }
+}];
+const exactSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
+  id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true
+});
+assert.strictEqual(exactSummary.state.code, 'MATCH_EXACT');
+assert.strictEqual(exactSummary.kqxs.label, 'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU');
+assert.strictEqual(exactSummary.totals.xac, 18);
+assert.strictEqual(exactSummary.totals.direction, 'BÙ');
+assert(Math.abs(exactSummary.totals.final_net - (-61.32)) < 1e-9);
+
+const waiting = H.buildScopeSummary(scope, [messages[0]], [], null);
+assert.strictEqual(waiting.state.code, 'WAITING_RESULT');
+assert.strictEqual(waiting.kqxs.label, 'CHƯA CÓ KQ');
 
 console.log('settlement-message-history-tests: PASS');
