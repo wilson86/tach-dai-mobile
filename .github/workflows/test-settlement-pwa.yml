@@ -72,6 +72,9 @@ jobs:
       - name: Settlement regression candidate wiring tests
         run: node tests/settlement-regression-candidates-wiring-tests.js
 
+      - name: Settlement regression mismatch clustering tests
+        run: node tests/settlement-regression-review-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
