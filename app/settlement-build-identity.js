@@ -19,10 +19,11 @@
     'app/settlement-repair-readiness.js':'34d92a558f3a94fbac6fff08aaa8a57462e16542',
     'app/settlement-qualification-dashboard.js':'647003a9fcf97d2f66c4caca4513d2dad6a5e54c',
     'app/settlement-qualification-history.js':'4866328175478a7aea3cefa244b7ae0ca1175b73',
-    'app/settlement-qualification-history-bridge.js':'90d7b8c619a1a3b1d29aa36c09d16f57b18cb0d9',
+    'app/settlement-qualification-history-bridge.js':'c36182faf88d78dc6a13e275f0ec72618615f1ea',
     'app/settlement-preproduction-package.js':'8206331fd8e552214d3a33076ed4a33fe7556958',
     'app/settlement-preproduction-review.js':'c1ca3becb7168b025b0b6e1310918b6eb156db58',
     'app/settlement-preproduction-review-history.js':'a8b9e9df60edb22ec53670e30718d3a6a51eee56',
+    'app/settlement-preproduction-review-bundle.js':'fdb89207efdb2606ec300e2a7e6d3ddc91a7c12b',
     'app/result-service.js':'a5f386c724cb8751a7082a90c49c17af50d2be05',
     'app/result-provider.js':'65d00f0bf0e250a17f41fbff5d3926373205c0b2',
     'app/result-auto.js':'92f49d694a08a1ff7ab81eebdda52054bec1989c'
