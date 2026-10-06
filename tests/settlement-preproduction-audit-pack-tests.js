@@ -1,0 +1,12 @@
+'use strict';
+const fs=require('fs'),vm=require('vm'),assert=require('assert'),crypto=require('crypto');
+function stable(v){if(v===null||typeof v!=='object')return JSON.stringify(v);if(Array.isArray(v))return '['+v.map(stable).join(',')+']';return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';}
+async function sha(v){return crypto.createHash('sha256').update(typeof v==='string'?v:stable(v)).digest('hex');}
+(async()=>{
+  const h={integrity:{handoff_sha256:'a'.repeat(64)},manifest:{bundle_sha256:'b'.repeat(64),receipt_sha256:'d'.repeat(64),chain_head_sha256:'e'.repeat(64),exporter_build_identity_sha256:'f'.repeat(64)}};
+  const c={integrity:{candidate_sha256:'c'.repeat(64)}};const b={integrity:{snapshot_sha256:'1'.repeat(64)}};
+  const ctx={console,globalThis:null,KTS_SETTLEMENT_QUALIFICATION_HISTORY:{sha256Hex:sha},KTS_SETTLEMENT_PREPRODUCTION_HANDOFF:{async verifyHandoff(x){return {valid:x===h||x&&x.integrity&&x.integrity.handoff_sha256==='a'.repeat(64)};}},KTS_SETTLEMENT_PREPRODUCTION_OFFLINE_VERIFIER:{async verifyHandoff(x){return {valid:Boolean(x&&x.integrity&&x.integrity.handoff_sha256==='a'.repeat(64))};}},KTS_SETTLEMENT_PREPRODUCTION_CANDIDATE:{async verifyCandidate(x){return {valid:Boolean(x&&x.integrity&&x.integrity.candidate_sha256==='c'.repeat(64))};}},KTS_SETTLEMENT_PREPRODUCTION_BOUNDARY:{async verifyBoundarySnapshot(x){return {valid:Boolean(x&&x.integrity&&x.integrity.snapshot_sha256==='1'.repeat(64))};}},Date,JSON};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('app/settlement-preproduction-audit-pack.js','utf8'),ctx);
+  const A=ctx.KTS_SETTLEMENT_PREPRODUCTION_AUDIT_PACK,pack=await A.buildAuditPack(h,c,b);assert.strictEqual(pack.format,'kts-preproduction-audit-pack-v1');assert.strictEqual(pack.authority.production_authorized,false);assert.strictEqual(pack.content_policy.contains_package_payload,false);let v=await A.verifyAuditPack(pack);assert.strictEqual(v.valid,true);
+  const tamper=JSON.parse(JSON.stringify(pack));tamper.artifacts.candidate.integrity.candidate_sha256='9'.repeat(64);tamper.integrity.audit_pack_sha256=await sha(A.withoutIntegrity(tamper));v=await A.verifyAuditPack(tamper);assert.strictEqual(v.valid,false);assert(v.errors.includes('PREPRODUCTION_AUDIT_PACK_CANDIDATE_INVALID'));
+  console.log('settlement-preproduction-audit-pack-tests: PASS');
+})().catch(e=>{console.error(e);process.exit(1);});
