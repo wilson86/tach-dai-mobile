@@ -63,6 +63,9 @@ jobs:
       - name: Settlement shadow persistence tests
         run: node tests/settlement-shadow-runtime-tests.js
 
+      - name: Settlement shadow recalculation guard tests
+        run: node tests/settlement-shadow-guard-tests.js
+
       - name: Settlement shadow mismatch UI tests
         run: node tests/settlement-shadow-ui-tests.js
 
