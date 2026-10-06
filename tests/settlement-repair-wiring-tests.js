@@ -27,6 +27,6 @@ assert(!repair.includes('compareAndSave('));
 assert(!repair.includes('dismissCandidate('));
 assert(!repair.includes('confirmAndPin('));
 assert(sw.includes("'./settlement-repair-workflow.js'"));
-assert(sw.includes('v1.0.40-repair-replay'));
+assert(sw.includes("const CACHE='kts-tach-unified-v1.0."));
 
 console.log('settlement-repair-wiring-tests: PASS');
