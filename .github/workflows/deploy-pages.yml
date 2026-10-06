@@ -1,8 +1,8 @@
-name: Deploy GitHub Pages
+name: Deploy GitHub Pages Test
 
 on:
   push:
-    branches: [main]
+    branches: [deploy/settlement-test]
   workflow_dispatch:
 
 permissions:

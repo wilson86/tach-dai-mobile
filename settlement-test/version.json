@@ -1,0 +1,15 @@
+{
+  "version": "1.0.2",
+  "updated": "2026-10-04",
+  "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c",
+  "contract": "DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2",
+  "modes": ["tach", "ngang", "davong"],
+  "ux": [
+    "select_all_input",
+    "cut_output_selection",
+    "select_all_output",
+    "preserve_input_selection_while_editing",
+    "grouped_da_vong_output",
+    "two_digit_pair_validation"
+  ]
+}

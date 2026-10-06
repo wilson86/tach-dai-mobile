@@ -1,0 +1,16 @@
+{
+  "name": "KTS Tách Đài",
+  "short_name": "KTS Tách",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f6f9",
+  "theme_color": "#0b57d0",
+  "lang": "vi",
+  "description": "Tách Đài, Tách Đài Ngang và Đá Vòng trong một PWA tĩnh.",
+  "icons": [
+    {"src": "../icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "../icon-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}
