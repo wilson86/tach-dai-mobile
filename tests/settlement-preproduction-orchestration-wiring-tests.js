@@ -7,7 +7,9 @@ assert(session.includes("settlement-preproduction-review-session-v1"));assert(se
 assert(audit.includes("kts-preproduction-audit-pack-v1"));assert(audit.includes("READ_ONLY_PREPRODUCTION_ARCHIVE"));assert(audit.includes('contains_operational_store:false'));assert(audit.includes('contains_package_payload:false'));assert(audit.includes('production_authorized:false'));assert(!audit.includes('saveSettlement('));assert(!audit.includes('saveConfig('));
 for(const f of ['./settlement-preproduction-audit-pack.js','./settlement-preproduction-review-session.js','./settlement-preproduction-orchestrator.js']){assert(bridge.includes(f));assert(sw.includes("'"+f+"'"));}
 assert(bridge.includes("appendScript('./settlement-preproduction-boundary.js','data-kts-preproduction-boundary',loadPreproductionAuditPack)"));
-assert(bridge.includes("appendScript('./settlement-preproduction-audit-pack.js','data-kts-preproduction-audit-pack',loadPreproductionReviewSession)"));
+assert(bridge.includes("appendScript('./settlement-preproduction-audit-pack.js','data-kts-preproduction-audit-pack',loadPreproductionAuditOfflineVerifier)"));
+assert(bridge.includes("appendScript('./settlement-preproduction-audit-offline-verifier.js','data-kts-preproduction-audit-offline-verifier',loadPreproductionDecisionDossier)"));
+assert(bridge.includes("appendScript('./settlement-preproduction-decision-dossier.js','data-kts-preproduction-decision-dossier',loadPreproductionReviewSession)"));
 assert(bridge.includes("appendScript('./settlement-preproduction-review-session.js','data-kts-preproduction-review-session',loadPreproductionOrchestrator)"));
 assert(identity.includes("'app/settlement-preproduction-audit-pack.js'"));assert(identity.includes("'app/settlement-preproduction-review-session.js'"));assert(identity.includes("'app/settlement-preproduction-orchestrator.js'"));
 console.log('settlement-preproduction-orchestration-wiring-tests: PASS');
