@@ -110,12 +110,64 @@
     };
   }
 
+  function messageIdsForCategory(settlement, code) {
+    const target = String(code || '').toUpperCase();
+    const ids = new Set();
+    const breakdown = settlement && Array.isArray(settlement.message_breakdown) ? settlement.message_breakdown : [];
+    for (const row of breakdown) {
+      const categories = Array.isArray(row.category_rows) ? row.category_rows : [];
+      if (categories.some(c => String(c.code || c.category || '').toUpperCase() === target) && row.message_id) ids.add(String(row.message_id));
+    }
+    const direct = settlement && Array.isArray(settlement.category_rows) ? settlement.category_rows : [];
+    for (const row of direct) {
+      if (String(row.code || row.category || '').toUpperCase() === target && row.message_id) ids.add(String(row.message_id));
+    }
+    return [...ids];
+  }
+
+  function buildMismatchDiagnostics(settlement, comparison) {
+    const c = comparison || {};
+    const totalIssues = [];
+    for (const [field, row] of Object.entries(c.totals || {})) {
+      if (!row || row.status === 'MATCH_EXACT') continue;
+      totalIssues.push({ field, status: row.status, local: row.local, reference: row.reference, delta: row.delta });
+    }
+
+    const categoryIssues = [];
+    for (const row of c.categories || []) {
+      if (!row || row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE') continue;
+      const fields = Object.entries(row.fields || {})
+        .filter(([, value]) => value && value.status !== 'MATCH_EXACT')
+        .map(([field, value]) => ({ field, status: value.status, local: value.local, reference: value.reference, delta: value.delta }));
+      categoryIssues.push({
+        code: String(row.code || '').toUpperCase(),
+        status: row.status,
+        fields,
+        message_ids: messageIdsForCategory(settlement, row.code)
+      });
+    }
+
+    const priority = { MISMATCH: 0, MATCH_DISPLAY: 1, NOT_COMPARABLE: 2 };
+    categoryIssues.sort((a, b) => (priority[a.status] == null ? 9 : priority[a.status]) - (priority[b.status] == null ? 9 : priority[b.status]) || a.code.localeCompare(b.code));
+    totalIssues.sort((a, b) => (priority[a.status] == null ? 9 : priority[a.status]) - (priority[b.status] == null ? 9 : priority[b.status]) || a.field.localeCompare(b.field));
+
+    return {
+      status: c.status || 'INCOMPLETE_REFERENCE',
+      total_issues: totalIssues,
+      category_issues: categoryIssues,
+      category_reference_missing: !Array.isArray(c.categories) || c.categories.length === 0,
+      has_actionable_category_issue: categoryIssues.length > 0
+    };
+  }
+
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v2',
+    version: 'settlement-shadow-v3-diagnostics',
     REQUIRED_PROMOTION_TOTALS,
     roundDisplay,
     compareNumber,
     compareCategories,
-    compareSettlement
+    compareSettlement,
+    messageIdsForCategory,
+    buildMismatchDiagnostics
   });
 })(typeof window !== 'undefined' ? window : globalThis);
