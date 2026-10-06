@@ -51,9 +51,11 @@ const empty = D.buildReadiness({ status:'EMPTY', counts:{ partners:0 } });
 assert.strictEqual(empty.ready, false);
 assert.strictEqual(empty.reasons[0].code, 'NO_DATA');
 
-assert(code.includes('Tách Khách / Chủ'));
-assert(code.includes('Tách theo miền'));
-assert(code.includes('Tổng chỉ các đối tác đã khớp exact'));
+assert(code.includes('Tiền theo từng miền'));
+assert(code.includes("regionCard('Miền Nam'"));
+assert(code.includes("regionCard('Miền Trung'"));
+assert(code.includes("regionCard('Miền Bắc'"));
+assert(code.includes('Tổng cộng cả 3 miền / kiểm tra vai trò'));
 assert(code.includes('GATE ĐỐI SOÁT CUỐI NGÀY'));
 assert(code.includes('không tự chốt hoặc khóa ngày'));
 assert(code.includes('Không dùng tổng này để chốt'));

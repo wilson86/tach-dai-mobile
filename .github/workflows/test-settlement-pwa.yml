@@ -55,6 +55,12 @@ jobs:
       - name: Settlement report dashboard tests
         run: node tests/settlement-report-dashboard-tests.js
 
+      - name: Settlement MN MT separation tests
+        run: node tests/settlement-mn-mt-separation-tests.js
+
+      - name: Settlement simple report UI tests
+        run: node tests/settlement-report-simple-ui-tests.js
+
       - name: Settlement daily attention tests
         run: node tests/settlement-attention-ui-tests.js
 

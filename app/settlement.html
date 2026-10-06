@@ -33,7 +33,8 @@
       <div class="gate"><input id="allowUi" type="checkbox"><div><b>Tính Ủi</b><span>Mặc định TẮT. Không sinh tiền Ủi khi chưa cho phép.</span></div></div>
       <div class="hint" style="margin-top:8px">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi. Ngày trước ngày hiệu lực tiếp tục dùng phiên bản cũ.</div>
     </div>
-    <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá MN / MT</div><span class="hint">MT dùng cùng rule MN</span></div><div id="priceMnMt"></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá Miền Nam</div><span class="hint">Cấu hình riêng MN</span></div><div id="priceMn"></div></div>
+    <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá Miền Trung</div><span class="hint">Cùng cách tính MN · giá lưu riêng MT</span></div><div id="priceMt"></div></div>
     <div class="card"><div class="section-title">Giá Miền Bắc</div><div id="priceMb"></div></div>
     <div class="card"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><div id="configStatus" class="status"></div></div>
   </section>
@@ -50,7 +51,7 @@
   </section>
 
   <section id="pane-report" class="pane">
-    <div class="card"><div class="section-title">Báo cáo chi tiết</div><div class="grid"><div><label>Ngày</label><input id="reportDate" type="date"></div><div><label>Đối tác</label><select id="reportPartner"></select></div></div><div class="row" style="margin-top:8px"><button id="loadReport" class="btn primary">Xem báo cáo</button></div></div>
+    <div class="card"><div class="section-title">Báo cáo theo đối tác</div><div class="hint" style="margin-bottom:8px">Miền Nam, Miền Trung và Miền Bắc luôn hiển thị thành từng phần riêng. Không gộp MN với MT.</div><div class="grid"><div><label>Ngày</label><input id="reportDate" type="date"></div><div><label>Đối tác</label><select id="reportPartner"></select></div></div><div class="row" style="margin-top:8px"><button id="loadReport" class="btn primary">Xem báo cáo</button></div></div>
     <div id="reportOutput" class="card hint">Chưa có báo cáo.</div>
   </section>
 </div>
@@ -91,5 +92,6 @@
 <script src="./settlement-observation-ui.js"></script>
 <script src="./settlement-backup-ui.js"></script>
 <script src="./settlement-scope-sync.js"></script>
+<script src="./settlement-report-simple-ui.js"></script>
 </body>
 </html>
