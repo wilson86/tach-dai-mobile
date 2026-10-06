@@ -63,7 +63,8 @@ function fakeStore(messages) {
   ];
   const store = fakeStore(baseMessages);
   const ctx = loadContext(store);
-  const out = await ctx.KTS_SETTLEMENT_PIPELINE.settleScope({ partner_id: 'p1', business_date: '2026-09-22', region: 'mb' });
+  const P = ctx.KTS_SETTLEMENT_PIPELINE;
+  const out = await P.settleScope({ partner_id: 'p1', business_date: '2026-09-22', region: 'mb' });
   assert.strictEqual(out.status, 'complete_unverified');
   assert.strictEqual(out.settlement.id, 'scope:p1:2026-09-22:mb');
   assert.deepStrictEqual(Array.from(out.settlement.message_ids), ['m1','m2']);
@@ -74,11 +75,37 @@ function fakeStore(messages) {
   assert.strictEqual(out.settlement.message_breakdown.length, 2);
 
   store.state.messages.push({ id: 'm3', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: 'bad', status: 'parser_error', canonical_payload: null });
-  const blocked = await ctx.KTS_SETTLEMENT_PIPELINE.settleScope({ partner_id: 'p1', business_date: '2026-09-22', region: 'mb' });
+  const blocked = await P.settleScope({ partner_id: 'p1', business_date: '2026-09-22', region: 'mb' });
   assert.strictEqual(blocked.status, 'blocked');
   assert.match(blocked.reason, /PENDING_PARSER/);
   assert.strictEqual(store.state.settlements.length, 1, 'deterministic scope upsert must replace stale money');
   assert.strictEqual(store.state.settlements[0].result_snapshot.total_xac, 0);
+
+  const cancelBad = await P.cancelMessage('m3');
+  assert.strictEqual(cancelBad.status, 'cancelled');
+  assert.strictEqual(store.state.messages.find(x => x.id === 'm3').status, 'cancelled');
+  assert.strictEqual(cancelBad.settlement.status, 'complete_unverified');
+  assert.strictEqual(cancelBad.settlement.settlement.result_snapshot.total_xac, 81);
+
+  await P.cancelMessage('m1');
+  const onlyM2 = store.state.settlements[0];
+  assert.deepStrictEqual(Array.from(onlyM2.message_ids), ['m2']);
+  assert.strictEqual(onlyM2.result_snapshot.total_xac, 54);
+
+  const lastCancelled = await P.cancelMessage('m2');
+  assert.strictEqual(lastCancelled.settlement.status, 'empty');
+  assert.strictEqual(lastCancelled.settlement.settlement.scope_status, 'empty');
+  assert.strictEqual(lastCancelled.settlement.settlement.result_snapshot.total_xac, 0);
+  assert.deepStrictEqual(Array.from(lastCancelled.settlement.settlement.message_ids), []);
+
+  const restored = await P.restoreMessage('m2');
+  assert.strictEqual(restored.status, 'restored');
+  assert.strictEqual(restored.settlement.status, 'complete_unverified');
+  assert.deepStrictEqual(Array.from(restored.settlement.settlement.message_ids), ['m2']);
+  assert.strictEqual(store.state.messages.find(x => x.id === 'm2').status, 'settled_unverified');
+
+  const active = await P.findScopeMessages('p1', '2026-09-22', 'mb');
+  assert.deepStrictEqual(Array.from(active.map(x => x.id)), ['m2']);
 
   const xienStore = fakeStore([{ id: 'x1', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: '92 61 xien 1n', status: 'parsed_waiting_result', canonical_payload: { region: 'mb', legs: [{ code: 'MB_XIEN2', values: ['92','61'], stake: '1' }] } }]);
   const xctx = loadContext(xienStore);
