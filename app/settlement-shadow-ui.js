@@ -10,6 +10,9 @@
   }
   function value(id) { const el = global.document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
   function status(text, kind) { const el=global.document.getElementById('shadowStatus'); if(!el)return; el.textContent=text||''; el.className='status '+(kind||''); }
+  function fieldLabel(field) {
+    return ({total_xac:'XÁC',total_qua_co:'QUA CÒ',total_payout:'TRẢ TRÚNG',refund_amount:'HỒI',final_net:'THU/BÙ',xac:'XÁC',qua_co:'QUA CÒ',hit_units:'TRÚNG',payout:'TRẢ'})[field] || field;
+  }
 
   function install() {
     const doc = global.document;
@@ -31,7 +34,7 @@
         <div><label>HỒI HIOSKT (nếu có)</label><input id="shadowRefund" inputmode="decimal"></div>
         <div><label>THU/BÙ cuối HIOSKT</label><input id="shadowFinal" inputmode="decimal"></div>
       </div>
-      <details style="margin-top:8px"><summary class="hint">Chi tiết category HIOSKT (tùy chọn)</summary>
+      <details style="margin-top:8px"><summary class="hint">Chi tiết category HIOSKT (tùy chọn nhưng nên nhập khi có lệch)</summary>
         <label style="margin-top:8px">JSON array, ví dụ [{"code":"DAT","xac":72,"qua_co":54.72,"hit_units":4,"payout":3000}]</label>
         <textarea id="shadowCategories" style="min-height:90px" placeholder='[{"code":"DAT","xac":72,"qua_co":54.72,"hit_units":4,"payout":3000}]'></textarea>
       </details>
@@ -48,7 +51,22 @@
       return { partner_id: partner.value, business_date: date.value, region: value('shadowRegion') };
     }
 
-    function render(comparison) {
+    function renderDiagnostics(diagnostics) {
+      if (!diagnostics) return '';
+      if (diagnostics.category_reference_missing && diagnostics.status === 'MISMATCH') {
+        return '<div class="status warn">Đã thấy lệch tổng nhưng chưa có chi tiết category HIOSKT. Nhập category để hệ thống chỉ đúng loại cược/tin gây lệch.</div>';
+      }
+      if (!diagnostics.category_issues || !diagnostics.category_issues.length) return '';
+      return `<div class="status err">Khoanh vùng lệch:</div>${diagnostics.category_issues.map(issue => {
+        const fields = (issue.fields || []).map(f => `${esc(fieldLabel(f.field))}: KTS ${money(f.local)} · HIOSKT ${money(f.reference)} · lệch ${money(f.delta)}`).join('<br>');
+        const messages = (issue.messages || []).length
+          ? `<div style="margin-top:5px"><b>Tin liên quan:</b>${issue.messages.map(m => `<div class="raw" style="margin-top:4px">${esc(m.raw_text || m.id)}</div>`).join('')}</div>`
+          : '<div class="hint" style="margin-top:5px">Chưa ánh xạ được tin cụ thể; xem category và detail rows.</div>';
+        return `<div class="report-message"><div><b>${esc(issue.code)}</b> <span class="tag err">${esc(issue.status)}</span></div><div class="hint" style="margin-top:4px">${fields}</div>${messages}</div>`;
+      }).join('')}`;
+    }
+
+    function render(comparison, diagnostics) {
       const out = doc.getElementById('shadowOutput');
       if (!comparison) { out.innerHTML=''; return; }
       const cls = comparison.status === 'MATCH_EXACT' ? 'ok' : comparison.status === 'MISMATCH' ? 'err' : 'warn';
@@ -56,9 +74,23 @@
         MATCH_EXACT:'KHỚP CHÍNH XÁC', MATCH_DISPLAY_ONLY:'CHỈ KHỚP SỐ HIỂN THỊ', MISMATCH:'LỆCH TIỀN', INCOMPLETE_REFERENCE:'THIẾU SỐ HIOSKT'
       };
       const rows=[];
-      for(const [field,r] of Object.entries(comparison.totals||{})) rows.push(`<tr><td>${esc(field)}</td><td>${money(r.local)}</td><td>${money(r.reference)}</td><td>${money(r.delta)}</td><td>${esc(r.status)}</td></tr>`);
+      for(const [field,r] of Object.entries(comparison.totals||{})) rows.push(`<tr><td>${esc(fieldLabel(field))}</td><td>${money(r.local)}</td><td>${money(r.reference)}</td><td>${money(r.delta)}</td><td>${esc(r.status)}</td></tr>`);
+      const categoryRows=(comparison.categories||[]).map(c=>{
+        const bad=Object.entries(c.fields||{}).filter(([,r])=>r.status!=='MATCH_EXACT').map(([field,r])=>`${esc(fieldLabel(field))}: ${money(r.local)} / ${money(r.reference)} (${money(r.delta)})`).join('<br>');
+        return `<tr><td>${esc(c.code)}</td><td>${esc(c.status)}</td><td>${bad||'—'}</td></tr>`;
+      }).join('');
       out.innerHTML=`<div class="status ${cls}">${esc(labels[comparison.status]||comparison.status)}${comparison.safe_to_promote?' · ĐỦ ĐIỀU KIỆN SHADOW':' · CHƯA ĐỦ ĐIỀU KIỆN'}</div>`+
-        `<table><thead><tr><th>Trường</th><th>KTS</th><th>HIOSKT</th><th>Lệch</th><th>Trạng thái</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
+        `<div class="result-grid"><table><thead><tr><th>Trường</th><th>KTS</th><th>HIOSKT</th><th>Lệch</th><th>Trạng thái</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`+
+        (categoryRows ? `<details open style="margin-top:7px"><summary class="hint"><b>So category</b></summary><div class="result-grid"><table><thead><tr><th>Loại</th><th>Trạng thái</th><th>Trường lệch</th></tr></thead><tbody>${categoryRows}</tbody></table></div></details>` : '')+
+        renderDiagnostics(diagnostics);
+    }
+
+    async function loadDiagnostics(s) {
+      if (typeof runtime.getDiagnostics !== 'function') return null;
+      try {
+        const loaded = await runtime.getDiagnostics(s);
+        return loaded && loaded.diagnostics || null;
+      } catch (_) { return null; }
     }
 
     doc.getElementById('shadowCompare').addEventListener('click', async () => {
@@ -68,7 +100,8 @@
         const raw=value('shadowCategories');
         if(raw){ categories=JSON.parse(raw); if(!Array.isArray(categories)) throw new Error('Category JSON phải là array.'); }
         const result=await runtime.compareAndSave(Object.assign({},s,{reference_snapshot:{source:'HIOSKT_MANUAL',totals:{xac:value('shadowXac'),qua_co:value('shadowQuaCo'),payout:value('shadowPayout'),hoi:value('shadowRefund'),final:value('shadowFinal')},categories}}));
-        render(result.comparison);
+        const diagnostics=await loadDiagnostics(s);
+        render(result.comparison, diagnostics);
         status(result.comparison.safe_to_promote?'Đã lưu đối chiếu exact. Scope này đạt gate shadow hiện tại.':'Đã lưu đối chiếu. Chưa được promotion nếu còn thiếu/khớp hiển thị/lệch.',result.comparison.safe_to_promote?'ok':result.comparison.status==='MISMATCH'?'err':'warn');
         if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
           global.dispatchEvent(new global.CustomEvent('kts:shadow-saved', { detail: Object.assign({}, s, { comparison_status: result.comparison.status }) }));
@@ -78,7 +111,8 @@
 
     doc.getElementById('shadowLoad').addEventListener('click', async () => {
       try {
-        const saved=await runtime.getComparison(scope());
+        const s=scope();
+        const saved=await runtime.getComparison(s);
         if(!saved||!saved.reference){status('Chưa có đối chiếu HIOSKT đã lưu cho scope này.','warn');render(null);return;}
         const t=saved.reference.totals||{};
         doc.getElementById('shadowXac').value=t.xac==null?'':t.xac;
@@ -87,7 +121,8 @@
         doc.getElementById('shadowRefund').value=t.hoi==null?'':t.hoi;
         doc.getElementById('shadowFinal').value=t.final==null?'':t.final;
         doc.getElementById('shadowCategories').value=saved.reference.categories&&saved.reference.categories.length?JSON.stringify(saved.reference.categories,null,2):'';
-        render(saved.comparison);
+        const diagnostics=await loadDiagnostics(s);
+        render(saved.comparison, diagnostics);
         status('Đã nạp lần đối chiếu đã lưu.','ok');
       }catch(e){status(String(e.message||e),'err');}
     });
