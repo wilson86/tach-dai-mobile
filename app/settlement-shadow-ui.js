@@ -8,6 +8,11 @@
     const n = Number(v);
     return Number.isFinite(n) ? new Intl.NumberFormat('vi-VN',{maximumFractionDigits:6}).format(n) : '—';
   }
+  function when(v) {
+    if (!v) return '—';
+    const d = new Date(v);
+    return Number.isFinite(d.getTime()) ? d.toLocaleString('vi-VN') : String(v);
+  }
   function value(id) { const el = global.document.getElementById(id); return el ? String(el.value || '').trim() : ''; }
   function status(text, kind) { const el=global.document.getElementById('shadowStatus'); if(!el)return; el.textContent=text||''; el.className='status '+(kind||''); }
   function fieldLabel(field) {
@@ -38,9 +43,10 @@
         <label style="margin-top:8px">JSON array, ví dụ [{"code":"DAT","xac":72,"qua_co":54.72,"hit_units":4,"payout":3000}]</label>
         <textarea id="shadowCategories" style="min-height:90px" placeholder='[{"code":"DAT","xac":72,"qua_co":54.72,"hit_units":4,"payout":3000}]'></textarea>
       </details>
-      <div class="row" style="margin-top:8px"><button id="shadowCompare" class="btn primary">So với HIOSKT + lưu</button><button id="shadowLoad" class="btn soft">Nạp lần đối chiếu đã lưu</button></div>
+      <div class="row" style="margin-top:8px"><button id="shadowCompare" class="btn primary">So với HIOSKT + lưu</button><button id="shadowLoad" class="btn soft">Nạp lần đối chiếu đã lưu</button><button id="shadowHistoryLoad" class="btn soft">Lịch sử đối chiếu</button></div>
       <div id="shadowStatus" class="status"></div>
-      <div id="shadowOutput" class="hint"></div>`;
+      <div id="shadowOutput" class="hint"></div>
+      <details id="shadowHistoryPanel" style="margin-top:8px"><summary class="hint"><b>Lịch sử Shadow / evidence</b> · append-only</summary><div id="shadowHistoryOutput" class="hint" style="margin-top:7px">Chưa tải lịch sử.</div></details>`;
     pane.appendChild(card);
 
     function scope() {
@@ -85,6 +91,27 @@
         renderDiagnostics(diagnostics);
     }
 
+    function renderHistory(events) {
+      const host = doc.getElementById('shadowHistoryOutput');
+      if (!host) return;
+      const rows = Array.isArray(events) ? events.slice().reverse() : [];
+      if (!rows.length) {
+        host.innerHTML = '<div class="hint">Chưa có evidence đối chiếu cho scope này.</div>';
+        return;
+      }
+      host.innerHTML = `<div class="hint">${rows.length} mốc evidence. Các lần tự tính lại giống hệt liên tiếp được khử trùng để không phình lịch sử.</div>` + rows.slice(0, 30).map((event, index) => {
+        const comp = event.comparison || {};
+        const local = event.local_snapshot && event.local_snapshot.settlement_result || {};
+        const ref = event.reference_snapshot && event.reference_snapshot.totals || {};
+        const finalCmp = comp.totals && comp.totals.final_net || null;
+        const cls = event.comparison_status === 'MATCH_EXACT' ? 'ok' : event.comparison_status === 'MISMATCH' ? 'err' : 'warn';
+        const verify = event.local_snapshot && event.local_snapshot.result_verification_status || 'unverified';
+        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>#${rows.length-index}</b> <span class="tag ${cls}">${esc(event.comparison_status)}</span> <span class="tag">${esc(event.trigger || 'UNKNOWN')}</span></div><span class="hint">${esc(when(event.observed_at))}</span></div>`+
+          `<div class="hint" style="margin-top:4px">THU/BÙ KTS <b>${money(local.final_net)}</b> · HIOSKT <b>${money(ref.final)}</b> · lệch <b>${money(finalCmp && finalCmp.delta)}</b> · KQXS ${esc(verify)} · engine ${esc(event.local_snapshot && event.local_snapshot.engine_version || '—')} · config v${esc(event.local_snapshot && event.local_snapshot.config_version == null ? '—' : event.local_snapshot.config_version)}</div>`+
+          `${event.reason ? `<div class="hint">Lý do: ${esc(event.reason)}</div>` : ''}</div>`;
+      }).join('');
+    }
+
     async function loadDiagnostics(s) {
       if (typeof runtime.getDiagnostics !== 'function') return null;
       try {
@@ -93,15 +120,27 @@
       } catch (_) { return null; }
     }
 
+    async function refreshHistory(s) {
+      if (typeof runtime.getHistory !== 'function') return [];
+      const events = await runtime.getHistory(s);
+      renderHistory(events);
+      return events;
+    }
+
     doc.getElementById('shadowCompare').addEventListener('click', async () => {
       try {
         const s=scope();
         let categories=[];
         const raw=value('shadowCategories');
         if(raw){ categories=JSON.parse(raw); if(!Array.isArray(categories)) throw new Error('Category JSON phải là array.'); }
-        const result=await runtime.compareAndSave(Object.assign({},s,{reference_snapshot:{source:'HIOSKT_MANUAL',totals:{xac:value('shadowXac'),qua_co:value('shadowQuaCo'),payout:value('shadowPayout'),hoi:value('shadowRefund'),final:value('shadowFinal')},categories}}));
+        const result=await runtime.compareAndSave(Object.assign({},s,{
+          trigger:'MANUAL_COMPARE',
+          reason:'operator:shadow-ui',
+          reference_snapshot:{source:'HIOSKT_MANUAL',totals:{xac:value('shadowXac'),qua_co:value('shadowQuaCo'),payout:value('shadowPayout'),hoi:value('shadowRefund'),final:value('shadowFinal')},categories}
+        }));
         const diagnostics=await loadDiagnostics(s);
         render(result.comparison, diagnostics);
+        await refreshHistory(s).catch(() => {});
         status(result.comparison.safe_to_promote?'Đã lưu đối chiếu exact. Scope này đạt gate shadow hiện tại.':'Đã lưu đối chiếu. Chưa được promotion nếu còn thiếu/khớp hiển thị/lệch.',result.comparison.safe_to_promote?'ok':result.comparison.status==='MISMATCH'?'err':'warn');
         if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
           global.dispatchEvent(new global.CustomEvent('kts:shadow-saved', { detail: Object.assign({}, s, { comparison_status: result.comparison.status }) }));
@@ -113,7 +152,7 @@
       try {
         const s=scope();
         const saved=await runtime.getComparison(s);
-        if(!saved||!saved.reference){status('Chưa có đối chiếu HIOSKT đã lưu cho scope này.','warn');render(null);return;}
+        if(!saved||!saved.reference){status('Chưa có đối chiếu HIOSKT đã lưu cho scope này.','warn');render(null);await refreshHistory(s).catch(()=>{});return;}
         const t=saved.reference.totals||{};
         doc.getElementById('shadowXac').value=t.xac==null?'':t.xac;
         doc.getElementById('shadowQuaCo').value=t.qua_co==null?'':t.qua_co;
@@ -123,8 +162,19 @@
         doc.getElementById('shadowCategories').value=saved.reference.categories&&saved.reference.categories.length?JSON.stringify(saved.reference.categories,null,2):'';
         const diagnostics=await loadDiagnostics(s);
         render(saved.comparison, diagnostics);
+        await refreshHistory(s).catch(() => {});
         status('Đã nạp lần đối chiếu đã lưu.','ok');
       }catch(e){status(String(e.message||e),'err');}
+    });
+
+    doc.getElementById('shadowHistoryLoad').addEventListener('click', async () => {
+      try {
+        const s = scope();
+        const events = await refreshHistory(s);
+        const panel = doc.getElementById('shadowHistoryPanel');
+        if (panel) panel.open = true;
+        status(events.length ? `Đã nạp ${events.length} mốc evidence Shadow.` : 'Scope này chưa có lịch sử Shadow.', events.length ? 'ok' : 'warn');
+      } catch (e) { status(String(e.message || e), 'err'); }
     });
   }
 
