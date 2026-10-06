@@ -75,6 +75,9 @@ jobs:
       - name: Settlement shadow mismatch UI tests
         run: node tests/settlement-shadow-ui-tests.js
 
+      - name: Settlement batch shadow tests
+        run: node tests/settlement-shadow-batch-tests.js
+
       - name: Settlement shadow observation tests
         run: node tests/settlement-observation-tests.js
 
