@@ -102,6 +102,9 @@ jobs:
       - name: Settlement final qualification wiring tests
         run: node tests/settlement-qualification-dashboard-wiring-tests.js
 
+      - name: Settlement critical build identity tests
+        run: node tests/settlement-build-identity-tests.js
+
       - name: Settlement qualification evidence history tests
         run: node tests/settlement-qualification-history-tests.js
 
