@@ -39,9 +39,6 @@
   function normalizeStation(region, station) {
     if (!station || !station.code) throw new Error('RESULT_STATION_CODE_REQUIRED');
     const prizes = normalizePrizeMap(station.prizes);
-    // Never trust provider `complete:true` if the actual prize shape is incomplete.
-    // An explicit false may keep a station provisional, but true cannot override
-    // deterministic prize-count validation.
     const computedComplete = stationComplete(region, { prizes });
     const complete = computedComplete && station.complete !== false;
     return {
@@ -90,7 +87,21 @@
     const status = complete ? 'complete' : 'partial';
     const verificationStatus = normalizeVerification(input, complete);
     const verified = complete && verificationStatus === 'verified';
-    const core = { business_date: businessDate, region, expected_station_codes: expectedStationCodes, stations, complete, status, verification_status: verificationStatus };
+    const verificationSources = Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [];
+    const verificationReason = input.verification_reason == null ? null : String(input.verification_reason);
+    const verificationConflicts = Array.isArray(input.verification_conflicts) ? input.verification_conflicts.map(String) : [];
+    const core = {
+      business_date: businessDate,
+      region,
+      expected_station_codes: expectedStationCodes,
+      stations,
+      complete,
+      status,
+      verification_status: verificationStatus,
+      verification_sources: verificationSources,
+      verification_reason: verificationReason,
+      verification_conflicts: verificationConflicts
+    };
     return {
       id: input.id || `${businessDate}:${region}`,
       business_date: businessDate,
@@ -102,12 +113,21 @@
       coverage_complete: coverageComplete,
       verified,
       verification_status: verificationStatus,
-      verification_sources: Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [],
+      verification_sources: verificationSources,
+      verification_reason: verificationReason,
+      verification_conflicts: verificationConflicts,
       expected_station_codes: expectedStationCodes,
       stations,
       fingerprint: stableStringify(core),
       provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
     };
+  }
+
+  function verificationPending(snapshot) {
+    if (!snapshot || snapshot.verification_status !== 'unverified') return false;
+    const sources = Array.isArray(snapshot.verification_sources) ? snapshot.verification_sources : [];
+    const reason = String(snapshot.verification_reason || '');
+    return sources.length >= 2 || reason.startsWith('SECONDARY_');
   }
 
   function createPoller(options) {
@@ -166,12 +186,17 @@
           complete_confirmations_required: completeConfirmations,
           complete_confirmed: confirmedComplete,
           verified: snapshot.verified,
+          verification_status: snapshot.verification_status,
           final: snapshot.verified
         });
 
-        if (snapshot.verified) {
+        if (snapshot.verification_status === 'conflict') {
+          onStatus({ state: 'conflict', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
+        } else if (snapshot.verified) {
           onStatus({ state: 'verified', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
           stop();
+        } else if (confirmedComplete && verificationPending(snapshot)) {
+          onStatus({ state: 'verification_pending', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
         } else if (confirmedComplete) {
           onStatus({ state: 'complete', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
           stop();
@@ -239,6 +264,7 @@
     normalizeExpectedStationCodes,
     stationCoverage,
     normalizeSnapshot,
+    verificationPending,
     createPoller
   });
 })(typeof window !== 'undefined' ? window : globalThis);
