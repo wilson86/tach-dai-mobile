@@ -127,8 +127,11 @@
         }));
       }
 
-      const parts = String(id).split(':');
-      const scope = { partner_id: parts[1], business_date: parts[2], region: parts[3] };
+      const scope = {
+        partner_id: String(current.partner_id || ''),
+        business_date: String(current.business_date || ''),
+        region: String(current.region || '').toLowerCase()
+      };
       const refreshed = await shadowRuntime.compareAndSave(Object.assign({}, scope, { reference_snapshot: reference }));
       return refreshed && refreshed.settlement ? refreshed.settlement : current;
     }
@@ -179,6 +182,7 @@
     install
   });
 
-  if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
-  else install();
+  // This module has no DOM dependency. Install synchronously so result-auto.js
+  // and settlement-ui.js capture the guarded pipeline, not the raw pipeline.
+  install();
 })(typeof window !== 'undefined' ? window : globalThis);
