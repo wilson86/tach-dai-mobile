@@ -20,8 +20,9 @@ const ctx={console,globalThis:null,KTS_SETTLEMENT_STORE:store,KTS_SETTLEMENT_QUA
   const link=await H.verifyPackageRecordLink(pkg,record);assert.strictEqual(link.valid,true);
   const qlink=await H.verifyQualificationLink(pkg);assert.strictEqual(qlink.status,'VERIFIED');
   const e1=await H.buildEvent(pkg,record,null,1,qlink);const e2=await H.buildEvent(pkg,record,e1,2,qlink);let chain=await H.verifyChain([e1,e2]);assert.strictEqual(chain.valid,true);assert.strictEqual(chain.count,2);assert.strictEqual(e2.previous_event_sha256,e1.integrity.event_sha256);
-  const tampered=clone(e2);tampered.package_link.package_payload_sha256='c'.repeat(64);chain=await H.verifyChain([e1,tampered]);assert.strictEqual(chain.valid,false);
   let validity=await H.checkEventValidity(e1);assert.strictEqual(validity.status,'CURRENT');assert.strictEqual(validity.current,true);
+  validity=await H.checkEventValidity(e2);assert.strictEqual(validity.status,'CURRENT');assert.strictEqual(validity.current,true);
+  const tampered=clone(e2);tampered.package_link.package_payload_sha256='c'.repeat(64);chain=await H.verifyChain([e1,tampered]);assert.strictEqual(chain.valid,false);
   currentMaterial.runtime.build='changed';validity=await H.checkEventValidity(e1);assert.strictEqual(validity.status,'STALE');assert(validity.changed_components.includes('runtime'));
   currentMaterial={runtime:{build:'a'},parser_backend:{status:'unavailable',error:'OFFLINE'}};validity=await H.checkEventValidity(e1);assert.strictEqual(validity.status,'UNVERIFIABLE');
   const badRecord=clone(record);badRecord.package.package_payload_sha256='d'.repeat(64);const bad=await H.verifyPackageRecordLink(pkg,badRecord);assert.strictEqual(bad.valid,false);assert(bad.errors.includes('REVIEW_PACKAGE_SHA_MISMATCH'));
