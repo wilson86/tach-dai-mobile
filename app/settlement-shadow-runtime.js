@@ -72,11 +72,35 @@
     };
   }
 
+  async function getDiagnostics(input) {
+    const d = deps();
+    const loaded = await getComparison(input);
+    if (!loaded || !loaded.comparison) return null;
+    const diagnostics = d.shadow.buildMismatchDiagnostics(loaded.settlement, loaded.comparison);
+    const messages = d.store.STORES.messages && typeof d.store.getAll === 'function'
+      ? await d.store.getAll(d.store.STORES.messages)
+      : [];
+    const messageMap = Object.fromEntries((messages || []).map(m => [String(m.id), m]));
+    const enriched = clone(diagnostics);
+    for (const issue of enriched.category_issues || []) {
+      issue.messages = (issue.message_ids || []).map(id => {
+        const m = messageMap[String(id)] || {};
+        return {
+          id: String(id),
+          raw_text: String(m.raw_text || ''),
+          status: String(m.status || '')
+        };
+      });
+    }
+    return Object.assign({}, loaded, { diagnostics: enriched });
+  }
+
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v1',
+    version: 'settlement-shadow-runtime-v2-diagnostics',
     scopeId,
     normalizeReference,
     compareAndSave,
-    getComparison
+    getComparison,
+    getDiagnostics
   });
 })(typeof window !== 'undefined' ? window : globalThis);
