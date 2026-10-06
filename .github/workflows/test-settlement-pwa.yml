@@ -78,6 +78,9 @@ jobs:
       - name: Settlement batch shadow tests
         run: node tests/settlement-shadow-batch-tests.js
 
+      - name: Settlement batch shadow wiring tests
+        run: node tests/settlement-shadow-batch-wiring-tests.js
+
       - name: Settlement shadow observation tests
         run: node tests/settlement-observation-tests.js
 
