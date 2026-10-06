@@ -4,6 +4,7 @@ const vm = require('vm');
 const assert = require('assert');
 
 const state = {
+  partners:[{id:'p1',name:'Hiền',role:'customer'}],
   settlements: [{
     id:'scope:p1:2026-09-22:mn', partner_id:'p1', business_date:'2026-09-22', region:'mn',
     scope_status:'complete_unverified', comparison_status:'unverified', engine_version:'engine-test',
@@ -24,7 +25,7 @@ const state = {
   shadow_events:[]
 };
 const store = {
-  STORES:{settlements:'settlements',messages:'messages',shadowEvents:'shadow_events'},
+  STORES:{partners:'partners',settlements:'settlements',messages:'messages',shadowEvents:'shadow_events'},
   async get(name,id){return (state[name]||[]).find(x=>x.id===id)||null;},
   async getAll(name){return (state[name]||[]).map(x=>JSON.parse(JSON.stringify(x)));},
   async saveSettlement(row){const i=state.settlements.findIndex(x=>x.id===row.id); if(i>=0)state.settlements[i]={...row};else state.settlements.push({...row}); return {...row};},
@@ -42,7 +43,7 @@ for(const file of ['app/settlement-shadow.js','app/settlement-shadow-runtime.js'
 
 (async()=>{
   const R=ctx.KTS_SETTLEMENT_SHADOW_RUNTIME;
-  assert.strictEqual(R.version,'settlement-shadow-runtime-v4-replay-evidence');
+  assert.strictEqual(R.version,'settlement-shadow-runtime-v5-replay-role');
   const saved=await R.compareAndSave({partner_id:'p1',business_date:'2026-09-22',region:'mn',trigger:'MANUAL_COMPARE',reason:'operator:test',reference_snapshot:{totals:{xac:288,qua_co:218.88,payout:4650,final:-4431.12},categories:[{code:'DAT',xac:72,qua_co:55.72,hit_units:4,payout:3000},{code:'DAX',xac:216,qua_co:164.16,hit_units:3,payout:1650}]}});
   assert.strictEqual(saved.comparison.status,'MISMATCH');
   assert.strictEqual(saved.comparison.safe_to_promote,false);
@@ -50,6 +51,7 @@ for(const file of ['app/settlement-shadow.js','app/settlement-shadow-runtime.js'
   assert.strictEqual(state.shadow_events.length,1);
   assert.strictEqual(state.shadow_events[0].trigger,'MANUAL_COMPARE');
   assert.strictEqual(state.shadow_events[0].reason,'operator:test');
+  assert.strictEqual(state.shadow_events[0].local_snapshot.partner_role,'customer');
   assert.strictEqual(state.shadow_events[0].local_snapshot.engine_version,'engine-test');
   assert.strictEqual(state.shadow_events[0].local_snapshot.config_version,3);
   assert.strictEqual(state.shadow_events[0].local_snapshot.config_snapshot.total_percent,'100');
@@ -73,6 +75,7 @@ for(const file of ['app/settlement-shadow.js','app/settlement-shadow-runtime.js'
   const replay1=await R.getReplayCase({partner_id:'p1',business_date:'2026-09-22',region:'mn'});
   assert.strictEqual(replay1.format,'kts-shadow-replay-case-v1');
   assert.strictEqual(replay1.scope.scope_id,'scope:p1:2026-09-22:mn');
+  assert.strictEqual(replay1.partner_role,'customer');
   assert.strictEqual(replay1.messages.length,2);
   assert.strictEqual(replay1.config_snapshot.version,3);
   assert.strictEqual(replay1.lottery_result_snapshot.fingerprint,'kq-v1');
@@ -92,6 +95,7 @@ for(const file of ['app/settlement-shadow.js','app/settlement-shadow-runtime.js'
   assert.strictEqual(history[1].id,'ev2');
   const firstReplay=await R.getReplayCase({partner_id:'p1',business_date:'2026-09-22',region:'mn',event_id:'ev1'});
   assert.strictEqual(firstReplay.lottery_result_snapshot.fingerprint,'kq-v1');
+  assert.strictEqual(firstReplay.partner_role,'customer');
   const latestReplay=await R.getReplayCase({partner_id:'p1',business_date:'2026-09-22',region:'mn'});
   assert.strictEqual(latestReplay.lottery_result_snapshot.fingerprint,'kq-v2');
 
