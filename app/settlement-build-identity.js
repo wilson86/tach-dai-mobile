@@ -22,7 +22,7 @@
     'app/settlement-qualification-history-bridge.js':'90d7b8c619a1a3b1d29aa36c09d16f57b18cb0d9',
     'app/settlement-preproduction-package.js':'8206331fd8e552214d3a33076ed4a33fe7556958',
     'app/settlement-preproduction-review.js':'c1ca3becb7168b025b0b6e1310918b6eb156db58',
-    'app/settlement-preproduction-review-history.js':'a1ee55fb9c3bd3487678590696edbcec973ce643',
+    'app/settlement-preproduction-review-history.js':'a8b9e9df60edb22ec53670e30718d3a6a51eee56',
     'app/result-service.js':'a5f386c724cb8751a7082a90c49c17af50d2be05',
     'app/result-provider.js':'65d00f0bf0e250a17f41fbff5d3926373205c0b2',
     'app/result-auto.js':'92f49d694a08a1ff7ab81eebdda52054bec1989c'
