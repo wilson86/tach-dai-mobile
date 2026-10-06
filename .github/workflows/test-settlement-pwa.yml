@@ -90,6 +90,9 @@ jobs:
       - name: Settlement current parser replay wiring tests
         run: node tests/settlement-parser-replay-wiring-tests.js
 
+      - name: Settlement repair readiness queue tests
+        run: node tests/settlement-repair-readiness-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
