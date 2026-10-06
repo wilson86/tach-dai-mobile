@@ -79,6 +79,19 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(O.comparisonStatus(nested), 'MATCH_EXACT');
 }
 
+// KQXS/shadow guard can block via comparison_status while the accounting scope itself remains complete.
+{
+  const guarded = scope('2026-10-01', 'mb', 'blocked', {
+    scope_status: 'complete_unverified',
+    blocked_reasons: ['KQXS_SOURCE_CONFLICT']
+  });
+  assert.strictEqual(O.comparisonStatus(guarded), 'BLOCKED');
+  const s = O.buildObservation([guarded], { required_observation_days: 1 });
+  assert.strictEqual(s.counts.blocked, 1);
+  assert.strictEqual(s.promotion_ready, false);
+  assert(s.blockers.includes('BLOCKED:1'));
+}
+
 // A day is not clean if there is an active message scope without a settlement.
 {
   const rows = [scope('2026-10-01', 'mn', 'MATCH_EXACT')];
