@@ -8,7 +8,7 @@ ctx.globalThis = ctx;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/settlement-regression-review.js', 'utf8'), ctx, { filename: 'settlement-regression-review.js' });
 const R = ctx.KTS_SETTLEMENT_REGRESSION_REVIEW;
-assert.strictEqual(R.version, 'settlement-regression-review-v1');
+assert.strictEqual(R.version, 'settlement-regression-review-v3-repair-loader');
 
 function candidate(id, date, region, role, delta, categories, totals, state) {
   return {
@@ -72,5 +72,18 @@ const totalOnly = candidate('c6', '2026-09-26', 'mt', 'customer', 1, [], {
 });
 const sig = R.signatureForCandidate(totalOnly);
 assert(sig.includes('mt|customer|TOTAL=final_net:MATCH_DISPLAY|total_qua_co:MISMATCH'));
+
+// Real candidates do not persist source comparison inside normalized regression cases.
+// Review can replay the case to derive the current actionable category shape.
+ctx.KTS_SETTLEMENT_REGRESSION_CASES = {
+  replayCase() {
+    return { comparison: { categories: datMismatch, totals: { final_net: { status: 'MISMATCH' } } } };
+  }
+};
+const replayOnly = {
+  id: 'c7', state: 'pending', final_delta: '1', created_at: '2026-09-27T18:00:00Z',
+  case: { partner_role: 'customer', scope: { partner_id: 'p1', business_date: '2026-09-27', region: 'mn' } }
+};
+assert(R.signatureForCandidate(replayOnly).includes('mn|customer|CAT=DAT:payout,qua_co'));
 
 console.log('settlement-regression-review-tests: PASS');
