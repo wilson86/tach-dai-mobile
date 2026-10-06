@@ -175,6 +175,15 @@ jobs:
       - name: Settlement portable audit pack tests
         run: node tests/settlement-preproduction-audit-pack-tests.js
 
+      - name: Settlement offline audit-pack verifier tests
+        run: node tests/settlement-preproduction-audit-offline-verifier-tests.js
+
+      - name: Settlement human decision dossier tests
+        run: node tests/settlement-preproduction-decision-dossier-tests.js
+
+      - name: Settlement decision handoff wiring tests
+        run: node tests/settlement-preproduction-decision-wiring-tests.js
+
       - name: Settlement pre-production orchestration wiring tests
         run: node tests/settlement-preproduction-orchestration-wiring-tests.js
 

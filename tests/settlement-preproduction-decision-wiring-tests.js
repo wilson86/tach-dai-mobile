@@ -1,0 +1,11 @@
+'use strict';
+const fs=require('fs'),assert=require('assert');
+const av=fs.readFileSync('app/settlement-preproduction-audit-offline-verifier.js','utf8'),dossier=fs.readFileSync('app/settlement-preproduction-decision-dossier.js','utf8'),bridge=fs.readFileSync('app/settlement-qualification-history-bridge.js','utf8'),sw=fs.readFileSync('app/sw.js','utf8'),identity=fs.readFileSync('app/settlement-build-identity.js','utf8');
+assert(av.includes('settlement-preproduction-audit-offline-verifier-v1'));assert(av.includes('current_state_verified:false'));assert(av.includes('current_state_reverification_required:true'));assert(av.includes('production_authorized:false'));assert(!av.includes('indexedDB'));assert(!av.includes('fetch('));assert(!av.includes('saveSettlement('));assert(!av.includes('saveConfig('));
+assert(dossier.includes('settlement-preproduction-decision-dossier-v1'));assert(dossier.includes('DOSSIER_IS_NOT_PRODUCTION_APPROVAL'));assert(dossier.includes('REVERIFY_CURRENT_STATE_BEFORE_ANY_PRODUCTION_DECISION'));assert(dossier.includes('NO_AUTO_MERGE_DEPLOY_ENABLE'));assert(dossier.includes('current_state_verified:false'));assert(dossier.includes('production_authorized:false'));assert(!dossier.includes('saveSettlement('));assert(!dossier.includes('saveConfig('));assert(!dossier.includes('production_authorized=true'));
+for(const f of ['./settlement-preproduction-audit-offline-verifier.js','./settlement-preproduction-decision-dossier.js']){assert(bridge.includes(f));assert(sw.includes("'"+f+"'"));}
+assert(bridge.includes("appendScript('./settlement-preproduction-audit-pack.js','data-kts-preproduction-audit-pack',loadPreproductionAuditOfflineVerifier)"));
+assert(bridge.includes("appendScript('./settlement-preproduction-audit-offline-verifier.js','data-kts-preproduction-audit-offline-verifier',loadPreproductionDecisionDossier)"));
+assert(bridge.includes("appendScript('./settlement-preproduction-decision-dossier.js','data-kts-preproduction-decision-dossier',loadPreproductionReviewSession)"));
+assert(identity.includes("'app/settlement-preproduction-audit-offline-verifier.js'"));assert(identity.includes("'app/settlement-preproduction-decision-dossier.js'"));
+console.log('settlement-preproduction-decision-wiring-tests: PASS');
