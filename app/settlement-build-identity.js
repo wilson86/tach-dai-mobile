@@ -1,0 +1,33 @@
+(function(global){
+  'use strict';
+  const critical=Object.freeze({
+    'app/settlement-store.js':'d6dd6d49491db310c0b9ff444bd85931331df66d',
+    'app/settlement-engine.js':'93471a5e809746a91a847b0e64b2bff09cdc0a37',
+    'app/settlement-mb-rules.js':'01e7636d0ea0ab5dbbb2e51e0968a5c5e2f73081',
+    'app/settlement-category-map.js':'5cbd0575ec451b6a6a5a351fbe67d1599fccfb4d',
+    'app/settlement-feature-gates.js':'c9aff5cfc042538fcbc00e3a62c33caef3f96ace',
+    'app/settlement-runtime.js':'51754c4f72dcfe88e0c08c1451258462aa2b25b2',
+    'app/settlement-evaluator.js':'bb358dbfd6e5ad263e2af3df7295c1f0dcb8eb15',
+    'app/settlement-parser-provider.js':'090a4266e0b3844d78f073f9ff09c18aacc29f22',
+    'app/settlement-pipeline.js':'765ed2670eaf850d69e3bc45cb592dcc62b2c4a6',
+    'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
+    'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
+    'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
+    'app/settlement-observation.js':'24b48853baf77507313ce8eb4249e3e28439cd88',
+    'app/settlement-regression-cases.js':'0529fc97fb2cd3ca45c370ce3252e03c5516a940',
+    'app/settlement-parser-replay.js':'46f804323d4d6b3c6ad82d689421d6fdd33c3f3f',
+    'app/settlement-repair-readiness.js':'34d92a558f3a94fbac6fff08aaa8a57462e16542',
+    'app/settlement-qualification-dashboard.js':'4a4f620f10536f5ad58f54119d5770db8f424cb9',
+    'app/settlement-qualification-history.js':'88de622401e36047347dfce637a544b1aea63d7d',
+    'app/settlement-qualification-history-bridge.js':'b12de71d2151c185375f1b6f0d68951f39bf16a9',
+    'app/result-service.js':'a5f386c724cb8751a7082a90c49c17af50d2be05',
+    'app/result-provider.js':'65d00f0bf0e250a17f41fbff5d3926373205c0b2',
+    'app/result-auto.js':'92f49d694a08a1ff7ab81eebdda52054bec1989c'
+  });
+  global.KTS_SETTLEMENT_BUILD_IDENTITY=Object.freeze({
+    version:'settlement-build-identity-v1',
+    algorithm:'git-blob-sha1',
+    critical_git_blobs:critical,
+    business_engine_sha256:'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c'
+  });
+})(typeof window!=='undefined'?window:globalThis);
