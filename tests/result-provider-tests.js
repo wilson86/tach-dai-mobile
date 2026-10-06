@@ -21,7 +21,7 @@ const sandbox = {
     return {
       ok: true,
       status: 200,
-      json: async () => ({ source: 'fixture', stations: [{ code: 'bl', name: 'Bạc Liêu', prizes: { G8: ['90'] } }] })
+      json: async () => ({ source: 'fixture', expected_station_codes: ['bt', 'vt', 'bli'], stations: [{ code: 'bli', name: 'Bạc Liêu', prizes: { G8: ['90'] } }] })
     };
   }
 };
@@ -40,7 +40,8 @@ assert.throws(() => P.setEndpoint('javascript:alert(1)'), /KQXS_ENDPOINT/);
   assert.strictEqual(out.business_date, '2026-10-05');
   assert.strictEqual(out.region, 'mn');
   assert.strictEqual(out.source, 'fixture');
-  assert.strictEqual(out.stations[0].code, 'bl');
+  assert.strictEqual(out.stations[0].code, 'bli');
+  assert.deepStrictEqual(Array.from(out.expected_station_codes), ['bt', 'vt', 'bli']);
   assert(requested.url.includes('date=2026-10-05'));
   assert(requested.url.includes('region=mn'));
   assert.strictEqual(requested.options.cache, 'no-store');
