@@ -14,7 +14,7 @@ function makeCtx(opts={}){
   const ctx={console,globalThis:null,KTS_SETTLEMENT_STORE:store,KTS_SETTLEMENT_OBSERVATION:observation,KTS_SETTLEMENT_REGRESSION_CASES:regression,KTS_SETTLEMENT_REGRESSION_CANDIDATES:candidates,KTS_SETTLEMENT_REPAIR_READINESS:readiness};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('app/settlement-qualification-dashboard.js','utf8'),ctx,{filename:'settlement-qualification-dashboard.js'});return ctx.KTS_SETTLEMENT_QUALIFICATION;
 }
 (async()=>{
-  const Q=makeCtx();assert.strictEqual(Q.version,'settlement-qualification-dashboard-v1');
+  const Q=makeCtx();assert.strictEqual(Q.version,'settlement-qualification-dashboard-v2-evidence-event');
   let kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'verified'}]});assert.strictEqual(kg.met,true);assert.strictEqual(kg.verified,1);
   kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'conflict'}]});assert.strictEqual(kg.met,false);assert.strictEqual(kg.conflict,1);
   let pg=Q.parserProvenanceGate([message()],{from_date:'2026-09-22',to_date:'2026-09-22'});assert.strictEqual(pg.met,true);assert.strictEqual(pg.known,1);
