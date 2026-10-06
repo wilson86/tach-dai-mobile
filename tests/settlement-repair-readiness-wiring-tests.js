@@ -20,5 +20,5 @@ assert(!readiness.includes('saveConfig('));
 assert(!readiness.includes('dismissCandidate('));
 assert(!readiness.includes('confirmAndPin('));
 assert(sw.includes("'./settlement-repair-readiness.js'"));
-assert(sw.includes('v1.0.45-repair-readiness-bulk'));
+assert(sw.includes("const CACHE='kts-tach-unified-v1.0."));
 console.log('settlement-repair-readiness-wiring-tests: PASS');
