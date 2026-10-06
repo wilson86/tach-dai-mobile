@@ -23,6 +23,7 @@
     const doc = global.document;
     const pane = doc && doc.getElementById('pane-report');
     const runtime = global.KTS_SETTLEMENT_SHADOW_RUNTIME;
+    const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
     if (!pane || !runtime || doc.getElementById('shadowPanel')) return;
 
     const card = doc.createElement('div');
@@ -44,7 +45,10 @@
         <textarea id="shadowCategories" style="min-height:90px" placeholder='[{"code":"DAT","xac":72,"qua_co":54.72,"hit_units":4,"payout":3000}]'></textarea>
       </details>
       <div class="row" style="margin-top:8px"><button id="shadowCompare" class="btn primary">So với HIOSKT + lưu</button><button id="shadowLoad" class="btn soft">Nạp lần đối chiếu đã lưu</button><button id="shadowHistoryLoad" class="btn soft">Lịch sử đối chiếu</button></div>
+      <div class="row" style="margin-top:8px"><button id="shadowPinRegression" class="btn soft">Ghim case regression</button><button id="shadowRunRegression" class="btn soft">Kiểm tra case đã ghim</button><button id="shadowExportRegression" class="btn soft">Xuất case CI</button></div>
       <div id="shadowStatus" class="status"></div>
+      <div id="shadowRegressionStatus" class="status"></div>
+      <div id="shadowRegressionOutput" class="hint"></div>
       <div id="shadowOutput" class="hint"></div>
       <details id="shadowHistoryPanel" style="margin-top:8px"><summary class="hint"><b>Lịch sử Shadow / evidence</b> · append-only</summary><div id="shadowHistoryOutput" class="hint" style="margin-top:7px">Chưa tải lịch sử.</div></details>`;
     pane.appendChild(card);
@@ -55,6 +59,13 @@
       if (!partner || !partner.value) throw new Error('Chưa chọn đối tác ở phần Báo cáo.');
       if (!date || !date.value) throw new Error('Chưa chọn ngày ở phần Báo cáo.');
       return { partner_id: partner.value, business_date: date.value, region: value('shadowRegion') };
+    }
+
+    function regressionStatus(text, kind) {
+      const el = doc.getElementById('shadowRegressionStatus');
+      if (!el) return;
+      el.textContent = text || '';
+      el.className = 'status ' + (kind || '');
     }
 
     function renderDiagnostics(diagnostics) {
@@ -109,6 +120,23 @@
         return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>#${rows.length-index}</b> <span class="tag ${cls}">${esc(event.comparison_status)}</span> <span class="tag">${esc(event.trigger || 'UNKNOWN')}</span></div><span class="hint">${esc(when(event.observed_at))}</span></div>`+
           `<div class="hint" style="margin-top:4px">THU/BÙ KTS <b>${money(local.final_net)}</b> · HIOSKT <b>${money(ref.final)}</b> · lệch <b>${money(finalCmp && finalCmp.delta)}</b> · KQXS ${esc(verify)} · engine ${esc(event.local_snapshot && event.local_snapshot.engine_version || '—')} · config v${esc(event.local_snapshot && event.local_snapshot.config_version == null ? '—' : event.local_snapshot.config_version)}</div>`+
           `${event.reason ? `<div class="hint">Lý do: ${esc(event.reason)}</div>` : ''}</div>`;
+      }).join('');
+    }
+
+    function renderRegressionRun(summary) {
+      const host = doc.getElementById('shadowRegressionOutput');
+      if (!host) return;
+      if (!summary || !summary.total) {
+        host.innerHTML = '<div class="hint">Chưa có case regression nào được ghim trên máy này.</div>';
+        return;
+      }
+      host.innerHTML = summary.results.map(row => {
+        const c = row.case || {};
+        const s = c.scope || {};
+        const cls = row.pass ? 'ok' : 'err';
+        const label = row.pass ? 'PASS' : 'FAIL';
+        const detail = row.error || (row.comparison ? row.comparison.status : 'UNKNOWN');
+        return `<div class="report-message"><span class="tag ${cls}">${label}</span> <b>${esc(s.business_date || '')} ${esc(String(s.region || '').toUpperCase())}</b> · ${esc(c.id || '')}<div class="hint">${esc(detail)}</div></div>`;
       }).join('');
     }
 
@@ -175,6 +203,47 @@
         if (panel) panel.open = true;
         status(events.length ? `Đã nạp ${events.length} mốc evidence Shadow.` : 'Scope này chưa có lịch sử Shadow.', events.length ? 'ok' : 'warn');
       } catch (e) { status(String(e.message || e), 'err'); }
+    });
+
+    doc.getElementById('shadowPinRegression').addEventListener('click', async () => {
+      try {
+        if (!regression) throw new Error('REGRESSION_MODULE_NOT_LOADED');
+        const s = scope();
+        const events = await runtime.getHistory(s);
+        if (!events.length) throw new Error('Chưa có evidence Shadow để ghim.');
+        const event = events[events.length - 1];
+        const c = await regression.caseFromEvidence(event, { note:'Pinned from Shadow UI' });
+        await regression.pinCase(c);
+        const replay = regression.replayCase(c);
+        regressionStatus(`Đã ghim ${c.id}. Replay hiện tại: ${replay.pass ? 'PASS' : 'FAIL ' + replay.comparison.status}.`, replay.pass ? 'ok' : 'warn');
+      } catch (e) { regressionStatus(String(e.message || e), 'err'); }
+    });
+
+    doc.getElementById('shadowRunRegression').addEventListener('click', async () => {
+      try {
+        if (!regression) throw new Error('REGRESSION_MODULE_NOT_LOADED');
+        const summary = await regression.runPinnedCases();
+        renderRegressionRun(summary);
+        regressionStatus(summary.total ? `${summary.passed}/${summary.total} case regression PASS.` : 'Chưa có case regression đã ghim.', summary.total && summary.failed === 0 ? 'ok' : 'warn');
+      } catch (e) { regressionStatus(String(e.message || e), 'err'); }
+    });
+
+    doc.getElementById('shadowExportRegression').addEventListener('click', async () => {
+      try {
+        if (!regression) throw new Error('REGRESSION_MODULE_NOT_LOADED');
+        const cases = await regression.listPinnedCases();
+        if (!cases.length) throw new Error('Chưa có case regression đã ghim để xuất.');
+        const bundle = regression.exportBundle(cases);
+        const blob = new Blob([JSON.stringify(bundle, null, 2)], { type:'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = doc.createElement('a');
+        const stamp = new Date().toISOString().slice(0,10).replace(/-/g,'');
+        a.href = url;
+        a.download = `kts-shadow-regression-${stamp}.json`;
+        doc.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        regressionStatus(`Đã xuất ${cases.length} case. File này có thể đưa vào bộ CI regression.`, 'ok');
+      } catch (e) { regressionStatus(String(e.message || e), 'err'); }
     });
   }
 
