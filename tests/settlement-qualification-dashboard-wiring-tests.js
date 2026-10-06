@@ -24,5 +24,6 @@ assert(!q.includes('saveConfig('));
 assert(!q.includes('confirmAndPin('));
 assert(!q.includes('dismissCandidate('));
 assert(sw.includes("'./settlement-qualification-dashboard.js'"));
-assert(sw.includes('v1.0.52-live-ready-validity'));
+assert(sw.includes('/api/settlement/parser-identity'));
+assert(sw.includes('v1.0.53-preproduction-package'));
 console.log('settlement-qualification-dashboard-wiring-tests: PASS');
