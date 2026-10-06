@@ -9,8 +9,9 @@
     const candidates = global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
     const runtime = global.KTS_SETTLEMENT_SHADOW_RUNTIME;
     const store = global.KTS_SETTLEMENT_STORE;
-    if (!candidates || !runtime || !store) throw new Error('REPAIR_WORKFLOW_DEPENDENCY_MISSING');
-    return { candidates, runtime, store };
+    const regression = global.KTS_SETTLEMENT_REGRESSION_CASES;
+    if (!candidates || !runtime || !store || !regression) throw new Error('REPAIR_WORKFLOW_DEPENDENCY_MISSING');
+    return { candidates, runtime, store, regression };
   }
   function scopeFromCandidate(candidate) {
     const s = candidate && candidate.case && candidate.case.scope || {};
@@ -34,15 +35,21 @@
     }
     return rows;
   }
-  function issueRowsFromEvent(event) {
-    const comparison = event && event.comparison || {};
+  function issueRowsFromComparison(comparison) {
+    const c = comparison || {};
     const rows = [];
-    rows.push(...fieldIssueRows(comparison.totals, { kind: 'total' }));
-    for (const category of (comparison.categories || [])) {
+    rows.push(...fieldIssueRows(c.totals, { kind: 'total' }));
+    for (const category of (c.categories || [])) {
       const code = String(category && category.code || '').toUpperCase();
       rows.push(...fieldIssueRows(category && category.fields, { kind: 'category', code }));
     }
     return rows;
+  }
+  function issueRowsFromEvent(event) {
+    return issueRowsFromComparison(event && event.comparison || {});
+  }
+  function issueKey(row) {
+    return [String(row && row.kind || ''), String(row && row.code || ''), String(row && row.field || '')].join(':');
   }
   function issueCodes(rows) {
     return [...new Set((rows || []).filter(r => r.kind === 'category' && r.code).map(r => String(r.code).toUpperCase()))];
@@ -95,6 +102,61 @@
       coverage_complete: s.coverage_complete == null ? null : Boolean(s.coverage_complete)
     };
   }
+  function currentReplayAssessment(candidate, event, replayResult, replayError) {
+    const originalIssues = issueRowsFromEvent(event);
+    const originalKeys = new Set(originalIssues.map(issueKey));
+    if (replayError) {
+      return {
+        basis: 'CAPTURED_CANONICAL',
+        status: 'REPLAY_ERROR',
+        pass: false,
+        safe_to_promote: false,
+        source_engine_version: event && event.local_snapshot && event.local_snapshot.engine_version || candidate && candidate.case && candidate.case.engine_version || null,
+        current_engine_version: null,
+        original_issue_count: originalIssues.length,
+        current_issue_count: null,
+        current_issues: [],
+        resolved_issue_keys: [],
+        remaining_issue_keys: [],
+        new_issue_keys: [],
+        current_final_delta: null,
+        error: String(replayError && replayError.message || replayError)
+      };
+    }
+    const comparison = replayResult && replayResult.comparison || {};
+    const currentIssues = issueRowsFromComparison(comparison);
+    const currentKeys = new Set(currentIssues.map(issueKey));
+    const resolved = [...originalKeys].filter(key => !currentKeys.has(key)).sort();
+    const remaining = [...originalKeys].filter(key => currentKeys.has(key)).sort();
+    const added = [...currentKeys].filter(key => !originalKeys.has(key)).sort();
+    const status = String(comparison.status || (replayResult && replayResult.pass ? 'MATCH_EXACT' : 'UNVERIFIED')).toUpperCase();
+    const finalRow = comparison.totals && comparison.totals.final_net || null;
+    return {
+      basis: 'CAPTURED_CANONICAL',
+      status,
+      pass: Boolean(replayResult && replayResult.pass),
+      safe_to_promote: comparison.safe_to_promote === true,
+      source_engine_version: event && event.local_snapshot && event.local_snapshot.engine_version || candidate && candidate.case && candidate.case.engine_version || null,
+      current_engine_version: replayResult && replayResult.settlement && replayResult.settlement.engine_version || null,
+      original_issue_count: originalIssues.length,
+      current_issue_count: currentIssues.length,
+      current_issues: clone(currentIssues),
+      resolved_issue_keys: resolved,
+      remaining_issue_keys: remaining,
+      new_issue_keys: added,
+      current_final_delta: finalRow && finalRow.delta != null ? finalRow.delta : null,
+      current_settlement_result: clone(replayResult && replayResult.settlement && replayResult.settlement.settlement_result || null),
+      error: null
+    };
+  }
+  function replayCurrent(candidate, event, regressionApi) {
+    try {
+      const replay = regressionApi.replayCase(candidate.case);
+      return currentReplayAssessment(candidate, event, replay, null);
+    } catch (error) {
+      return currentReplayAssessment(candidate, event, null, error);
+    }
+  }
   function buildRepairPacket(candidate, event, partner) {
     if (!candidate || !event) throw new Error('REPAIR_EVIDENCE_REQUIRED');
     const scope = scopeFromCandidate(candidate);
@@ -103,7 +165,7 @@
     const config = local.config_snapshot || candidate.case && candidate.case.config_snapshot || null;
     const lottery = local.lottery_result_snapshot || candidate.case && candidate.case.lottery_result_snapshot || null;
     return {
-      format: 'kts-shadow-repair-packet-v1',
+      format: 'kts-shadow-repair-packet-v2-current-replay',
       candidate_id: String(candidate.id || ''),
       source_event_id: String(candidate.source_event_id || event.id || ''),
       scope,
@@ -133,7 +195,8 @@
       reference_snapshot: clone(event.reference_snapshot || null),
       local_settlement_result: clone(local.settlement_result || null),
       local_category_rows: clone(local.category_rows || []),
-      diagnostic_hints: diagnosticHints(issues)
+      diagnostic_hints: diagnosticHints(issues),
+      current_replay: null
     };
   }
   async function loadCandidatePacket(candidate) {
@@ -145,7 +208,9 @@
     const partner = d.store.STORES && d.store.STORES.partners && typeof d.store.get === 'function'
       ? await d.store.get(d.store.STORES.partners, scope.partner_id).catch(() => null)
       : null;
-    return buildRepairPacket(candidate, event, partner);
+    const packet = buildRepairPacket(candidate, event, partner);
+    packet.current_replay = replayCurrent(candidate, event, d.regression);
+    return packet;
   }
   async function loadGroup(candidateIds) {
     const d = deps();
@@ -159,7 +224,7 @@
       try { packets.push(await loadCandidatePacket(candidate)); }
       catch (error) { errors.push({ candidate_id: String(candidate.id || ''), error: String(error && error.message || error) }); }
     }
-    return { format: 'kts-shadow-repair-group-v1', total: selected.length, loaded: packets.length, errors, packets };
+    return { format: 'kts-shadow-repair-group-v2-current-replay', total: selected.length, loaded: packets.length, errors, packets };
   }
 
   function installUi() {
@@ -171,7 +236,7 @@
     card.id = 'shadowRepairPanel';
     card.innerHTML = `
       <div class="section-title">Shadow repair · hồ sơ nguyên nhân</div>
-      <div class="hint">Mở từ “Nhóm mismatch cần fix”. Đây là hồ sơ đọc-only: evidence → field/category lệch → tin gốc → config đúng ngày → KQXS snapshot. Không tự sửa rule hoặc tiền.</div>
+      <div class="hint">Mở từ “Nhóm mismatch cần fix”. Hồ sơ giữ evidence gốc bất biến và replay lại <b>engine hiện tại</b> trên đúng config + KQXS + canonical đã chụp. Không tự sửa rule, tiền, candidate hay xác nhận HIOSKT.</div>
       <div id="shadowRepairStatus" class="status"></div>
       <div id="shadowRepairOutput" class="hint">Chưa chọn nhóm mismatch.</div>`;
     pane.appendChild(card);
@@ -181,24 +246,49 @@
       el.textContent = text || '';
       el.className = 'status ' + (kind || '');
     }
+    function issueTable(rows, emptyText) {
+      const body = rows && rows.length ? rows.map(row => `<tr><td>${esc(row.code || 'TỔNG')}</td><td>${esc(row.field)}</td><td>${esc(row.local == null ? '—' : row.local)}</td><td>${esc(row.reference == null ? '—' : row.reference)}</td><td class="${row.status === 'MISMATCH' ? 'err' : 'warn'}">${esc(row.delta == null ? '—' : row.delta)}</td></tr>`).join('') : `<tr><td colspan="5">${esc(emptyText)}</td></tr>`;
+      return `<div style="overflow:auto;margin-top:7px"><table><thead><tr><th>Category</th><th>Field</th><th>KTS</th><th>HIOSKT</th><th>Delta</th></tr></thead><tbody>${body}</tbody></table></div>`;
+    }
+    function renderReplay(replay) {
+      if (!replay) return '<div class="status warn">Chưa có replay engine hiện tại.</div>';
+      if (replay.status === 'REPLAY_ERROR') {
+        return `<div class="status err">Replay engine hiện tại lỗi: ${esc(replay.error || 'unknown')}</div><div class="hint">Candidate vẫn giữ nguyên trạng thái chờ xử lý.</div>`;
+      }
+      const exact = replay.pass && replay.safe_to_promote;
+      const tag = exact ? '<span class="tag ok">ENGINE HIỆN TẠI · MATCH_EXACT</span>' : `<span class="tag err">ENGINE HIỆN TẠI · ${esc(replay.status)}</span>`;
+      const movement = `đã hết ${replay.resolved_issue_keys.length} field · còn ${replay.remaining_issue_keys.length} field · mới phát sinh ${replay.new_issue_keys.length} field`;
+      const note = exact
+        ? 'Case đã khớp exact khi replay bằng engine hiện tại, nhưng candidate vẫn PENDING cho tới khi người vận hành xác nhận/dismiss thủ công.'
+        : 'Case vẫn còn lệch với engine hiện tại; không tự thay đổi candidate.';
+      return `<div class="report-message"><div>${tag} · engine ${esc(replay.current_engine_version || '—')}</div>`+
+        `<div class="hint">${esc(movement)} · delta THU/BÙ hiện tại ${esc(replay.current_final_delta == null ? '—' : replay.current_final_delta)}</div>`+
+        `<div class="hint"><b>Basis:</b> canonical đã chụp tại evidence. Replay này kiểm tra thay đổi engine/evaluator; không chạy lại parser backend nên không dùng để chứng minh riêng một parser fix.</div>`+
+        `<div class="hint">${esc(note)}</div>`+
+        issueTable(replay.current_issues, exact ? 'Không còn field lệch.' : 'Replay không trả field mismatch chi tiết.')+
+        (replay.resolved_issue_keys.length ? `<details style="margin-top:6px"><summary class="hint">Field đã hết lệch</summary><div class="raw">${esc(replay.resolved_issue_keys.join('\n'))}</div></details>` : '')+
+        (replay.new_issue_keys.length ? `<details style="margin-top:6px"><summary class="hint">Field mới phát sinh</summary><div class="raw">${esc(replay.new_issue_keys.join('\n'))}</div></details>` : '')+
+        `</div>`;
+    }
     function renderPacket(packet) {
-      const issueHtml = packet.issues.length ? packet.issues.map(row => `<tr><td>${esc(row.code || 'TỔNG')}</td><td>${esc(row.field)}</td><td>${esc(row.local == null ? '—' : row.local)}</td><td>${esc(row.reference == null ? '—' : row.reference)}</td><td class="err">${esc(row.delta == null ? '—' : row.delta)}</td></tr>`).join('') : '<tr><td colspan="5">Evidence không có field mismatch chi tiết.</td></tr>';
       const messages = packet.messages.length ? packet.messages.map(m => `<div class="raw" style="margin-top:5px"><b>${esc(m.id || '')}</b> · ${esc(m.raw_text || '')}\n${esc(JSON.stringify(m.canonical_payload || null))}</div>`).join('') : '<div class="hint">Không có tin evidence.</div>';
       const hints = packet.diagnostic_hints.length ? '<ul>' + packet.diagnostic_hints.map(x => `<li>${esc(x)}</li>`).join('') + '</ul>' : '<div class="hint">Chưa đủ field detail để đưa checklist.</div>';
-      return `<div class="report-message"><div><span class="tag err">MISMATCH</span> <b>${esc(packet.scope.business_date)} ${esc(packet.scope.region.toUpperCase())}</b> · ${esc(packet.partner.name || packet.partner.id)} · ${esc(packet.partner.role)}</div>`+
-        `<div class="hint">event ${esc(packet.source_event_id)} · engine ${esc(packet.engine_version || '—')} · ${esc(packet.observed_at || '—')}</div>`+
-        `<div style="overflow:auto;margin-top:7px"><table><thead><tr><th>Category</th><th>Field</th><th>KTS</th><th>HIOSKT</th><th>Delta</th></tr></thead><tbody>${issueHtml}</tbody></table></div>`+
+      return `<div class="report-message"><div><span class="tag err">TRƯỚC SỬA · MISMATCH</span> <b>${esc(packet.scope.business_date)} ${esc(packet.scope.region.toUpperCase())}</b> · ${esc(packet.partner.name || packet.partner.id)} · ${esc(packet.partner.role)}</div>`+
+        `<div class="hint">event ${esc(packet.source_event_id)} · engine lúc lỗi ${esc(packet.engine_version || '—')} · ${esc(packet.observed_at || '—')}</div>`+
+        issueTable(packet.issues, 'Evidence không có field mismatch chi tiết.')+
+        renderReplay(packet.current_replay)+
         `<details open style="margin-top:7px"><summary class="hint">Tin gốc liên quan</summary>${messages}</details>`+
         `<details style="margin-top:7px"><summary class="hint">Config đúng ngày</summary><div class="raw">${esc(JSON.stringify(packet.config_summary, null, 2))}</div></details>`+
         `<details style="margin-top:7px"><summary class="hint">KQXS evidence</summary><div class="raw">${esc(JSON.stringify(packet.result_summary, null, 2))}</div><details><summary class="hint">Snapshot đầy đủ</summary><div class="raw">${esc(JSON.stringify(packet.lottery_result_snapshot, null, 2))}</div></details></details>`+
         `<details style="margin-top:7px"><summary class="hint">Checklist khoanh nguyên nhân</summary>${hints}</details></div>`;
     }
     async function openGroup(ids) {
-      status('Đang nạp evidence của nhóm mismatch…', 'warn');
+      status('Đang nạp evidence và replay engine hiện tại…', 'warn');
       const result = await loadGroup(ids);
       const host = doc.getElementById('shadowRepairOutput');
       host.innerHTML = result.packets.map(renderPacket).join('') + (result.errors.length ? `<div class="status err">Không nạp được: ${esc(result.errors.map(x => x.candidate_id + ':' + x.error).join(' · '))}</div>` : '');
-      status(`Đã nạp ${result.loaded}/${result.total} case. Hồ sơ chỉ đọc, chưa thay đổi rule hay tiền.`, result.errors.length ? 'warn' : 'ok');
+      const exactNow = result.packets.filter(p => p.current_replay && p.current_replay.pass && p.current_replay.safe_to_promote).length;
+      status(`Đã nạp ${result.loaded}/${result.total} case · engine hiện tại exact ${exactNow}/${result.loaded}. Candidate vẫn giữ nguyên, chưa xác nhận/dismiss tự động.`, result.errors.length ? 'warn' : exactNow === result.loaded && result.loaded ? 'ok' : 'warn');
       if (card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return result;
     }
@@ -211,13 +301,17 @@
   }
 
   global.KTS_SETTLEMENT_REPAIR_WORKFLOW = Object.freeze({
-    version: 'settlement-repair-workflow-v1',
+    version: 'settlement-repair-workflow-v2-current-replay',
     scopeFromCandidate,
+    issueRowsFromComparison,
     issueRowsFromEvent,
+    issueKey,
     relevantMessages,
     relevantPricing,
     diagnosticHints,
     resultSummary,
+    currentReplayAssessment,
+    replayCurrent,
     buildRepairPacket,
     loadCandidatePacket,
     loadGroup
