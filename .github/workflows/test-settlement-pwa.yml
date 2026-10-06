@@ -74,3 +74,6 @@ jobs:
 
       - name: KQXS automatic scope polling tests
         run: node tests/result-auto-tests.js
+
+      - name: KQXS correction audit tests
+        run: node tests/result-audit-ui-tests.js
