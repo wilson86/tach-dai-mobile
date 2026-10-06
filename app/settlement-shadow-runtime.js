@@ -43,6 +43,39 @@
     return normalized;
   }
 
+  function localEvidence(settlement) {
+    const result = settlement && (settlement.settlement_result || settlement.result_snapshot) || null;
+    const lottery = settlement && settlement.lottery_result_snapshot || null;
+    const config = settlement && settlement.config_snapshot || null;
+    return {
+      settlement_result: clone(result),
+      category_rows: clone(settlement && settlement.category_rows || []),
+      message_ids: clone(settlement && settlement.message_ids || []),
+      engine_version: String(settlement && settlement.engine_version || ''),
+      config_version: config && config.version != null ? Number(config.version) : null,
+      config_effective_from_date: config && config.effective_from_date ? String(config.effective_from_date) : null,
+      result_fingerprint: lottery && lottery.fingerprint ? String(lottery.fingerprint) : null,
+      result_verification_status: lottery && lottery.verification_status ? String(lottery.verification_status) : null,
+      scope_status: String(settlement && settlement.scope_status || '')
+    };
+  }
+
+  async function saveEvidence(store, settlement, reference, comparison, input) {
+    if (!store || typeof store.saveShadowEvent !== 'function') return null;
+    return store.saveShadowEvent({
+      scope_id: settlement.id,
+      partner_id: settlement.partner_id,
+      business_date: settlement.business_date,
+      region: settlement.region,
+      trigger: String(input && input.trigger || 'MANUAL_COMPARE').toUpperCase(),
+      reason: input && input.reason != null ? String(input.reason) : null,
+      local_snapshot: localEvidence(settlement),
+      reference_snapshot: clone(reference),
+      comparison: clone(comparison),
+      comparison_status: comparison.status
+    });
+  }
+
   async function compareAndSave(input) {
     const d = deps();
     const id = scopeId(input.partner_id, input.business_date, input.region);
@@ -57,7 +90,8 @@
       comparison_status: comparison.status,
       created_at: settlement.created_at
     }));
-    return { settlement: saved, reference: savedReference, comparison };
+    const evidence = await saveEvidence(d.store, saved, reference, comparison, input || {});
+    return { settlement: saved, reference: savedReference, comparison, evidence };
   }
 
   async function getComparison(input) {
@@ -95,12 +129,30 @@
     return Object.assign({}, loaded, { diagnostics: enriched });
   }
 
+  async function getHistory(input) {
+    const d = deps();
+    if (typeof d.store.listShadowEvents === 'function') {
+      return d.store.listShadowEvents({
+        partner_id: input.partner_id,
+        business_date: input.business_date,
+        region: input.region
+      });
+    }
+    if (!d.store.STORES.shadowEvents || typeof d.store.getAll !== 'function') return [];
+    const id = scopeId(input.partner_id, input.business_date, input.region);
+    const all = await d.store.getAll(d.store.STORES.shadowEvents);
+    return (all || []).filter(row => String(row.scope_id || '') === id)
+      .sort((a, b) => String(a.observed_at || '').localeCompare(String(b.observed_at || '')));
+  }
+
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v2-diagnostics',
+    version: 'settlement-shadow-runtime-v3-evidence-history',
     scopeId,
     normalizeReference,
+    localEvidence,
     compareAndSave,
     getComparison,
-    getDiagnostics
+    getDiagnostics,
+    getHistory
   });
 })(typeof window !== 'undefined' ? window : globalThis);
