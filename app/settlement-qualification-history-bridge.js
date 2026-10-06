@@ -21,6 +21,15 @@
     script.setAttribute('data-kts-preproduction-package','1');
     (doc.body||doc.head||doc.documentElement).appendChild(script);
   }
+  function loadPreproductionReview(){
+    const doc=global.document;
+    if(!doc||global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW||doc.querySelector('script[data-kts-preproduction-review]'))return;
+    const script=doc.createElement('script');
+    script.src='./settlement-preproduction-review.js';
+    script.async=false;
+    script.setAttribute('data-kts-preproduction-review','1');
+    (doc.body||doc.head||doc.documentElement).appendChild(script);
+  }
   if(typeof global.addEventListener==='function'){
     global.addEventListener('kts:qualification-completed',event=>{
       const history=global.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
@@ -34,4 +43,5 @@
     });
   }
   loadPreproductionPackage();
+  loadPreproductionReview();
 })(typeof window!=='undefined'?window:globalThis);
