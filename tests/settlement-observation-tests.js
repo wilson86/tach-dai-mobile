@@ -9,6 +9,7 @@ const sandbox = { globalThis: {} };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const O = sandbox.globalThis.KTS_SETTLEMENT_OBSERVATION;
+assert.strictEqual(O.version, 'settlement-observation-v3-regression-gate');
 
 function scope(date, region, comparison, extra) {
   return Object.assign({
@@ -37,6 +38,7 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(s.counts.total, 5);
   assert.strictEqual(s.counts.exact, 5);
   assert.strictEqual(s.exact_days, 3);
+  assert.strictEqual(s.regression_gate.enabled, false);
   assert.strictEqual(s.promotion_ready, true);
   assert.deepStrictEqual(Array.from(s.blockers), []);
 }
@@ -136,7 +138,35 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(s.promotion_ready, true);
 }
 
+// Local pinned regression failures block promotion even when all shadow scopes are exact.
+{
+  const rows = [scope('2026-10-01', 'mn', 'MATCH_EXACT')];
+  const s = O.buildObservation(rows, {
+    required_observation_days: 1,
+    regression_summary: { total: 3, passed: 2, failed: 1 }
+  });
+  assert.strictEqual(s.all_scopes_exact, true);
+  assert.strictEqual(s.duration_gate_met, true);
+  assert.strictEqual(s.regression_gate.enabled, true);
+  assert.strictEqual(s.regression_gate.met, false);
+  assert.strictEqual(s.promotion_ready, false);
+  assert(s.blockers.includes('REGRESSION_FAILED:1/3'));
+}
+
+// Passing pinned regressions do not block a clean shadow window.
+{
+  const rows = [scope('2026-10-01', 'mn', 'MATCH_EXACT')];
+  const s = O.buildObservation(rows, {
+    required_observation_days: 1,
+    regression_summary: { total: 2, passed: 2, failed: 0 }
+  });
+  assert.strictEqual(s.regression_gate.enabled, true);
+  assert.strictEqual(s.regression_gate.met, true);
+  assert.strictEqual(s.promotion_ready, true);
+}
+
 assert.throws(() => O.buildObservation([], { from_date: '2026-10-03', to_date: '2026-10-01' }), /DATE_RANGE/);
 assert.throws(() => O.buildObservation([], { required_observation_days: -1 }), /REQUIRED_OBSERVATION_DAYS/);
+assert.throws(() => O.buildObservation([], { regression_summary: { total: 1, passed: 1, failed: 1 } }), /INVALID_REGRESSION_SUMMARY/);
 
 console.log('settlement-observation-tests: PASS');
