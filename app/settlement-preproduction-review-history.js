@@ -71,7 +71,7 @@
     if(Number(event&&event.sequence)!==Number(index)+1)errors.push('EVENT_SEQUENCE_INVALID');
     if(!authorityValid(event&&event.authority))errors.push('EVENT_AUTHORITY_INVALID');
     if(previous){if(!same(event.previous_event_id,previous.id))errors.push('EVENT_PREVIOUS_ID_MISMATCH');if(!same(event.previous_event_sha256,previous.integrity&&previous.integrity.event_sha256))errors.push('EVENT_PREVIOUS_SHA_MISMATCH');}
-    else if(event&&(event.previous_event_id!=null||event.previous_event_sha256!=null))errors.push('EVENT_GENESIS_LINK_INVALID');
+    else if(Number(index)===0&&event&&(event.previous_event_id!=null||event.previous_event_sha256!=null))errors.push('EVENT_GENESIS_LINK_INVALID');
     const sha=event&&event.integrity&&event.integrity.event_sha256;
     if(!SHA256_RE.test(String(sha||'')))errors.push('EVENT_SHA_INVALID');
     else if(!same(await qualification.sha256Hex(eventWithoutIntegrity(event)),sha))errors.push('EVENT_SHA_MISMATCH');
