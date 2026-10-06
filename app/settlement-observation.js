@@ -54,6 +54,17 @@
     return { total, passed, failed };
   }
 
+  function normalizeCandidateSummary(value) {
+    if (!value || typeof value !== 'object') return null;
+    const pending = Number(value.pending || 0);
+    const promoted = Number(value.promoted || 0);
+    const dismissed = Number(value.dismissed || 0);
+    if (![pending, promoted, dismissed].every(Number.isInteger) || pending < 0 || promoted < 0 || dismissed < 0) {
+      throw new Error('INVALID_REGRESSION_CANDIDATE_SUMMARY');
+    }
+    return { pending, promoted, dismissed };
+  }
+
   function normalizeOptions(options) {
     const o = options || {};
     const fromDate = o.from_date ? String(o.from_date).slice(0, 10) : '';
@@ -70,7 +81,8 @@
       partner_id: o.partner_id ? String(o.partner_id) : '',
       regions,
       required_observation_days: requiredDays,
-      regression_summary: normalizeRegressionSummary(o.regression_summary)
+      regression_summary: normalizeRegressionSummary(o.regression_summary),
+      candidate_summary: normalizeCandidateSummary(o.candidate_summary)
     };
   }
 
@@ -170,6 +182,8 @@
     const durationMet = durationConfigured && exactDays >= o.required_observation_days;
     const regressionEnabled = Boolean(o.regression_summary && o.regression_summary.total > 0);
     const regressionMet = !regressionEnabled || o.regression_summary.failed === 0;
+    const candidateEnabled = Boolean(o.candidate_summary);
+    const candidateMet = !candidateEnabled || o.candidate_summary.pending === 0;
     const blockers = [];
     if (!counts.total) blockers.push('NO_SHADOW_SCOPES');
     if (missingScopes.length) blockers.push(`MISSING_SCOPE:${missingScopes.length}`);
@@ -178,12 +192,13 @@
     if (counts.blocked) blockers.push(`BLOCKED:${counts.blocked}`);
     if (counts.provisional) blockers.push(`PROVISIONAL:${counts.provisional}`);
     if (counts.unverified) blockers.push(`UNVERIFIED:${counts.unverified}`);
+    if (candidateEnabled && !candidateMet) blockers.push(`REGRESSION_CANDIDATE_PENDING:${o.candidate_summary.pending}`);
     if (regressionEnabled && !regressionMet) blockers.push(`REGRESSION_FAILED:${o.regression_summary.failed}/${o.regression_summary.total}`);
     if (!durationConfigured) blockers.push('OBSERVATION_DURATION_NOT_CONFIGURED');
     else if (!durationMet) blockers.push(`OBSERVATION_DAYS:${exactDays}/${o.required_observation_days}`);
 
     return {
-      version: 'settlement-observation-v3-regression-gate',
+      version: 'settlement-observation-v4-candidate-review-gate',
       options: clone(o),
       counts,
       coverage: {
@@ -199,13 +214,20 @@
         passed: o.regression_summary ? o.regression_summary.passed : 0,
         failed: o.regression_summary ? o.regression_summary.failed : 0
       },
+      candidate_gate: {
+        enabled: candidateEnabled,
+        met: candidateMet,
+        pending: o.candidate_summary ? o.candidate_summary.pending : 0,
+        promoted: o.candidate_summary ? o.candidate_summary.promoted : 0,
+        dismissed: o.candidate_summary ? o.candidate_summary.dismissed : 0
+      },
       exact_days: exactDays,
       observed_days: dates.length,
       all_scopes_exact: allExact,
       zero_money_mismatch: counts.mismatch === 0 && counts.display_only === 0,
       duration_gate_configured: durationConfigured,
       duration_gate_met: durationMet,
-      promotion_ready: allExact && durationMet && regressionMet,
+      promotion_ready: allExact && durationMet && regressionMet && candidateMet,
       blockers,
       dates,
       scopes: rows
@@ -213,11 +235,12 @@
   }
 
   global.KTS_SETTLEMENT_OBSERVATION = Object.freeze({
-    version: 'settlement-observation-v3-regression-gate',
+    version: 'settlement-observation-v4-candidate-review-gate',
     STATUS,
     comparisonStatus,
     scopeKey,
     normalizeRegressionSummary,
+    normalizeCandidateSummary,
     messageScopeCoverage,
     buildObservation
   });
