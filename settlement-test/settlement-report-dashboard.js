@@ -121,6 +121,11 @@
     function totalsRow(label, t) {
       return `<tr><td><b>${esc(label)}</b></td><td>${money(t.xac)}</td><td>${money(t.qua_co)}</td><td>${money(t.payout)}</td><td>${money(t.refund_amount)}</td><td>${esc(direction(t.final_net))} ${money(Math.abs(num(t.final_net)))}</td></tr>`;
     }
+    function regionCard(label, t) {
+      const has = t && (t.xac || t.qua_co || t.payout || t.refund_amount || t.final_net);
+      if (!has) return `<div class="card" style="box-shadow:none;margin:0"><b>${esc(label)}</b><div class="hint">Chưa có dữ liệu.</div></div>`;
+      return `<div class="card" style="box-shadow:none;margin:0"><b>${esc(label)}</b><div class="hint" style="margin-top:5px">XÁC <span class="money">${money(t.xac)}</span> · QUA CÒ <span class="money">${money(t.qua_co)}</span> · TRẢ <span class="money">${money(t.payout)}</span> · HỒI <span class="money">${money(t.refund_amount)}</span></div><div class="status ${direction(t.final_net)==='THU'?'ok':direction(t.final_net)==='BÙ'?'err':''}">${esc(direction(t.final_net))}: ${money(Math.abs(num(t.final_net)))}</div></div>`;
+    }
     function renderReadiness(model) {
       const host = doc.getElementById('dailyCloseGate');
       if (!host) return;
@@ -148,12 +153,17 @@
 
       const breakdown = buildBreakdown(model);
       totals.innerHTML = `
-        <div style="margin:6px 0"><b>Tổng đang tính:</b> XÁC <span class="money">${money(model.totals.xac)}</span> · QUA CÒ <span class="money">${money(model.totals.qua_co)}</span> · TRẢ <span class="money">${money(model.totals.payout)}</span> · HỒI <span class="money">${money(model.totals.refund_amount)}</span></div>
-        <div class="status ${model.totals.direction === 'THU' ? 'ok' : model.totals.direction === 'BU' ? 'err' : ''}">${esc(direction(model.totals.final_net))}: ${money(Math.abs(num(model.totals.final_net)))}</div>
-        <div class="hint">Đã exact ${model.counts.exact}/${model.counts.partners} đối tác · blocked ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch} · khớp hiển thị ${model.counts.display_only}.</div>
-        <details style="margin-top:6px"><summary class="hint">Tổng chỉ các đối tác đã khớp exact</summary><div class="hint" style="margin-top:5px">XÁC ${money(model.exact_totals.xac)} · QUA CÒ ${money(model.exact_totals.qua_co)} · TRẢ ${money(model.exact_totals.payout)} · HỒI ${money(model.exact_totals.refund_amount)} · ${esc(direction(model.exact_totals.final_net))} ${money(Math.abs(num(model.exact_totals.final_net)))}</div></details>
-        <details open style="margin-top:8px"><summary class="hint"><b>Tách Khách / Chủ</b></summary><div class="result-grid" style="margin-top:5px"><table><thead><tr><th>Vai trò</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${totalsRow('Khách', breakdown.role_totals.customer)}${totalsRow('Chủ', breakdown.role_totals.owner)}</tbody></table></div></details>
-        <details open style="margin-top:8px"><summary class="hint"><b>Tách theo miền</b></summary><div class="result-grid" style="margin-top:5px"><table><thead><tr><th>Miền</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${[['mn','MN'],['mt','MT'],['mb','MB']].filter(x => { const t=breakdown.region_totals[x[0]]; return t && (t.xac || t.qua_co || t.payout || t.refund_amount || t.final_net); }).map(x => totalsRow(x[1], breakdown.region_totals[x[0]])).join('')}</tbody></table></div></details>`;
+        <div class="section-title" style="margin-top:6px">Tiền theo từng miền</div>
+        <div class="grid3" style="margin-top:6px">
+          ${regionCard('Miền Nam', breakdown.region_totals.mn)}
+          ${regionCard('Miền Trung', breakdown.region_totals.mt)}
+          ${regionCard('Miền Bắc', breakdown.region_totals.mb)}
+        </div>
+        <details style="margin-top:8px"><summary class="hint">Tổng cộng cả 3 miền / kiểm tra vai trò</summary>
+          <div style="margin:6px 0"><b>Tổng 3 miền:</b> XÁC <span class="money">${money(model.totals.xac)}</span> · QUA CÒ <span class="money">${money(model.totals.qua_co)}</span> · TRẢ <span class="money">${money(model.totals.payout)}</span> · HỒI <span class="money">${money(model.totals.refund_amount)}</span> · <b>${esc(direction(model.totals.final_net))} ${money(Math.abs(num(model.totals.final_net)))}</b></div>
+          <div class="result-grid"><table><thead><tr><th>Vai trò</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${totalsRow('Khách', breakdown.role_totals.customer)}${totalsRow('Chủ', breakdown.role_totals.owner)}</tbody></table></div>
+        </details>
+        <div class="hint">Đã exact ${model.counts.exact}/${model.counts.partners} đối tác · blocked ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch}.</div>`;
 
       partners.innerHTML = model.partners.map(report => {
         const cls = report.blocked ? 'err' : report.provisional ? 'warn' : shadowKind(report.shadow_status);
