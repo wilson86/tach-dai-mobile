@@ -60,6 +60,24 @@
     return { role_totals:roleTotals, region_totals:regionTotals };
   }
 
+  function buildReadiness(model) {
+    const counts = model && model.counts || {};
+    const partners = num(counts.partners);
+    const reasons = [];
+    if (!partners) reasons.push({ code:'NO_DATA', label:'Chưa có đối tác/tin trong ngày' });
+    if (num(counts.blocked) > 0) reasons.push({ code:'BLOCKED', label:`${num(counts.blocked)} đối tác có phạm vi fail-closed` });
+    if (num(counts.provisional) > 0) reasons.push({ code:'PROVISIONAL', label:`${num(counts.provisional)} đối tác còn tiền tạm tính` });
+    if (num(counts.mismatch) > 0) reasons.push({ code:'MISMATCH', label:`${num(counts.mismatch)} đối tác đang lệch HIOSKT` });
+    if (num(counts.display_only) > 0) reasons.push({ code:'DISPLAY_ONLY', label:`${num(counts.display_only)} đối tác mới chỉ khớp số hiển thị` });
+    if (num(counts.unverified) > 0) reasons.push({ code:'UNVERIFIED', label:`${num(counts.unverified)} đối tác chưa đối chiếu exact` });
+    const exact = num(counts.exact);
+    if (partners > 0 && exact !== partners && !reasons.length) reasons.push({ code:'NOT_ALL_EXACT', label:'Chưa phải tất cả đối tác đều khớp exact' });
+    return {
+      ready: reasons.length === 0 && String(model && model.status || '') === 'MATCH_EXACT' && partners > 0,
+      reasons, exact, partners
+    };
+  }
+
   function install() {
     const doc = global.document;
     const store = global.KTS_SETTLEMENT_STORE;
@@ -77,6 +95,7 @@
         <button id="refreshDailyOps" class="btn soft">Làm mới</button>
       </div>
       <div id="dailyOpsStatus" class="status"></div>
+      <div id="dailyCloseGate" class="hint"></div>
       <div id="dailyOpsTotals" class="hint"></div>
       <div id="dailyOpsPartners" class="hint" style="margin-top:8px"></div>`;
     if (detailCard) detailCard.insertAdjacentElement('afterend', card);
@@ -102,10 +121,22 @@
     function totalsRow(label, t) {
       return `<tr><td><b>${esc(label)}</b></td><td>${money(t.xac)}</td><td>${money(t.qua_co)}</td><td>${money(t.payout)}</td><td>${money(t.refund_amount)}</td><td>${esc(direction(t.final_net))} ${money(Math.abs(num(t.final_net)))}</td></tr>`;
     }
+    function renderReadiness(model) {
+      const host = doc.getElementById('dailyCloseGate');
+      if (!host) return;
+      const gate = buildReadiness(model);
+      if (gate.ready) {
+        host.innerHTML = `<div class="status ok">GATE ĐỐI SOÁT CUỐI NGÀY: ĐỦ · ${gate.exact}/${gate.partners} đối tác khớp exact.</div><div class="hint">Đây chỉ là gate shadow; hệ thống không tự chốt hoặc khóa ngày.</div>`;
+      } else {
+        const items = gate.reasons.length ? gate.reasons.map(r => `<li>${esc(r.label)}</li>`).join('') : '<li>Chưa đạt trạng thái MATCH_EXACT toàn ngày.</li>';
+        host.innerHTML = `<div class="status warn">GATE ĐỐI SOÁT CUỐI NGÀY: CHƯA ĐỦ</div><ul style="margin:4px 0 8px 18px;padding:0">${items}</ul><div class="hint">Gate chỉ báo phần còn thiếu; không tự động chốt tiền.</div>`;
+      }
+    }
 
     function render(model) {
       const statusInfo = dayStatus(model.status);
       setStatus(`${statusInfo[0]} · ${model.business_date}`, statusInfo[1]);
+      renderReadiness(model);
       const totals = doc.getElementById('dailyOpsTotals');
       const partners = doc.getElementById('dailyOpsPartners');
       if (!totals || !partners) return;
@@ -133,6 +164,7 @@
             ? '<div class="status warn">KQXS chưa hoàn tất · số tiền còn tạm.</div>'
             : report.shadow_status !== 'MATCH_EXACT'
               ? '<div class="status warn">Tiền đã tính nhưng chưa qua gate shadow exact.</div>' : '';
+        const cats = (report.categories || []).map(c => `${esc(c.label || c.code)}: XÁC ${money(c.xac)} · QUA ${money(c.qua_co)} · TRẢ ${money(c.payout)}`).join('<br>');
         return `<div class="report-message" data-ops-partner="${esc(report.partner.id)}">
           <div class="row" style="justify-content:space-between">
             <div><b>${esc(report.partner.name || report.partner.id)}</b> <span class="tag">${esc(roleLabel(report.partner.role))}</span></div>
@@ -142,6 +174,7 @@
           <div class="hint" style="margin-top:6px">XÁC ${money(report.totals.xac)} · QUA CÒ ${money(report.totals.qua_co)} · TRẢ ${money(report.totals.payout)} · HỒI ${money(report.totals.refund_amount)}</div>
           <div class="status ${report.totals.direction === 'THU' ? 'ok' : report.totals.direction === 'BU' ? 'err' : ''}">${esc(direction(report.totals.final_net))} ${money(Math.abs(num(report.totals.final_net)))}</div>
           ${warning}
+          ${cats ? `<details style="margin-top:5px"><summary class="hint">Theo loại cược</summary><div class="hint" style="margin-top:4px">${cats}</div></details>` : ''}
           <button class="btn soft" data-open-partner="${esc(report.partner.id)}" style="margin-top:6px">Xem chi tiết</button>
         </div>`;
       }).join('');
@@ -179,11 +212,14 @@
     if (date) date.addEventListener('change', refresh);
     const load = doc.getElementById('loadReport');
     if (load) load.addEventListener('click', () => setTimeout(refresh, 0));
+    if (typeof global.addEventListener === 'function') global.addEventListener('kts:auto-result-recalculated', () => {
+      if (pane.classList.contains('active')) refresh().catch(() => {});
+    });
     for (const button of doc.querySelectorAll('.nav button[data-pane="report"]')) button.addEventListener('click', refresh);
   }
 
   global.KTS_SETTLEMENT_REPORT_DASHBOARD = Object.freeze({
-    version:'settlement-report-dashboard-v2', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown
+    version:'settlement-report-dashboard-v3-readiness', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown, buildReadiness
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
