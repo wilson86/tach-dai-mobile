@@ -2,7 +2,7 @@
   'use strict';
 
   const DB_NAME = 'kts_settlement_v0';
-  const DB_VERSION = 4;
+  const DB_VERSION = 5;
   const STORES = Object.freeze({
     partners: 'partners',
     configs: 'configs',
@@ -10,6 +10,7 @@
     settlements: 'settlements',
     results: 'results',
     resultEvents: 'result_events',
+    shadowEvents: 'shadow_events',
     metadata: 'metadata'
   });
 
@@ -76,6 +77,13 @@
         else resultEvents = tx.objectStore(STORES.resultEvents);
         ensureIndex(resultEvents, 'by_date_region', ['business_date', 'region']);
         ensureIndex(resultEvents, 'by_result_id', 'result_id');
+
+        let shadowEvents;
+        if (!db.objectStoreNames.contains(STORES.shadowEvents)) shadowEvents = db.createObjectStore(STORES.shadowEvents, { keyPath: 'id' });
+        else shadowEvents = tx.objectStore(STORES.shadowEvents);
+        ensureIndex(shadowEvents, 'by_scope', ['partner_id', 'business_date', 'region']);
+        ensureIndex(shadowEvents, 'by_scope_id', 'scope_id');
+        ensureIndex(shadowEvents, 'by_observed_at', 'observed_at');
 
         if (!db.objectStoreNames.contains(STORES.metadata)) db.createObjectStore(STORES.metadata, { keyPath: 'key' });
       };
@@ -193,6 +201,37 @@
       stations,
       fingerprint,
       provider_revision: input.provider_revision == null ? null : String(input.provider_revision)
+    };
+  }
+
+  function normalizeShadowEvent(input) {
+    const partnerId = String(input && input.partner_id || '');
+    const businessDate = String(input && input.business_date || '').slice(0, 10);
+    const region = String(input && input.region || '').toLowerCase();
+    if (!partnerId || !validDateOnly(businessDate)) throw new Error('SHADOW_EVENT_SCOPE_REQUIRED');
+    if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('SHADOW_EVENT_REGION_REQUIRED');
+    const scopeId = String(input.scope_id || `scope:${partnerId}:${businessDate}:${region}`);
+    const evidenceCore = {
+      scope_id: scopeId,
+      trigger: String(input.trigger || 'UNKNOWN'),
+      local_snapshot: clone(input.local_snapshot || null),
+      reference_snapshot: clone(input.reference_snapshot || null),
+      comparison: clone(input.comparison || null)
+    };
+    return {
+      id: input.id || makeId('shadow_event'),
+      scope_id: scopeId,
+      partner_id: partnerId,
+      business_date: businessDate,
+      region,
+      trigger: evidenceCore.trigger,
+      reason: input.reason == null ? null : String(input.reason),
+      local_snapshot: evidenceCore.local_snapshot,
+      reference_snapshot: evidenceCore.reference_snapshot,
+      comparison: evidenceCore.comparison,
+      comparison_status: String(input.comparison_status || (evidenceCore.comparison && evidenceCore.comparison.status) || 'UNVERIFIED').toUpperCase(),
+      evidence_fingerprint: input.evidence_fingerprint || stableStringify(evidenceCore),
+      observed_at: input.observed_at || nowIso()
     };
   }
 
@@ -335,15 +374,41 @@
     return { snapshot: v, changed, previous: previous || null };
   }
 
+  async function listShadowEvents(input) {
+    const all = await getAll(STORES.shadowEvents);
+    const partnerId = input && input.partner_id ? String(input.partner_id) : '';
+    const businessDate = input && input.business_date ? String(input.business_date).slice(0, 10) : '';
+    const region = input && input.region ? String(input.region).toLowerCase() : '';
+    const scope = input && input.scope_id ? String(input.scope_id) : '';
+    return all.filter(row => {
+      if (scope && String(row.scope_id) !== scope) return false;
+      if (partnerId && String(row.partner_id) !== partnerId) return false;
+      if (businessDate && String(row.business_date) !== businessDate) return false;
+      if (region && String(row.region).toLowerCase() !== region) return false;
+      return true;
+    }).sort((a, b) => String(a.observed_at || '').localeCompare(String(b.observed_at || '')) || String(a.id || '').localeCompare(String(b.id || '')));
+  }
+
+  async function saveShadowEvent(input) {
+    const event = normalizeShadowEvent(input || {});
+    const existing = await listShadowEvents({ scope_id: event.scope_id });
+    const previous = existing.length ? existing[existing.length - 1] : null;
+    if (previous && previous.evidence_fingerprint === event.evidence_fingerprint) {
+      return { event: clone(previous), changed: false, previous: clone(previous) };
+    }
+    await put(STORES.shadowEvents, event);
+    return { event, changed: true, previous: previous ? clone(previous) : null };
+  }
+
   async function exportAll() {
-    const payload = { format: 'kts-settlement-export', version: 4, exported_at: nowIso(), stores: {} };
+    const payload = { format: 'kts-settlement-export', version: 5, exported_at: nowIso(), stores: {} };
     for (const name of Object.values(STORES)) payload.stores[name] = await getAll(name);
     return payload;
   }
 
   async function importAll(payload, options) {
     const replace = Boolean(options && options.replace);
-    if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2, 3, 4].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
+    if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2, 3, 4, 5].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
     const db = await openDb();
     try {
       const names = Object.values(STORES);
@@ -360,8 +425,8 @@
   global.KTS_SETTLEMENT_STORE = Object.freeze({
     DB_NAME, DB_VERSION, STORES, openDb,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
-    saveMessage, saveSettlement, saveResultSnapshot,
+    saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig, normalizeResultSnapshot, stableStringify
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);
