@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.39-shadow-repair';
+const CACHE='kts-tach-unified-v1.0.40-repair-replay';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
