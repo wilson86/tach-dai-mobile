@@ -52,7 +52,8 @@
     if (!Number.isInteger(a) || !Number.isInteger(b) || a < 0 || b < 0) {
       throw new Error('INVALID_MB_DAT_HITS');
     }
-    return a > 0 && b > 0 ? 1 : 0;
+    if (a === 0 || b === 0) return 0;
+    return Math.min(a, b);
   }
 
   function mbDatTotalHitUnits(hitCounts) {
@@ -109,7 +110,7 @@
   }
 
   global.KTS_SETTLEMENT_MB_RULES = Object.freeze({
-    version: 'mb-business-2026-10-06-dd-label-fix-v3',
+    version: 'mb-business-2026-10-06-straight-da-multipair-v4',
     MB_XAC_UNITS,
     MB_SELECTORS,
     MB_POSITION_XAC_UNITS,
