@@ -6,6 +6,8 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
+  function num(v) { const n = Number(v == null ? 0 : v); return Number.isFinite(n) ? n : 0; }
+  function money(v) { return new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(num(v)); }
 
   function scopeMatch(row, scope) {
     return Boolean(row && scope &&
@@ -19,6 +21,13 @@
       const ids = Array.isArray(s.message_ids) ? s.message_ids : (s.message_id ? [s.message_id] : []);
       return ids.includes(message.id);
     }) || null;
+  }
+
+  function settlementForScope(scope, settlements) {
+    if (!scope) return null;
+    const expected = `scope:${scope.partner_id}:${scope.business_date}:${String(scope.region || '').toLowerCase()}`;
+    return (settlements || []).find(s => s.id === expected) ||
+      (settlements || []).find(s => scopeMatch(s, scope)) || null;
   }
 
   function deriveState(message, settlement) {
@@ -56,6 +65,48 @@
       });
   }
 
+  function buildScopeSummary(scope, messages, settlements, resultSnapshot) {
+    const scoped = (messages || []).filter(m => scopeMatch(m, scope));
+    const active = scoped.filter(m => String(m.status || '') !== 'cancelled');
+    const cancelled = scoped.length - active.length;
+    const parserErrors = active.filter(m => m.parser_error || String(m.status || '') === 'parser_error').length;
+    const settlement = settlementForScope(scope, settlements);
+    const result = settlement && (settlement.settlement_result || settlement.result_snapshot) || {};
+    const comparison = String(settlement && settlement.comparison_status || '').toUpperCase();
+    const resultAvailable = Boolean(resultSnapshot);
+    const resultComplete = Boolean(resultSnapshot && resultSnapshot.complete);
+    const resultVerified = Boolean(resultSnapshot && (resultSnapshot.verified === true || resultSnapshot.verification_status === 'verified'));
+
+    let state = { code: 'WAITING_RESULT', label: 'CHỜ KQXS', kind: 'warn' };
+    if (!active.length) state = { code: 'EMPTY', label: 'CHƯA CÓ TIN ĐANG TÍNH', kind: '' };
+    else if (parserErrors || (settlement && settlement.scope_status === 'blocked')) state = { code: 'BLOCKED', label: 'FAIL-CLOSED', kind: 'err' };
+    else if (!resultAvailable) state = { code: 'WAITING_RESULT', label: 'CHỜ KQXS', kind: 'warn' };
+    else if (!resultComplete || (settlement && settlement.scope_status === 'provisional')) state = { code: 'PROVISIONAL', label: 'TẠM TÍNH', kind: 'warn' };
+    else if (comparison === 'MATCH_EXACT') state = { code: 'MATCH_EXACT', label: 'KHỚP EXACT', kind: 'ok' };
+    else if (comparison === 'MISMATCH') state = { code: 'MISMATCH', label: 'LỆCH SHADOW', kind: 'err' };
+    else if (comparison === 'MATCH_DISPLAY_ONLY') state = { code: 'MATCH_DISPLAY_ONLY', label: 'CHỈ KHỚP HIỂN THỊ', kind: 'warn' };
+    else state = { code: 'UNVERIFIED', label: 'ĐÃ TÍNH · CHỜ ĐỐI CHIẾU', kind: 'warn' };
+
+    const finalNet = num(result.final_net);
+    return {
+      scope: Object.assign({}, scope),
+      counts: { total: scoped.length, active: active.length, cancelled, parser_errors: parserErrors },
+      state,
+      kqxs: {
+        available: resultAvailable,
+        complete: resultComplete,
+        verified: resultVerified,
+        label: !resultAvailable ? 'CHƯA CÓ KQ' : resultVerified ? 'ĐÃ XÁC MINH' : resultComplete ? 'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU' : 'ĐANG RA KQ'
+      },
+      totals: {
+        xac: num(result.total_xac), qua_co: num(result.total_qua_co), payout: num(result.total_payout),
+        refund_amount: num(result.refund_amount), final_net: finalNet,
+        direction: finalNet > 0 ? 'THU' : finalNet < 0 ? 'BÙ' : 'HÒA'
+      },
+      blocked_reasons: settlement && Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.slice() : []
+    };
+  }
+
   function install() {
     const doc = global.document;
     const store = global.KTS_SETTLEMENT_STORE;
@@ -68,7 +119,7 @@
 
     const card = doc.createElement('div');
     card.className = 'card';
-    card.innerHTML = '<div class="row" style="justify-content:space-between"><div class="section-title">Tin đã lưu</div><div class="row"><button id="refreshMessageHistory" class="btn soft">Làm mới</button><button id="recalcMessageScope" class="btn soft">Rà lại phạm vi</button></div></div><div id="messageHistoryStatus" class="status"></div><div id="messageHistory" class="hint">Chưa có tin trong phạm vi đang chọn.</div>';
+    card.innerHTML = '<div class="row" style="justify-content:space-between"><div class="section-title">Phạm vi đang làm</div><button id="refreshMessageHistory" class="btn soft">Làm mới</button></div><div id="messageScopeSummary" class="hint">Chưa có dữ liệu.</div><div class="row" style="justify-content:space-between;margin-top:10px"><div class="section-title" style="margin:0">Tin đã lưu</div><button id="recalcMessageScope" class="btn soft">Rà lại phạm vi</button></div><div id="messageHistoryStatus" class="status"></div><div id="messageHistory" class="hint">Chưa có tin trong phạm vi đang chọn.</div>';
     inputCard.insertAdjacentElement('afterend', card);
 
     function currentScope() {
@@ -89,6 +140,17 @@
       el.className = 'status ' + (kind || '');
     }
 
+    function renderSummary(summary) {
+      const host = doc.getElementById('messageScopeSummary');
+      if (!host) return;
+      const stateClass = summary.state.kind || '';
+      const total = summary.totals;
+      const blocked = summary.blocked_reasons.length ? `<div class="status err">${esc(summary.blocked_reasons.join(' · '))}</div>` : '';
+      host.innerHTML = `<div class="row" style="justify-content:space-between"><div><span class="tag ${stateClass}">${esc(summary.state.label)}</span> <span class="tag ${summary.kqxs.verified ? 'ok' : 'warn'}">${esc(summary.kqxs.label)}</span></div><div class="hint">${summary.counts.active} tin đang tính${summary.counts.cancelled ? ` · ${summary.counts.cancelled} đã hủy` : ''}${summary.counts.parser_errors ? ` · ${summary.counts.parser_errors} lỗi parser` : ''}</div></div>` +
+        `<div style="margin-top:7px">XÁC <span class="money">${money(total.xac)}</span> · QUA CÒ <span class="money">${money(total.qua_co)}</span> · TRẢ <span class="money">${money(total.payout)}</span> · HỒI <span class="money">${money(total.refund_amount)}</span></div>` +
+        `<div class="status ${total.direction === 'THU' ? 'ok' : total.direction === 'BÙ' ? 'err' : ''}">${esc(total.direction)} ${money(Math.abs(total.final_net))}</div>${blocked}`;
+    }
+
     async function refresh() {
       const scope = currentScope();
       const host = doc.getElementById('messageHistory');
@@ -96,8 +158,11 @@
         if (host) host.innerHTML = '<div class="hint">Chọn đối tác, ngày và miền để xem tin.</div>';
         return [];
       }
-      const messages = await store.getAll(store.STORES.messages);
-      const settlements = await store.getAll(store.STORES.settlements);
+      const [messages, settlements, resultSnapshot] = await Promise.all([
+        store.getAll(store.STORES.messages), store.getAll(store.STORES.settlements),
+        store.get(store.STORES.results, `${scope.business_date}:${scope.region}`)
+      ]);
+      renderSummary(buildScopeSummary(scope, messages, settlements, resultSnapshot));
       const rows = buildRows(scope, messages, settlements);
       if (!host) return rows;
       if (!rows.length) {
@@ -182,12 +247,24 @@
       const observer = new global.MutationObserver(() => refresh().catch(() => {}));
       observer.observe(messageStatus, { childList: true, characterData: true, subtree: true });
     }
+    if (typeof global.addEventListener === 'function') {
+      for (const eventName of ['kts:auto-result-update','kts:auto-result-recalculated']) {
+        global.addEventListener(eventName, event => {
+          const detail = event && event.detail || {};
+          const snapshot = detail.snapshot || {};
+          const scope = currentScope();
+          if (String(snapshot.business_date || '') === scope.business_date && String(snapshot.region || '').toLowerCase() === scope.region) refresh().catch(() => {});
+        });
+      }
+    }
     for (const button of doc.querySelectorAll('.nav button[data-pane="message"]')) {
       button.addEventListener('click', () => refresh().catch(() => {}));
     }
   }
 
-  global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({ version: 'message-history-v2-soft-cancel', scopeMatch, deriveState, buildRows });
+  global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
+    version: 'message-history-v3-live-scope', scopeMatch, settlementForScope, deriveState, buildRows, buildScopeSummary
+  });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
