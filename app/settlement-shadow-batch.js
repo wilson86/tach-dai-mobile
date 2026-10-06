@@ -15,6 +15,26 @@
 
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function validDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
+  function stableStringify(value) {
+    if (value === null || typeof value !== 'object') return JSON.stringify(value);
+    if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
+    return '{' + Object.keys(value).sort().map(k => JSON.stringify(k) + ':' + stableStringify(value[k])).join(',') + '}';
+  }
+  function settlementFingerprint(store, settlement) {
+    const s = settlement || {};
+    const core = {
+      id: s.id || null,
+      updated_at: s.updated_at || null,
+      scope_status: s.scope_status || null,
+      engine_version: s.engine_version || null,
+      config_snapshot: s.config_snapshot || null,
+      lottery_result_snapshot: s.lottery_result_snapshot || null,
+      settlement_result: s.settlement_result || s.result_snapshot || null,
+      category_rows: s.category_rows || [],
+      message_ids: s.message_ids || (s.message_id ? [s.message_id] : [])
+    };
+    return store && typeof store.stableStringify === 'function' ? store.stableStringify(core) : stableStringify(core);
+  }
   function cleanHeader(v) {
     return String(v == null ? '' : v).trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -149,14 +169,19 @@
         if (!settlement) throw new Error('BATCH_SETTLEMENT_NOT_FOUND:' + id);
         if (String(settlement.scope_status || '').toLowerCase() === 'blocked') throw new Error('BATCH_SETTLEMENT_BLOCKED:' + id);
         const comparison = d.shadow.compareSettlement(settlement, row.reference_snapshot);
-        rows.push(Object.assign({}, row, { scope_id: id, comparison: clone(comparison) }));
+        rows.push(Object.assign({}, row, {
+          scope_id: id,
+          settlement_fingerprint: settlementFingerprint(d.store, settlement),
+          comparison: clone(comparison)
+        }));
       } catch (error) {
         errors.push({ row_number: Number(source && source._row || 0), error: String(error && error.message || error) });
       }
     }
     return {
-      format: 'kts-shadow-batch-preview-v1',
+      format: 'kts-shadow-batch-preview-v2-stale-guard',
       raw: String(raw || ''),
+      previewed_at: new Date().toISOString(),
       rows,
       errors,
       ready: errors.length === 0 && rows.length > 0,
@@ -172,34 +197,55 @@
     };
   }
 
-  async function apply(previewResult) {
+  async function preflight(previewResult) {
     const d = deps();
     const p = previewResult || {};
     if (!p.ready || !Array.isArray(p.rows) || !p.rows.length) throw new Error('BATCH_PREVIEW_REQUIRED');
     if (Array.isArray(p.errors) && p.errors.length) throw new Error('BATCH_PREVIEW_HAS_ERRORS');
-    const results = [];
+    const checked = [];
     for (const row of p.rows) {
+      if (!row.settlement_fingerprint) throw new Error('BATCH_PREVIEW_FINGERPRINT_REQUIRED:' + row.scope_id);
       const current = await d.store.get(d.store.STORES.settlements, row.scope_id);
       if (!current) throw new Error('BATCH_SETTLEMENT_NOT_FOUND:' + row.scope_id);
       if (String(current.scope_status || '').toLowerCase() === 'blocked') throw new Error('BATCH_SETTLEMENT_BLOCKED:' + row.scope_id);
-      const saved = await d.runtime.compareAndSave({
-        partner_id: row.partner_id,
-        business_date: row.business_date,
-        region: row.region,
-        trigger: 'BATCH_COMPARE',
-        reason: 'operator:shadow-batch',
-        reference_snapshot: clone(row.reference_snapshot)
-      });
-      results.push({
-        scope_id: row.scope_id,
-        partner_id: row.partner_id,
-        business_date: row.business_date,
-        region: row.region,
-        comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN'
-      });
+      const currentFingerprint = settlementFingerprint(d.store, current);
+      if (currentFingerprint !== row.settlement_fingerprint) throw new Error('BATCH_PREVIEW_STALE_SCOPE:' + row.scope_id);
+      checked.push({ scope_id: row.scope_id, settlement_fingerprint: currentFingerprint });
+    }
+    return checked;
+  }
+
+  async function apply(previewResult) {
+    const d = deps();
+    const p = previewResult || {};
+    await preflight(p);
+    const results = [];
+    for (const row of p.rows) {
+      try {
+        const saved = await d.runtime.compareAndSave({
+          partner_id: row.partner_id,
+          business_date: row.business_date,
+          region: row.region,
+          trigger: 'BATCH_COMPARE',
+          reason: 'operator:shadow-batch',
+          reference_snapshot: clone(row.reference_snapshot)
+        });
+        results.push({
+          scope_id: row.scope_id,
+          partner_id: row.partner_id,
+          business_date: row.business_date,
+          region: row.region,
+          comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN'
+        });
+      } catch (error) {
+        const e = new Error(`BATCH_APPLY_PARTIAL:${results.length}/${p.rows.length}:${String(error && error.message || error)}`);
+        e.applied_results = clone(results);
+        e.failed_scope_id = row.scope_id;
+        throw e;
+      }
     }
     return {
-      format: 'kts-shadow-batch-apply-v1',
+      format: 'kts-shadow-batch-apply-v2-stale-guard',
       total: results.length,
       exact: results.filter(x => x.comparison_status === 'MATCH_EXACT').length,
       display_only: results.filter(x => x.comparison_status === 'MATCH_DISPLAY_ONLY').length,
@@ -220,7 +266,7 @@
     card.id = 'shadowBatchPanel';
     card.innerHTML = `
       <div class="section-title">Đối chiếu HIOSKT hàng loạt</div>
-      <div class="hint">Dán nhiều scope một lần. Hệ thống chỉ lưu sau khi <b>toàn bộ dòng preview hợp lệ</b>; có một dòng sai thì nút áp dụng bị khóa. TSV dùng dấu TAB, số thập phân dùng dấu chấm.</div>
+      <div class="hint">Dán nhiều scope một lần. Hệ thống chỉ cho áp dụng khi <b>toàn bộ dòng preview hợp lệ</b>. Trước khi ghi sẽ kiểm tra lại tất cả scope; nếu KQXS, cấu hình hoặc tiền đã đổi sau preview thì batch bị chặn và phải preview lại. TSV dùng dấu TAB, số thập phân dùng dấu chấm.</div>
       <details style="margin-top:7px"><summary class="hint">Mẫu TSV</summary><div class="raw" style="margin-top:6px">business_date\tpartner\tregion\txac\tqua_co\tpayout\thoi\tfinal\n2026-09-22\tHiền\tmn\t288\t218.88\t4650\t0\t-4431.12</div></details>
       <textarea id="shadowBatchInput" style="min-height:120px;margin-top:8px" placeholder="business_date[TAB]partner[TAB]region[TAB]xac[TAB]qua_co[TAB]payout[TAB]hoi[TAB]final"></textarea>
       <div class="row" style="margin-top:8px"><button id="shadowBatchPreview" class="btn soft">Kiểm tra trước</button><button id="shadowBatchApply" class="btn primary" disabled>Áp dụng toàn bộ</button></div>
@@ -251,7 +297,7 @@
         lastPreview = await preview(raw);
         render(lastPreview);
         doc.getElementById('shadowBatchApply').disabled = !lastPreview.ready;
-        setStatus(lastPreview.ready ? 'Preview hợp lệ. Có thể áp dụng toàn bộ.' : 'Có dòng lỗi; chưa ghi bất kỳ đối chiếu nào.', lastPreview.ready ? 'ok' : 'err');
+        setStatus(lastPreview.ready ? 'Preview hợp lệ. Có thể áp dụng nếu dữ liệu scope không đổi.' : 'Có dòng lỗi; chưa ghi bất kỳ đối chiếu nào.', lastPreview.ready ? 'ok' : 'err');
       } catch (error) {
         lastPreview = null;
         doc.getElementById('shadowBatchApply').disabled = true;
@@ -279,18 +325,25 @@
         }
         lastPreview = null;
       } catch (error) {
-        setStatus(String(error && error.message || error), 'err');
+        const message = String(error && error.message || error);
+        if (message.includes('BATCH_PREVIEW_STALE_SCOPE') || message.includes('BATCH_APPLY_PARTIAL')) {
+          lastPreview = null;
+          doc.getElementById('shadowBatchApply').disabled = true;
+        }
+        setStatus(message, 'err');
       }
     });
   }
 
   global.KTS_SETTLEMENT_SHADOW_BATCH = Object.freeze({
-    version: 'settlement-shadow-batch-v1',
+    version: 'settlement-shadow-batch-v2-stale-guard',
     parseInput,
     resolvePartner,
     normalizeRow,
     scopeId,
+    settlementFingerprint,
     preview,
+    preflight,
     apply
   });
 
