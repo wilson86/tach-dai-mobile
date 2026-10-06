@@ -43,7 +43,7 @@
     return normalized;
   }
 
-  function localEvidence(settlement, messages) {
+  function localEvidence(settlement, messages, partnerRole) {
     const result = settlement && (settlement.settlement_result || settlement.result_snapshot) || null;
     const lottery = settlement && settlement.lottery_result_snapshot || null;
     const config = settlement && settlement.config_snapshot || null;
@@ -52,6 +52,7 @@
       category_rows: clone(settlement && settlement.category_rows || []),
       message_ids: clone(settlement && settlement.message_ids || []),
       messages: clone(messages || []),
+      partner_role: partnerRole == null ? null : String(partnerRole),
       engine_version: String(settlement && settlement.engine_version || ''),
       config_version: config && config.version != null ? Number(config.version) : null,
       config_effective_from_date: config && config.effective_from_date ? String(config.effective_from_date) : null,
@@ -80,9 +81,21 @@
     }));
   }
 
+  async function loadPartnerRole(store, settlement) {
+    if (!store || !store.STORES || !store.STORES.partners || typeof store.get !== 'function') return null;
+    const partnerId = settlement && settlement.partner_id;
+    if (!partnerId) return null;
+    const partner = await store.get(store.STORES.partners, partnerId).catch(() => null);
+    const role = String(partner && partner.role || '').toLowerCase();
+    return ['customer', 'owner'].includes(role) ? role : null;
+  }
+
   async function saveEvidence(store, settlement, reference, comparison, input) {
     if (!store || typeof store.saveShadowEvent !== 'function') return null;
-    const messages = await loadMessageEvidence(store, settlement);
+    const [messages, partnerRole] = await Promise.all([
+      loadMessageEvidence(store, settlement),
+      loadPartnerRole(store, settlement)
+    ]);
     return store.saveShadowEvent({
       scope_id: settlement.id,
       partner_id: settlement.partner_id,
@@ -90,7 +103,7 @@
       region: settlement.region,
       trigger: String(input && input.trigger || 'MANUAL_COMPARE').toUpperCase(),
       reason: input && input.reason != null ? String(input.reason) : null,
-      local_snapshot: localEvidence(settlement, messages),
+      local_snapshot: localEvidence(settlement, messages, partnerRole),
       reference_snapshot: clone(reference),
       comparison: clone(comparison),
       comparison_status: comparison.status
@@ -171,12 +184,14 @@
     const local = event.local_snapshot || {};
     return {
       format: 'kts-shadow-replay-case-v1',
+      source_event_id: event.id == null ? null : String(event.id),
       scope: {
         scope_id: String(event.scope_id),
         partner_id: String(event.partner_id || ''),
         business_date: String(event.business_date || ''),
         region: String(event.region || '').toLowerCase()
       },
+      partner_role: local.partner_role == null ? null : String(local.partner_role),
       captured_at: event.observed_at || null,
       trigger: event.trigger || null,
       engine_version: local.engine_version || null,
@@ -192,21 +207,25 @@
   }
 
   async function getReplayCase(input) {
+    const d = deps();
     const history = await getHistory(input);
     if (!history.length) throw new Error('SHADOW_EVIDENCE_NOT_FOUND');
     const target = input && input.event_id
       ? history.find(row => String(row.id) === String(input.event_id))
       : history[history.length - 1];
     if (!target) throw new Error('SHADOW_EVIDENCE_NOT_FOUND');
-    return buildReplayCase(target);
+    const replay = buildReplayCase(target);
+    if (!replay.partner_role) replay.partner_role = await loadPartnerRole(d.store, { partner_id: replay.scope.partner_id });
+    return replay;
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v4-replay-evidence',
+    version: 'settlement-shadow-runtime-v5-replay-role',
     scopeId,
     normalizeReference,
     localEvidence,
     loadMessageEvidence,
+    loadPartnerRole,
     compareAndSave,
     getComparison,
     getDiagnostics,
