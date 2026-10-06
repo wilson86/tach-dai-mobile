@@ -16,9 +16,21 @@
     const doc=global.document;if(!doc||doc.querySelector('script['+attr+']'))return;
     const script=doc.createElement('script');script.src=src;script.async=false;script.setAttribute(attr,'1');if(onload)script.addEventListener('load',onload,{once:true});(doc.body||doc.head||doc.documentElement).appendChild(script);
   }
+  function loadPreproductionBoundary(){
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_BOUNDARY)return;
+    appendScript('./settlement-preproduction-boundary.js','data-kts-preproduction-boundary');
+  }
+  function loadPreproductionHandoff(){
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_HANDOFF){loadPreproductionBoundary();return;}
+    appendScript('./settlement-preproduction-handoff.js','data-kts-preproduction-handoff',loadPreproductionBoundary);
+  }
+  function loadPreproductionReceipt(){
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_RECEIPT){loadPreproductionHandoff();return;}
+    appendScript('./settlement-preproduction-receipt.js','data-kts-preproduction-receipt',loadPreproductionHandoff);
+  }
   function loadPreproductionReviewBundle(){
-    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_BUNDLE)return;
-    appendScript('./settlement-preproduction-review-bundle.js','data-kts-preproduction-review-bundle');
+    if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_BUNDLE){loadPreproductionReceipt();return;}
+    appendScript('./settlement-preproduction-review-bundle.js','data-kts-preproduction-review-bundle',loadPreproductionReceipt);
   }
   function loadPreproductionReviewHistory(){
     if(global.KTS_SETTLEMENT_PREPRODUCTION_REVIEW_HISTORY){loadPreproductionReviewBundle();return;}

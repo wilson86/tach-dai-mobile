@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('fs');const assert=require('assert');
+const receipt=fs.readFileSync('app/settlement-preproduction-receipt.js','utf8');
+const bridge=fs.readFileSync('app/settlement-qualification-history-bridge.js','utf8');
+const sw=fs.readFileSync('app/sw.js','utf8');
+const identity=fs.readFileSync('app/settlement-build-identity.js','utf8');
+assert(receipt.includes("version:'settlement-preproduction-receipt-v1'"));
+assert(receipt.includes("FORMAT='kts-preproduction-review-receipt-v1'"));
+assert(receipt.includes("MODE='PORTABLE_FINGERPRINT_ONLY'"));
+for(const lock of ['production_enabled:false','merge_authorized:false','deploy_authorized:false','mutates_settlement:false','production_approval_recorded:false'])assert(receipt.includes(lock));
+assert(receipt.includes('verifyReceiptAgainstBundle'));
+assert(!receipt.includes('saveSettlement('));assert(!receipt.includes('saveConfig('));assert(!receipt.includes('writeRow('));
+assert(bridge.includes("'./settlement-preproduction-receipt.js'"));assert(bridge.includes('data-kts-preproduction-receipt'));
+assert(sw.includes("'./settlement-preproduction-receipt.js'"));assert(sw.includes('v1.0.57-preproduction-boundary'));
+assert(identity.includes("'app/settlement-preproduction-receipt.js'"));
+console.log('settlement-preproduction-receipt-wiring-tests: PASS');

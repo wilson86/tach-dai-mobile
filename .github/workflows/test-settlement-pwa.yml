@@ -135,6 +135,24 @@ jobs:
       - name: Settlement portable pre-production review bundle wiring tests
         run: node tests/settlement-preproduction-review-bundle-wiring-tests.js
 
+      - name: Settlement portable evidence receipt tests
+        run: node tests/settlement-preproduction-receipt-tests.js
+
+      - name: Settlement portable evidence receipt wiring tests
+        run: node tests/settlement-preproduction-receipt-wiring-tests.js
+
+      - name: Settlement portable handoff tests
+        run: node tests/settlement-preproduction-handoff-tests.js
+
+      - name: Settlement portable handoff wiring tests
+        run: node tests/settlement-preproduction-handoff-wiring-tests.js
+
+      - name: Settlement final pre-production boundary tests
+        run: node tests/settlement-preproduction-boundary-tests.js
+
+      - name: Settlement final pre-production boundary wiring tests
+        run: node tests/settlement-preproduction-boundary-wiring-tests.js
+
       - name: Committed shadow regression fixtures
         run: node tests/shadow-regression-fixture-runner.js
 
