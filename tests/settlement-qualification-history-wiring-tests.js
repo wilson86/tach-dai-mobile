@@ -32,6 +32,7 @@ assert(bridge.includes('Chưa dùng kết quả này làm bằng chứng qualifi
 assert(bridge.includes("'./settlement-preproduction-package.js'"));
 assert(bridge.includes("'./settlement-preproduction-review.js'"));
 assert(bridge.includes("'./settlement-preproduction-review-history.js'"));
+assert(bridge.includes("'./settlement-preproduction-review-bundle.js'"));
 assert(!history.includes('saveSettlement('));
 assert(!history.includes('saveConfig('));
 assert(!history.includes('confirmAndPin('));
@@ -42,6 +43,7 @@ assert(sw.includes("'./settlement-qualification-history-bridge.js'"));
 assert(sw.includes("'./settlement-preproduction-package.js'"));
 assert(sw.includes("'./settlement-preproduction-review.js'"));
 assert(sw.includes("'./settlement-preproduction-review-history.js'"));
+assert(sw.includes("'./settlement-preproduction-review-bundle.js'"));
 assert(sw.includes('/api/settlement/parser-identity'));
-assert(sw.includes('v1.0.55-preproduction-review-history'));
+assert(sw.includes('v1.0.56-preproduction-review-bundle'));
 console.log('settlement-qualification-history-wiring-tests: PASS');
