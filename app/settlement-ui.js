@@ -526,7 +526,10 @@
     const originalLabel = button ? button.textContent : '';
     if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
     renderParsedPreview(null);
-    status('messageStatus', 'Đang chạy canonical parser…', '');
+    status('messageStatus', 'Đang đọc cú pháp…', '');
+    const slowParserNotice = global.setTimeout ? global.setTimeout(() => {
+      if (savingMessage) status('messageStatus', 'Máy chủ đang khởi động/kết nối · vẫn tiếp tục đọc tin, không cần bấm Lưu lần nữa.', 'warn');
+    }, 3000) : null;
     try {
       const outcome = await pipeline.parseAndSaveMessage({
         partner_id: partnerId,
@@ -578,6 +581,7 @@
       status('messageStatus', String(e.message || e), 'err');
       return null;
     } finally {
+      if (slowParserNotice != null && global.clearTimeout) global.clearTimeout(slowParserNotice);
       savingMessage = false;
       if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu + tính'; }
     }
