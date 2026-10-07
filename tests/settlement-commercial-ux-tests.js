@@ -53,4 +53,10 @@ assert(backupUi.includes('function') || backupUi.includes('const setBackupBusy =
 assert(backupUi.includes("['settlementExportBackup','settlementImportBackup','settlementImportFile']"));
 assert(backupUi.includes('Một thao tác sao lưu/khôi phục đang chạy'));
 assert(backupUi.includes('setBackupBusy(false)'));
+
+
+assert(ui.includes("kts:settlement-config-recalculated"));
+assert(ui.includes("kts:settlement-message-activity-changed"));
+assert(ui.includes('refreshVisiblePartnerReport'));
+assert(ui.includes("document.querySelectorAll('.nav button[data-pane=\"report\"]')"));
 console.log('settlement-commercial-ux-tests: PASS');
