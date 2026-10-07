@@ -599,6 +599,16 @@
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.settlements + ':' + String(row.id));
       const messageIds = Array.isArray(row.message_ids) ? row.message_ids.map(String) : (row.message_id ? [String(row.message_id)] : []);
       if (new Set(messageIds).size !== messageIds.length) throw new Error('IMPORT_SETTLEMENT_MESSAGE_DUPLICATE:' + String(row.id));
+      for (const messageId of messageIds) {
+        const message = combinedMessages.get(String(messageId));
+        if (!message) throw new Error('IMPORT_SETTLEMENT_MESSAGE_MISSING:' + String(row.id) + ':' + String(messageId));
+        if (String(message.status || '').toLowerCase() === 'cancelled') throw new Error('IMPORT_SETTLEMENT_REFERENCES_CANCELLED_MESSAGE:' + String(row.id) + ':' + String(messageId));
+        if (String(message.partner_id || '') !== partnerId ||
+            String(message.business_date || '') !== String(row.business_date || '') ||
+            String(message.region || '').toLowerCase() !== String(row.region || '').toLowerCase()) {
+          throw new Error('IMPORT_SETTLEMENT_MESSAGE_SCOPE_MISMATCH:' + String(row.id) + ':' + String(messageId));
+        }
+      }
       const activeScopeMessageIds = [...combinedMessages.values()]
         .filter(message =>
           String(message.partner_id || '') === partnerId &&
@@ -622,16 +632,6 @@
         const totals = row.result_snapshot || row.settlement_result || {};
         for (const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']) {
           if (Number(totals[field] || 0) !== 0) throw new Error('IMPORT_EMPTY_SETTLEMENT_NONZERO:' + String(row.id) + ':' + field);
-        }
-      }
-      for (const messageId of messageIds) {
-        const message = combinedMessages.get(String(messageId));
-        if (!message) throw new Error('IMPORT_SETTLEMENT_MESSAGE_MISSING:' + String(row.id) + ':' + String(messageId));
-        if (String(message.status || '').toLowerCase() === 'cancelled') throw new Error('IMPORT_SETTLEMENT_REFERENCES_CANCELLED_MESSAGE:' + String(row.id) + ':' + String(messageId));
-        if (String(message.partner_id || '') !== partnerId ||
-            String(message.business_date || '') !== String(row.business_date || '') ||
-            String(message.region || '').toLowerCase() !== String(row.region || '').toLowerCase()) {
-          throw new Error('IMPORT_SETTLEMENT_MESSAGE_SCOPE_MISMATCH:' + String(row.id) + ':' + String(messageId));
         }
       }
     }
