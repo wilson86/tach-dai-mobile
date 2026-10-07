@@ -20,5 +20,5 @@ assert(!readiness.includes('saveConfig('));
 assert(!readiness.includes('dismissCandidate('));
 assert(!readiness.includes('confirmAndPin('));
 assert(sw.includes("'./settlement-repair-readiness.js'"));
-assert(sw.includes("const CACHE='kts-tach-unified-v1.0."));
+assert(/const CACHE=\`\$\{CACHE_PREFIX\}v1\.0\.\d+-[^\`]+\`;/.test(sw),'repair readiness wiring requires scope-isolated versioned cache');
 console.log('settlement-repair-readiness-wiring-tests: PASS');
