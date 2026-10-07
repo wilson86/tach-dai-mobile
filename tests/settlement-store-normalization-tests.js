@@ -162,6 +162,17 @@ const incompletePrizeClaim=S.normalizeResultSnapshot({
 });
 assert.strictEqual(incompletePrizeClaim.complete,false,'missing prize rows must downgrade complete=true at durable store boundary');
 assert.strictEqual(incompletePrizeClaim.verified,false,'incomplete prize data must never remain verified');
+const explicitIncompleteStation=S.normalizeResultSnapshot({
+  ...base,verification_status:'verified',verified:true,
+  verification_sources:['primary','secondary'],verification_conflicts:[],
+  stations:[
+    {code:'bt',complete:false,prizes:fullMnPrizes('bt')},
+    {code:'vt',prizes:fullMnPrizes('vt')},
+    {code:'bli',prizes:fullMnPrizes('bli')}
+  ]
+});
+assert.strictEqual(explicitIncompleteStation.complete,false,'station.complete=false must be authoritative even when all prize rows are present');
+assert.strictEqual(explicitIncompleteStation.verified,false);
 
 const conflictEvidenceWins=S.normalizeResultSnapshot({
   ...base,verification_status:'verified',verified:true,
