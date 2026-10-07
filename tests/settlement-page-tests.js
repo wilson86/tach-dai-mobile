@@ -60,6 +60,8 @@ assert(ui.includes('const saveDraftSignature = configEditorSignature()'));
 assert(ui.includes('const sameConfigView ='));
 assert(ui.includes('màn hình hiện tại không bị đánh dấu đã lưu'));
 assert(ui.includes('if (savingConfig)'));
+assert(ui.includes('if (savingMessage)'));
+assert(ui.includes('tin dùng đúng bảng giá'));
 assert(ui.includes("button.textContent = 'Đang lưu…'"));
 assert(ui.includes('if (savingMessage)'));
 assert(ui.includes("button.disabled = true"));
