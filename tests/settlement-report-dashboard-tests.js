@@ -88,3 +88,7 @@ assert(source.includes("kts:settlement-config-recalculated"));
 console.log('settlement-report-dashboard-tests: PASS');
 
 // Empty/cancelled-only scopes are filtered by settlement-report before dashboard readiness.
+
+assert(source.includes('let refreshEpoch = 0'));
+assert(source.includes('const epoch = ++refreshEpoch'));
+assert(source.includes('epoch === refreshEpoch && scopeDate() === date'));
