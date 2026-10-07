@@ -51,6 +51,23 @@ const empty = D.buildReadiness({ status:'EMPTY', counts:{ partners:0 } });
 assert.strictEqual(empty.ready, false);
 assert.strictEqual(empty.reasons[0].code, 'NO_DATA');
 
+const kqxsPending = D.buildReadiness({
+  status:'MATCH_EXACT',
+  counts:{ partners:1, exact:1, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 },
+  partners:[{regions:[{region:'mn',kqxs_verified:false,kqxs_conflict:false,shadow_status:'MATCH_EXACT'}]}]
+});
+assert.strictEqual(kqxsPending.ready,false,'MATCH_EXACT money must not close day before KQXS verification');
+assert(kqxsPending.reasons.some(r=>r.code==='KQXS_UNVERIFIED'));
+assert.strictEqual(kqxsPending.kqxs_pending,1);
+
+const kqxsConflict = D.buildReadiness({
+  status:'MATCH_EXACT',
+  counts:{ partners:1, exact:1, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 },
+  partners:[{regions:[{region:'mb',kqxs_verified:false,kqxs_conflict:true,shadow_status:'MATCH_EXACT'}]}]
+});
+assert.strictEqual(kqxsConflict.ready,false);
+assert(kqxsConflict.reasons.some(r=>r.code==='KQXS_CONFLICT'));
+
 assert(code.includes('Tiền theo từng miền'));
 assert(code.includes("regionCard('Miền Nam'"));
 assert(code.includes("regionCard('Miền Trung'"));
