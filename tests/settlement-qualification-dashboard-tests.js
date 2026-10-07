@@ -2,8 +2,8 @@
 const fs=require('fs');const vm=require('vm');const assert=require('assert');
 const H='a'.repeat(64);
 function message(id='m1',opts={}){return {id,partner_id:'p1',business_date:'2026-09-22',region:opts.region||'mn',status:opts.status||'active',parser_error:opts.parser_error||null,canonical_payload:opts.noCanonical?null:{parser_identity:opts.noIdentity?null:{identity_sha256:opts.hash||H},legs:[{code:'2CB'}]}};}
-function settlement(opts={}){return {id:'scope:p1:2026-09-22:mn',partner_id:'p1',business_date:'2026-09-22',region:'mn',scope_status:'complete',lottery_result_snapshot:{verification_status:opts.verify||'verified'},config_snapshot:{tinh_ui:opts.ui===true},category_rows:opts.ui?[{code:'UI'}]:[{code:'2CB'}]};}
-function observationFor(settlements,options){const scopes=(settlements||[]).map(s=>({partner_id:s.partner_id,business_date:s.business_date,region:s.region,result_verification_status:s.lottery_result_snapshot&&s.lottery_result_snapshot.verification_status||'unverified'}));const cand=options.candidate_summary||{pending:0};const reg=options.regression_summary||{total:0,failed:0};const duration=Number(options.required_observation_days||0)>0;const ready=scopes.length>0&&duration&&cand.pending===0&&reg.failed===0;const blockers=[];if(!duration)blockers.push('OBSERVATION_DURATION_NOT_CONFIGURED');if(cand.pending)blockers.push('REGRESSION_CANDIDATE_PENDING:'+cand.pending);return {promotion_ready:ready,exact_days:ready?1:0,counts:{total:scopes.length,exact:ready?scopes.length:0,missing_scopes:0},scopes,blockers};}
+function settlement(opts={}){return {id:'scope:p1:2026-09-22:mn',partner_id:'p1',business_date:'2026-09-22',region:'mn',scope_status:'complete',lottery_result_snapshot:{verification_status:opts.verify||'verified',strict_evidence_valid:opts.evidenceValid!==false},config_snapshot:{tinh_ui:opts.ui===true},category_rows:opts.ui?[{code:'UI'}]:[{code:'2CB'}]};}
+function observationFor(settlements,options){const scopes=(settlements||[]).map(s=>({partner_id:s.partner_id,business_date:s.business_date,region:s.region,result_verification_status:s.lottery_result_snapshot&&s.lottery_result_snapshot.verification_status||'unverified',result_verification_evidence_valid:Boolean(s.lottery_result_snapshot&&s.lottery_result_snapshot.strict_evidence_valid),result_verification_reason:s.lottery_result_snapshot&&s.lottery_result_snapshot.strict_evidence_valid?'': 'KQXS_STRICT_EVIDENCE_MISSING'}));const cand=options.candidate_summary||{pending:0};const reg=options.regression_summary||{total:0,failed:0};const duration=Number(options.required_observation_days||0)>0;const ready=scopes.length>0&&duration&&cand.pending===0&&reg.failed===0;const blockers=[];if(!duration)blockers.push('OBSERVATION_DURATION_NOT_CONFIGURED');if(cand.pending)blockers.push('REGRESSION_CANDIDATE_PENDING:'+cand.pending);return {promotion_ready:ready,exact_days:ready?1:0,counts:{total:scopes.length,exact:ready?scopes.length:0,missing_scopes:0},scopes,blockers};}
 function makeCtx(opts={}){
   const settlements=opts.settlements||[settlement()];const messages=opts.messages||[message()];const candidatesRows=opts.candidates||[];const reg=opts.regression||{total:1,passed:1,failed:0,pass:true,results:[]};
   const store={STORES:{settlements:'settlements',messages:'messages'},async getAll(name){return JSON.parse(JSON.stringify(name==='settlements'?settlements:messages));}};
@@ -15,9 +15,10 @@ function makeCtx(opts={}){
   const ctx={console,globalThis:null,KTS_SETTLEMENT_STORE:store,KTS_SETTLEMENT_OBSERVATION:observation,KTS_SETTLEMENT_REGRESSION_CASES:regression,KTS_SETTLEMENT_REGRESSION_CANDIDATES:candidates,KTS_SETTLEMENT_REPAIR_READINESS:readiness,KTS_SETTLEMENT_PARSER_PROVIDER:parserProvider};ctx.globalThis=ctx;vm.createContext(ctx);vm.runInContext(fs.readFileSync('app/settlement-qualification-dashboard.js','utf8'),ctx,{filename:'settlement-qualification-dashboard.js'});return ctx.KTS_SETTLEMENT_QUALIFICATION;
 }
 (async()=>{
-  const Q=makeCtx();assert.strictEqual(Q.version,'settlement-qualification-dashboard-v3-live-parser-backend');
-  let kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'verified'}]});assert.strictEqual(kg.met,true);assert.strictEqual(kg.verified,1);
-  kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'conflict'}]});assert.strictEqual(kg.met,false);assert.strictEqual(kg.conflict,1);
+  const Q=makeCtx();assert.strictEqual(Q.version,'settlement-qualification-dashboard-v4-strict-kqxs-evidence');
+  let kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'verified',result_verification_evidence_valid:true}]});assert.strictEqual(kg.met,true);assert.strictEqual(kg.verified,1);
+  kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'verified',result_verification_evidence_valid:false,result_verification_reason:'KQXS_PRIZE_DATA_INCOMPLETE'}]});assert.strictEqual(kg.met,false);assert.strictEqual(kg.unverified,1);assert.strictEqual(kg.bad_scopes[0].reason,'KQXS_PRIZE_DATA_INCOMPLETE');
+  kg=Q.kqxsVerificationGate({scopes:[{partner_id:'p',business_date:'2026-09-22',region:'mn',result_verification_status:'conflict',result_verification_evidence_valid:false}]});assert.strictEqual(kg.met,false);assert.strictEqual(kg.conflict,1);
   let pg=Q.parserProvenanceGate([message()],{from_date:'2026-09-22',to_date:'2026-09-22'});assert.strictEqual(pg.met,true);assert.strictEqual(pg.known,1);
   pg=Q.parserProvenanceGate([message('m2',{noIdentity:true})],{from_date:'2026-09-22',to_date:'2026-09-22'});assert.strictEqual(pg.met,false);assert.strictEqual(pg.unknown,1);
   let bg=await Q.parserBackendGate([message()],{from_date:'2026-09-22',to_date:'2026-09-22'},{fetchIdentity:async()=>({identities:{mb:{identity_sha256:H},mn_mt:{identity_sha256:H}}})});assert.strictEqual(bg.met,true);assert.strictEqual(bg.matched,1);
@@ -33,6 +34,10 @@ function makeCtx(opts={}){
 
   const badKqxs=await makeCtx({settlements:[settlement({verify:'unverified'})]}).runQualification({from_date:'2026-09-22',to_date:'2026-09-22',required_observation_days:1});
   assert.strictEqual(badKqxs.ready_for_production_review,false);assert(badKqxs.blockers.some(x=>x.startsWith('KQXS_NOT_FULLY_VERIFIED:')));
+
+  const fakeVerifiedNoEvidence=await makeCtx({settlements:[settlement({verify:'verified',evidenceValid:false})]}).runQualification({from_date:'2026-09-22',to_date:'2026-09-22',required_observation_days:1});
+  assert.strictEqual(fakeVerifiedNoEvidence.ready_for_production_review,false,'verified label without strict evidence must not qualify');
+  assert(fakeVerifiedNoEvidence.blockers.some(x=>x.startsWith('KQXS_NOT_FULLY_VERIFIED:')));
 
   const badParser=await makeCtx({messages:[message('m3',{noIdentity:true})]}).runQualification({from_date:'2026-09-22',to_date:'2026-09-22',required_observation_days:1});
   assert.strictEqual(badParser.ready_for_production_review,false);assert(badParser.blockers.some(x=>x.startsWith('PARSER_PROVENANCE_INCOMPLETE:')));
