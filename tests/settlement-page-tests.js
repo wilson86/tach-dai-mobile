@@ -242,4 +242,9 @@ assert(sw.includes("url.pathname.includes('/api/settlement/parse')"));
 
 assert(page.includes("navigator.serviceWorker.register('./sw.js'"),'direct settlement page must register its scope-safe service worker');
 assert(page.includes("registration.update()"),'direct settlement page must check for a newer service worker build');
+assert(page.includes('navigator.serviceWorker.addEventListener(\'controllerchange\''));
+assert(page.includes('reloadingForWorker'));
+assert(page.includes('Chưa lưu thay đổi'));
+assert(page.includes('Có bản thử nghiệm mới. Nội dung chưa lưu đang được giữ'));
+assert(page.includes('location.reload()'));
 console.log('settlement-page-tests: PASS');
