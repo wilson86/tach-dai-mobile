@@ -9,8 +9,20 @@ const sandbox = { globalThis: {} };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const O = sandbox.globalThis.KTS_SETTLEMENT_OBSERVATION;
-assert.strictEqual(O.version, 'settlement-observation-v4-candidate-review-gate');
+assert.strictEqual(O.version, 'settlement-observation-v5-strict-kqxs-promotion');
 
+function fullPrizes(region,prefix) {
+  const counts=region==='mb'?{G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1}:{G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1};
+  return Object.fromEntries(Object.entries(counts).map(([k,n])=>[k,Array.from({length:n},(_,i)=>String(prefix)+'-'+k+'-'+String(i+1))]));
+}
+function verifiedKqxs(date,region) {
+  const code=region==='mb'?'mb':region==='mt'?'dn':'bt';
+  return {
+    business_date:date,region,complete:true,coverage_complete:true,verified:true,verification_status:'verified',
+    verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:[code],
+    stations:[{code,complete:true,prizes:fullPrizes(region,code)}]
+  };
+}
 function scope(date, region, comparison, extra) {
   return Object.assign({
     id: `scope:p1:${date}:${region}`,
@@ -19,7 +31,8 @@ function scope(date, region, comparison, extra) {
     region,
     scope_status: 'complete_unverified',
     comparison_status: comparison,
-    settlement_result: { final_net: 1 }
+    settlement_result: { final_net: 1 },
+    lottery_result_snapshot: verifiedKqxs(date,region)
   }, extra || {});
 }
 function message(id, date, region, status, partner) {
@@ -93,6 +106,34 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(s.counts.blocked, 1);
   assert.strictEqual(s.promotion_ready, false);
   assert(s.blockers.includes('BLOCKED:1'));
+}
+
+// Metadata saying "verified" is insufficient when prize evidence is incomplete.
+{
+  const bad = scope('2026-10-01','mn','MATCH_EXACT',{
+    lottery_result_snapshot:{
+      business_date:'2026-10-01',region:'mn',complete:true,verified:true,verification_status:'verified',
+      verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['bt'],
+      stations:[{code:'bt',prizes:{G8:['10']}}]
+    }
+  });
+  const s=O.buildObservation([bad],{required_observation_days:1});
+  assert.strictEqual(s.promotion_ready,false);
+  assert.strictEqual(s.kqxs_gate.met,false);
+  assert.strictEqual(s.kqxs_gate.verified,0);
+  assert(s.blockers.some(x=>x.startsWith('KQXS_NOT_FULLY_VERIFIED:')));
+  assert.strictEqual(s.scopes[0].result_verification_reason,'KQXS_PRIZE_DATA_INCOMPLETE');
+}
+
+// Wrong-date KQXS evidence also cannot contribute an exact observation day.
+{
+  const bad = scope('2026-10-01','mn','MATCH_EXACT',{
+    lottery_result_snapshot:verifiedKqxs('2026-09-30','mn')
+  });
+  const s=O.buildObservation([bad],{required_observation_days:1});
+  assert.strictEqual(s.exact_days,0);
+  assert.strictEqual(s.promotion_ready,false);
+  assert.strictEqual(s.scopes[0].result_verification_reason,'KQXS_SCOPE_MISMATCH');
 }
 
 // A day is not clean if there is an active message scope without a settlement.
