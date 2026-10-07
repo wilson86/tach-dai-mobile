@@ -47,6 +47,7 @@ assert.strictEqual(blockedSummary.state.code, 'BLOCKED');
 assert.strictEqual(blockedSummary.kqxs.label, 'ĐÃ XÁC MINH');
 assert.deepStrictEqual(Array.from(blockedSummary.blocked_reasons), ['Có tin chưa đọc được cú pháp.']);
 assert.strictEqual(H.friendlyReason('NO_CONFIG_FOR_BUSINESS_DATE'),'Chưa có thiết lập giá cho ngày này.');
+assert.strictEqual(H.friendlyReason('PRICE_MISSING:mt:2CB'),'Miền Trung chưa có bảng giá riêng. Mở Thiết lập và lưu bảng giá MT.');
 
 const goodMessages = [messages[0], messages[2]];
 const exactSettlement = [{

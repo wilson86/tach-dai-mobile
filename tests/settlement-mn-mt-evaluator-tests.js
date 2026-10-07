@@ -82,3 +82,14 @@ assert.strictEqual(mtEval.detail_rows[0].selector,'one_time');
 assert.strictEqual(E.regionTerms(mnConfig,'mn').dat_hit_mode,'ky_ruoi');
 assert.strictEqual(E.regionTerms(mnConfig,'mt').dat_hit_mode,'one_time');
 console.log('settlement MN/MT evaluator tests PASS');
+
+{
+  const strictCfg = JSON.parse(JSON.stringify(mnConfig));
+  delete strictCfg.region_pricing.mt;
+  assert.throws(() => E.evaluateCanonicalMessage({
+    canonical_payload:{region:'mt',legs:[{code:'2CB',values:['12'],stake:'1',station_codes:['dl']}]},
+    config_snapshot:strictCfg,
+    result_snapshot:makeMnMtResult('mt'),
+    region:'mt'
+  }), /PRICE_MISSING:mt:2CB/);
+}

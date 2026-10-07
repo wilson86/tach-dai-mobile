@@ -245,7 +245,7 @@
       const region = input.dataset.priceRegion;
       const code = input.dataset.priceCode;
       const field = input.dataset.priceField;
-      const regionData = pricing[region] || (region === 'mt' ? pricing.mn : {}) || {};
+      const regionData = pricing[region] || {};
       input.value = regionData[code] && regionData[code][field] != null ? regionData[code][field] : '0';
     });
   }
@@ -284,6 +284,11 @@
     $('allowUi').checked = false;
     fillPricing(null);
     refreshGateVisuals();
+  }
+
+  function configNeedsMtPricing(config) {
+    const pricing = config && config.region_pricing || {};
+    return Boolean(pricing.mn && !pricing.mt);
   }
 
   function applyConfig(config) {
@@ -365,7 +370,9 @@
     try {
       const cfg = await store.resolveConfigForDate(partnerId, date);
       applyConfig(cfg);
-      status('configStatus', `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, 'ok');
+      status('configStatus', configNeedsMtPricing(cfg)
+        ? `Cấu hình v${cfg.version} là dữ liệu cũ chưa có bảng giá Miền Trung riêng. MT đang để 0; kiểm tra rồi Lưu cấu hình trước khi tính MT.`
+        : `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, configNeedsMtPricing(cfg) ? 'warn' : 'ok');
     } catch (e) {
       if (String(e.message || e).includes('NO_CONFIG')) {
         const template = await nearestConfigTemplate(partnerId, date);

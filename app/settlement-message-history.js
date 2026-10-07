@@ -34,6 +34,9 @@
     const text = String(reason || '');
     if (text.includes('NO_CONFIG_FOR_BUSINESS_DATE')) return 'Chưa có thiết lập giá cho ngày này.';
     if (text.includes('KQXS_NOT_AVAILABLE')) return 'Chưa có kết quả xổ số cho ngày này.';
+    if (text.includes('PRICE_MISSING:mt:')) return 'Miền Trung chưa có bảng giá riêng. Mở Thiết lập và lưu bảng giá MT.';
+    if (text.includes('PRICE_MISSING:mn:')) return 'Miền Nam chưa có bảng giá cho cách đánh này.';
+    if (text.includes('PRICE_MISSING:mb:')) return 'Miền Bắc chưa có bảng giá cho cách đánh này.';
     if (text.startsWith('PENDING_PARSER:')) return 'Có tin chưa đọc được cú pháp.';
     return text;
   }
