@@ -127,7 +127,7 @@ const kqxsGateReport = R.buildDailyPartnerReport({
   partner:{id:'kg',name:'KQXS Gate',role:'customer'},business_date:'2026-10-06',messages_by_id:{},
   settlements:[
     {id:'kg-mn',partner_id:'kg',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
-     lottery_result_snapshot:{complete:true,verification_status:'verified',verified:true},
+     lottery_result_snapshot:{complete:true,verification_status:'verified',verified:true,verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt'}],verification_conflicts:[]},
      result_snapshot:{total_xac:10,total_qua_co:8,total_payout:0,refund_amount:0,final_net:8}},
     {id:'kg-mb',partner_id:'kg',business_date:'2026-10-06',region:'mb',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
      lottery_result_snapshot:{complete:true,verification_status:'unverified',verified:false},
@@ -171,7 +171,7 @@ const legacyWeakVerified={
 };
 assert.strictEqual(R.kqxsVerificationStatus(legacyWeakVerified),'unverified','legacy one-source verified flag must not pass close gate');
 const legacyStrongVerified={
-  lottery_result_snapshot:{complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[]}
+  lottery_result_snapshot:{complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['mb'],stations:[{code:'mb'}]}
 };
 assert.strictEqual(R.kqxsVerificationStatus(legacyStrongVerified),'verified');
 console.log('settlement-report-tests: PASS');
