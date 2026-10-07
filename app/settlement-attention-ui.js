@@ -10,9 +10,9 @@
   const PRIORITY = Object.freeze({
     BLOCKED: 1,
     KQXS_CONFLICT: 2,
-    PROVISIONAL: 3,
-    KQXS_UNVERIFIED: 4,
-    MISMATCH: 5,
+    MISMATCH: 3,
+    PROVISIONAL: 4,
+    KQXS_UNVERIFIED: 5,
     MATCH_DISPLAY_ONLY: 6,
     INCOMPLETE_REFERENCE: 7,
     UNVERIFIED: 8,
@@ -158,7 +158,7 @@
     const card = doc.createElement('div');
     card.className = 'card';
     card.id = 'dailyAttention';
-    card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện những mục cần kiểm tra. Ưu tiên: chưa tính → KQXS → tạm tính → lệch đối soát → chưa đối chiếu.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
+    card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện những mục cần kiểm tra. Ưu tiên: chưa tính → KQXS lệch nguồn → lệch đối soát → tạm tính → KQXS chưa xác minh.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
     if (anchor) anchor.insertAdjacentElement('afterend', card); else pane.appendChild(card);
 
     function setStatus(text, kind) {
