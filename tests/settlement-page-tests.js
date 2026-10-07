@@ -176,7 +176,8 @@ assert(resultAudit.includes('store.STORES.resultEvents'));
 assert(resultAudit.includes("kts:auto-result-update"));
 assert(resultAuto.includes('completeConfirmations: confirmations'));
 assert(resultAuto.includes('pipeline.recalculateDateRegion'));
-assert(resultAuto.includes("getElementById('saveMessage')"));
+assert(resultAuto.includes("global.addEventListener('kts:settlement-message-saved'"))
+assert(!resultAuto.includes("save.addEventListener('click'"));
 assert(resultAuto.includes('complete_waiting_confirmation'));
 assert(resultAuto.includes('verification_pending'));
 assert(resultAuto.includes('Hai nguồn kết quả đang lệch nhau'));
