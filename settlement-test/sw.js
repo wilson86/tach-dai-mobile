@@ -1,6 +1,8 @@
 'use strict';
 // Scope-safe service worker for both /app/ and isolated /settlement-test/ deployments.
-const CACHE='kts-tach-unified-v1.0.129-scope-revalidate';
+const CACHE_SCOPE=new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'')||'root';
+const CACHE_PREFIX=`kts-tach-unified-${CACHE_SCOPE}-`;
+const CACHE=`${CACHE_PREFIX}v1.0.130-scope-isolated`;
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
@@ -21,7 +23,7 @@ self.addEventListener('install',event=>event.waitUntil(
   caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())
 ));
 self.addEventListener('activate',event=>event.waitUntil(
-  caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
+  caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith(CACHE_PREFIX)&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
 ));
 self.addEventListener('fetch',event=>{
   const req=event.request,url=new URL(req.url);
