@@ -96,4 +96,11 @@ assert(historySource.includes("querySelectorAll('[data-cancel-message],[data-res
 assert(historySource.includes("if (!beginScopeMutation('hủy/khôi phục')) return;"));
 assert(historySource.includes("if (!beginScopeMutation('rà lại')) return;"));
 assert(historySource.includes('setScopeMutationBusy(false)'));
+
+
+const legacyUpperCancelled={id:'legacy-upper',partner_id:'p1',business_date:'2026-10-06',region:'mn',raw_text:'old',status:'CANCELLED',created_at:'2026-10-06T05:00:00Z'};
+assert.strictEqual(H.deriveState(legacyUpperCancelled,null).code,'CANCELLED');
+const legacySummary=H.buildScopeSummary(scope,[legacyUpperCancelled],[],null);
+assert.strictEqual(legacySummary.counts.active,0);
+assert.strictEqual(legacySummary.counts.cancelled,1);
 console.log('settlement-message-history-tests: PASS');
