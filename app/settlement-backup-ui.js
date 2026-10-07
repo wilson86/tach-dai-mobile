@@ -123,7 +123,7 @@
           const zero = {
             scope_status:'blocked', blocked:true, blocked_reasons:[reason],
             total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0,
-            direction:'THU',category_totals:{},category_rows:[],detail_rows:[],message_breakdown:[]
+            direction:'HOA',category_totals:{},category_rows:[],detail_rows:[],message_breakdown:[]
           };
           await store.saveSettlement({
             id:`scope:${scope.partner_id}:${scope.business_date}:${scope.region}`,
