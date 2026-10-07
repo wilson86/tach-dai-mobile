@@ -66,7 +66,7 @@
 
   function deriveState(message, settlement) {
     if (!message) return { code: 'UNKNOWN', label: 'Không rõ', kind: 'warn' };
-    if (String(message.status || '') === 'cancelled') {
+    if (String(message.status || '').toLowerCase() === 'cancelled') {
       return { code: 'CANCELLED', label: 'Đã hủy', kind: 'err' };
     }
     if (message.parser_error || String(message.status || '') === 'parser_error') {
@@ -168,6 +168,7 @@
     if (!doc || !store || !pipeline) return;
 
     let scopeMutationBusy = false;
+    let refreshEpoch = 0;
 
     function setScopeMutationBusy(value) {
       scopeMutationBusy = Boolean(value);
@@ -224,8 +225,10 @@
     }
 
     async function refresh() {
+      const epoch = ++refreshEpoch;
       const scope = currentScope();
       const host = doc.getElementById('messageHistory');
+      const stillCurrent = () => epoch === refreshEpoch && scopeMatch(scope, currentScope());
       if (!scope.partner_id || !/^\d{4}-\d{2}-\d{2}$/.test(scope.business_date) || !['mn','mt','mb'].includes(scope.region)) {
         if (host) host.innerHTML = '<div class="hint">Chọn đối tác, ngày và miền để xem tin.</div>';
         return [];
@@ -234,6 +237,7 @@
         store.getAll(store.STORES.messages), store.getAll(store.STORES.settlements),
         store.get(store.STORES.results, `${scope.business_date}:${scope.region}`)
       ]);
+      if (!stillCurrent()) return [];
       renderSummary(buildScopeSummary(scope, messages, settlements, resultSnapshot));
       const rows = buildRows(scope, messages, settlements);
       if (!host) return rows;
@@ -256,6 +260,11 @@
       host.querySelectorAll('[data-reuse-message]').forEach(btn => btn.addEventListener('click', () => {
         const row = rows.find(x => x.message.id === btn.dataset.reuseMessage);
         const text = doc.getElementById('messageText');
+        if (row && !scopeMatch(row.message, currentScope())) {
+          setStatus('Phạm vi đã đổi. Danh sách cũ không còn được dùng; đang tải lại.', 'warn');
+          refresh().catch(() => {});
+          return;
+        }
         if (row && text) {
           text.value = row.message.raw_text || '';
           text.focus();
@@ -266,6 +275,11 @@
         const id = btn.dataset.cancelMessage;
         const row = rows.find(x => x.message.id === id);
         if (!row) return;
+        if (!scopeMatch(row.message, currentScope())) {
+          setStatus('Phạm vi đã đổi. Không hủy tin từ danh sách cũ.', 'warn');
+          refresh().catch(() => {});
+          return;
+        }
         if (typeof global.confirm === 'function' && !global.confirm(`Hủy tin này khỏi tính tiền?\n\n${row.message.raw_text || ''}\n\nTin vẫn được giữ trong lịch sử và có thể khôi phục.`)) return;
         if (!beginScopeMutation('hủy/khôi phục')) return;
         setStatus('Đang hủy tin và tính lại phạm vi…', 'warn');
@@ -286,11 +300,18 @@
       }));
       host.querySelectorAll('[data-restore-message]').forEach(btn => btn.addEventListener('click', async () => {
         const id = btn.dataset.restoreMessage;
+        const row = rows.find(x => x.message.id === id);
+        if (!row) return;
+        if (!scopeMatch(row.message, currentScope())) {
+          setStatus('Phạm vi đã đổi. Không khôi phục tin từ danh sách cũ.', 'warn');
+          refresh().catch(() => {});
+          return;
+        }
         if (!beginScopeMutation('hủy/khôi phục')) return;
         setStatus('Đang khôi phục tin và tính lại phạm vi…', 'warn');
         try {
           await pipeline.restoreMessage(id);
-          const restored = rows.find(x => x.message.id === id);
+          const restored = row;
           if (restored && typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
             global.dispatchEvent(new global.CustomEvent('kts:settlement-message-activity-changed', { detail:{ scope:{
               business_date:String(restored.message.business_date || ''), region:String(restored.message.region || '').toLowerCase()
@@ -360,7 +381,7 @@
   }
 
   global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
-    version: 'message-history-v7-scope-mutation-lock', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
+    version: 'message-history-v8-stale-safe-actions', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
