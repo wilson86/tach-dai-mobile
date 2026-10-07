@@ -139,4 +139,29 @@ assert.strictEqual(kqxsGateReport.kqxs_conflict,false);
 assert.strictEqual(kqxsGateReport.regions.find(x=>x.region==='mn').kqxs_verified,true);
 assert.strictEqual(kqxsGateReport.regions.find(x=>x.region==='mb').kqxs_verified,false);
 assert.strictEqual(R.kqxsVerificationStatus({lottery_result_snapshot:{verification_status:'conflict'}}),'conflict');
+
+
+const ghostPartnerReport = R.buildDailyPartnerReport({
+  partner:{id:'ghost',name:'Đã hủy hết',role:'customer'},business_date:'2026-10-06',messages_by_id:{},
+  settlements:[{
+    id:'scope:ghost:2026-10-06:mn',partner_id:'ghost',business_date:'2026-10-06',region:'mn',
+    message_ids:[],scope_status:'empty',comparison_status:'empty',
+    result_snapshot:{total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0}
+  }]
+});
+assert.strictEqual(ghostPartnerReport.regions.length,0,'empty cancelled scope must not create a report region');
+assert.strictEqual(ghostPartnerReport.messages.length,0);
+const ghostOps = R.buildDailyOperationsReport({
+  business_date:'2026-10-06',
+  partners:[{id:'ghost',name:'Đã hủy hết',role:'customer'}],
+  messages:[{id:'old',partner_id:'ghost',business_date:'2026-10-06',region:'mn',status:'cancelled'}],
+  settlements:[{
+    id:'scope:ghost:2026-10-06:mn',partner_id:'ghost',business_date:'2026-10-06',region:'mn',
+    message_ids:[],scope_status:'empty',comparison_status:'empty',
+    result_snapshot:{total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0}
+  }]
+});
+assert.strictEqual(ghostOps.status,'EMPTY');
+assert.strictEqual(ghostOps.counts.partners,0,'cancelled-only partner must not affect close gate');
+assert.strictEqual(ghostOps.partners.length,0);
 console.log('settlement-report-tests: PASS');
