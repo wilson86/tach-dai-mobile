@@ -16,7 +16,8 @@ const ctx = {
 };
 ctx.globalThis = ctx;
 vm.createContext(ctx);
-vm.runInContext(fs.readFileSync('app/settlement-parser-provider.js', 'utf8'), ctx, { filename: 'settlement-parser-provider.js' });
+const source = fs.readFileSync('app/settlement-parser-provider.js', 'utf8');
+vm.runInContext(source, ctx, { filename: 'settlement-parser-provider.js' });
 const P = ctx.KTS_SETTLEMENT_PARSER_PROVIDER;
 
 (async()=>{
