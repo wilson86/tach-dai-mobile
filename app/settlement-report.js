@@ -54,8 +54,20 @@
       ? new Set(snapshot.verification_sources.map(x => String(x || '').trim()).filter(Boolean))
       : new Set();
     const conflicts = Array.isArray(snapshot.verification_conflicts) ? snapshot.verification_conflicts : [];
+    const expected = Array.isArray(snapshot.expected_station_codes)
+      ? snapshot.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const actual = Array.isArray(snapshot.stations)
+      ? snapshot.stations.map(row => String(row && row.code || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const coverageValid =
+      expected.length > 0 &&
+      new Set(expected).size === expected.length &&
+      new Set(actual).size === actual.length &&
+      actual.length === expected.length &&
+      expected.every(code => actual.includes(code));
     const claimedVerified = snapshot.verified === true || status === 'verified';
-    if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0) return 'verified';
+    if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0 && coverageValid) return 'verified';
     return 'unverified';
   }
 
