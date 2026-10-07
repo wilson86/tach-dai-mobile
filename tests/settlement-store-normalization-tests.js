@@ -18,6 +18,19 @@ assert.strictEqual(typeof S.assertConfigPartner, 'function');
 assert.strictEqual(S.assertConfigPartner({partner_id:'p1'}, 'p1'), true);
 assert.throws(() => S.assertConfigPartner({partner_id:'p2'}, 'p1'), /CONFIG_PARTNER_MISMATCH/);
 
+assert.strictEqual(typeof S.resolveConfigFromRows, 'function');
+const versionRows = [
+  S.normalizeConfig({partner_id:'p1',version:1,effective_from_date:'2026-10-06'}),
+  S.normalizeConfig({partner_id:'p1',version:2,effective_from_date:'2026-10-07'}),
+  S.normalizeConfig({partner_id:'p1',version:3,effective_from_date:'2026-10-07'}),
+  S.normalizeConfig({partner_id:'p2',version:99,effective_from_date:'2026-10-01'})
+];
+assert.strictEqual(S.resolveConfigFromRows(versionRows,'p1','2026-10-06').version,1,'date before new rule must keep old version');
+assert.strictEqual(S.resolveConfigFromRows(versionRows,'p1','2026-10-07').version,3,'same effective date must pick highest version');
+assert.strictEqual(S.resolveConfigFromRows(versionRows,'p1','2026-10-08').partner_id,'p1','foreign partner config must never leak');
+assert.throws(()=>S.resolveConfigFromRows(versionRows,'p1','2026-10-05'),/NO_CONFIG_FOR_BUSINESS_DATE/);
+
+
 const regionCfg = S.normalizeConfig({
   partner_id:'p1', version:1, effective_from_date:'2026-10-07',
   total_percent:'100', refund_percent:'0', dat_hit_mode:'ky_ruoi', dax_hit_mode:'multi_pair',
