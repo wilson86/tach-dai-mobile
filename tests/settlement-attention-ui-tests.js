@@ -120,8 +120,9 @@ assert(code.includes('shadowRuntime.getDiagnostics'));
 assert(code.includes('kts:shadow-saved'));
 assert(code.includes('kts:auto-result-recalculated'));
 
-console.log('settlement-attention-ui-tests: PASS');
+
 
 assert(source.includes('let refreshEpoch = 0'));
 assert(source.includes('const epoch = ++refreshEpoch'));
 assert(source.includes('epoch === refreshEpoch'));
+console.log('settlement-attention-ui-tests: PASS');
