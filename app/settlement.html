@@ -152,5 +152,14 @@
 <script src="./settlement-scope-sync.js"></script>
 <script src="./settlement-report-simple-ui.js"></script>
 <script src="./settlement-consumer-ui.js"></script>
+<script>
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js', { scope: './' })
+      .then(registration => registration.update().catch(() => {}))
+      .catch(() => {});
+  });
+}
+</script>
 </body>
 </html>
