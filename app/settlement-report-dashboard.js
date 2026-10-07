@@ -106,6 +106,8 @@
     if (detailCard) detailCard.insertAdjacentElement('afterend', card);
     else pane.insertBefore(card, pane.firstChild);
 
+    let refreshEpoch = 0;
+
     function setStatus(text, kind) {
       const el = doc.getElementById('dailyOpsStatus');
       if (!el) return;
@@ -214,18 +216,22 @@
     }
 
     async function refresh() {
+      const epoch = ++refreshEpoch;
       const date = scopeDate();
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return setStatus('Chọn ngày hợp lệ để xem tổng quan.', 'err');
+      const stillCurrent = () => epoch === refreshEpoch && scopeDate() === date;
       setStatus('Đang tổng hợp toàn bộ khách/chủ trong ngày…', '');
       try {
         const [partners, settlements, messages] = await Promise.all([
           store.getAll(store.STORES.partners), store.getAll(store.STORES.settlements), store.getAll(store.STORES.messages)
         ]);
+        if (!stillCurrent()) return null;
         const model = reportApi.buildDailyOperationsReport({ business_date: date, partners, settlements, messages });
+        if (!stillCurrent()) return null;
         render(model);
         return model;
       } catch (e) {
-        setStatus('Không tổng hợp được báo cáo ngày: ' + String(e && e.message || e), 'err');
+        if (stillCurrent()) setStatus('Không tổng hợp được báo cáo ngày: ' + String(e && e.message || e), 'err');
         return null;
       }
     }
@@ -252,7 +258,7 @@
   }
 
   global.KTS_SETTLEMENT_REPORT_DASHBOARD = Object.freeze({
-    version:'settlement-report-dashboard-v4-live-refresh', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown, buildReadiness
+    version:'settlement-report-dashboard-v5-stale-safe-refresh', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown, buildReadiness
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
