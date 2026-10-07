@@ -328,13 +328,21 @@
     return v;
   }
 
-  async function resolveConfigForDate(partnerId, businessDate) {
+  function resolveConfigFromRows(rows, partnerId, businessDate) {
     if (!partnerId) throw new Error('CONFIG_PARTNER_REQUIRED');
     if (!validDateOnly(businessDate)) throw new Error('INVALID_BUSINESS_DATE');
-    const rows = await listConfigsForPartner(partnerId);
-    const eligible = rows.filter(x => x.effective_from_date <= businessDate);
+    const eligible = (Array.isArray(rows) ? rows : [])
+      .filter(x => String(x && x.partner_id || '') === String(partnerId))
+      .map(x => x && x.effective_from_date ? x : Object.assign({}, x, { effective_from_date: String(x && x.effective_from || '').slice(0, 10) }))
+      .filter(x => validDateOnly(x.effective_from_date) && x.effective_from_date <= businessDate)
+      .sort((a, b) => a.effective_from_date.localeCompare(b.effective_from_date) || Number(a.version || 0) - Number(b.version || 0));
     if (!eligible.length) throw new Error('NO_CONFIG_FOR_BUSINESS_DATE');
     return clone(eligible[eligible.length - 1]);
+  }
+
+  async function resolveConfigForDate(partnerId, businessDate) {
+    const rows = await listConfigsForPartner(partnerId);
+    return resolveConfigFromRows(rows, partnerId, businessDate);
   }
 
   function assertConfigPartner(configSnapshot, partnerId) {
@@ -572,6 +580,6 @@
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, validateImportPayload, stableStringify
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, validateImportPayload, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);
