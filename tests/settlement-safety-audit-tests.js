@@ -122,5 +122,8 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   assert(ui.includes('Đối tác/ngày đã đổi trong lúc chuẩn bị thiết lập'));
   assert(ui.includes('Đối tác/ngày/miền đã đổi. Không áp dụng bảng giá của phạm vi cũ.'));
 
+  assert(ui.includes("if (sameSaveScope()) setMissingConfigAction(false, '', null, businessDate)"));
+  assert(ui.includes('Đối tác/ngày/miền đã đổi trong lúc kiểm tra bảng giá. Tin cũ chưa được lưu.'));
+
   console.log('settlement-safety-audit-tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
