@@ -36,3 +36,7 @@ assert(consumer.includes('Ngày này chưa có dữ liệu tính tiền.'));
 assert(consumer.includes("button.id='checkMessageSyntax'"));
 assert(consumer.includes('canonicalSummary'));
 console.log('settlement-commercial-ux-tests: PASS');
+
+assert(ui.includes('ĐÃ ĐỦ KẾT QUẢ · CHỜ XÁC MINH'),'complete fallback KQXS must remain unclosed until verification');
+assert(ui.includes('ĐÃ ĐỐI CHIẾU 2 NGUỒN'));
+assert(!ui.includes("snapshot.complete ? '<span class=\"tag ok\">ĐÃ CHỐT</span>'"),'complete alone must never render ĐÃ CHỐT');
