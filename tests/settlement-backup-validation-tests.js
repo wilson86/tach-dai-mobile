@@ -43,4 +43,29 @@ const source=fs.readFileSync('app/settlement-store.js','utf8');
 const importPos=source.indexOf('async function importAll');
 assert(source.indexOf('validateImportPayload(payload, existing',importPos)>importPos);
 assert(source.indexOf('validateImportPayload(payload, existing',importPos)<source.indexOf('const db = await openDb();',importPos),'backup must validate before write transaction');
+
+
+{
+  const p=payload({partners:[partner('a')],settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['missing'],config_snapshot:cfg('a:v1','a')}]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_MESSAGE_MISSING/);
+}
+{
+  const p=payload({partners:[partner('a')],settlements:[{id:'wrong-scope',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:[],config_snapshot:cfg('a:v1','a')}]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_ID_SCOPE_MISMATCH/);
+}
+{
+  const p=payload({results:[{id:'wrong',business_date:'2026-10-06',region:'mn',complete:false,stations:[]}]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_RESULT_ID_SCOPE_MISMATCH/);
+}
+{
+  const p=payload({partners:[partner('a')],shadow_events:[{id:'se1',scope_id:'scope:b:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn'}]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_SCOPE_ID_MISMATCH/);
+}
+{
+  const ex=empty(); ex.partners=[partner('a')]; ex.messages=[msg('same','a')];
+  const p=payload({partners:[partner('a')],messages:[{...msg('same','a'),raw_text:'OLDER BACKUP TEXT'}]});
+  const out=S.validateImportPayload(p,ex,{replace:false});
+  assert.strictEqual(out.inserted_counts.messages,0,'merge must not overwrite existing message id');
+  assert.strictEqual(out.skipped_existing_counts.messages,1);
+}
 console.log('settlement-backup-validation-tests: PASS');
