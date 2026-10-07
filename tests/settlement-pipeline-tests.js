@@ -30,6 +30,7 @@ function config() {
   return {
     partner_id: 'p1', version: 1, effective_from_date: '2026-01-01', commission_type: 'ratio',
     total_percent: '100', refund_percent: '0', mb_xien_234: false, tinh_ui: false,
+    region_terms: { mb:{ total_percent:'50', refund_percent:'0' } },
     region_pricing: { mb: { '2CB': p(), '2CD': p(), '2CB8': p(), DAT: p(), '3CB': p(), '3CB7': p(), '3CDD': p(), '4C': p(), MB_XIEN2: { commission: '56', win: '1000' }, UI: { commission: '0', win: '10' } } }
   };
 }
@@ -72,7 +73,7 @@ function fakeStore(messages) {
   approx(out.settlement.result_snapshot.total_qua_co, 61.56);
   // 2CB 92 hits 3 times; DAT 92-61 uses fixed nhiều-cặp min(3,2)=2 => total 5.
   assert.strictEqual(out.settlement.result_snapshot.total_payout, 5);
-  approx(out.settlement.result_snapshot.final_net, 56.56);
+  approx(out.settlement.result_snapshot.final_net, 28.28);
   assert.strictEqual(out.settlement.message_breakdown.length, 2);
 
   store.state.messages.push({ id: 'm3', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: 'bad', status: 'parser_error', canonical_payload: null });

@@ -7,6 +7,7 @@ assert(ui.includes('async function copyPartner()'));
 assert(ui.includes("global.prompt ? global.prompt('Tên khách/chủ mới'"));
 assert(ui.includes('store.resolveConfigForDate(source.id, date)'));
 assert(ui.includes('store.saveConfig(configCloneInput(cfg, saved.id))'));
+assert(ui.includes('region_terms: JSON.parse(JSON.stringify(cfg.region_terms || {}))'));
 assert(ui.includes('Không copy tin/KQXS/lịch sử tiền'));
 assert(ui.includes('async function deactivatePartner()'));
 assert(ui.includes('active:false'));

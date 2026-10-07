@@ -29,15 +29,53 @@
   </section>
 
   <section id="pane-config" class="pane">
-    <div class="card"><div class="section-title">Cấu hình theo ngày hiệu lực</div><div class="grid3"><div><label>Ngày bắt đầu áp dụng</label><input id="effectiveDate" type="date"></div><div><label>Loại cò</label><select id="commissionType"><option value="ratio">Tỉ lệ</option><option value="amount">Thành tiền</option></select></div><div><label>% tổng</label><input id="totalPercent" inputmode="decimal" value="100"></div></div><div class="grid" style="margin-top:8px"><div><label>% hồi</label><input id="refundPercent" inputmode="decimal" value="0"></div><div><label>ĐáT / ĐáX MN-MT</label><div class="grid"><select id="datMode"><option value="one_time">1 lần</option><option value="ky_ruoi" selected>Kỳ rưỡi</option><option value="multi_pair">Nhiều cặp</option></select><select id="daxMode"><option value="one_time">1 lần</option><option value="ky_ruoi">Kỳ rưỡi</option><option value="multi_pair" selected>Nhiều cặp</option></select></div></div></div>
+    <div class="card">
+      <div class="section-title">Cấu hình theo ngày hiệu lực</div>
+      <div class="grid">
+        <div><label>Ngày bắt đầu áp dụng</label><input id="effectiveDate" type="date"></div>
+        <div><label>Loại cò</label><select id="commissionType"><option value="ratio">Tỉ lệ</option><option value="amount">Thành tiền</option></select></div>
+      </div>
       <div class="gate"><input id="allowMbXien" type="checkbox"><div><b>Cho phép Xiên 2-3-4 Miền Bắc</b><span>Mặc định TẮT. Chỉ tính khi bạn bật như soft gốc.</span></div></div>
       <div class="gate"><input id="allowUi" type="checkbox"><div><b>Tính Ủi</b><span>Mặc định TẮT. Không sinh tiền Ủi khi chưa cho phép.</span></div></div>
-      <div class="hint" style="margin-top:8px">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi. Ngày trước ngày hiệu lực tiếp tục dùng phiên bản cũ.</div>
+      <div class="hint" style="margin-top:8px">Mỗi miền có % tổng / % hồi riêng. MN và MT có mode ĐáT / ĐáX riêng. MB đá thẳng giữ cố định nhiều cặp theo rule đã chốt.</div>
     </div>
-    <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá Miền Nam</div><span class="hint">Cấu hình riêng MN</span></div><div id="priceMn"></div></div>
-    <div class="card"><div class="row" style="justify-content:space-between"><div class="section-title">Giá Miền Trung</div><span class="hint">Cùng cách tính MN · giá lưu riêng MT</span></div><div id="priceMt"></div></div>
-    <div class="card"><div class="section-title">Giá Miền Bắc</div><div id="priceMb"></div></div>
-    <div class="card"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><div id="configStatus" class="status"></div></div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><div class="section-title">Miền Nam</div><span class="hint">Cấu hình riêng MN</span></div>
+      <div class="grid">
+        <div><label>% tổng MN</label><input id="mnTotalPercent" inputmode="decimal" value="100"></div>
+        <div><label>% hồi MN</label><input id="mnRefundPercent" inputmode="decimal" value="0"></div>
+      </div>
+      <div class="grid" style="margin-top:8px">
+        <div><label>ĐáT MN</label><select id="mnDatMode"><option value="one_time">1 lần</option><option value="ky_ruoi" selected>Kỳ rưỡi</option><option value="multi_pair">Nhiều cặp</option></select></div>
+        <div><label>ĐáX MN</label><select id="mnDaxMode"><option value="one_time">1 lần</option><option value="ky_ruoi">Kỳ rưỡi</option><option value="multi_pair" selected>Nhiều cặp</option></select></div>
+      </div>
+      <div id="priceMn" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><div class="section-title">Miền Trung</div><span class="hint">Cùng công thức MN · cấu hình độc lập MT</span></div>
+      <div class="grid">
+        <div><label>% tổng MT</label><input id="mtTotalPercent" inputmode="decimal" value="100"></div>
+        <div><label>% hồi MT</label><input id="mtRefundPercent" inputmode="decimal" value="0"></div>
+      </div>
+      <div class="grid" style="margin-top:8px">
+        <div><label>ĐáT MT</label><select id="mtDatMode"><option value="one_time">1 lần</option><option value="ky_ruoi" selected>Kỳ rưỡi</option><option value="multi_pair">Nhiều cặp</option></select></div>
+        <div><label>ĐáX MT</label><select id="mtDaxMode"><option value="one_time">1 lần</option><option value="ky_ruoi">Kỳ rưỡi</option><option value="multi_pair" selected>Nhiều cặp</option></select></div>
+      </div>
+      <div id="priceMt" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <div class="row" style="justify-content:space-between"><div class="section-title">Miền Bắc</div><span class="hint">Đá thẳng: nhiều cặp (cố định)</span></div>
+      <div class="grid">
+        <div><label>% tổng MB</label><input id="mbTotalPercent" inputmode="decimal" value="100"></div>
+        <div><label>% hồi MB</label><input id="mbRefundPercent" inputmode="decimal" value="0"></div>
+      </div>
+      <div class="status">Đá MB: NHIỀU CẶP · không đổi mode.</div>
+      <div id="priceMb" style="margin-top:8px"></div>
+    </div>
+    <div class="card"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><div id="configStatus" class="status"></div><div class="hint">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi; ngày trước vẫn dùng phiên bản cũ.</div></div>
   </section>
 
   <section id="pane-message" class="pane">

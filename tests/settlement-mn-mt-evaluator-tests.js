@@ -34,6 +34,7 @@ const mnResult = {
 const p = (commission, win) => ({ commission:String(commission), win:String(win) });
 const mnConfig = {
   commission_type:'ratio', total_percent:'100', refund_percent:'0', dat_hit_mode:'ky_ruoi', dax_hit_mode:'multi_pair', tinh_ui:false,
+  region_terms:{ mn:{dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'}, mt:{dat_hit_mode:'one_time',dax_hit_mode:'one_time'} },
   region_pricing:{ mn:{ '2CB':p(.76,75), '2CD':p(.76,75), '2CB7':p(.76,75), DAT:p(.76,750), DAX:p(.76,550), '3CB':p(.76,650), '3CB7':p(.76,650), '3CDD':p(.76,650), '4C':p(.76,5500), UI:p(0,0) } }
 };
 const canonical = { region:'mn', legs:[
@@ -77,4 +78,7 @@ const mtConfig = JSON.parse(JSON.stringify(mnConfig)); mtConfig.region_pricing.m
 const mtResult = {business_date:'2026-10-04',region:'mt',complete:true,stations:[station('kh'),station('kt'),station('hue')]};
 const mtEval = E.evaluateCanonicalMessage({canonical_payload:{region:'mt',legs:[{code:'DAT',values:['00','01'],stake:'0.5',station_codes:['kh']}]},config_snapshot:mtConfig,result_snapshot:mtResult});
 assert.strictEqual(mtEval.category_inputs[0].xac,18);
+assert.strictEqual(mtEval.detail_rows[0].selector,'one_time');
+assert.strictEqual(E.regionTerms(mnConfig,'mn').dat_hit_mode,'ky_ruoi');
+assert.strictEqual(E.regionTerms(mnConfig,'mt').dat_hit_mode,'one_time');
 console.log('settlement MN/MT evaluator tests PASS');

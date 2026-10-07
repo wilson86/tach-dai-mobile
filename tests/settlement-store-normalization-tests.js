@@ -15,6 +15,26 @@ assert.strictEqual(typeof S.normalizeShadowEvent, 'function');
 assert.strictEqual(typeof S.saveShadowEvent, 'function');
 assert.strictEqual(typeof S.listShadowEvents, 'function');
 
+const regionCfg = S.normalizeConfig({
+  partner_id:'p1', version:1, effective_from_date:'2026-10-07',
+  total_percent:'100', refund_percent:'0', dat_hit_mode:'ky_ruoi', dax_hit_mode:'multi_pair',
+  region_terms:{
+    mn:{total_percent:'90',refund_percent:'5',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'},
+    mt:{total_percent:'80',refund_percent:'2',dat_hit_mode:'one_time',dax_hit_mode:'ky_ruoi'},
+    mb:{total_percent:'70',refund_percent:'1'}
+  }
+});
+assert.strictEqual(regionCfg.region_terms.mn.total_percent,'90');
+assert.strictEqual(regionCfg.region_terms.mt.refund_percent,'2');
+assert.strictEqual(regionCfg.region_terms.mt.dat_hit_mode,'one_time');
+assert.strictEqual(regionCfg.region_terms.mb.total_percent,'70');
+assert.strictEqual(regionCfg.region_terms.mb.dat_hit_mode,'multi_pair');
+const legacyCfg = S.normalizeConfig({partner_id:'p2',version:1,effective_from_date:'2026-10-07',total_percent:'88',refund_percent:'3',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'});
+assert.strictEqual(legacyCfg.region_terms.mn.total_percent,'88');
+assert.strictEqual(legacyCfg.region_terms.mt.total_percent,'88');
+assert.strictEqual(legacyCfg.region_terms.mb.refund_percent,'3');
+assert.throws(()=>S.normalizeConfig({partner_id:'p3',version:1,effective_from_date:'2026-10-07',region_terms:{mn:{dat_hit_mode:'bad'}}}),/INVALID_HIT_MODE/);
+
 const base = {
   business_date: '2026-10-06',
   region: 'mn',

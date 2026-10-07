@@ -18,6 +18,10 @@ for (const file of [
 const R = sandbox.globalThis.KTS_SETTLEMENT_RUNTIME;
 
 const baseConfig = { total_percent: 100, refund_percent: 0, mb_xien_234: false, tinh_ui: false };
+const regionalConfig = Object.assign({}, baseConfig, { region_terms: { mn:{total_percent:'80',refund_percent:'10'}, mt:{total_percent:'50',refund_percent:'0'}, mb:{total_percent:'25',refund_percent:'0'} } });
+assert.strictEqual(R.regionTerms(regionalConfig,'mn').total_percent,'80');
+assert.strictEqual(R.regionTerms(regionalConfig,'mt').total_percent,'50');
+assert.strictEqual(R.regionTerms(regionalConfig,'mb').total_percent,'25');
 
 assert.throws(
   () => R.mbXienCategoryWithConfig(2, 1, 1, 56, 1000, baseConfig),
@@ -48,5 +52,13 @@ const settledUi = R.settleWithConfig([
 ], { partner_role: 'customer', config_snapshot: Object.assign({}, baseConfig, { tinh_ui: true }) });
 assert.strictEqual(settledUi.total_payout, 40);
 assert(Math.abs(settledUi.final_net - (-26.32)) < 1e-9);
+
+const row = [{ code:'2CB', xac:18, commission_value:0.76, commission_type:'ratio', hit_units:0, win_rate:75 }];
+const mnRegional = R.settleWithConfig(row,{partner_role:'customer',config_snapshot:regionalConfig,region:'mn'});
+const mtRegional = R.settleWithConfig(row,{partner_role:'customer',config_snapshot:regionalConfig,region:'mt'});
+const mbRegional = R.settleWithConfig(row,{partner_role:'customer',config_snapshot:regionalConfig,region:'mb'});
+assert(Math.abs(mnRegional.final_net - 9.8496) < 1e-9);
+assert(Math.abs(mtRegional.final_net - 6.84) < 1e-9);
+assert(Math.abs(mbRegional.final_net - 3.42) < 1e-9);
 
 console.log('settlement-runtime-tests: PASS');

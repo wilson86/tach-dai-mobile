@@ -107,6 +107,7 @@
       partner_id: partnerId,
       effective_from_date: cfg.effective_from_date,
       region_pricing: JSON.parse(JSON.stringify(cfg.region_pricing || {})),
+      region_terms: JSON.parse(JSON.stringify(cfg.region_terms || {})),
       dat_hit_mode: cfg.dat_hit_mode,
       dax_hit_mode: cfg.dax_hit_mode,
       mb_xien_234: cfg.mb_xien_234 === true,
@@ -187,12 +188,36 @@
     });
   }
 
+  function regionTermsFromForm() {
+    return {
+      mn: { total_percent:$('mnTotalPercent').value, refund_percent:$('mnRefundPercent').value, dat_hit_mode:$('mnDatMode').value, dax_hit_mode:$('mnDaxMode').value },
+      mt: { total_percent:$('mtTotalPercent').value, refund_percent:$('mtRefundPercent').value, dat_hit_mode:$('mtDatMode').value, dax_hit_mode:$('mtDaxMode').value },
+      mb: { total_percent:$('mbTotalPercent').value, refund_percent:$('mbRefundPercent').value, dat_hit_mode:'multi_pair' }
+    };
+  }
+
+  function setRegionTerms(config) {
+    const all = config && config.region_terms ? config.region_terms : {};
+    const legacyTotal = config && config.total_percent != null ? config.total_percent : '100';
+    const legacyRefund = config && config.refund_percent != null ? config.refund_percent : '0';
+    const legacyDat = config && config.dat_hit_mode ? config.dat_hit_mode : 'ky_ruoi';
+    const legacyDax = config && config.dax_hit_mode ? config.dax_hit_mode : 'multi_pair';
+    const pick = (region, field, fallback) => all[region] && all[region][field] != null ? all[region][field] : fallback;
+    $('mnTotalPercent').value = pick('mn','total_percent',legacyTotal);
+    $('mnRefundPercent').value = pick('mn','refund_percent',legacyRefund);
+    $('mnDatMode').value = pick('mn','dat_hit_mode',legacyDat);
+    $('mnDaxMode').value = pick('mn','dax_hit_mode',legacyDax);
+    $('mtTotalPercent').value = pick('mt','total_percent',legacyTotal);
+    $('mtRefundPercent').value = pick('mt','refund_percent',legacyRefund);
+    $('mtDatMode').value = pick('mt','dat_hit_mode',legacyDat);
+    $('mtDaxMode').value = pick('mt','dax_hit_mode',legacyDax);
+    $('mbTotalPercent').value = pick('mb','total_percent',legacyTotal);
+    $('mbRefundPercent').value = pick('mb','refund_percent',legacyRefund);
+  }
+
   function resetConfigForm() {
     $('commissionType').value = 'ratio';
-    $('totalPercent').value = '100';
-    $('refundPercent').value = '0';
-    $('datMode').value = 'ky_ruoi';
-    $('daxMode').value = 'multi_pair';
+    setRegionTerms(null);
     $('allowMbXien').checked = false;
     $('allowUi').checked = false;
     fillPricing(null);
@@ -201,10 +226,7 @@
 
   function applyConfig(config) {
     $('commissionType').value = config.commission_type || 'ratio';
-    $('totalPercent').value = config.total_percent == null ? '100' : config.total_percent;
-    $('refundPercent').value = config.refund_percent == null ? '0' : config.refund_percent;
-    $('datMode').value = config.dat_hit_mode || 'ky_ruoi';
-    $('daxMode').value = config.dax_hit_mode || 'multi_pair';
+    setRegionTerms(config);
     $('allowMbXien').checked = config.mb_xien_234 === true;
     $('allowUi').checked = config.tinh_ui === true;
     fillPricing(config);
@@ -232,14 +254,16 @@
     const effective = $('effectiveDate').value;
     if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
     try {
+      const terms = regionTermsFromForm();
       const cfg = await store.saveConfig({
         partner_id: partnerId,
         effective_from_date: effective,
         commission_type: $('commissionType').value,
-        total_percent: $('totalPercent').value,
-        refund_percent: $('refundPercent').value,
-        dat_hit_mode: $('datMode').value,
-        dax_hit_mode: $('daxMode').value,
+        region_terms: terms,
+        total_percent: terms.mn.total_percent,
+        refund_percent: terms.mn.refund_percent,
+        dat_hit_mode: terms.mn.dat_hit_mode,
+        dax_hit_mode: terms.mn.dax_hit_mode,
         mb_xien_234: $('allowMbXien').checked,
         tinh_ui: $('allowUi').checked,
         region_pricing: priceInputsToObject()

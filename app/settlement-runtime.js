@@ -10,14 +10,24 @@
     return { engine, gates, research };
   }
 
+  function regionTerms(config, region) {
+    const key = String(region || '').toLowerCase();
+    const regional = config && config.region_terms && config.region_terms[key] ? config.region_terms[key] : {};
+    return {
+      total_percent: regional.total_percent == null ? (config && config.total_percent == null ? 100 : config.total_percent) : regional.total_percent,
+      refund_percent: regional.refund_percent == null ? (config && config.refund_percent == null ? 0 : config.refund_percent) : regional.refund_percent
+    };
+  }
+
   function settleWithConfig(categoryRows, options) {
     const d = deps();
     const config = options && options.config_snapshot ? options.config_snapshot : {};
+    const terms = regionTerms(config, options && options.region);
     const guarded = d.gates.guardCategoryRows(categoryRows || [], config);
     return d.engine.settle(guarded, {
       partner_role: options && options.partner_role,
-      total_percent: config.total_percent == null ? 100 : config.total_percent,
-      refund_percent: config.refund_percent == null ? 0 : config.refund_percent
+      total_percent: terms.total_percent,
+      refund_percent: terms.refund_percent
     });
   }
 
@@ -38,7 +48,8 @@
   }
 
   global.KTS_SETTLEMENT_RUNTIME = Object.freeze({
-    version: 'settlement-runtime-v1',
+    version: 'settlement-runtime-v2-region-terms',
+    regionTerms,
     settleWithConfig,
     mbXienCategoryWithConfig,
     uiPayoutRowWithConfig
