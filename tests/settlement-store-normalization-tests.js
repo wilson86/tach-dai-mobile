@@ -124,10 +124,11 @@ assert.notStrictEqual(ev1.evidence_fingerprint, ev3.evidence_fingerprint, 'chang
 assert.throws(() => S.normalizeShadowEvent({...evidenceBase,business_date:'bad'}), /SHADOW_EVENT_SCOPE_REQUIRED/);
 assert.throws(() => S.normalizeShadowEvent({...evidenceBase,region:'xx'}), /SHADOW_EVENT_REGION_REQUIRED/);
 
-console.log('settlement-store-normalization-tests: PASS');
+
 const storeSource=fs.readFileSync('app/settlement-store.js','utf8');
 const saveConfigSource=storeSource.slice(storeSource.indexOf('async function saveConfig'),storeSource.indexOf('function resolveConfigFromRows'));
 assert(saveConfigSource.includes("db.transaction(STORES.configs, 'readwrite')"),'config version read + write must share one readwrite transaction');
 assert(saveConfigSource.includes("store.index('by_partner').getAll"),'atomic config save must read existing partner versions inside that transaction');
 assert(saveConfigSource.includes('store.add(value)'),'auto version write must use add() to fail rather than overwrite on unexpected collision');
 assert(!saveConfigSource.includes('await nextConfigVersion('),'saveConfig must not allocate version in a separate async transaction');
+console.log('settlement-store-normalization-tests: PASS');
