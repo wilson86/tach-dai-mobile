@@ -1,5 +1,6 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.69-audit-runtime-dirty';
+const CACHE='kts-tach-unified-v1.0.69-audit-runtime-dirty-render-free-test-v2';
+const RENDER_BASE='https://kts-settlement-api-test.onrender.com';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
@@ -10,24 +11,32 @@ const CORE=[
   './result-service.js','./result-provider.js','./result-auto.js','./result-simple-ui.js','./result-audit-ui.js','./settlement-ui.js','./settlement-consumer-ui.js',
   '../icon-192.png','../icon-512.png'
 ];
+function renderApiUrl(url){
+  const target=new URL(RENDER_BASE);
+  target.pathname=url.pathname.replace(/^\/api\//,'/api/').replace(/^\/kts-api\//,'/api/');
+  target.search=url.search;
+  return target.toString();
+}
+function proxyApi(req,url){
+  const target=renderApiUrl(url);
+  const next=new Request(target,req);
+  return fetch(next,{cache:'no-store'});
+}
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{
   const req=event.request, url=new URL(req.url);
-  if(url.pathname.includes('/api/settlement/parse')||url.pathname.includes('/kts-api/settlement/parse')||url.pathname.includes('/api/settlement/parser-identity')||url.pathname.includes('/kts-api/settlement/parser-identity')){
-    event.respondWith(fetch(req,{cache:'no-store'}));return;
+  if(url.hostname==='wilson86.github.io' && (url.pathname.startsWith('/api/settlement/')||url.pathname.startsWith('/api/kqxs')||url.pathname.startsWith('/kts-api/settlement/')||url.pathname.startsWith('/kts-api/kqxs'))){
+    event.respondWith(proxyApi(req,url));return;
   }
   if(req.method!=='GET') return;
-  if(url.pathname.includes('/api/kqxs')||url.pathname.includes('/kts-api/kqxs')){
-    event.respondWith(fetch(req,{cache:'no-store'}));return;
-  }
   if(url.pathname.endsWith('/app/version.json')){
     event.respondWith(fetch(req,{cache:'no-store'}).catch(()=>caches.match('./version.json')));return;
   }
   if(req.mode==='navigate'&&url.pathname.includes('/tach-dai-mobile/app')){
     event.respondWith(fetch(req).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy));return res}).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html'))));return;
   }
-  if(url.pathname.includes('/tach-dai-mobile/app/')||url.pathname.endsWith('/tach-dai-mobile/icon-192.png')||url.pathname.endsWith('/tach-dai-mobile/icon-512.png')){
+  if(url.pathname.includes('/tach-dai-mobile/app/')||url.pathname.includes('/tach-dai-mobile/settlement-test/')||url.pathname.endsWith('/tach-dai-mobile/icon-192.png')||url.pathname.endsWith('/tach-dai-mobile/icon-512.png')){
     event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy));return res})));
   }
 });
