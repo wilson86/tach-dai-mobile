@@ -131,4 +131,17 @@ assert(saveConfigSource.includes("db.transaction(STORES.configs, 'readwrite')"),
 assert(saveConfigSource.includes("store.index('by_partner').getAll"),'atomic config save must read existing partner versions inside that transaction');
 assert(saveConfigSource.includes('store.add(value)'),'auto version write must use add() to fail rather than overwrite on unexpected collision');
 assert(!saveConfigSource.includes('await nextConfigVersion('),'saveConfig must not allocate version in a separate async transaction');
+
+
+const weakVerified=S.normalizeResultSnapshot({
+  ...base,verification_status:'verified',verified:true,
+  verification_sources:['primary'],verification_conflicts:[]
+});
+assert.strictEqual(weakVerified.verified,false);
+assert.strictEqual(weakVerified.verification_status,'unverified');
+const strongVerified=S.normalizeResultSnapshot({
+  ...base,verification_status:'verified',verified:true,
+  verification_sources:['primary','secondary'],verification_conflicts:[]
+});
+assert.strictEqual(strongVerified.verified,true);
 console.log('settlement-store-normalization-tests: PASS');
