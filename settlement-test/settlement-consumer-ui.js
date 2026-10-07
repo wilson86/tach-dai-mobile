@@ -133,19 +133,28 @@
     if(!preview){
       preview=doc.createElement('div');preview.id='messageParsePreview';preview.className='status';preview.setAttribute('aria-live','polite');row.insertAdjacentElement('afterend',preview);
     }
-    function reset(){preview.textContent='';preview.className='status';}
+    let reviewEpoch=0;
+    function reset(){reviewEpoch+=1;preview.textContent='';preview.className='status';}
     button.addEventListener('click',async()=>{
+      const epoch=++reviewEpoch;
       const raw=String(textarea.value||'').trim();
+      const reviewDate=String(date.value||'');
+      const reviewRegion=String(region.value||'');
+      const stillCurrent=()=>epoch===reviewEpoch&&String(textarea.value||'').trim()===raw&&String(date.value||'')===reviewDate&&String(region.value||'')===reviewRegion;
       if(!raw){preview.textContent='Chưa có tin để kiểm tra.';preview.className='status warn';return;}
       button.disabled=true;const label=button.textContent;button.textContent='Đang kiểm tra…';
       try{
-        const canonical=await parser.fetchCanonical(raw,String(region.value||''),String(date.value||''));
+        const canonical=await parser.fetchCanonical(raw,reviewRegion,reviewDate);
+        if(!stillCurrent())return;
         const summary=canonicalSummary(canonical);
         preview.textContent=summary?'Hệ thống đọc: '+summary:'Không đọc được nội dung tin.';
         preview.className='status '+(summary?'ok':'warn');
       }catch(error){
-        preview.textContent=friendlyParserError(error);preview.className='status err';
-      }finally{button.disabled=false;button.textContent=label||'Kiểm tra cú pháp';}
+        if(stillCurrent()){preview.textContent=friendlyParserError(error);preview.className='status err';}
+      }finally{
+        if(stillCurrent()){button.disabled=false;button.textContent=label||'Kiểm tra cú pháp';}
+        else if(button.disabled){button.disabled=false;button.textContent=label||'Kiểm tra cú pháp';}
+      }
     });
     textarea.addEventListener('input',reset);
     date.addEventListener('change',reset);
@@ -220,7 +229,15 @@
             updateBadge();
             return;
           }
-          draftOrigin=current();
+          const finalizeScope=()=>{
+            previous=String(control.value||'');
+            draftOrigin=current();
+            updateBadge();
+          };
+          if(typeof global.setTimeout==='function')global.setTimeout(finalizeScope,0);
+          else finalizeScope();
+          updateBadge();
+          return;
         }
         previous=next;
         updateBadge();
@@ -296,7 +313,7 @@
   }
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
-    version:'settlement-consumer-ui-v5-programmatic-scope-guard',
+    version:'settlement-consumer-ui-v7-stale-safe-syntax-review',
     compatibility:Object.freeze({version:'settlement-consumer-ui-v1'}),
     CODE_LABELS,
     regionName,
