@@ -164,4 +164,14 @@ const ghostOps = R.buildDailyOperationsReport({
 assert.strictEqual(ghostOps.status,'EMPTY');
 assert.strictEqual(ghostOps.counts.partners,0,'cancelled-only partner must not affect close gate');
 assert.strictEqual(ghostOps.partners.length,0);
+
+
+const legacyWeakVerified={
+  lottery_result_snapshot:{complete:true,verified:true,verification_status:'verified',verification_sources:['primary'],verification_conflicts:[]}
+};
+assert.strictEqual(R.kqxsVerificationStatus(legacyWeakVerified),'unverified','legacy one-source verified flag must not pass close gate');
+const legacyStrongVerified={
+  lottery_result_snapshot:{complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[]}
+};
+assert.strictEqual(R.kqxsVerificationStatus(legacyStrongVerified),'verified');
 console.log('settlement-report-tests: PASS');
