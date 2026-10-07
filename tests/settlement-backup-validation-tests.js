@@ -68,4 +68,21 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   assert.strictEqual(out.inserted_counts.messages,0,'merge must not overwrite existing message id');
   assert.strictEqual(out.skipped_existing_counts.messages,1);
 }
+
+
+{
+  const ex=empty(); ex.partners=[partner('a')];
+  const p=payload({partners:[{...partner('a'),role:'owner'}]});
+  assert.throws(()=>S.validateImportPayload(p,ex,{replace:false}),/IMPORT_PARTNER_ROLE_COLLISION/);
+}
+{
+  const ex=empty(); ex.partners=[partner('a')]; ex.configs=[cfg('a:v1','a')];
+  const p=payload({partners:[partner('a')],configs:[{...cfg('a:v1','a'),region_pricing:{mn:{'2CB':{commission:'999',win:'1'}}}}]});
+  assert.throws(()=>S.validateImportPayload(p,ex,{replace:false}),/IMPORT_CONFIG_CONTENT_COLLISION/);
+}
+{
+  const ex=empty(); ex.partners=[partner('a')]; ex.messages=[msg('same','a')];
+  const p=payload({partners:[partner('a')],messages:[{...msg('same','a'),raw_text:'different immutable source'}]});
+  assert.throws(()=>S.validateImportPayload(p,ex,{replace:false}),/IMPORT_MESSAGE_CONTENT_COLLISION/);
+}
 console.log('settlement-backup-validation-tests: PASS');
