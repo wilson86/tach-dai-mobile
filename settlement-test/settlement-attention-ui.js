@@ -161,6 +161,8 @@
     card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện những mục cần kiểm tra. Ưu tiên: chưa tính → KQXS lệch nguồn → lệch đối soát → tạm tính → KQXS chưa xác minh.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
     if (anchor) anchor.insertAdjacentElement('afterend', card); else pane.appendChild(card);
 
+    let refreshEpoch = 0;
+
     function setStatus(text, kind) {
       const el = doc.getElementById('attentionStatus');
       if (!el) return;
@@ -250,19 +252,26 @@
     }
 
     async function refresh() {
+      const epoch = ++refreshEpoch;
       const date = doc.getElementById('reportDate');
       const businessDate = date ? String(date.value || '') : '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return setStatus('Chọn ngày báo cáo hợp lệ.', 'err');
+      const stillCurrent = () => {
+        const current = doc.getElementById('reportDate');
+        return epoch === refreshEpoch && String(current && current.value || '') === businessDate;
+      };
       try {
         const [partners, settlements, messages] = await Promise.all([
           store.getAll(store.STORES.partners), store.getAll(store.STORES.settlements), store.getAll(store.STORES.messages)
         ]);
+        if (!stillCurrent()) return null;
         const model = reportApi.buildDailyOperationsReport({ business_date: businessDate, partners, settlements, messages });
         const attention = await enrichDiagnostics(buildAttention(model));
+        if (!stillCurrent()) return null;
         render(attention);
         return attention;
       } catch (e) {
-        setStatus('Không tải được việc cần xử lý: ' + String(e && e.message || e), 'err');
+        if (stillCurrent()) setStatus('Không tải được việc cần xử lý: ' + String(e && e.message || e), 'err');
         return null;
       }
     }
@@ -286,7 +295,7 @@
   }
 
   global.KTS_SETTLEMENT_ATTENTION = Object.freeze({
-    version:'settlement-attention-v4-kqxs-gate', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
+    version:'settlement-attention-v5-stale-safe-refresh', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once:true });
   else install();
