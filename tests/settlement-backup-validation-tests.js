@@ -117,4 +117,23 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   });
   assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_MESSAGE_DUPLICATE/);
 }
+
+
+{
+  const baseResult={id:'2026-10-06:mn',business_date:'2026-10-06',region:'mn',status:'partial',complete:false,expected_station_codes:['bt'],stations:[{code:'bt',prizes:{}}]};
+  const p=payload({results:[{...baseResult,fingerprint:'tampered'}]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_RESULT_FINGERPRINT_MISMATCH/);
+}
+{
+  const baseResult={id:'2026-10-06:mn',business_date:'2026-10-06',region:'mn',status:'partial',complete:false,expected_station_codes:['bt'],stations:[{code:'bt',prizes:{}}]};
+  const normalized=S.normalizeResultSnapshot(baseResult);
+  const event={...normalized,id:'result_event_1',result_id:'2026-10-06:mn',observed_at:'2026-10-06T10:00:00Z',fingerprint:'tampered'};
+  const p=payload({results:[normalized],result_events:[event]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_RESULT_EVENT_FINGERPRINT_MISMATCH/);
+}
+{
+  const core={id:'se-fp',scope_id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{a:1},reference_snapshot:{b:2},comparison:{status:'MATCH_EXACT'},evidence_fingerprint:'tampered'};
+  const p=payload({partners:[partner('a')],shadow_events:[core]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_FINGERPRINT_MISMATCH/);
+}
 console.log('settlement-backup-validation-tests: PASS');
