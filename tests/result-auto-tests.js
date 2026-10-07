@@ -96,6 +96,7 @@ function fixture() {
   assert.strictEqual(A.userResultState(verifiedSnapshot).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
   assert.strictEqual(A.userResultState({...verifiedSnapshot,verification_sources:['primary']}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({...verifiedSnapshot,stations:[{code:'bt',prizes:{G8:['10']}}]}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU','missing prize rows must not render as verified');
+  assert.strictEqual(A.userResultState({...verifiedSnapshot,stations:[{code:'bt',complete:false,prizes:fullMnPrizes('bt')}]}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU','station.complete=false must not render as verified');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
   assert.strictEqual(A.version, 'result-auto-v13-prize-complete-verification');
