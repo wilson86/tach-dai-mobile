@@ -167,6 +167,24 @@
     const pipeline = global.KTS_SETTLEMENT_PIPELINE;
     if (!doc || !store || !pipeline) return;
 
+    let scopeMutationBusy = false;
+
+    function setScopeMutationBusy(value) {
+      scopeMutationBusy = Boolean(value);
+      for (const button of doc.querySelectorAll('[data-cancel-message],[data-restore-message],#recalcMessageScope')) {
+        button.disabled = scopeMutationBusy;
+      }
+    }
+
+    function beginScopeMutation(label) {
+      if (scopeMutationBusy) {
+        setStatus(`Đang ${label || 'xử lý'} một thao tác khác trong phạm vi. Chờ hoàn tất rồi thử lại.`, 'warn');
+        return false;
+      }
+      setScopeMutationBusy(true);
+      return true;
+    }
+
     const pane = doc.getElementById('pane-message');
     const inputCard = pane && pane.querySelector('.card');
     if (!pane || !inputCard || doc.getElementById('messageHistory')) return;
@@ -249,6 +267,7 @@
         const row = rows.find(x => x.message.id === id);
         if (!row) return;
         if (typeof global.confirm === 'function' && !global.confirm(`Hủy tin này khỏi tính tiền?\n\n${row.message.raw_text || ''}\n\nTin vẫn được giữ trong lịch sử và có thể khôi phục.`)) return;
+        if (!beginScopeMutation('hủy/khôi phục')) return;
         setStatus('Đang hủy tin và tính lại phạm vi…', 'warn');
         try {
           const result = await pipeline.cancelMessage(id);
@@ -259,10 +278,15 @@
           }
           setStatus(result.settlement && result.settlement.status === 'empty' ? 'Đã hủy tin. Phạm vi hiện không còn tin đang tính.' : 'Đã hủy tin và tính lại phạm vi.', 'ok');
           await refresh();
-        } catch (error) { setStatus(`Hủy tin lỗi: ${String(error && error.message || error)}`, 'err'); }
+        } catch (error) {
+          setStatus(`Hủy tin lỗi: ${String(error && error.message || error)}`, 'err');
+        } finally {
+          setScopeMutationBusy(false);
+        }
       }));
       host.querySelectorAll('[data-restore-message]').forEach(btn => btn.addEventListener('click', async () => {
         const id = btn.dataset.restoreMessage;
+        if (!beginScopeMutation('hủy/khôi phục')) return;
         setStatus('Đang khôi phục tin và tính lại phạm vi…', 'warn');
         try {
           await pipeline.restoreMessage(id);
@@ -274,7 +298,11 @@
           }
           setStatus('Đã khôi phục tin và tính lại phạm vi.', 'ok');
           await refresh();
-        } catch (error) { setStatus(`Khôi phục tin lỗi: ${String(error && error.message || error)}`, 'err'); }
+        } catch (error) {
+          setStatus(`Khôi phục tin lỗi: ${String(error && error.message || error)}`, 'err');
+        } finally {
+          setScopeMutationBusy(false);
+        }
       }));
       const activeCount = rows.filter(row => row.state.code !== 'CANCELLED').length;
       const cancelledCount = rows.length - activeCount;
@@ -285,6 +313,7 @@
     async function recalc() {
       const scope = currentScope();
       if (!scope.partner_id) return setStatus('Chưa chọn đối tác.', 'err');
+      if (!beginScopeMutation('rà lại')) return;
       setStatus('Đang rà lại parser/config/KQXS của phạm vi…', '');
       try {
         const result = await pipeline.settleScope(scope);
@@ -296,6 +325,8 @@
         await refresh();
       } catch (error) {
         setStatus(`Rà lại lỗi: ${String(error && error.message || error)}`, 'err');
+      } finally {
+        setScopeMutationBusy(false);
       }
     }
 
@@ -329,7 +360,7 @@
   }
 
   global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
-    version: 'message-history-v6-strict-kqxs', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
+    version: 'message-history-v7-scope-mutation-lock', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
