@@ -9,17 +9,21 @@
 
   const PRIORITY = Object.freeze({
     BLOCKED: 1,
-    MISMATCH: 2,
+    KQXS_CONFLICT: 2,
     PROVISIONAL: 3,
-    MATCH_DISPLAY_ONLY: 4,
-    INCOMPLETE_REFERENCE: 5,
-    UNVERIFIED: 6,
-    NO_DATA: 7
+    KQXS_UNVERIFIED: 4,
+    MISMATCH: 5,
+    MATCH_DISPLAY_ONLY: 6,
+    INCOMPLETE_REFERENCE: 7,
+    UNVERIFIED: 8,
+    NO_DATA: 9
   });
 
   function statusLabel(status) {
     return ({
       BLOCKED:'CHƯA TÍNH',
+      KQXS_CONFLICT:'KQXS LỆCH NGUỒN',
+      KQXS_UNVERIFIED:'KQXS CHƯA XÁC MINH',
       MISMATCH:'LỆCH ĐỐI SOÁT',
       PROVISIONAL:'TẠM TÍNH',
       MATCH_DISPLAY_ONLY:'CHỈ KHỚP HIỂN THỊ',
@@ -31,14 +35,14 @@
 
   function statusKind(status) {
     const s = String(status || '').toUpperCase();
-    if (s === 'BLOCKED' || s === 'MISMATCH') return 'err';
+    if (s === 'BLOCKED' || s === 'MISMATCH' || s === 'KQXS_CONFLICT') return 'err';
     return 'warn';
   }
 
   function actionFor(status) {
     const s = String(status || '').toUpperCase();
     if (s === 'BLOCKED') return 'message';
-    if (s === 'PROVISIONAL') return 'result';
+    if (s === 'PROVISIONAL' || s === 'KQXS_UNVERIFIED' || s === 'KQXS_CONFLICT') return 'result';
     return 'shadow';
   }
 
@@ -87,6 +91,8 @@
   function normalizedRegionStatus(report, region) {
     if (region && region.blocked) return 'BLOCKED';
     if (region && region.provisional) return 'PROVISIONAL';
+    if (region && region.kqxs_conflict === true) return 'KQXS_CONFLICT';
+    if (region && region.kqxs_verified === false) return 'KQXS_UNVERIFIED';
     const s = String(region && region.shadow_status || report && report.shadow_status || 'UNVERIFIED').toUpperCase();
     return s === 'MATCH_EXACT' ? 'MATCH_EXACT' : s;
   }
@@ -152,7 +158,7 @@
     const card = doc.createElement('div');
     card.className = 'card';
     card.id = 'dailyAttention';
-    card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện những mục cần kiểm tra. Ưu tiên: chưa tính → lệch đối soát → tạm tính → chưa đối chiếu.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
+    card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện những mục cần kiểm tra. Ưu tiên: chưa tính → KQXS → tạm tính → lệch đối soát → chưa đối chiếu.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
     if (anchor) anchor.insertAdjacentElement('afterend', card); else pane.appendChild(card);
 
     function setStatus(text, kind) {
@@ -200,8 +206,8 @@
       const host = doc.getElementById('attentionList');
       if (!host) return;
       if (attention.clear) {
-        setStatus('Không còn việc cần xử lý · toàn ngày đang khớp exact.', 'ok');
-        host.innerHTML = '<div class="hint">Gate shadow của ngày này sạch.</div>';
+        setStatus('Không còn việc cần xử lý · toàn ngày đã đủ điều kiện đối soát.', 'ok');
+        host.innerHTML = '<div class="hint">Không còn cảnh báo KQXS hoặc đối soát.</div>';
         return;
       }
       if (!attention.items.length) {
@@ -273,7 +279,7 @@
   }
 
   global.KTS_SETTLEMENT_ATTENTION = Object.freeze({
-    version:'settlement-attention-v3-consumer-labels', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
+    version:'settlement-attention-v4-kqxs-gate', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once:true });
   else install();
