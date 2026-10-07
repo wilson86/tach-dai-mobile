@@ -10,7 +10,7 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const D = sandbox.globalThis.KTS_SETTLEMENT_REPORT_DASHBOARD;
 
-assert.strictEqual(D.version, 'settlement-report-dashboard-v5-kqxs-evidence-required');
+assert.strictEqual(D.version, 'settlement-report-dashboard-v5-stale-safe-refresh');
 assert.strictEqual(D.shadowLabel('MATCH_EXACT'), 'ĐÃ ĐỐI SOÁT');
 assert.strictEqual(D.shadowLabel('MISMATCH'), 'LỆCH ĐỐI SOÁT');
 assert.strictEqual(D.shadowKind('MATCH_EXACT'), 'ok');
