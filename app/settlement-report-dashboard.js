@@ -12,8 +12,8 @@
   function roleLabel(role) { return role === 'owner' ? 'Chủ' : role === 'customer' ? 'Khách' : '—'; }
   function shadowLabel(status) {
     return ({
-      MATCH_EXACT:'KHỚP EXACT', MATCH_DISPLAY_ONLY:'KHỚP HIỂN THỊ', MISMATCH:'LỆCH SHADOW',
-      INCOMPLETE_REFERENCE:'THIẾU HIOSKT', UNVERIFIED:'CHỜ ĐỐI CHIẾU', BLOCKED:'BLOCKED', NO_DATA:'CHƯA CÓ'
+      MATCH_EXACT:'ĐÃ ĐỐI SOÁT', MATCH_DISPLAY_ONLY:'CẦN KIỂM TRA THÊM', MISMATCH:'LỆCH ĐỐI SOÁT',
+      INCOMPLETE_REFERENCE:'THIẾU DỮ LIỆU ĐỐI CHIẾU', UNVERIFIED:'CHƯA ĐỐI SOÁT', BLOCKED:'CHƯA TÍNH', NO_DATA:'CHƯA CÓ'
     })[status] || String(status || 'CHƯA CÓ');
   }
   function shadowKind(status) {
@@ -23,12 +23,12 @@
   }
   function dayStatus(status) {
     return ({
-      MATCH_EXACT:['TẤT CẢ ĐÃ KHỚP EXACT','ok'],
-      BLOCKED:['CÓ PHẠM VI FAIL-CLOSED','err'],
-      MISMATCH:['CÓ LỆCH SHADOW','err'],
+      MATCH_EXACT:['TẤT CẢ ĐÃ ĐỐI SOÁT','ok'],
+      BLOCKED:['CÓ PHẠM VI CHƯA TÍNH','err'],
+      MISMATCH:['CÓ LỆCH ĐỐI SOÁT','err'],
       PROVISIONAL:['CÓ KẾT QUẢ TẠM TÍNH','warn'],
-      MATCH_DISPLAY_ONLY:['CÓ PHẠM VI CHỈ KHỚP SỐ HIỂN THỊ','warn'],
-      UNVERIFIED:['ĐANG CHỜ ĐỐI CHIẾU HIOSKT','warn'],
+      MATCH_DISPLAY_ONLY:['CÓ PHẠM VI CẦN KIỂM TRA THÊM','warn'],
+      UNVERIFIED:['CÒN PHẠM VI CHƯA ĐỐI SOÁT','warn'],
       EMPTY:['NGÀY NÀY CHƯA CÓ DỮ LIỆU','warn']
     })[status] || [String(status || 'UNKNOWN'),'warn'];
   }
@@ -65,13 +65,13 @@
     const partners = num(counts.partners);
     const reasons = [];
     if (!partners) reasons.push({ code:'NO_DATA', label:'Chưa có đối tác/tin trong ngày' });
-    if (num(counts.blocked) > 0) reasons.push({ code:'BLOCKED', label:`${num(counts.blocked)} đối tác có phạm vi fail-closed` });
+    if (num(counts.blocked) > 0) reasons.push({ code:'BLOCKED', label:`${num(counts.blocked)} đối tác có phạm vi chưa tính` });
     if (num(counts.provisional) > 0) reasons.push({ code:'PROVISIONAL', label:`${num(counts.provisional)} đối tác còn tiền tạm tính` });
-    if (num(counts.mismatch) > 0) reasons.push({ code:'MISMATCH', label:`${num(counts.mismatch)} đối tác đang lệch HIOSKT` });
-    if (num(counts.display_only) > 0) reasons.push({ code:'DISPLAY_ONLY', label:`${num(counts.display_only)} đối tác mới chỉ khớp số hiển thị` });
-    if (num(counts.unverified) > 0) reasons.push({ code:'UNVERIFIED', label:`${num(counts.unverified)} đối tác chưa đối chiếu exact` });
+    if (num(counts.mismatch) > 0) reasons.push({ code:'MISMATCH', label:`${num(counts.mismatch)} đối tác đang lệch đối soát` });
+    if (num(counts.display_only) > 0) reasons.push({ code:'DISPLAY_ONLY', label:`${num(counts.display_only)} đối tác cần kiểm tra thêm` });
+    if (num(counts.unverified) > 0) reasons.push({ code:'UNVERIFIED', label:`${num(counts.unverified)} đối tác chưa đối soát` });
     const exact = num(counts.exact);
-    if (partners > 0 && exact !== partners && !reasons.length) reasons.push({ code:'NOT_ALL_EXACT', label:'Chưa phải tất cả đối tác đều khớp exact' });
+    if (partners > 0 && exact !== partners && !reasons.length) reasons.push({ code:'NOT_ALL_EXACT', label:'Chưa phải tất cả đối tác đều hoàn tất đối soát' });
     return {
       ready: reasons.length === 0 && String(model && model.status || '') === 'MATCH_EXACT' && partners > 0,
       reasons, exact, partners
@@ -91,7 +91,7 @@
     card.id = 'dailyOpsDashboard';
     card.innerHTML = `
       <div class="row" style="justify-content:space-between">
-        <div><div class="section-title">Tổng quan vận hành trong ngày</div><div class="hint">Tổng tất cả khách/chủ · tách theo vai trò và miền · giữ cảnh báo shadow/fail-closed.</div></div>
+        <div><div class="section-title">Tổng quan vận hành trong ngày</div><div class="hint">Tổng tất cả khách/chủ · tách theo vai trò và miền · giữ cảnh báo chưa tính/lệch đối soát.</div></div>
         <button id="refreshDailyOps" class="btn soft">Làm mới</button>
       </div>
       <div id="dailyOpsStatus" class="status"></div>
@@ -114,7 +114,7 @@
     function regionSummary(report) {
       return (report.regions || []).map(r => {
         const cls = r.blocked ? 'err' : r.provisional ? 'warn' : shadowKind(r.shadow_status);
-        const state = r.blocked ? 'BLOCKED' : r.provisional ? 'TẠM' : shadowLabel(r.shadow_status);
+        const state = r.blocked ? 'CHƯA TÍNH' : r.provisional ? 'TẠM' : shadowLabel(r.shadow_status);
         return `<span class="tag ${cls}">${esc(r.region.toUpperCase())} · ${esc(state)}</span>`;
       }).join(' ');
     }
@@ -131,10 +131,10 @@
       if (!host) return;
       const gate = buildReadiness(model);
       if (gate.ready) {
-        host.innerHTML = `<div class="status ok">GATE ĐỐI SOÁT CUỐI NGÀY: ĐỦ · ${gate.exact}/${gate.partners} đối tác khớp exact.</div><div class="hint">Đây chỉ là gate shadow; hệ thống không tự chốt hoặc khóa ngày.</div>`;
+        host.innerHTML = `<div class="status ok">TRẠNG THÁI CHỐT NGÀY: ĐỦ · ${gate.exact}/${gate.partners} đối tác đã đối soát.</div><div class="hint">Hệ thống chỉ báo trạng thái; không tự chốt hoặc khóa ngày.</div>`;
       } else {
         const items = gate.reasons.length ? gate.reasons.map(r => `<li>${esc(r.label)}</li>`).join('') : '<li>Chưa đạt trạng thái MATCH_EXACT toàn ngày.</li>';
-        host.innerHTML = `<div class="status warn">GATE ĐỐI SOÁT CUỐI NGÀY: CHƯA ĐỦ</div><ul style="margin:4px 0 8px 18px;padding:0">${items}</ul><div class="hint">Gate chỉ báo phần còn thiếu; không tự động chốt tiền.</div>`;
+        host.innerHTML = `<div class="status warn">TRẠNG THÁI CHỐT NGÀY: CHƯA ĐỦ</div><ul style="margin:4px 0 8px 18px;padding:0">${items}</ul><div class="hint">Hệ thống chỉ báo phần còn thiếu; không tự động chốt tiền.</div>`;
       }
     }
 
@@ -163,17 +163,17 @@
           <div style="margin:6px 0"><b>Tổng 3 miền:</b> XÁC <span class="money">${money(model.totals.xac)}</span> · QUA CÒ <span class="money">${money(model.totals.qua_co)}</span> · TRẢ <span class="money">${money(model.totals.payout)}</span> · HỒI <span class="money">${money(model.totals.refund_amount)}</span> · <b>${esc(direction(model.totals.final_net))} ${money(Math.abs(num(model.totals.final_net)))}</b></div>
           <div class="result-grid"><table><thead><tr><th>Vai trò</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${totalsRow('Khách', breakdown.role_totals.customer)}${totalsRow('Chủ', breakdown.role_totals.owner)}</tbody></table></div>
         </details>
-        <div class="hint">Đã exact ${model.counts.exact}/${model.counts.partners} đối tác · blocked ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch}.</div>`;
+        <div class="hint">Đã đối soát ${model.counts.exact}/${model.counts.partners} đối tác · chưa tính ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch}.</div>`;
 
       partners.innerHTML = model.partners.map(report => {
         const cls = report.blocked ? 'err' : report.provisional ? 'warn' : shadowKind(report.shadow_status);
-        const state = report.blocked ? 'BLOCKED' : report.provisional ? 'TẠM TÍNH' : shadowLabel(report.shadow_status);
+        const state = report.blocked ? 'CHƯA TÍNH' : report.provisional ? 'TẠM TÍNH' : shadowLabel(report.shadow_status);
         const warning = report.blocked
           ? `<div class="status err">Không dùng tổng này để chốt · ${report.blocked_scopes.length} phạm vi bị chặn.</div>`
           : report.provisional
             ? '<div class="status warn">KQXS chưa hoàn tất · số tiền còn tạm.</div>'
             : report.shadow_status !== 'MATCH_EXACT'
-              ? '<div class="status warn">Tiền đã tính nhưng chưa qua gate shadow exact.</div>' : '';
+              ? '<div class="status warn">Tiền đã tính nhưng chưa hoàn tất đối soát.</div>' : '';
         const cats = (report.categories || []).map(c => `${esc(c.label || c.code)}: XÁC ${money(c.xac)} · QUA ${money(c.qua_co)} · TRẢ ${money(c.payout)}`).join('<br>');
         return `<div class="report-message" data-ops-partner="${esc(report.partner.id)}">
           <div class="row" style="justify-content:space-between">
