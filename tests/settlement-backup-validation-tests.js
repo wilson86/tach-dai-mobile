@@ -85,4 +85,36 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   const p=payload({partners:[partner('a')],messages:[{...msg('same','a'),raw_text:'different immutable source'}]});
   assert.throws(()=>S.validateImportPayload(p,ex,{replace:false}),/IMPORT_MESSAGE_CONTENT_COLLISION/);
 }
+
+
+{
+  const p=payload({
+    partners:[partner('a')],
+    messages:[msg('m1','a'),msg('m2','a')],
+    settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1'],scope_status:'blocked',config_snapshot:cfg('a:v1','a'),result_snapshot:{total_xac:0}}]
+  });
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_ACTIVE_MESSAGE_SET_MISMATCH/);
+}
+{
+  const cancelled={...msg('m1','a'),status:'cancelled'};
+  const p=payload({
+    partners:[partner('a')],messages:[cancelled],
+    settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1'],scope_status:'complete_unverified',config_snapshot:cfg('a:v1','a'),result_snapshot:{total_xac:10}}]
+  });
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/(IMPORT_STALE_SETTLEMENT_WITHOUT_ACTIVE_MESSAGES|IMPORT_SETTLEMENT_REFERENCES_CANCELLED_MESSAGE)/);
+}
+{
+  const p=payload({
+    partners:[partner('a')],
+    settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'empty',config_snapshot:null,result_snapshot:{total_xac:1,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0}}]
+  });
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_EMPTY_SETTLEMENT_NONZERO/);
+}
+{
+  const p=payload({
+    partners:[partner('a')],messages:[msg('m1','a')],
+    settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1','m1'],scope_status:'blocked',config_snapshot:cfg('a:v1','a'),result_snapshot:{total_xac:0}}]
+  });
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_MESSAGE_DUPLICATE/);
+}
 console.log('settlement-backup-validation-tests: PASS');
