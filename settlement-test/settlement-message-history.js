@@ -99,6 +99,26 @@
       });
   }
 
+  function snapshotVerified(snapshot) {
+    if (!snapshot || snapshot.complete !== true) return false;
+    const claimed = snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified';
+    if (!claimed) return false;
+    const sources = Array.isArray(snapshot.verification_sources)
+      ? new Set(snapshot.verification_sources.map(x => String(x || '').trim()).filter(Boolean))
+      : new Set();
+    const conflicts = Array.isArray(snapshot.verification_conflicts) ? snapshot.verification_conflicts : [];
+    const expected = Array.isArray(snapshot.expected_station_codes)
+      ? snapshot.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const actual = Array.isArray(snapshot.stations)
+      ? snapshot.stations.map(row => String(row && row.code || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    return sources.size >= 2 && conflicts.length === 0 &&
+      expected.length > 0 && new Set(expected).size === expected.length &&
+      new Set(actual).size === actual.length && actual.length === expected.length &&
+      expected.every(code => actual.includes(code));
+  }
+
   function buildScopeSummary(scope, messages, settlements, resultSnapshot) {
     const scoped = (messages || []).filter(m => scopeMatch(m, scope));
     const active = scoped.filter(m => String(m.status || '') !== 'cancelled');
@@ -109,7 +129,7 @@
     const comparison = String(settlement && settlement.comparison_status || '').toUpperCase();
     const resultAvailable = Boolean(resultSnapshot);
     const resultComplete = Boolean(resultSnapshot && resultSnapshot.complete);
-    const resultVerified = Boolean(resultSnapshot && (resultSnapshot.verified === true || resultSnapshot.verification_status === 'verified'));
+    const resultVerified = snapshotVerified(resultSnapshot);
 
     let state = { code: 'WAITING_RESULT', label: 'CHỜ KQXS', kind: 'warn' };
     if (!active.length) state = { code: 'EMPTY', label: 'CHƯA CÓ TIN ĐANG TÍNH', kind: '' };
@@ -309,7 +329,7 @@
   }
 
   global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
-    version: 'message-history-v5-canonical-summary', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, buildRows, buildScopeSummary
+    version: 'message-history-v6-strict-kqxs', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
