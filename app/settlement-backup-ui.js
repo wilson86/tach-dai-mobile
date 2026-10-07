@@ -11,6 +11,7 @@
   function install() {
     const doc = global.document;
     const store = global.KTS_SETTLEMENT_STORE;
+    const pipeline = global.KTS_SETTLEMENT_PIPELINE;
     const pane = doc && doc.getElementById('pane-report');
     if (!doc || !store || !pane || doc.getElementById('settlementBackupPanel')) return;
 
@@ -41,6 +42,111 @@
       el.textContent = text || '';
       el.className = 'status ' + (kind || '');
     };
+    const scopeKey = scope => `${scope.partner_id}:${scope.business_date}:${scope.region}`;
+    const validScope = scope => Boolean(
+      scope && scope.partner_id &&
+      /^\d{4}-\d{2}-\d{2}$/.test(String(scope.business_date || '')) &&
+      ['mn','mt','mb'].includes(String(scope.region || '').toLowerCase())
+    );
+
+    async function recalculateImportedScopes(payload) {
+      if (!pipeline || typeof pipeline.settleScope !== 'function') throw new Error('IMPORT_RECALC_PIPELINE_UNAVAILABLE');
+      const stores = payload && payload.stores || {};
+      const incomingMessages = Array.isArray(stores[store.STORES.messages]) ? stores[store.STORES.messages] : [];
+      const incomingSettlements = Array.isArray(stores[store.STORES.settlements]) ? stores[store.STORES.settlements] : [];
+      const incomingResults = Array.isArray(stores[store.STORES.results]) ? stores[store.STORES.results] : [];
+      const incomingConfigs = Array.isArray(stores[store.STORES.configs]) ? stores[store.STORES.configs] : [];
+
+      const directScopes = new Set();
+      for (const row of incomingMessages) {
+        if (String(row && row.status || '').toLowerCase() === 'cancelled') continue;
+        const scope = {
+          partner_id:String(row && row.partner_id || ''),
+          business_date:String(row && row.business_date || ''),
+          region:String(row && row.region || '').toLowerCase()
+        };
+        if (validScope(scope)) directScopes.add(scopeKey(scope));
+      }
+      for (const row of incomingSettlements) {
+        if (String(row && row.scope_status || '').toLowerCase() === 'empty') continue;
+        const scope = {
+          partner_id:String(row && row.partner_id || ''),
+          business_date:String(row && row.business_date || ''),
+          region:String(row && row.region || '').toLowerCase()
+        };
+        if (validScope(scope)) directScopes.add(scopeKey(scope));
+      }
+
+      const resultScopes = new Set(incomingResults.map(row =>
+        `${String(row && row.business_date || '')}:${String(row && row.region || '').toLowerCase()}`
+      ));
+      const configStarts = new Map();
+      for (const row of incomingConfigs) {
+        const partnerId=String(row && row.partner_id || '');
+        const start=String(row && (row.effective_from_date || row.effective_from) || '').slice(0,10);
+        if(!partnerId || !/^\d{4}-\d{2}-\d{2}$/.test(start)) continue;
+        if(!configStarts.has(partnerId)) configStarts.set(partnerId,[]);
+        configStarts.get(partnerId).push(start);
+      }
+
+      const allMessages = await store.getAll(store.STORES.messages);
+      const scopes = new Map();
+      for (const message of allMessages) {
+        if (String(message && message.status || '').toLowerCase() === 'cancelled') continue;
+        const scope = {
+          partner_id:String(message && message.partner_id || ''),
+          business_date:String(message && message.business_date || ''),
+          region:String(message && message.region || '').toLowerCase()
+        };
+        if (!validScope(scope)) continue;
+        const direct = directScopes.has(scopeKey(scope));
+        const resultChanged = resultScopes.has(`${scope.business_date}:${scope.region}`);
+        const starts = configStarts.get(scope.partner_id) || [];
+        const configChanged = starts.some(start => scope.business_date >= start);
+        if (direct || resultChanged || configChanged) scopes.set(scopeKey(scope), scope);
+      }
+
+      let blocked = 0;
+      for (const scope of scopes.values()) {
+        try {
+          const outcome = await pipeline.settleScope(scope);
+          if (outcome && outcome.status === 'blocked') blocked += 1;
+        } catch (error) {
+          blocked += 1;
+          const currentMessages = allMessages.filter(message =>
+            String(message && message.status || '').toLowerCase() !== 'cancelled' &&
+            String(message && message.partner_id || '') === scope.partner_id &&
+            String(message && message.business_date || '') === scope.business_date &&
+            String(message && message.region || '').toLowerCase() === scope.region
+          );
+          const reason = 'IMPORT_RECALC_FAILED:' + String(error && error.message || error);
+          const zero = {
+            scope_status:'blocked', blocked:true, blocked_reasons:[reason],
+            total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0,
+            direction:'THU',category_totals:{},category_rows:[],detail_rows:[],message_breakdown:[]
+          };
+          await store.saveSettlement({
+            id:`scope:${scope.partner_id}:${scope.business_date}:${scope.region}`,
+            partner_id:scope.partner_id,
+            message_ids:currentMessages.map(message => message.id),
+            business_date:scope.business_date,
+            region:scope.region,
+            config_snapshot:null,
+            lottery_result_snapshot:null,
+            result_snapshot:zero,
+            settlement_result:zero,
+            detail_rows:[],
+            category_rows:[],
+            message_breakdown:[],
+            scope_status:'blocked',
+            blocked_reasons:[reason],
+            comparison_status:'blocked'
+          });
+        }
+      }
+      return { scope_count:scopes.size, blocked_count:blocked };
+    }
+
 
     doc.getElementById('settlementExportBackup').addEventListener('click', async () => {
       if (backupBusy) return status('Một thao tác sao lưu/khôi phục đang chạy. Chờ hoàn tất rồi thử lại.', 'warn');
@@ -76,10 +182,16 @@
         status('Đang kiểm tra và khôi phục backup…', '');
         const text = await file.text();
         const payload = JSON.parse(text);
+        if (!pipeline || typeof pipeline.settleScope !== 'function') throw new Error('IMPORT_RECALC_PIPELINE_UNAVAILABLE');
         const validation = await store.importAll(payload, { replace: false });
+        status('Đã gộp dữ liệu · đang tính lại các phạm vi bị ảnh hưởng…', 'warn');
+        const recalculated = await recalculateImportedScopes(payload);
         const inserted = Object.values(validation.inserted_counts || validation.counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
         const skipped = Object.values(validation.skipped_existing_counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
-        status(`Đã kiểm tra an toàn và gộp backup · thêm ${inserted} bản ghi mới${skipped ? ` · giữ nguyên ${skipped} bản ghi đã có trên máy` : ''}. Tải lại trang để mọi danh sách cập nhật.`, 'ok');
+        const suffix = recalculated.blocked_count
+          ? ` · ${recalculated.blocked_count} phạm vi đang bị chặn, chưa dùng để chốt`
+          : '';
+        status(`Đã gộp backup an toàn · thêm ${inserted} bản ghi mới${skipped ? ` · giữ nguyên ${skipped} bản ghi đã có trên máy` : ''} · đã tính lại ${recalculated.scope_count} phạm vi${suffix}. Tải lại trang để cập nhật danh sách.`, recalculated.blocked_count ? 'warn' : 'ok');
       } catch (e) {
         status('KHÔNG khôi phục: ' + String(e && e.message || e), 'err');
       } finally {
@@ -88,7 +200,7 @@
     });
   }
 
-  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v4-operation-lock', filename });
+  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v5-recalculate-imported-scopes', filename });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
