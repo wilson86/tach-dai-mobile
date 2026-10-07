@@ -13,5 +13,5 @@ assert.strictEqual(U.formatDate('2026-10-07'),'07/10/2026');
 for(const needle of ['BẢN THỬ NGHIỆM','data-pane="partner">Đối tác','data-pane="config">Thiết lập','data-pane="message">Nhập tin','data-pane="result">Kết quả','id="workContext"','Cách tính Đá thẳng','Tùy chọn ít dùng'])assert(html.includes(needle));
 assert(html.includes('src="./settlement-consumer-ui.js"'));
 assert(sw.includes("'./settlement-consumer-ui.js'"));
-assert(sw.includes('v1.0.62-copy-rates'));
+assert(sw.includes('v1.0.63-hide-disabled-bets'));
 console.log('settlement-consumer-ui-tests: PASS');

@@ -60,11 +60,21 @@
     refreshGateVisuals();
   }
 
+  function applyGateState(selector, enabled) {
+    document.querySelectorAll(selector).forEach(row => {
+      row.classList.toggle('hidden', !enabled);
+      row.querySelectorAll('input').forEach(input => {
+        input.disabled = !enabled;
+        if (!enabled) input.value = '0';
+      });
+    });
+  }
+
   function refreshGateVisuals() {
     const xienOn = $('allowMbXien').checked;
     const uiOn = $('allowUi').checked;
-    document.querySelectorAll('[data-gate="xien"] input').forEach(el => { el.disabled = !xienOn; });
-    document.querySelectorAll('[data-gate="ui"] input').forEach(el => { el.disabled = !uiOn; });
+    applyGateState('[data-gate="xien"]', xienOn);
+    applyGateState('[data-gate="ui"]', uiOn);
   }
 
   function currentPartnerId() { return $('partnerSelect').value || ''; }
