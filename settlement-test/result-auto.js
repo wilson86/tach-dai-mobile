@@ -10,7 +10,7 @@
   });
   function resultStationComplete(region, station) {
     const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
-    if(!expected) return false;
+    if(!expected || (station && station.complete===false)) return false;
     const prizes=station&&station.prizes||{};
     return Object.entries(expected).every(([prize,count])=>{
       const found=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
