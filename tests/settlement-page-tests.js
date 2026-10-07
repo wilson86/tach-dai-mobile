@@ -240,4 +240,6 @@ assert(resultAuto.includes('kqxs-station-card'));
 assert(sw.includes("url.pathname.includes('/api/kqxs')"));
 assert(sw.includes("url.pathname.includes('/api/settlement/parse')"));
 
+assert(page.includes("navigator.serviceWorker.register('./sw.js'"),'direct settlement page must register its scope-safe service worker');
+assert(page.includes("registration.update()"),'direct settlement page must check for a newer service worker build');
 console.log('settlement-page-tests: PASS');
