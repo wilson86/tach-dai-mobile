@@ -114,5 +114,13 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   assert(ui.includes("let pendingConfigBusinessDate = ''"),'pending config cache must track target date');
   assert(ui.includes('pendingConfigBusinessDate === businessDate'),'cached config template must match current message date');
 
+  assert(ui.includes('let configLoadEpoch = 0'),'config loader must have stale-request epoch guard');
+  assert(ui.includes('const epoch = ++configLoadEpoch'));
+  assert(ui.includes('epoch === configLoadEpoch'));
+  assert(ui.includes("currentPartnerId() === partnerId"));
+  assert(ui.includes("String($('effectiveDate').value || today()) === date"));
+  assert(ui.includes('Đối tác/ngày đã đổi trong lúc chuẩn bị thiết lập'));
+  assert(ui.includes('Đối tác/ngày/miền đã đổi. Không áp dụng bảng giá của phạm vi cũ.'));
+
   console.log('settlement-safety-audit-tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
