@@ -99,6 +99,22 @@
       });
   }
 
+  const RESULT_PRIZE_COUNTS = Object.freeze({
+    mn:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mt:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mb:Object.freeze({G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1})
+  });
+  function resultStationComplete(region, station) {
+    const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
+    if(!expected) return false;
+    const prizes=station&&station.prizes||{};
+    return Object.entries(expected).every(([prize,count])=>{
+      const found=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
+      const values=found ? (Array.isArray(found[1]) ? found[1] : [found[1]]) : [];
+      return values.filter(v=>v!=null&&String(v).trim()!=='').length===count;
+    });
+  }
+
   function snapshotVerified(snapshot) {
     if (!snapshot || snapshot.complete !== true) return false;
     const claimed = snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified';
@@ -113,10 +129,13 @@
     const actual = Array.isArray(snapshot.stations)
       ? snapshot.stations.map(row => String(row && row.code || '').trim().toLowerCase()).filter(Boolean)
       : [];
+    const region=String(snapshot.region||'').toLowerCase();
+    const prizeDataValid=Array.isArray(snapshot.stations) && snapshot.stations.length>0 &&
+      snapshot.stations.every(station=>resultStationComplete(region,station));
     return sources.size >= 2 && conflicts.length === 0 &&
       expected.length > 0 && new Set(expected).size === expected.length &&
       new Set(actual).size === actual.length && actual.length === expected.length &&
-      expected.every(code => actual.includes(code));
+      expected.every(code => actual.includes(code)) && prizeDataValid;
   }
 
   function buildScopeSummary(scope, messages, settlements, resultSnapshot) {
@@ -381,7 +400,7 @@
   }
 
   global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
-    version: 'message-history-v8-stale-safe-actions', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
+    version: 'message-history-v9-prize-complete-kqxs', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, snapshotVerified, buildRows, buildScopeSummary
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
