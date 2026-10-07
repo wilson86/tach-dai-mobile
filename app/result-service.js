@@ -191,9 +191,11 @@
 
         if (snapshot.verification_status === 'conflict') {
           onStatus({ state: 'conflict', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
-        } else if (snapshot.verified) {
+        } else if (snapshot.verified && confirmedComplete) {
           onStatus({ state: 'verified', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
           stop();
+        } else if (snapshot.verified) {
+          onStatus({ state: 'complete_waiting_confirmation', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak, complete_confirmations_required: completeConfirmations });
         } else if (confirmedComplete && verificationPending(snapshot)) {
           onStatus({ state: 'verification_pending', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
         } else if (confirmedComplete) {
