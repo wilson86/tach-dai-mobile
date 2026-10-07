@@ -23,4 +23,15 @@ assert(!ui.includes('store.remove(store.STORES.partners'));
 assert(ui.includes('const reportRows = partners.concat(inactivePartners)'));
 assert(ui.includes("p.active === false ? ' · Đã ngừng' : ''"));
 assert(ui.includes('partners.concat(inactivePartners).find'), 'historical report must remain available without reactivating partner');
+
+
+assert(ui.includes('let savingPartnerAction = false'));
+assert(ui.includes('function setPartnerActionBusy(value)'));
+assert(ui.includes('function partnerActionPreflight(actionLabel)'));
+assert(ui.includes("Một thao tác đối tác khác đang chạy"));
+assert(ui.includes("Thiết lập giá đang được lưu. Chờ hoàn tất rồi mới "));
+assert(ui.includes("Một tin đang được lưu/tính. Chờ hoàn tất rồi mới "));
+assert(ui.includes("Thêm đối tác đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ."));
+assert(ui.includes("setPartnerActionBusy(true)"));
+assert(ui.includes("setPartnerActionBusy(false)"));
 console.log('settlement-partner-actions-tests: PASS');
