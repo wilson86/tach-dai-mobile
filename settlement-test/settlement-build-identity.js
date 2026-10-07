@@ -17,7 +17,7 @@
     'app/settlement-attention-ui.js':'b6a81eaa554292d0dd7dcefcba8864d6135b07f4',
     'app/settlement-ui.js':'1fb1406747d5a5c7eaab7b3c6f3d35003145c77f',
     'app/settlement-backup-ui.js':'36f835fc9476c5c507b3596e0450d4df04be3884',
-    'app/sw.js':'0b7563074ae997b2cd6125c449c14d074d1a24cd',
+    'app/sw.js':'e1198250a5d45502d7525de28f50a0ccd6cf2c42',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
@@ -46,7 +46,19 @@
     'app/settlement-preproduction-orchestrator.js':'15f77c2ec3c041d35a4fff7e787e76399e05bef1',
     'app/result-service.js':'a5f386c724cb8751a7082a90c49c17af50d2be05',
     'app/result-provider.js':'6fccc72b98a49a2f047d76d587e67bafaead0dfd',
-    'app/result-auto.js':'f7e150df3d63a4da6f04de1f925dce229119a6b5'
+    'app/result-auto.js':'f7e150df3d63a4da6f04de1f925dce229119a6b5',
+    'app/settlement-research-defaults.js':'f65f05d9efa2216f713e4c86c2656a073d7d6278',
+    'app/result-simple-ui.js':'aa9be983d65b5b074c572eb6a0d965908356534e',
+    'app/settlement-message-history.js':'8a8911e058cb34e4287bb7b46ec341b631fe73f8',
+    'app/result-audit-ui.js':'ce5f165e0e5bc09e9bee7b98b026857b4d7fb112',
+    'app/settlement-shadow-ui.js':'7b4d505c95137cb3eea8ceff6ba8d05e7671edad',
+    'app/settlement-shadow-batch.js':'9753c9468b5443a806277deaeadbec69b1c7481b',
+    'app/settlement-regression-candidates.js':'223b3af2904a909e279a1eeed581543527ea1bf6',
+    'app/settlement-regression-review.js':'7ee4f2c4f822e6df7b795e3008d3c2a1e7def08a',
+    'app/settlement-observation-ui.js':'7fd27d230fb05b847b0931f148283176ed385715',
+    'app/settlement-scope-sync.js':'25e170a0eed8688c1b0173cc3469e13495596519',
+    'app/settlement-report-simple-ui.js':'87fe1d52560e4b649d3770ff8cc6fe68c292b48e',
+    'app/settlement-consumer-ui.js':'6e9d3592be4015681192d1f5bc98ef40219ce8d2'
   });
   global.KTS_SETTLEMENT_BUILD_IDENTITY=Object.freeze({version:'settlement-build-identity-v1',algorithm:'git-blob-sha1',critical_git_blobs:critical,business_engine_sha256:'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c'});
 })(typeof window!=='undefined'?window:globalThis);
