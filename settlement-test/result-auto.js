@@ -3,6 +3,25 @@
 
   const VIEW_MODE_KEY = 'kts_kqxs_view_mode_v1';
   const PENDING_SCOPES_KEY = 'kts_settlement_pending_result_scopes_v1';
+  const RESULT_PRIZE_COUNTS = Object.freeze({
+    mn:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mt:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mb:Object.freeze({G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1})
+  });
+  function resultStationComplete(region, station) {
+    const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
+    if(!expected) return false;
+    const prizes=station&&station.prizes||{};
+    return Object.entries(expected).every(([prize,count])=>{
+      const found=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
+      const values=found ? (Array.isArray(found[1]) ? found[1] : [found[1]]) : [];
+      return values.filter(v=>v!=null&&String(v).trim()!=='').length===count;
+    });
+  }
+  function resultPrizeDataComplete(snapshot) {
+    const stations=Array.isArray(snapshot&&snapshot.stations)?snapshot.stations:[];
+    return stations.length>0 && stations.every(station=>resultStationComplete(snapshot&&snapshot.region,station));
+  }
 
   function validScope(scope) {
     return Boolean(scope && /^\d{4}-\d{2}-\d{2}$/.test(String(scope.business_date || '')) && ['mn','mt','mb'].includes(String(scope.region || '').toLowerCase()));
@@ -76,7 +95,8 @@
     return sources.size >= 2 && conflicts.length === 0 &&
       expected.length > 0 && new Set(expected).size === expected.length &&
       new Set(actual).size === actual.length && actual.length === expected.length &&
-      expected.every(code => actual.includes(code));
+      expected.every(code => actual.includes(code)) &&
+      resultPrizeDataComplete(snapshot);
   }
   function verificationConflict(snapshot) {
     return Boolean(snapshot && String(snapshot.verification_status || '').toLowerCase() === 'conflict');
@@ -573,7 +593,7 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v12-strict-verification-status',
+    version: 'result-auto-v13-prize-complete-verification',
     VIEW_MODE_KEY,
     PENDING_SCOPES_KEY,
     readPendingScopes,
