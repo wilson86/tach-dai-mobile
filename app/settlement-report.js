@@ -45,6 +45,15 @@
     return found && Array.isArray(found.category_rows) ? found.category_rows.map(x => Object.assign({}, x)) : [];
   }
 
+  function kqxsVerificationStatus(settlement) {
+    const snapshot = settlement && settlement.lottery_result_snapshot || null;
+    if (!snapshot) return 'unverified';
+    const status = String(snapshot.verification_status || '').toLowerCase();
+    if (status === 'conflict') return 'conflict';
+    if (snapshot.verified === true || status === 'verified') return 'verified';
+    return 'unverified';
+  }
+
   function shadowStatusFromSettlements(settlements) {
     const statuses = (settlements || []).map(s => String(s.comparison_status || 'unverified').toUpperCase());
     if (!statuses.length) return 'NO_DATA';
@@ -96,7 +105,7 @@
       if (!byRegion[region]) {
         byRegion[region] = {
           region, categories: {}, total_xac: 0, total_qua_co: 0, total_payout: 0,
-          refund_amount: 0, final_net: 0, messages: [], scope_statuses: [], settlements: []
+          refund_amount: 0, final_net: 0, messages: [], scope_statuses: [], kqxs_statuses: [], settlements: []
         };
       }
       const regionReport = byRegion[region];
@@ -105,6 +114,7 @@
       const categories = settlementCategories(settlement);
       const scopeStatus = settlement.scope_status || settlement.comparison_status || 'unverified';
       regionReport.scope_statuses.push(scopeStatus);
+      regionReport.kqxs_statuses.push(kqxsVerificationStatus(settlement));
 
       if (scopeStatus === 'blocked' || settlement.comparison_status === 'blocked') {
         blockedScopes.push({
@@ -161,6 +171,10 @@
       regionReport.blocked = regionReport.scope_statuses.includes('blocked');
       regionReport.provisional = regionReport.scope_statuses.includes('provisional');
       regionReport.shadow_status = shadowStatusFromSettlements(regionReport.settlements);
+      regionReport.kqxs_conflict = regionReport.kqxs_statuses.includes('conflict');
+      regionReport.kqxs_verified = regionReport.kqxs_statuses.length > 0 && regionReport.kqxs_statuses.every(x => x === 'verified');
+      regionReport.kqxs_verification_status = regionReport.kqxs_conflict ? 'conflict' : regionReport.kqxs_verified ? 'verified' : 'unverified';
+      delete regionReport.kqxs_statuses;
       delete regionReport.settlements;
       return regionReport;
     }
@@ -180,6 +194,8 @@
       provisional: regions.some(x => x.provisional),
       blocked: blockedScopes.length > 0,
       shadow_status: shadowStatusFromSettlements(partnerSettlements),
+      kqxs_conflict: regions.some(x => x.kqxs_conflict),
+      kqxs_verified: regions.length > 0 && regions.every(x => x.kqxs_verified),
       totals: {
         xac: totalXac,
         qua_co: totalQuaCo,
@@ -239,9 +255,10 @@
   }
 
   global.KTS_SETTLEMENT_REPORT = Object.freeze({
-    version: 'settlement-report-v2',
+    version: 'settlement-report-v3-kqxs-gate',
     CATEGORY_LABELS,
     categoryLabel,
+    kqxsVerificationStatus,
     shadowStatusFromSettlements,
     buildDailyPartnerReport,
     buildDailyOperationsReport
