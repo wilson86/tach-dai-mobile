@@ -122,7 +122,7 @@ assert(code.includes('kts:auto-result-recalculated'));
 
 
 
-assert(source.includes('let refreshEpoch = 0'));
-assert(source.includes('const epoch = ++refreshEpoch'));
-assert(source.includes('epoch === refreshEpoch'));
+assert(code.includes('let refreshEpoch = 0'));
+assert(code.includes('const epoch = ++refreshEpoch'));
+assert(code.includes('epoch === refreshEpoch'));
 console.log('settlement-attention-ui-tests: PASS');
