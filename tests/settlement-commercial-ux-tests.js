@@ -44,4 +44,13 @@ assert(!ui.includes("snapshot.complete ? '<span class=\"tag ok\">ĐÃ CHỐT</sp
 assert(ui.includes('KQXS chưa xác minh đủ 2 nguồn. Chưa dùng báo cáo này để chốt.'),'partner report must warn on unverified KQXS');
 assert(ui.includes('KQXS đang lệch giữa các nguồn. Không dùng báo cáo này để chốt tiền.'));
 assert(ui.includes('KQXS CHƯA XÁC MINH'));
+
+
+const backupUi=fs.readFileSync('app/settlement-backup-ui.js','utf8');
+assert(backupUi.includes("version: 'settlement-backup-ui-v4-operation-lock'"));
+assert(backupUi.includes('let backupBusy = false'));
+assert(backupUi.includes('function') || backupUi.includes('const setBackupBusy = value =>'));
+assert(backupUi.includes("['settlementExportBackup','settlementImportBackup','settlementImportFile']"));
+assert(backupUi.includes('Một thao tác sao lưu/khôi phục đang chạy'));
+assert(backupUi.includes('setBackupBusy(false)'));
 console.log('settlement-commercial-ux-tests: PASS');
