@@ -1,7 +1,11 @@
 'use strict';
 const fs=require('fs'),assert=require('assert');
 const sw=fs.readFileSync('app/sw.js','utf8');
-assert(sw.includes("const CACHE='kts-tach-unified-v1.0.126-parser-timeout-ux'"));
+assert(sw.includes("const CACHE_SCOPE=new URL(self.registration.scope).pathname"));
+assert(sw.includes("const CACHE_PREFIX=\`kts-tach-unified-\${CACHE_SCOPE}-\`"));
+assert(sw.includes("v1.0.130-scope-isolated"));
+assert(sw.includes("k.startsWith(CACHE_PREFIX)&&k!==CACHE"));
+assert(!sw.includes("k.startsWith('kts-tach-unified-')&&k!==CACHE"));
 assert(sw.includes('function withinWorkerScope(url)'));
 assert(sw.includes('self.registration.scope'));
 assert(sw.includes("url.pathname.startsWith(scope.pathname)"));
