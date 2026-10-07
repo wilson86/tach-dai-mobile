@@ -1,6 +1,6 @@
 'use strict';
 // Scope-safe service worker for both /app/ and isolated /settlement-test/ deployments.
-const CACHE='kts-tach-unified-v1.0.119-stale-safe-history-audit';
+const CACHE='kts-tach-unified-v1.0.120-simple-kqxs-scope-sync';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
