@@ -27,6 +27,7 @@
   let poller = null;
   let pendingConfigTemplate = null;
   let savingMessage = false;
+  let savingConfig = false;
   let configDirty = false;
   let loadedConfigPartnerId = '';
   let loadedConfigDate = '';
@@ -178,6 +179,7 @@
   }
 
   async function copyPartner() {
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Tạo bản sao đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const source = selectedPartner();
     if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để copy.', 'err');
     const proposed = source.name + ' - Copy';
@@ -202,6 +204,7 @@
   }
 
   async function deactivatePartner() {
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Ngừng sử dụng đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const source = selectedPartner();
     if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để ngừng sử dụng.', 'err');
     const ok = !global.confirm || global.confirm(`Ngừng sử dụng ${source.name}?\n\nĐối tác sẽ chỉ bị ẩn khỏi danh sách đang dùng. Tin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
@@ -214,6 +217,7 @@
   }
 
   async function restorePartner() {
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Khôi phục đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const id = $('inactivePartnerSelect').value;
     const source = inactivePartners.find(p => p.id === id);
     if (!source) return status('partnerStatus', 'Không có khách/chủ đã ngừng sử dụng để khôi phục.', 'warn');
@@ -427,9 +431,14 @@
 
   async function saveConfig() {
     const partnerId = currentPartnerId();
+    const button = $('saveConfig');
     if (!partnerId) return status('configStatus', 'Chưa chọn đối tác.', 'err');
     const effective = $('effectiveDate').value;
     if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
+    if (savingConfig) return status('configStatus', 'Cấu hình trước đang được lưu. Vui lòng chờ hoàn tất.', 'warn');
+    savingConfig = true;
+    const originalLabel = button ? button.textContent : '';
+    if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
     try {
       const checked = configValidation.validate({
         commission_type: $('commissionType').value,
@@ -455,7 +464,12 @@
       loadedConfigDate = effective;
       setConfigDirty(false);
       status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.`, 'ok');
-    } catch (e) { status('configStatus', String(e.message || e), 'err'); }
+    } catch (e) {
+      status('configStatus', String(e.message || e), 'err');
+    } finally {
+      savingConfig = false;
+      if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu cấu hình từ ngày đã chọn'; }
+    }
   }
 
   function renderParsedPreview(message) {
@@ -486,6 +500,12 @@
     if (savingMessage) return status('messageStatus', 'Tin trước đang được lưu. Chờ hoàn tất để tránh gửi trùng.', 'warn');
 
     const businessDate = $('messageDate').value;
+    const region = String($('messageRegion').value || '').toLowerCase();
+    const saveScope = Object.freeze({ partner_id: partnerId, business_date: businessDate, region });
+    const sameSaveScope = () =>
+      currentPartnerId() === saveScope.partner_id &&
+      String($('messageDate').value || '') === saveScope.business_date &&
+      String($('messageRegion').value || '').toLowerCase() === saveScope.region;
     try {
       await store.resolveConfigForDate(partnerId, businessDate);
       setMissingConfigAction(false, '', null, businessDate);
@@ -506,12 +526,15 @@
     const originalLabel = button ? button.textContent : '';
     if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
     renderParsedPreview(null);
-    status('messageStatus', 'Đang chạy canonical parser…', '');
+    status('messageStatus', 'Đang đọc cú pháp…', '');
+    const slowParserNotice = global.setTimeout ? global.setTimeout(() => {
+      if (savingMessage) status('messageStatus', 'Máy chủ đang khởi động/kết nối · vẫn tiếp tục đọc tin, không cần bấm Lưu lần nữa.', 'warn');
+    }, 3000) : null;
     try {
       const outcome = await pipeline.parseAndSaveMessage({
         partner_id: partnerId,
-        business_date: $('messageDate').value,
-        region: $('messageRegion').value,
+        business_date: saveScope.business_date,
+        region: saveScope.region,
         raw_text: raw,
         parser_provider: parserProvider
       });
@@ -521,14 +544,16 @@
         return outcome;
       }
 
-      renderParsedPreview(outcome.message);
+      const editorStillMatches = sameSaveScope() && String($('messageText').value || '').trim() === raw;
+      if (editorStillMatches) renderParsedPreview(outcome.message);
+      else renderParsedPreview(null);
 
       // Start automatic KQXS tracking only after a canonical message is durable.
       // Missing config / parser errors never create a background polling job.
       if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
         global.dispatchEvent(new global.CustomEvent('kts:settlement-message-saved', { detail: {
           message_id: outcome.message && outcome.message.id,
-          scope: { business_date: businessDate, region: String($('messageRegion').value || '').toLowerCase() }
+          scope: { business_date: saveScope.business_date, region: saveScope.region }
         }}));
       }
 
@@ -536,11 +561,13 @@
       // so a fast second tap cannot accidentally create another identical bet.
       // Intentionally retyping/pasting the same line after this completes still
       // creates a new message, because identical real bets are valid business data.
-      $('messageText').value = '';
-      $('messageText').focus();
+      if (editorStillMatches) {
+        $('messageText').value = '';
+        $('messageText').focus();
+      }
 
       if (outcome.status === 'parsed_waiting_result') {
-        status('messageStatus', `Đã parse tin ${outcome.message.id}. Chờ KQXS trước khi tính tiền.`, 'warn');
+        status('messageStatus', `Đã parse tin ${outcome.message.id} cho ${saveScope.region.toUpperCase()} ${viDate(saveScope.business_date)}. Chờ KQXS trước khi tính tiền.${editorStillMatches ? '' : ' Bạn đã đổi phạm vi hoặc ô nhập; nội dung hiện tại được giữ nguyên.'}`, 'warn');
         return outcome;
       }
       if (outcome.status === 'blocked') {
@@ -548,12 +575,13 @@
         status('messageStatus', reason.includes('NO_CONFIG') ? 'Thiếu thiết lập giá cho ngày này. Mở Thiết lập để kiểm tra.' : 'Tin chưa thể tính. Kiểm tra phần cảnh báo bên dưới.', 'err');
         return outcome;
       }
-      status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.`, outcome.status === 'provisional' ? 'warn' : 'ok');
+      status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} cho ${saveScope.region.toUpperCase()} ${viDate(saveScope.business_date)} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.${editorStillMatches ? '' : ' Bạn đã đổi phạm vi hoặc ô nhập; nội dung hiện tại được giữ nguyên.'}`, outcome.status === 'provisional' ? 'warn' : 'ok');
       return outcome;
     } catch (e) {
       status('messageStatus', String(e.message || e), 'err');
       return null;
     } finally {
+      if (slowParserNotice != null && global.clearTimeout) global.clearTimeout(slowParserNotice);
       savingMessage = false;
       if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu + tính'; }
     }
