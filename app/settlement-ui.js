@@ -27,6 +27,7 @@
   let poller = null;
   let pendingConfigTemplate = null;
   let savingMessage = false;
+  let savingConfig = false;
   let configDirty = false;
   let loadedConfigPartnerId = '';
   let loadedConfigDate = '';
@@ -178,6 +179,7 @@
   }
 
   async function copyPartner() {
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Tạo bản sao đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const source = selectedPartner();
     if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để copy.', 'err');
     const proposed = source.name + ' - Copy';
@@ -202,6 +204,7 @@
   }
 
   async function deactivatePartner() {
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Ngừng sử dụng đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const source = selectedPartner();
     if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để ngừng sử dụng.', 'err');
     const ok = !global.confirm || global.confirm(`Ngừng sử dụng ${source.name}?\n\nĐối tác sẽ chỉ bị ẩn khỏi danh sách đang dùng. Tin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
@@ -214,6 +217,7 @@
   }
 
   async function restorePartner() {
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Khôi phục đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const id = $('inactivePartnerSelect').value;
     const source = inactivePartners.find(p => p.id === id);
     if (!source) return status('partnerStatus', 'Không có khách/chủ đã ngừng sử dụng để khôi phục.', 'warn');
@@ -427,9 +431,14 @@
 
   async function saveConfig() {
     const partnerId = currentPartnerId();
+    const button = $('saveConfig');
     if (!partnerId) return status('configStatus', 'Chưa chọn đối tác.', 'err');
     const effective = $('effectiveDate').value;
     if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
+    if (savingConfig) return status('configStatus', 'Cấu hình trước đang được lưu. Vui lòng chờ hoàn tất.', 'warn');
+    savingConfig = true;
+    const originalLabel = button ? button.textContent : '';
+    if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
     try {
       const checked = configValidation.validate({
         commission_type: $('commissionType').value,
@@ -455,7 +464,12 @@
       loadedConfigDate = effective;
       setConfigDirty(false);
       status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.`, 'ok');
-    } catch (e) { status('configStatus', String(e.message || e), 'err'); }
+    } catch (e) {
+      status('configStatus', String(e.message || e), 'err');
+    } finally {
+      savingConfig = false;
+      if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu cấu hình từ ngày đã chọn'; }
+    }
   }
 
   function renderParsedPreview(message) {
