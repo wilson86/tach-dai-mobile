@@ -54,6 +54,8 @@ assert(ui.includes('pipeline.parseAndSaveMessage'));
 assert(ui.includes('pipeline.recalculateDateRegion'));
 assert(ui.includes('pipeline.recalculatePartnerFromDate'));
 assert(ui.includes('let savingMessage = false'));
+assert(ui.includes('const releaseMessageSave = () =>'));
+assert(ui.includes("button.textContent = 'Đang kiểm tra…'"));
 assert(ui.includes('let savingConfig = false'));
 assert(ui.includes('function configEditorSignature()'));
 assert(ui.includes('const saveDraftSignature = configEditorSignature()'));
