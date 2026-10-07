@@ -12,6 +12,26 @@
     'MB_XIEN2':'Xiên 2','MB_XIEN3':'Xiên 3','MB_XIEN4':'Xiên 4','UI':'Ủi'
   });
 
+  const RESULT_PRIZE_COUNTS = Object.freeze({
+    mn:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mt:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mb:Object.freeze({G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1})
+  });
+  function resultStationComplete(region, station) {
+    const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
+    if(!expected) return false;
+    const prizes=station&&station.prizes||{};
+    return Object.entries(expected).every(([prize,count])=>{
+      const raw=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
+      const values=raw ? (Array.isArray(raw[1]) ? raw[1] : [raw[1]]) : [];
+      return values.filter(v=>v!=null&&String(v).trim()!=='').length===count;
+    });
+  }
+  function resultPrizeDataComplete(region, snapshot) {
+    const stations=Array.isArray(snapshot&&snapshot.stations)?snapshot.stations:[];
+    return stations.length>0 && stations.every(station=>resultStationComplete(region,station));
+  }
+
   function categoryLabel(code) { return CATEGORY_LABELS[String(code || '').toUpperCase()] || String(code || 'UNKNOWN'); }
 
   function addCategory(target, row) {
@@ -67,7 +87,8 @@
       actual.length === expected.length &&
       expected.every(code => actual.includes(code));
     const claimedVerified = snapshot.verified === true || status === 'verified';
-    if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0 && coverageValid) return 'verified';
+    const prizeDataValid = resultPrizeDataComplete(settlement && settlement.region || snapshot.region, snapshot);
+    if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0 && coverageValid && prizeDataValid) return 'verified';
     return 'unverified';
   }
 
@@ -277,7 +298,7 @@
   }
 
   global.KTS_SETTLEMENT_REPORT = Object.freeze({
-    version: 'settlement-report-v3-kqxs-gate',
+    version: 'settlement-report-v4-prize-complete-kqxs-gate',
     CATEGORY_LABELS,
     categoryLabel,
     kqxsVerificationStatus,
