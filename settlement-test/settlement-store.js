@@ -130,18 +130,49 @@
     const effectiveDate = String(input.effective_from_date || input.effective_from || todayLocalDate()).slice(0, 10);
     if (!validDateOnly(effectiveDate)) throw new Error('INVALID_EFFECTIVE_FROM_DATE');
     const now = nowIso();
+    const legacyTotal = String(input.total_percent == null ? '100' : input.total_percent);
+    const legacyRefund = String(input.refund_percent == null ? '0' : input.refund_percent);
+    const legacyDat = input.dat_hit_mode || 'ky_ruoi';
+    const legacyDax = input.dax_hit_mode || 'multi_pair';
+    const srcTerms = input.region_terms || {};
+    const term = (region, field, fallback) => srcTerms[region] && srcTerms[region][field] != null ? srcTerms[region][field] : fallback;
+    const mode = value => {
+      const v = String(value || '');
+      if (!['one_time','ky_ruoi','multi_pair'].includes(v)) throw new Error('INVALID_HIT_MODE:' + v);
+      return v;
+    };
+    const regionTerms = {
+      mn: {
+        total_percent: String(term('mn','total_percent',legacyTotal)),
+        refund_percent: String(term('mn','refund_percent',legacyRefund)),
+        dat_hit_mode: mode(term('mn','dat_hit_mode',legacyDat)),
+        dax_hit_mode: mode(term('mn','dax_hit_mode',legacyDax))
+      },
+      mt: {
+        total_percent: String(term('mt','total_percent',legacyTotal)),
+        refund_percent: String(term('mt','refund_percent',legacyRefund)),
+        dat_hit_mode: mode(term('mt','dat_hit_mode',legacyDat)),
+        dax_hit_mode: mode(term('mt','dax_hit_mode',legacyDax))
+      },
+      mb: {
+        total_percent: String(term('mb','total_percent',legacyTotal)),
+        refund_percent: String(term('mb','refund_percent',legacyRefund)),
+        dat_hit_mode: 'multi_pair'
+      }
+    };
     return {
       id: input.id || `${input.partner_id}:v${version}`,
       partner_id: input.partner_id,
       version,
       effective_from_date: effectiveDate,
       region_pricing: clone(input.region_pricing || {}),
-      dat_hit_mode: input.dat_hit_mode || 'ky_ruoi',
-      dax_hit_mode: input.dax_hit_mode || 'multi_pair',
+      region_terms: clone(regionTerms),
+      dat_hit_mode: legacyDat,
+      dax_hit_mode: legacyDax,
       mb_xien_234: Boolean(input.mb_xien_234),
       tinh_ui: Boolean(input.tinh_ui),
-      total_percent: String(input.total_percent == null ? '100' : input.total_percent),
-      refund_percent: String(input.refund_percent == null ? '0' : input.refund_percent),
+      total_percent: legacyTotal,
+      refund_percent: legacyRefund,
       commission_type: input.commission_type || 'ratio',
       created_at: input.created_at || now,
       updated_at: now

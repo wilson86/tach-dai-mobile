@@ -139,7 +139,7 @@
     try {
       const partner = await d.store.get(d.store.STORES.partners, partnerId);
       if (!partner) throw new Error('PARTNER_NOT_FOUND');
-      settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config });
+      settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config, region });
     } catch (e) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
     }
@@ -260,7 +260,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v2-soft-cancel',
+    version: 'settlement-pipeline-v3-region-terms',
     scopeId,
     isCancelled,
     findScopeMessages,

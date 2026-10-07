@@ -95,6 +95,13 @@
   function evaluateXienMbLeg(leg,snapshot,config){ const d=deps(),code=String(leg.code||'').toUpperCase(),size=Number(code.replace('MB_XIEN','')),values=(leg.values||[]).map(String),stake=num(leg.stake,'stake'); if(![2,3,4].includes(size)||values.length!==size) throw new Error('INVALID_MB_XIEN_SIZE'); const selected=selectedPrizeValues(snapshot,d.mb.mbSelectors('2CB'),2),hits=values.map(v=>countValueHits(v,selected,2)),winning=hits.every(x=>x>0),price=pricing(config,'mb',code); return {category_inputs:[{code,xac:stake,commission_type:'direct',commission_value:price.commission,hit_units:winning?stake:0,win_rate:price.win}],detail_rows:[{code,station:mbStation(snapshot).code||'mb',numbers:values.join('-'),selector:'xien',points:stake,hit_counts:hits,hit_units:winning?stake:0,xac:stake}]}; }
   function evaluateMbLeg(leg,snapshot,config){ const code=String(leg.code||'').toUpperCase(); if(code==='DAT') return evaluateDatMbLeg(leg,snapshot,config); if(/^MB_XIEN[234]$/.test(code)) return evaluateXienMbLeg(leg,snapshot,config); return evaluateNormalMbLeg(leg,snapshot,config); }
 
+  function regionTerms(config, region) {
+    const regional = config && config.region_terms && config.region_terms[region] ? config.region_terms[region] : {};
+    return {
+      dat_hit_mode: regional.dat_hit_mode || (config && config.dat_hit_mode) || 'ky_ruoi',
+      dax_hit_mode: regional.dax_hit_mode || (config && config.dax_hit_mode) || 'multi_pair'
+    };
+  }
   function mnMtWidth(code){ return code==='4C'?4:(code==='3CB'||code==='3CB7'||code==='3CXC'?3:2); }
   function evaluateNormalMnMtLeg(leg,snapshot,config,region){
     const d=deps(),code=String(leg.code||'').toUpperCase(),stations=Array.isArray(leg.station_codes)?leg.station_codes:[]; if(stations.length!==1) throw new Error('MN_MT_STANDARD_LEG_REQUIRES_ONE_STATION');
@@ -106,13 +113,13 @@
   function evaluateDatMnMtLeg(leg,snapshot,config,region){
     const d=deps(),stations=Array.isArray(leg.station_codes)?leg.station_codes:[]; if(stations.length!==1) throw new Error('MN_MT_DAT_REQUIRES_ONE_STATION');
     const station=stationByCode(snapshot,region,stations[0]),selected=selectedPrizeValuesFromStation(station,d.engine.mnMtSelectors('2CB'),2),values=(leg.values||[]).map(String),stake=num(leg.stake,'stake'); if(values.length<2) throw new Error('MN_MT_DAT_REQUIRES_AT_LEAST_2_NUMBERS');
-    const hits=values.map(v=>countValueHits(v,selected,2)),mode=config.dat_hit_mode||'ky_ruoi'; let units=0; const details=[];
+    const hits=values.map(v=>countValueHits(v,selected,2)),mode=regionTerms(config,region).dat_hit_mode; let units=0; const details=[];
     for(let i=0;i<values.length;i++) for(let j=i+1;j<values.length;j++){const h=d.engine.datHitUnits(hits[i],hits[j],mode);units+=h*stake;details.push({code:'DAT',station:String(station.code||stations[0]).toLowerCase(),numbers:values[i]+'-'+values[j],selector:mode,points:stake,hit_count_a:hits[i],hit_count_b:hits[j],hit_units:h*stake,xac:d.engine.MN_MT_XAC_UNITS.DAT*stake});}
     return {category_inputs:[standardCategoryInput('DAT',d.engine.mnMtXacUnits('DAT',{number_count:values.length,stake}),units,pricing(config,region,'DAT'),config)],detail_rows:details};
   }
   function evaluateDaxMnMtLeg(leg,snapshot,config,region){
     const d=deps(),stations=Array.isArray(leg.station_codes)?leg.station_codes:[],values=(leg.values||[]).map(String),stake=num(leg.stake,'stake'); if(stations.length<2||values.length<2) throw new Error('MN_MT_DAX_REQUIRES_2PLUS_STATIONS_AND_NUMBERS');
-    const selected=stations.map(code=>{const station=stationByCode(snapshot,region,code);return {station,selected:selectedPrizeValuesFromStation(station,d.engine.mnMtSelectors('2CB'),2)};}); const mode=config.dax_hit_mode||'multi_pair'; let units=0; const details=[];
+    const selected=stations.map(code=>{const station=stationByCode(snapshot,region,code);return {station,selected:selectedPrizeValuesFromStation(station,d.engine.mnMtSelectors('2CB'),2)};}); const mode=regionTerms(config,region).dax_hit_mode; let units=0; const details=[];
     for(let ni=0;ni<values.length;ni++) for(let nj=ni+1;nj<values.length;nj++) for(let si=0;si<stations.length;si++) for(let sj=si+1;sj<stations.length;sj++){const a=countValueHits(values[ni],selected[si].selected,2),b=countValueHits(values[nj],selected[sj].selected,2),h=d.engine.daxPairHitUnits(a,b,mode);units+=h*stake;details.push({code:'DAX',station:stations[si]+'-'+stations[sj],numbers:values[ni]+'-'+values[nj],selector:mode,points:stake,hit_count_a:a,hit_count_b:b,hit_units:h*stake,xac:d.engine.MN_MT_XAC_UNITS.DAX*stake});}
     return {category_inputs:[standardCategoryInput('DAX',d.engine.mnMtXacUnits('DAX',{number_count:values.length,station_count:stations.length,stake}),units,pricing(config,region,'DAX'),config)],detail_rows:details};
   }
@@ -120,5 +127,5 @@
 
   function evaluateCanonicalMessage(input){ const canonical=input&&input.canonical_payload,config=input&&input.config_snapshot,snapshot=input&&input.result_snapshot;if(!canonical||!Array.isArray(canonical.legs))throw new Error('CANONICAL_PAYLOAD_REQUIRED');const region=String(canonical.region||input.region||'').toLowerCase();if(!['mn','mt','mb'].includes(region))throw new Error('SETTLEMENT_REGION_REQUIRED');const categoryInputs=[],detailRows=[];for(const leg of canonical.legs){const e=region==='mb'?evaluateMbLeg(leg,snapshot,config):evaluateMnMtLeg(leg,snapshot,config,region);categoryInputs.push(...e.category_inputs);detailRows.push(...e.detail_rows);}return {region,category_inputs:clone(categoryInputs),detail_rows:clone(detailRows)};}
 
-  global.KTS_SETTLEMENT_EVALUATOR=Object.freeze({version:'settlement-evaluator-3region-v2',suffix,selectedPrizeValues,selectedPrizeValuesFromStation,countValueHits,pricing,evaluateCanonicalMessage});
+  global.KTS_SETTLEMENT_EVALUATOR=Object.freeze({version:'settlement-evaluator-3region-v3-region-terms',suffix,selectedPrizeValues,selectedPrizeValuesFromStation,countValueHits,pricing,regionTerms,evaluateCanonicalMessage});
 })(typeof window !== 'undefined' ? window : globalThis);
