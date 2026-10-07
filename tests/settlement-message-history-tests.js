@@ -21,7 +21,7 @@ const settlements = [
   { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
-assert.strictEqual(H.version, 'message-history-v6-strict-kqxs');
+assert.strictEqual(H.version, 'message-history-v7-scope-mutation-lock');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -88,4 +88,12 @@ const weakSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
 });
 assert.strictEqual(weakSummary.kqxs.verified,false);
 assert.strictEqual(weakSummary.kqxs.label,'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU');
+
+
+assert(historySource.includes('let scopeMutationBusy = false'));
+assert(historySource.includes('function beginScopeMutation(label)'));
+assert(historySource.includes("querySelectorAll('[data-cancel-message],[data-restore-message],#recalcMessageScope')"));
+assert(historySource.includes("if (!beginScopeMutation('hủy/khôi phục')) return;"));
+assert(historySource.includes("if (!beginScopeMutation('rà lại')) return;"));
+assert(historySource.includes('setScopeMutationBusy(false)'));
 console.log('settlement-message-history-tests: PASS');
