@@ -1,7 +1,7 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.62-copy-rates';
+const CACHE='kts-tach-unified-v1.0.62-copy-rates-render-free-test';
 const CORE=[
-  './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
+  './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json','./test-backend-bootstrap.js',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
   './settlement-category-map.js','./settlement-research-defaults.js','./settlement-feature-gates.js',
   './settlement-runtime.js','./settlement-evaluator.js','./settlement-parser-provider.js','./settlement-pipeline.js','./settlement-pricing-copy.js',
