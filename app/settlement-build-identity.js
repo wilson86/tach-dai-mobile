@@ -1,7 +1,7 @@
 (function(global){
   'use strict';
   const critical=Object.freeze({
-    'app/settlement-store.js':'f493e7a8c52884b4e3bcdc73f1efd5ca9a0a253f',
+    'app/settlement-store.js':'4a6f3b4f3daa8c0eb34911a3dc1c5a01f483f3f7',
     'app/settlement-engine.js':'93471a5e809746a91a847b0e64b2bff09cdc0a37',
     'app/settlement-mb-rules.js':'01e7636d0ea0ab5dbbb2e51e0968a5c5e2f73081',
     'app/settlement-category-map.js':'5cbd0575ec451b6a6a5a351fbe67d1599fccfb4d',
@@ -16,8 +16,8 @@
     'app/settlement-report-dashboard.js':'e37251d4b3fcae091e14c714b079767529f9d2c9',
     'app/settlement-attention-ui.js':'b6a81eaa554292d0dd7dcefcba8864d6135b07f4',
     'app/settlement-ui.js':'67385c57c58331576e4e46a4f7f6ae7bc5a2a226',
-    'app/settlement-backup-ui.js':'36f835fc9476c5c507b3596e0450d4df04be3884',
-    'app/sw.js':'aaec565cc77fdf8d2baf05171ef59123d88b5593',
+    'app/settlement-backup-ui.js':'8e9c1d1046065d8817518e865c88e4e3c799e324',
+    'app/sw.js':'3d31573afa6c8ecaf683784ea5ad41cddeb6fb94',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
