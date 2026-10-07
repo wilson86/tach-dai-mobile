@@ -78,6 +78,14 @@ const missingKqxsEvidence = D.buildReadiness({
 assert.strictEqual(missingKqxsEvidence.ready,false,'daily close must fail closed when partner counts exist without region/KQXS evidence');
 assert(missingKqxsEvidence.reasons.some(r=>r.code==='KQXS_EVIDENCE_MISSING'));
 
+const partialKqxsEvidence = D.buildReadiness({
+  status:'MATCH_EXACT',
+  counts:{ partners:2, exact:2, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 },
+  partners:[{regions:[{region:'mn',kqxs_verified:true,kqxs_conflict:false}]}]
+});
+assert.strictEqual(partialKqxsEvidence.ready,false,'missing one partner row must fail closed even when remaining KQXS evidence is verified');
+assert(partialKqxsEvidence.reasons.some(r=>r.code==='KQXS_EVIDENCE_MISSING'));
+
 const kqxsPending = D.buildReadiness({
   status:'MATCH_EXACT',
   counts:{ partners:1, exact:1, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 },
