@@ -12,7 +12,7 @@
     'app/settlement-pipeline.js':'5f961f75aa432ceac36b2b0ec8ef58a4cd0a3966',
     'app/settlement-pricing-copy.js':'622f9b5018922d9abf14f6ff04a390c8511b7b51',
     'app/settlement-config-validation.js':'288688bceea58cb884f10fe9a7e36d9415ad85c1',
-    'app/settlement-ui.js':'d12c2426999c262f4579c4615007564de858e59d',
+    'app/settlement-ui.js':'f08e9dcef99a606dbb107b5fa9cc52e9d2ffce5f',
     'app/settlement-backup-ui.js':'36f835fc9476c5c507b3596e0450d4df04be3884',
     'app/sw.js':'10da864e08b8100bfc421f9930c4f71204f72730',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',

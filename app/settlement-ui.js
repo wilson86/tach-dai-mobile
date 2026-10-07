@@ -132,13 +132,13 @@
     inactivePartners = allPartners.filter(p => p.active === false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
     const options = partners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
     $('partnerSelect').innerHTML = options || '<option value="">Chưa có đối tác</option>';
-    $('reportPartner').innerHTML = options || '<option value="">Chưa có đối tác</option>';
+    const reportRows = partners.concat(inactivePartners).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+    const reportOptions = reportRows.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}${p.active === false ? ' · Đã ngừng' : ''}</option>`).join('');
+    $('reportPartner').innerHTML = reportOptions || '<option value="">Chưa có đối tác</option>';
     const inactive = inactivePartners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
     $('inactivePartnerSelect').innerHTML = inactive || '<option value="">Không có</option>';
-    if (preferId && partners.some(p => p.id === preferId)) {
-      $('partnerSelect').value = preferId;
-      $('reportPartner').value = preferId;
-    }
+    if (preferId && partners.some(p => p.id === preferId)) $('partnerSelect').value = preferId;
+    if (preferId && reportRows.some(p => p.id === preferId)) $('reportPartner').value = preferId;
     updatePartnerView();
     await loadConfigForDate();
   }
@@ -609,7 +609,7 @@
     const partnerId = $('reportPartner').value;
     const date = $('reportDate').value;
     if (!partnerId || !date) return;
-    const partner = partners.find(p => p.id === partnerId) || { id: partnerId };
+    const partner = partners.concat(inactivePartners).find(p => p.id === partnerId) || { id: partnerId };
     const settlements = await store.getAll(store.STORES.settlements);
     const messages = await store.getAll(store.STORES.messages);
     const messagesById = Object.fromEntries(messages.map(m => [m.id, m]));

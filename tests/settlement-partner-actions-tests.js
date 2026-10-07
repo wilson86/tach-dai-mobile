@@ -17,4 +17,7 @@ assert(ui.includes('active:true'));
 assert(ui.includes("allPartners.filter(p => p.active === false)"));
 assert(ui.includes("allPartners.filter(p => p.active !== false)"));
 assert(!ui.includes('store.remove(store.STORES.partners'));
+assert(ui.includes('const reportRows = partners.concat(inactivePartners)'));
+assert(ui.includes("p.active === false ? ' · Đã ngừng' : ''"));
+assert(ui.includes('partners.concat(inactivePartners).find'), 'historical report must remain available without reactivating partner');
 console.log('settlement-partner-actions-tests: PASS');
