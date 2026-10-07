@@ -87,6 +87,8 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   assert(ui.includes('button.disabled = true'));
   assert(ui.includes('Intentionally retyping/pasting the same line after this completes still'));
   assert(ui.includes('const saveScope = Object.freeze'), 'save must freeze partner/date/region at click time');
+  assert(ui.includes('const saveDraftSignature = configEditorSignature()'), 'config save must snapshot the editor before async work');
+  assert(ui.includes('configEditorSignature() === saveDraftSignature'), 'late config completion must not clear a changed editor');
   assert(ui.includes('business_date: saveScope.business_date'));
   assert(ui.includes('region: saveScope.region'));
   assert(ui.includes('const editorStillMatches = sameSaveScope()'), 'late parser response must not clear a new draft/scope');
