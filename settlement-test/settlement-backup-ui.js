@@ -26,6 +26,15 @@
       <div id="settlementBackupStatus" class="status"></div>`;
     pane.appendChild(card);
 
+    let backupBusy = false;
+    const setBackupBusy = value => {
+      backupBusy = Boolean(value);
+      for (const id of ['settlementExportBackup','settlementImportBackup','settlementImportFile']) {
+        const el = doc.getElementById(id);
+        if (el) el.disabled = backupBusy;
+      }
+    };
+
     const status = (text, kind) => {
       const el = doc.getElementById('settlementBackupStatus');
       if (!el) return;
@@ -34,6 +43,8 @@
     };
 
     doc.getElementById('settlementExportBackup').addEventListener('click', async () => {
+      if (backupBusy) return status('Một thao tác sao lưu/khôi phục đang chạy. Chờ hoàn tất rồi thử lại.', 'warn');
+      setBackupBusy(true);
       try {
         status('Đang tạo backup…', '');
         const payload = await store.exportAll();
@@ -50,13 +61,17 @@
         status(`Đã xuất backup ${payload.version} · ${total} bản ghi.`, 'ok');
       } catch (e) {
         status('Xuất backup lỗi: ' + String(e && e.message || e), 'err');
+      } finally {
+        setBackupBusy(false);
       }
     });
 
     doc.getElementById('settlementImportBackup').addEventListener('click', async () => {
+      if (backupBusy) return status('Một thao tác sao lưu/khôi phục đang chạy. Chờ hoàn tất rồi thử lại.', 'warn');
       const input = doc.getElementById('settlementImportFile');
       const file = input && input.files && input.files[0];
       if (!file) return status('Chọn file backup JSON trước.', 'warn');
+      setBackupBusy(true);
       try {
         status('Đang kiểm tra và khôi phục backup…', '');
         const text = await file.text();
@@ -67,11 +82,13 @@
         status(`Đã kiểm tra an toàn và gộp backup · thêm ${inserted} bản ghi mới${skipped ? ` · giữ nguyên ${skipped} bản ghi đã có trên máy` : ''}. Tải lại trang để mọi danh sách cập nhật.`, 'ok');
       } catch (e) {
         status('KHÔNG khôi phục: ' + String(e && e.message || e), 'err');
+      } finally {
+        setBackupBusy(false);
       }
     });
   }
 
-  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v3-nondestructive-merge', filename });
+  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v4-operation-lock', filename });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
