@@ -10,6 +10,8 @@
     return { store, evaluator, runtime, engine };
   }
 
+  const scopeSettlementQueues = new Map();
+
   function clone(v) { return JSON.parse(JSON.stringify(v)); }
   function scopeId(partnerId, businessDate, region) {
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
@@ -86,7 +88,7 @@
     return { status: 'blocked', reason: input.reason, settlement: saved };
   }
 
-  async function settleScope(input) {
+  async function settleScopeOnce(input) {
     const d = deps();
     const partnerId = input.partner_id;
     const businessDate = input.business_date;
@@ -207,6 +209,21 @@
     return { status: scopeStatus, settlement: saved };
   }
 
+  function settleScope(input) {
+    const partnerId = String(input && input.partner_id || '');
+    const businessDate = String(input && input.business_date || '');
+    const region = String(input && input.region || '').toLowerCase();
+    const key = scopeId(partnerId, businessDate, region);
+    const previous = scopeSettlementQueues.get(key) || Promise.resolve();
+    const run = previous.catch(() => {}).then(() => settleScopeOnce(input));
+    let tracked;
+    tracked = run.finally(() => {
+      if (scopeSettlementQueues.get(key) === tracked) scopeSettlementQueues.delete(key);
+    });
+    scopeSettlementQueues.set(key, tracked);
+    return tracked;
+  }
+
   async function recalculateDateRegion(input) {
     const d = deps();
     const businessDate = input.business_date;
@@ -303,7 +320,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v5-cancel-status-normalized',
+    version: 'settlement-pipeline-v6-scope-queue',
     scopeId,
     isCancelled,
     findScopeMessages,
