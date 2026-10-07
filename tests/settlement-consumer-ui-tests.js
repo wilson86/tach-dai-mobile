@@ -58,4 +58,6 @@ assert(source.includes('requestSeq===syntaxRequestSeq'));
 assert(source.includes("String(textarea.value||'').trim()===raw"));
 assert(source.includes("String(date.value||'')===requestDate"));
 assert(source.includes("String(region.value||'')===requestRegion"));
+assert(source.includes('Máy chủ đọc cú pháp phản hồi quá lâu'));
+assert(source.includes('Máy chủ trả thiếu thông tin xác thực cú pháp'));
 console.log('settlement-consumer-ui-tests: PASS');
