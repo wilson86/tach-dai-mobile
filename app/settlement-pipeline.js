@@ -17,6 +17,33 @@
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
   function isCancelled(message) { return String(message && message.status || '').toLowerCase() === 'cancelled'; }
+  function messageRevisionSignature(messages) {
+    return (Array.isArray(messages) ? messages : []).map(message => [
+      String(message && message.id || ''),
+      String(message && message.updated_at || ''),
+      String(message && message.status || ''),
+      String(message && message.canonical_version || ''),
+      String(message && message.parser_error || '')
+    ].join('|')).sort().join('\n');
+  }
+  function configRevisionSignature(config) {
+    if (!config) return '';
+    return [
+      String(config.id || ''),
+      String(config.partner_id || ''),
+      String(config.version == null ? '' : config.version),
+      String(config.effective_from_date || ''),
+      String(config.updated_at || '')
+    ].join('|');
+  }
+  function resultRevisionSignature(result) {
+    if (!result) return '';
+    if (result.fingerprint) return String(result.fingerprint);
+    return JSON.stringify([
+      result.business_date || '', result.region || '', Boolean(result.complete),
+      result.verification_status || '', result.expected_station_codes || [], result.stations || []
+    ]);
+  }
 
   function zeroResult(reason) {
     return {
@@ -123,11 +150,9 @@
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: `PENDING_PARSER:${pending.map(m => m.id).join(',')}` });
     }
 
-    // Store is the canonical KQXS authority. Callers may pass a snapshot as a
-    // bootstrap only when none is stored yet; once a scope has persisted KQXS,
-    // queued/stale callbacks must not overwrite settlement with older evidence.
-    const storedResultSnapshot = await findResult(businessDate, region);
-    const resultSnapshot = storedResultSnapshot || input.result_snapshot || null;
+    // Store is the canonical KQXS authority. Callers may carry a snapshot for
+    // event metadata, but monetary settlement always rereads the persisted scope.
+    const resultSnapshot = await findResult(businessDate, region);
     if (!resultSnapshot) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: 'KQXS_NOT_AVAILABLE' });
     }
@@ -183,6 +208,23 @@
       message_id: item.message_id,
       category_rows: settled.rows.slice(item.start, item.start + item.count).map(clone)
     }));
+    // Revalidate all scope inputs immediately before commit. A cancel/restore,
+    // config version change, parser rewrite, or newer KQXS may have landed while
+    // this calculation was running. In that case this run is superseded and must
+    // not publish stale money; the queued/newer scope recalculation becomes final.
+    const latestMessages = await findScopeMessages(partnerId, businessDate, region);
+    let latestConfig;
+    try { latestConfig = await d.store.resolveConfigForDate(partnerId, businessDate); }
+    catch (_) { latestConfig = null; }
+    const latestResult = await findResult(businessDate, region);
+    if (
+      messageRevisionSignature(latestMessages) !== messageRevisionSignature(messages) ||
+      configRevisionSignature(latestConfig) !== configRevisionSignature(config) ||
+      resultRevisionSignature(latestResult) !== resultRevisionSignature(resultSnapshot)
+    ) {
+      return { status: 'superseded', reason: 'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT', settlement: null };
+    }
+
     const scopeStatus = resultSnapshot.complete ? 'complete_unverified' : 'provisional';
     const saved = await d.store.saveSettlement({
       id: scopeId(partnerId, businessDate, region),
@@ -204,9 +246,12 @@
       comparison_status: resultSnapshot.complete ? 'unverified' : 'provisional'
     });
 
-    for (const message of messages) {
-      await d.store.saveMessage(Object.assign({}, message, {
-        config_snapshot: message.config_snapshot || config,
+    for (const message of latestMessages) {
+      const current = await d.store.get(d.store.STORES.messages, message.id);
+      if (!current || isCancelled(current)) continue;
+      if (messageRevisionSignature([current]) !== messageRevisionSignature([message])) continue;
+      await d.store.saveMessage(Object.assign({}, current, {
+        config_snapshot: current.config_snapshot || config,
         status: resultSnapshot.complete ? 'settled_unverified' : 'settled_provisional'
       }));
     }
@@ -324,7 +369,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v7-result-store-authority',
+    version: 'settlement-pipeline-v8-scope-revalidate',
     scopeId,
     isCancelled,
     findScopeMessages,

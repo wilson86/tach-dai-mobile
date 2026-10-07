@@ -148,12 +148,13 @@ function fakeStore(messages) {
     };
     const raceCtx=loadContext(raceStore);
     const RP=raceCtx.KTS_SETTLEMENT_PIPELINE;
-    assert.strictEqual(RP.version,'settlement-pipeline-v7-result-store-authority');
+    assert.strictEqual(RP.version,'settlement-pipeline-v8-scope-revalidate');
     const background=RP.settleScope({partner_id:'p1',business_date:'2026-09-22',region:'mb'});
     await entered;
     const cancel=RP.cancelMessage('race1');
     releaseFirst();
-    await Promise.all([background,cancel]);
+    const [backgroundResult] = await Promise.all([background,cancel]);
+    assert.strictEqual(backgroundResult.status,'superseded','stale background calculation must self-abort after cancellation changes scope inputs');
     assert.strictEqual(raceStore.state.messages.find(x=>x.id==='race1').status,'cancelled');
     assert.strictEqual(raceStore.state.settlements.length,1);
     assert.strictEqual(raceStore.state.settlements[0].scope_status,'empty','queued cancel recalculation must be final');
