@@ -1,4 +1,5 @@
 'use strict';
+// Consumer-safety refresh: install the latest UX polish without changing the evidence cache namespace.
 const CACHE='kts-tach-unified-v1.0.69-audit-runtime-dirty';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',

@@ -51,12 +51,26 @@
   }
   function cleanUserText(value){
     return String(value||'')
-      .replace(/fail-closed/gi,'chưa thể tính')
+      .replace(/chờ đối chiếu HIOSKT/gi,'đang đối chiếu')
       .replace(/HIOSKT/g,'nguồn đối chiếu')
+      .replace(/FAIL-CLOSED/g,'CHƯA THỂ CHỐT')
+      .replace(/fail-closed/gi,'chưa đủ điều kiện tính')
+      .replace(/\bBLOCKED\b/g,'CHƯA TÍNH')
+      .replace(/shadow đối chiếu/gi,'đối chiếu')
       .replace(/SHADOW/g,'đối soát')
       .replace(/lỗi parser/gi,'lỗi cú pháp')
       .replace(/canonical parser/gi,'bộ đọc cú pháp')
-      .replace(/settlement/gi,'kết quả tính tiền');
+      .replace(/Ngày này chưa có settlement\./g,'Ngày này chưa có dữ liệu tính tiền.')
+      .replace(/settlement chỉ TẠM TÍNH/gi,'tiền hiện chỉ TẠM TÍNH')
+      .replace(/settlement được tính lại/gi,'tiền được tính lại')
+      .replace(/settlement/gi,'kết quả tính tiền')
+      .replace(/dừng polling/gi,'ngừng cập nhật')
+      .replace(/KQXS có dữ liệu nhưng tính lại lỗi:/g,'Có kết quả xổ số nhưng chưa tính lại được:')
+      .replace(/(^|[·\s])BU(?=\s*:)/g,'$1BÙ');
+  }
+  function hasUnsavedConfig(doc){
+    const el=doc&&doc.getElementById?doc.getElementById('configDirtyStatus'):null;
+    return Boolean(el&&/Chưa lưu thay đổi/i.test(String(el.textContent||'')));
   }
 
   function installSaveGuard(doc){
@@ -127,24 +141,38 @@
     region.addEventListener('change',reset);
   }
 
-  function installLanguageCleanup(doc){
-    const root=doc.getElementById('pane-message');
-    if(!root||typeof global.MutationObserver!=='function')return;
-    let running=false;
-    function clean(){
-      if(running)return;running=true;
-      try{
-        const walker=doc.createTreeWalker(root,(global.NodeFilter&&global.NodeFilter.SHOW_TEXT)||4);
-        const nodes=[];let node;
-        while((node=walker.nextNode()))nodes.push(node);
-        for(const textNode of nodes){
-          const next=cleanUserText(textNode.nodeValue);
-          if(next!==textNode.nodeValue)textNode.nodeValue=next;
-        }
-      }finally{running=false;}
+  function cleanTree(doc,root){
+    if(!root||!doc.createTreeWalker)return;
+    const walker=doc.createTreeWalker(root,(global.NodeFilter&&global.NodeFilter.SHOW_TEXT)||4);
+    const nodes=[];let node;
+    while((node=walker.nextNode()))nodes.push(node);
+    for(const textNode of nodes){
+      const next=cleanUserText(textNode.nodeValue);
+      if(next!==textNode.nodeValue)textNode.nodeValue=next;
     }
-    clean();
-    new global.MutationObserver(clean).observe(root,{childList:true,characterData:true,subtree:true});
+  }
+  function installLanguageCleanup(doc){
+    if(typeof global.MutationObserver!=='function')return;
+    const ids=['pane-message','resultStatus','reportOutput','attentionList','attentionStatus'];
+    for(const id of ids){
+      const root=doc.getElementById(id);
+      if(!root)continue;
+      let running=false;
+      function clean(){
+        if(running)return;running=true;
+        try{cleanTree(doc,root);}finally{running=false;}
+      }
+      clean();
+      new global.MutationObserver(clean).observe(root,{childList:true,characterData:true,subtree:true});
+    }
+  }
+  function installUnsavedGuard(doc){
+    if(typeof global.addEventListener!=='function')return;
+    global.addEventListener('beforeunload',event=>{
+      if(!hasUnsavedConfig(doc))return;
+      event.preventDefault();
+      event.returnValue='';
+    });
   }
 
   function install(){
@@ -180,11 +208,12 @@
     installSaveGuard(doc);
     installSyntaxReview(doc);
     installLanguageCleanup(doc);
+    installUnsavedGuard(doc);
     update();
   }
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
-    version:'settlement-consumer-ui-v2-safety-review',
+    version:'settlement-consumer-ui-v3-commercial-safety',
     compatibility:Object.freeze({version:'settlement-consumer-ui-v1'}),
     CODE_LABELS,
     regionName,
@@ -192,7 +221,8 @@
     partnerLabel,
     canonicalSummary,
     friendlyParserError,
-    cleanUserText
+    cleanUserText,
+    hasUnsavedConfig
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',install,{once:true});
   else install();
