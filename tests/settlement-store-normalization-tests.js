@@ -144,4 +144,15 @@ const strongVerified=S.normalizeResultSnapshot({
   verification_sources:['primary','secondary'],verification_conflicts:[]
 });
 assert.strictEqual(strongVerified.verified,true);
+
+
+const coverageDowngraded=S.normalizeResultSnapshot({
+  ...base,complete:true,status:'complete',
+  expected_station_codes:['bt','vt','bli'],
+  stations:[{code:'bt'}],
+  verification_status:'unverified'
+});
+assert.strictEqual(coverageDowngraded.complete,false);
+assert.strictEqual(coverageDowngraded.coverage_complete,false);
+assert.strictEqual(coverageDowngraded.status,'partial');
 console.log('settlement-store-normalization-tests: PASS');
