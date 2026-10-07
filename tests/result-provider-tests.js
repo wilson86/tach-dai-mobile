@@ -48,6 +48,24 @@ assert.strictEqual(P.setEndpoint('/kts-api/kqxs'), '/kts-api/kqxs');
 assert.strictEqual(P.endpoint(), '/kts-api/kqxs');
 assert.throws(() => P.setEndpoint('javascript:alert(1)'), /KQXS_ENDPOINT/);
 
+assert.throws(() => P.normalizeProviderPayload({
+  business_date:'2026-10-04', region:'mn',
+  expected_station_codes:['bt'], stations:[{code:'bt',prizes:{G8:['01']}}]
+}, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_SCOPE_MISMATCH:DATE/);
+assert.throws(() => P.normalizeProviderPayload({
+  business_date:'2026-10-05', region:'mt',
+  expected_station_codes:['dl'], stations:[{code:'dl',prizes:{G8:['01']}}]
+}, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_SCOPE_MISMATCH:REGION/);
+assert.throws(() => P.normalizeProviderPayload({
+  business_date:'2026-10-05', region:'mn',
+  stations:[{code:'bt',prizes:{G8:['01']}}]
+}, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_EXPECTED_STATIONS_REQUIRED/);
+assert.throws(() => P.normalizeProviderPayload({
+  business_date:'2026-10-05', region:'mn',
+  expected_station_codes:['bt','bt'], stations:[{code:'bt',prizes:{G8:['01']}}]
+}, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_EXPECTED_STATIONS_DUPLICATE/);
+
+
 (async () => {
   const out = await P.fetchSnapshot({ business_date: '2026-10-05', region: 'mn' });
   assert.strictEqual(out.business_date, '2026-10-05');
