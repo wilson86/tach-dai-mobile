@@ -10,6 +10,11 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const H = sandbox.globalThis.KTS_SETTLEMENT_MESSAGE_HISTORY;
 
+function fullMnPrizes(prefix){
+  const counts={G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1};
+  return Object.fromEntries(Object.entries(counts).map(([k,n])=>[k,Array.from({length:n},(_,i)=>String(prefix)+'-'+k+'-'+String(i+1))]));
+}
+
 const scope = { partner_id: 'p1', business_date: '2026-10-06', region: 'mn' };
 const messages = [
   { id: 'm1', partner_id: 'p1', business_date: '2026-10-06', region: 'mn', raw_text: 'tg 75 b 1n', status: 'settled_unverified', created_at: '2026-10-06T01:00:00Z' },
@@ -21,7 +26,7 @@ const settlements = [
   { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
-assert.strictEqual(H.version, 'message-history-v8-stale-safe-actions');
+assert.strictEqual(H.version, 'message-history-v9-prize-complete-kqxs');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -39,7 +44,7 @@ assert.strictEqual(H.settlementForScope(scope, settlements).id, 'scope:p1:2026-1
 const blockedSummary = H.buildScopeSummary(scope, messages, settlements, {
   id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true, verified:true, verification_status:'verified',
   verification_sources:['primary','secondary'], expected_station_codes:['bt','vt','bli'],
-  stations:[{code:'bt'},{code:'vt'},{code:'bli'}]
+  stations:[{code:'bt',prizes:fullMnPrizes('bt')},{code:'vt',prizes:fullMnPrizes('vt')},{code:'bli',prizes:fullMnPrizes('bli')}]
 });
 assert.strictEqual(blockedSummary.counts.total, 3);
 assert.strictEqual(blockedSummary.counts.active, 2);
@@ -88,6 +93,11 @@ const weakSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
 });
 assert.strictEqual(weakSummary.kqxs.verified,false);
 assert.strictEqual(weakSummary.kqxs.label,'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU');
+const incompletePrizeSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
+  id:'2026-10-06:mn',business_date:'2026-10-06',region:'mn',complete:true,verified:true,verification_status:'verified',
+  verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt',prizes:{G8:['10']}}]
+});
+assert.strictEqual(incompletePrizeSummary.kqxs.verified,false,'two-source metadata cannot override missing prize rows');
 
 
 assert(historySource.includes('let scopeMutationBusy = false'));
