@@ -5,6 +5,7 @@
   function esc(v){return String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
   function regionName(v){return v==='mn'?'Miền Nam':v==='mt'?'Miền Trung':v==='mb'?'Miền Bắc':String(v||'').toUpperCase();}
   function validScope(s){return Boolean(s&&/^\d{4}-\d{2}-\d{2}$/.test(String(s.business_date||''))&&['mn','mt','mb'].includes(String(s.region||'').toLowerCase()));}
+  function sameScope(a,b){return Boolean(validScope(a)&&validScope(b)&&String(a.business_date)===String(b.business_date)&&String(a.region).toLowerCase()===String(b.region).toLowerCase());}
 
   function install(){
     const doc=global.document;
@@ -82,12 +83,18 @@
     function syncScope(){
       const scope=messageScope();
       if(!validScope(scope)){updateLabel(scope);return scope;}
+      const dateChanged=String(resultDate.value||'')!==scope.business_date;
+      const regionChanged=String(resultRegion.value||'').toLowerCase()!==scope.region;
       resultDate.value=scope.business_date;
       resultRegion.value=scope.region;
       updateLabel(scope);
       try{if(global.localStorage)global.localStorage.setItem(VIEW_MODE_KEY,'date');}catch(_){}
       const chooser=doc.getElementById('resultViewMode');
       if(chooser&&chooser.value!=='date')chooser.value='date';
+      if(typeof global.Event==='function'){
+        if(dateChanged)resultDate.dispatchEvent(new global.Event('change',{bubbles:true}));
+        if(regionChanged)resultRegion.dispatchEvent(new global.Event('change',{bubbles:true}));
+      }
       return scope;
     }
     async function ensureAuto(){
@@ -119,7 +126,9 @@
         }
       });
       global.addEventListener('kts:auto-result-update',event=>{
-        const s=event.detail&&event.detail.snapshot;if(s&&validScope(s))updateLabel(s);
+        const s=event.detail&&event.detail.snapshot;
+        const current=messageScope();
+        if(s&&sameScope(s,current))updateLabel(current);
       });
     }
 
@@ -127,6 +136,6 @@
     applyTech();
   }
 
-  global.KTS_RESULT_SIMPLE_UI=Object.freeze({version:'result-simple-ui-v2-consumer',regionName,validScope});
+  global.KTS_RESULT_SIMPLE_UI=Object.freeze({version:'result-simple-ui-v3-scope-render-sync',regionName,validScope,sameScope});
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(typeof window!=='undefined'?window:globalThis);
