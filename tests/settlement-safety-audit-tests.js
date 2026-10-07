@@ -149,5 +149,11 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   assert(pipelineSource.includes('function settleScope(input)'));
   assert(pipelineSource.includes('scopeSettlementQueues.set(key, tracked)'));
 
+  assert(ui.includes('let reportLoadEpoch = 0'),'report loader must have stale-request epoch guard');
+  assert(ui.includes('const epoch = ++reportLoadEpoch'));
+  assert(ui.includes('epoch === reportLoadEpoch'));
+  assert(ui.includes("String($('reportPartner').value || '') === partnerId"));
+  assert(ui.includes("String($('reportDate').value || '') === date"));
+
   console.log('settlement-safety-audit-tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
