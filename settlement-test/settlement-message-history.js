@@ -232,6 +232,11 @@
         setStatus('Đang hủy tin và tính lại phạm vi…', 'warn');
         try {
           const result = await pipeline.cancelMessage(id);
+          if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+            global.dispatchEvent(new global.CustomEvent('kts:settlement-message-activity-changed', { detail:{ scope:{
+              business_date:String(row.message.business_date || ''), region:String(row.message.region || '').toLowerCase()
+            }}}));
+          }
           setStatus(result.settlement && result.settlement.status === 'empty' ? 'Đã hủy tin. Phạm vi hiện không còn tin đang tính.' : 'Đã hủy tin và tính lại phạm vi.', 'ok');
           await refresh();
         } catch (error) { setStatus(`Hủy tin lỗi: ${String(error && error.message || error)}`, 'err'); }
@@ -241,6 +246,12 @@
         setStatus('Đang khôi phục tin và tính lại phạm vi…', 'warn');
         try {
           await pipeline.restoreMessage(id);
+          const restored = rows.find(x => x.message.id === id);
+          if (restored && typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+            global.dispatchEvent(new global.CustomEvent('kts:settlement-message-activity-changed', { detail:{ scope:{
+              business_date:String(restored.message.business_date || ''), region:String(restored.message.region || '').toLowerCase()
+            }}}));
+          }
           setStatus('Đã khôi phục tin và tính lại phạm vi.', 'ok');
           await refresh();
         } catch (error) { setStatus(`Khôi phục tin lỗi: ${String(error && error.message || error)}`, 'err'); }
