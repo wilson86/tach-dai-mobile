@@ -30,6 +30,14 @@
       (settlements || []).find(s => scopeMatch(s, scope)) || null;
   }
 
+  function friendlyReason(reason) {
+    const text = String(reason || '');
+    if (text.includes('NO_CONFIG_FOR_BUSINESS_DATE')) return 'Chưa có thiết lập giá cho ngày này.';
+    if (text.includes('KQXS_NOT_AVAILABLE')) return 'Chưa có kết quả xổ số cho ngày này.';
+    if (text.startsWith('PENDING_PARSER:')) return 'Có tin chưa đọc được cú pháp.';
+    return text;
+  }
+
   function deriveState(message, settlement) {
     if (!message) return { code: 'UNKNOWN', label: 'Không rõ', kind: 'warn' };
     if (String(message.status || '') === 'cancelled') {
@@ -39,7 +47,7 @@
       return { code: 'PARSER_ERROR', label: 'Lỗi parser', kind: 'err' };
     }
     if (settlement && settlement.scope_status === 'blocked') {
-      return { code: 'BLOCKED', label: 'Bị chặn', kind: 'err' };
+      return { code: 'BLOCKED', label: 'Chưa tính', kind: 'err' };
     }
     if (settlement && settlement.scope_status === 'provisional') {
       return { code: 'PROVISIONAL', label: 'Tạm tính', kind: 'warn' };
@@ -60,7 +68,7 @@
       .map(message => {
         const settlement = settlementForMessage(message, settlements);
         const state = deriveState(message, settlement);
-        const blocked = settlement && Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons : [];
+        const blocked = settlement && Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.map(friendlyReason) : [];
         return { message, settlement, state, blocked_reasons: blocked };
       });
   }
@@ -79,7 +87,7 @@
 
     let state = { code: 'WAITING_RESULT', label: 'CHỜ KQXS', kind: 'warn' };
     if (!active.length) state = { code: 'EMPTY', label: 'CHƯA CÓ TIN ĐANG TÍNH', kind: '' };
-    else if (parserErrors || (settlement && settlement.scope_status === 'blocked')) state = { code: 'BLOCKED', label: 'FAIL-CLOSED', kind: 'err' };
+    else if (parserErrors || (settlement && settlement.scope_status === 'blocked')) state = { code: 'BLOCKED', label: 'CHƯA TÍNH', kind: 'err' };
     else if (!resultAvailable) state = { code: 'WAITING_RESULT', label: 'CHỜ KQXS', kind: 'warn' };
     else if (!resultComplete || (settlement && settlement.scope_status === 'provisional')) state = { code: 'PROVISIONAL', label: 'TẠM TÍNH', kind: 'warn' };
     else if (comparison === 'MATCH_EXACT') state = { code: 'MATCH_EXACT', label: 'KHỚP EXACT', kind: 'ok' };
@@ -103,7 +111,7 @@
         refund_amount: num(result.refund_amount), final_net: finalNet,
         direction: finalNet > 0 ? 'THU' : finalNet < 0 ? 'BÙ' : 'HÒA'
       },
-      blocked_reasons: settlement && Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.slice() : []
+      blocked_reasons: settlement && Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.map(friendlyReason) : []
     };
   }
 
@@ -263,7 +271,7 @@
   }
 
   global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
-    version: 'message-history-v3-live-scope', scopeMatch, settlementForScope, deriveState, buildRows, buildScopeSummary
+    version: 'message-history-v4-consumer-reasons', scopeMatch, settlementForScope, friendlyReason, deriveState, buildRows, buildScopeSummary
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();

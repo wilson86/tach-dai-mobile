@@ -21,7 +21,7 @@ const settlements = [
   { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
-assert.strictEqual(H.version, 'message-history-v3-live-scope');
+assert.strictEqual(H.version, 'message-history-v4-consumer-reasons');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -45,7 +45,8 @@ assert.strictEqual(blockedSummary.counts.cancelled, 1);
 assert.strictEqual(blockedSummary.counts.parser_errors, 1);
 assert.strictEqual(blockedSummary.state.code, 'BLOCKED');
 assert.strictEqual(blockedSummary.kqxs.label, 'ĐÃ XÁC MINH');
-assert.deepStrictEqual(Array.from(blockedSummary.blocked_reasons), ['PENDING_PARSER:m2']);
+assert.deepStrictEqual(Array.from(blockedSummary.blocked_reasons), ['Có tin chưa đọc được cú pháp.']);
+assert.strictEqual(H.friendlyReason('NO_CONFIG_FOR_BUSINESS_DATE'),'Chưa có thiết lập giá cho ngày này.');
 
 const goodMessages = [messages[0], messages[2]];
 const exactSettlement = [{
