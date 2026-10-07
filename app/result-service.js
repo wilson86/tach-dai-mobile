@@ -85,11 +85,15 @@
     const coverageComplete = stationCoverage(expectedStationCodes, stations);
     const complete = coverageComplete && stations.every(s => s.complete);
     const status = complete ? 'complete' : 'partial';
-    const verificationStatus = normalizeVerification(input, complete);
-    const verified = complete && verificationStatus === 'verified';
     const verificationSources = Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [];
     const verificationReason = input.verification_reason == null ? null : String(input.verification_reason);
     const verificationConflicts = Array.isArray(input.verification_conflicts) ? input.verification_conflicts.map(String) : [];
+    let verificationStatus = normalizeVerification(input, complete);
+    const distinctVerificationSources = new Set(verificationSources.map(x => String(x || '').trim()).filter(Boolean));
+    if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || verificationConflicts.length > 0)) {
+      verificationStatus = 'unverified';
+    }
+    const verified = complete && verificationStatus === 'verified';
     const core = {
       business_date: businessDate,
       region,
