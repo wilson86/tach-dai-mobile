@@ -29,6 +29,7 @@
   let pendingConfigBusinessDate = '';
   let savingMessage = false;
   let savingConfig = false;
+  let savingPartnerAction = false;
   let configDirty = false;
   let loadedConfigPartnerId = '';
   let loadedConfigDate = '';
@@ -106,6 +107,30 @@
   function currentPartnerId() { return $('partnerSelect').value || ''; }
   function selectedPartner() { return partners.find(p => p.id === currentPartnerId()) || null; }
 
+  function setPartnerActionBusy(value) {
+    savingPartnerAction = Boolean(value);
+    for (const id of ['addPartner','copyPartner','deactivatePartner','restorePartner']) {
+      const button = $(id);
+      if (button) button.disabled = savingPartnerAction;
+    }
+  }
+
+  function partnerActionPreflight(actionLabel) {
+    if (savingPartnerAction) {
+      status('partnerStatus', 'Một thao tác đối tác khác đang chạy. Chờ hoàn tất để tránh tạo/lặp thao tác.', 'warn');
+      return false;
+    }
+    if (savingConfig) {
+      status('partnerStatus', 'Thiết lập giá đang được lưu. Chờ hoàn tất rồi mới ' + actionLabel + '.', 'warn');
+      return false;
+    }
+    if (savingMessage) {
+      status('partnerStatus', 'Một tin đang được lưu/tính. Chờ hoàn tất rồi mới ' + actionLabel + '.', 'warn');
+      return false;
+    }
+    return true;
+  }
+
   function setConfigDirty(value) {
     configDirty = Boolean(value);
     const el = $('configDirtyStatus');
@@ -167,14 +192,21 @@
   }
 
   async function addPartner() {
+    if (!partnerActionPreflight('thêm đối tác')) return;
+    if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Thêm đối tác đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const name = $('partnerName').value.trim();
     if (!name) return status('partnerStatus', 'Nhập tên đối tác.', 'err');
+    setPartnerActionBusy(true);
     try {
       const saved = await store.savePartner({ name, role: $('partnerRole').value });
       $('partnerName').value = '';
       await refreshPartners(saved.id);
       status('partnerStatus', `Đã lưu ${saved.name}.`, 'ok');
-    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+    } catch (e) {
+      status('partnerStatus', String(e.message || e), 'err');
+    } finally {
+      setPartnerActionBusy(false);
+    }
   }
 
   function configCloneInput(cfg, partnerId) {
@@ -194,6 +226,7 @@
   }
 
   async function copyPartner() {
+    if (!partnerActionPreflight('tạo bản sao')) return;
     if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Tạo bản sao đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const source = selectedPartner();
     if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để copy.', 'err');
@@ -202,6 +235,7 @@
     if (entered == null) return;
     const name = String(entered || '').trim();
     if (!name) return status('partnerStatus', 'Tên bản copy không được để trống.', 'err');
+    setPartnerActionBusy(true);
     try {
       let cfg = null;
       const date = $('effectiveDate').value || today();
@@ -215,32 +249,48 @@
       status('partnerStatus', cfg
         ? `Đã copy ${source.name} → ${saved.name}, gồm cấu hình đang áp dụng. Không copy tin/KQXS/lịch sử tiền.`
         : `Đã copy ${source.name} → ${saved.name}. Nguồn chưa có cấu hình nên chỉ copy khách/chủ.`, 'ok');
-    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+    } catch (e) {
+      status('partnerStatus', String(e.message || e), 'err');
+    } finally {
+      setPartnerActionBusy(false);
+    }
   }
 
   async function deactivatePartner() {
+    if (!partnerActionPreflight('ngừng sử dụng đối tác')) return;
     if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Ngừng sử dụng đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const source = selectedPartner();
     if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để ngừng sử dụng.', 'err');
     const ok = !global.confirm || global.confirm(`Ngừng sử dụng ${source.name}?\n\nĐối tác sẽ chỉ bị ẩn khỏi danh sách đang dùng. Tin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
     if (!ok) return;
+    setPartnerActionBusy(true);
     try {
       await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:false, created_at:source.created_at });
       await refreshPartners();
       status('partnerStatus', `Đã ngừng sử dụng ${source.name}. Lịch sử cũ vẫn được giữ và có thể khôi phục.`, 'ok');
-    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+    } catch (e) {
+      status('partnerStatus', String(e.message || e), 'err');
+    } finally {
+      setPartnerActionBusy(false);
+    }
   }
 
   async function restorePartner() {
+    if (!partnerActionPreflight('khôi phục đối tác')) return;
     if (!confirmDiscardConfigChanges()) return status('partnerStatus', 'Khôi phục đã hủy; thay đổi thiết lập chưa lưu vẫn được giữ.', 'warn');
     const id = $('inactivePartnerSelect').value;
     const source = inactivePartners.find(p => p.id === id);
     if (!source) return status('partnerStatus', 'Không có khách/chủ đã ngừng sử dụng để khôi phục.', 'warn');
+    setPartnerActionBusy(true);
     try {
       const saved = await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:true, created_at:source.created_at });
       await refreshPartners(saved.id);
       status('partnerStatus', `Đã khôi phục ${saved.name}.`, 'ok');
-    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+    } catch (e) {
+      status('partnerStatus', String(e.message || e), 'err');
+    } finally {
+      setPartnerActionBusy(false);
+    }
   }
 
   function regionDisplayName(region) {
