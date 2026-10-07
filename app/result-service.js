@@ -124,10 +124,9 @@
   }
 
   function verificationPending(snapshot) {
-    if (!snapshot || snapshot.verification_status !== 'unverified') return false;
-    const sources = Array.isArray(snapshot.verification_sources) ? snapshot.verification_sources : [];
-    const reason = String(snapshot.verification_reason || '');
-    return sources.length >= 2 || reason.startsWith('SECONDARY_');
+    return Boolean(snapshot) &&
+      String(snapshot.verification_status || '').toLowerCase() === 'unverified' &&
+      snapshot.verified !== true;
   }
 
   function createPoller(options) {
