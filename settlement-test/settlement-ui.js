@@ -127,6 +127,19 @@
     ]).has(String(el.id || ''));
   }
 
+  function configEditorSignature() {
+    const draft = {
+      partner_id: currentPartnerId(),
+      effective_from_date: String($('effectiveDate').value || ''),
+      commission_type: String($('commissionType').value || ''),
+      region_terms: regionTermsFromForm(),
+      region_pricing: priceInputsToObject(),
+      mb_xien_234: Boolean($('allowMbXien').checked),
+      tinh_ui: Boolean($('allowUi').checked)
+    };
+    return typeof store.stableStringify === 'function' ? store.stableStringify(draft) : JSON.stringify(draft);
+  }
+
   async function refreshPartners(preferId) {
     const allPartners = await store.getAll(store.STORES.partners);
     partners = allPartners.filter(p => p.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
@@ -438,6 +451,8 @@
     if (savingConfig) return status('configStatus', 'Cấu hình trước đang được lưu. Vui lòng chờ hoàn tất.', 'warn');
     savingConfig = true;
     const originalLabel = button ? button.textContent : '';
+    const saveDraftSignature = configEditorSignature();
+    const savePartnerName = selectedPartner() ? selectedPartner().name : partnerId;
     if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
     try {
       const checked = configValidation.validate({
@@ -460,10 +475,18 @@
         region_pricing: checked.region_pricing
       });
       const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, effective);
-      loadedConfigPartnerId = partnerId;
-      loadedConfigDate = effective;
-      setConfigDirty(false);
-      status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.`, 'ok');
+      const sameConfigView =
+        currentPartnerId() === partnerId &&
+        String($('effectiveDate').value || '') === effective &&
+        configEditorSignature() === saveDraftSignature;
+      if (sameConfigView) {
+        loadedConfigPartnerId = partnerId;
+        loadedConfigDate = effective;
+        setConfigDirty(false);
+      }
+      status('configStatus',
+        `Đã lưu v${cfg.version} cho ${savePartnerName}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.${sameConfigView ? '' : ' Bạn đã đổi đối tác/ngày hoặc sửa tiếp; màn hình hiện tại không bị đánh dấu đã lưu.'}`,
+        sameConfigView ? 'ok' : 'warn');
     } catch (e) {
       status('configStatus', String(e.message || e), 'err');
     } finally {
