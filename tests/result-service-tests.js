@@ -166,7 +166,7 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
   await poller.runOnce();
   assert.strictEqual(poller.getState().running, false);
   assert.strictEqual(poller.getState().complete_confirmations, 2);
-  assert(states.includes('complete'));
+  assert(states.includes('verified'));
 
   const conflictStates = [];
   const conflictPoller = R.createPoller({
