@@ -11,6 +11,11 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const R = sandbox.globalThis.KTS_SETTLEMENT_REPORT;
 
+function fullPrizes(region,prefix){
+  const counts=region==='mb'?{G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1}:{G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1};
+  return Object.fromEntries(Object.entries(counts).map(([k,n])=>[k,Array.from({length:n},(_,i)=>String(prefix)+'-'+k+'-'+String(i+1))]));
+}
+
 const report = R.buildDailyPartnerReport({
   partner: { id: 'hien', name: 'Hiền', role: 'customer' },
   business_date: '2026-10-04',
@@ -127,7 +132,7 @@ const kqxsGateReport = R.buildDailyPartnerReport({
   partner:{id:'kg',name:'KQXS Gate',role:'customer'},business_date:'2026-10-06',messages_by_id:{},
   settlements:[
     {id:'kg-mn',partner_id:'kg',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
-     lottery_result_snapshot:{complete:true,verification_status:'verified',verified:true,verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt'}],verification_conflicts:[]},
+     lottery_result_snapshot:{region:'mn',complete:true,verification_status:'verified',verified:true,verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt',prizes:fullPrizes('mn','bt')}],verification_conflicts:[]},
      result_snapshot:{total_xac:10,total_qua_co:8,total_payout:0,refund_amount:0,final_net:8}},
     {id:'kg-mb',partner_id:'kg',business_date:'2026-10-06',region:'mb',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
      lottery_result_snapshot:{complete:true,verification_status:'unverified',verified:false},
@@ -171,7 +176,12 @@ const legacyWeakVerified={
 };
 assert.strictEqual(R.kqxsVerificationStatus(legacyWeakVerified),'unverified','legacy one-source verified flag must not pass close gate');
 const legacyStrongVerified={
-  lottery_result_snapshot:{complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['mb'],stations:[{code:'mb'}]}
+  lottery_result_snapshot:{region:'mb',complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['mb'],stations:[{code:'mb',prizes:fullPrizes('mb','mb')}]}
 };
 assert.strictEqual(R.kqxsVerificationStatus(legacyStrongVerified),'verified');
+const legacyIncompletePrizeVerified={
+  region:'mn',
+  lottery_result_snapshot:{region:'mn',complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['bt'],stations:[{code:'bt',prizes:{G8:['10']}}]}
+};
+assert.strictEqual(R.kqxsVerificationStatus(legacyIncompletePrizeVerified),'unverified','legacy complete flag with missing prize rows must not pass close gate');
 console.log('settlement-report-tests: PASS');
