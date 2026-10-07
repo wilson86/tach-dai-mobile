@@ -272,8 +272,15 @@
     const date = doc.getElementById('reportDate');
     if (date) date.addEventListener('change', refresh);
     if (typeof global.addEventListener === 'function') {
-      global.addEventListener('kts:auto-result-recalculated', () => { if (pane.classList.contains('active')) refresh().catch(() => {}); });
-      global.addEventListener('kts:shadow-saved', () => { if (pane.classList.contains('active')) refresh().catch(() => {}); });
+      for (const eventName of [
+        'kts:auto-result-recalculated',
+        'kts:settlement-message-saved',
+        'kts:settlement-message-activity-changed',
+        'kts:settlement-config-recalculated',
+        'kts:shadow-saved'
+      ]) {
+        global.addEventListener(eventName, () => { if (pane.classList.contains('active')) refresh().catch(() => {}); });
+      }
     }
     for (const btn of doc.querySelectorAll('.nav button[data-pane="report"]')) btn.addEventListener('click', refresh);
   }
