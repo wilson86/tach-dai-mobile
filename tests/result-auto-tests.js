@@ -55,6 +55,20 @@ function fixture() {
     assert.strictEqual(manager.stopScope({ business_date: '2026-09-22', region: 'mb' }), true);
   }
 
+  {
+    const f = fixture();
+    const manager = A.createManager(Object.assign({}, f, { today: () => '2026-10-06' }));
+    await manager.ensureScope({ business_date: '2026-10-06', region: 'mn' });
+    const snapshot = { business_date:'2026-10-06', region:'mn', complete:true, fingerprint:'changed-kqxs' };
+    f.created[0].options.onUpdate(snapshot, { changed:true, previous:{ fingerprint:'old-kqxs' } });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    assert.strictEqual(f.recalcs.length, 1, 'changed KQXS update must recalculate');
+    assert.strictEqual(f.recalcs[0].business_date, '2026-10-06');
+    assert.strictEqual(f.recalcs[0].region, 'mn');
+    assert.strictEqual(f.recalcs[0].result_snapshot, snapshot);
+    manager.stopAll();
+  }
+
   assert.strictEqual(A.validScope({ business_date: '2026-10-06', region: 'mt' }), true);
   assert.strictEqual(A.validScope({ business_date: 'bad', region: 'mt' }), false);
   assert.strictEqual(A.normalizeViewMode('date'), 'date');
