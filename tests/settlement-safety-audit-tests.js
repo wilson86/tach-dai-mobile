@@ -88,6 +88,8 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   assert(ui.includes('Intentionally retyping/pasting the same line after this completes still'));
   assert(ui.includes('const saveScope = Object.freeze'), 'save must freeze partner/date/region at click time');
   assert(ui.includes('const saveDraftSignature = configEditorSignature()'), 'config save must snapshot the editor before async work');
+  assert(ui.includes('tránh tin dùng nhầm bảng giá'), 'config save must refuse while a message is being saved');
+  assert(ui.includes('tin dùng đúng bảng giá'), 'message save must refuse while config is being saved');
   assert(ui.includes('configEditorSignature() === saveDraftSignature'), 'late config completion must not clear a changed editor');
   assert(ui.includes('business_date: saveScope.business_date'));
   assert(ui.includes('region: saveScope.region'));
