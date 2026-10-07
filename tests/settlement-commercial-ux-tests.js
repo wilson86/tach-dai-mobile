@@ -59,4 +59,5 @@ assert(ui.includes("kts:settlement-config-recalculated"));
 assert(ui.includes("kts:settlement-message-activity-changed"));
 assert(ui.includes('refreshVisiblePartnerReport'));
 assert(ui.includes("document.querySelectorAll('.nav button[data-pane=\"report\"]')"));
+assert(ui.includes('reportLoadEpoch'));
 console.log('settlement-commercial-ux-tests: PASS');
