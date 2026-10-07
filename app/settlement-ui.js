@@ -486,6 +486,12 @@
     if (savingMessage) return status('messageStatus', 'Tin trước đang được lưu. Chờ hoàn tất để tránh gửi trùng.', 'warn');
 
     const businessDate = $('messageDate').value;
+    const region = String($('messageRegion').value || '').toLowerCase();
+    const saveScope = Object.freeze({ partner_id: partnerId, business_date: businessDate, region });
+    const sameSaveScope = () =>
+      currentPartnerId() === saveScope.partner_id &&
+      String($('messageDate').value || '') === saveScope.business_date &&
+      String($('messageRegion').value || '').toLowerCase() === saveScope.region;
     try {
       await store.resolveConfigForDate(partnerId, businessDate);
       setMissingConfigAction(false, '', null, businessDate);
@@ -510,8 +516,8 @@
     try {
       const outcome = await pipeline.parseAndSaveMessage({
         partner_id: partnerId,
-        business_date: $('messageDate').value,
-        region: $('messageRegion').value,
+        business_date: saveScope.business_date,
+        region: saveScope.region,
         raw_text: raw,
         parser_provider: parserProvider
       });
@@ -521,14 +527,16 @@
         return outcome;
       }
 
-      renderParsedPreview(outcome.message);
+      const editorStillMatches = sameSaveScope() && String($('messageText').value || '').trim() === raw;
+      if (editorStillMatches) renderParsedPreview(outcome.message);
+      else renderParsedPreview(null);
 
       // Start automatic KQXS tracking only after a canonical message is durable.
       // Missing config / parser errors never create a background polling job.
       if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
         global.dispatchEvent(new global.CustomEvent('kts:settlement-message-saved', { detail: {
           message_id: outcome.message && outcome.message.id,
-          scope: { business_date: businessDate, region: String($('messageRegion').value || '').toLowerCase() }
+          scope: { business_date: saveScope.business_date, region: saveScope.region }
         }}));
       }
 
@@ -536,11 +544,13 @@
       // so a fast second tap cannot accidentally create another identical bet.
       // Intentionally retyping/pasting the same line after this completes still
       // creates a new message, because identical real bets are valid business data.
-      $('messageText').value = '';
-      $('messageText').focus();
+      if (editorStillMatches) {
+        $('messageText').value = '';
+        $('messageText').focus();
+      }
 
       if (outcome.status === 'parsed_waiting_result') {
-        status('messageStatus', `Đã parse tin ${outcome.message.id}. Chờ KQXS trước khi tính tiền.`, 'warn');
+        status('messageStatus', `Đã parse tin ${outcome.message.id} cho ${saveScope.region.toUpperCase()} ${viDate(saveScope.business_date)}. Chờ KQXS trước khi tính tiền.${editorStillMatches ? '' : ' Bạn đã đổi phạm vi hoặc ô nhập; nội dung hiện tại được giữ nguyên.'}`, 'warn');
         return outcome;
       }
       if (outcome.status === 'blocked') {
@@ -548,7 +558,7 @@
         status('messageStatus', reason.includes('NO_CONFIG') ? 'Thiếu thiết lập giá cho ngày này. Mở Thiết lập để kiểm tra.' : 'Tin chưa thể tính. Kiểm tra phần cảnh báo bên dưới.', 'err');
         return outcome;
       }
-      status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.`, outcome.status === 'provisional' ? 'warn' : 'ok');
+      status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} cho ${saveScope.region.toUpperCase()} ${viDate(saveScope.business_date)} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.${editorStillMatches ? '' : ' Bạn đã đổi phạm vi hoặc ô nhập; nội dung hiện tại được giữ nguyên.'}`, outcome.status === 'provisional' ? 'warn' : 'ok');
       return outcome;
     } catch (e) {
       status('messageStatus', String(e.message || e), 'err');
