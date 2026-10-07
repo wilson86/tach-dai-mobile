@@ -121,3 +121,21 @@ assert.strictEqual(allRegions.totals.payout,6);
 assert.strictEqual(allRegions.totals.refund_amount,3);
 assert.strictEqual(allRegions.totals.final_net,39);
 console.log('settlement-report-tests: PASS');
+
+
+const kqxsGateReport = R.buildDailyPartnerReport({
+  partner:{id:'kg',name:'KQXS Gate',role:'customer'},business_date:'2026-10-06',messages_by_id:{},
+  settlements:[
+    {id:'kg-mn',partner_id:'kg',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+     lottery_result_snapshot:{complete:true,verification_status:'verified',verified:true},
+     result_snapshot:{total_xac:10,total_qua_co:8,total_payout:0,refund_amount:0,final_net:8}},
+    {id:'kg-mb',partner_id:'kg',business_date:'2026-10-06',region:'mb',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+     lottery_result_snapshot:{complete:true,verification_status:'unverified',verified:false},
+     result_snapshot:{total_xac:20,total_qua_co:16,total_payout:0,refund_amount:0,final_net:16}}
+  ]
+});
+assert.strictEqual(kqxsGateReport.kqxs_verified,false,'one unverified KQXS region must keep partner unverified');
+assert.strictEqual(kqxsGateReport.kqxs_conflict,false);
+assert.strictEqual(kqxsGateReport.regions.find(x=>x.region==='mn').kqxs_verified,true);
+assert.strictEqual(kqxsGateReport.regions.find(x=>x.region==='mb').kqxs_verified,false);
+assert.strictEqual(R.kqxsVerificationStatus({lottery_result_snapshot:{verification_status:'conflict'}}),'conflict');
