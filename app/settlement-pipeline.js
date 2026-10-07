@@ -14,7 +14,7 @@
   function scopeId(partnerId, businessDate, region) {
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
-  function isCancelled(message) { return String(message && message.status || '') === 'cancelled'; }
+  function isCancelled(message) { return String(message && message.status || '').toLowerCase() === 'cancelled'; }
 
   function zeroResult(reason) {
     return {
@@ -303,7 +303,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v4-scope-safety',
+    version: 'settlement-pipeline-v5-cancel-status-normalized',
     scopeId,
     isCancelled,
     findScopeMessages,
