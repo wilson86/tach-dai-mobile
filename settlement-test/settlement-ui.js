@@ -675,10 +675,15 @@
     if (button) { button.disabled = true; button.textContent = 'Đang kiểm tra…'; }
     try {
       await store.resolveConfigForDate(partnerId, businessDate);
-      setMissingConfigAction(false, '', null, businessDate);
+      if (sameSaveScope()) setMissingConfigAction(false, '', null, businessDate);
     } catch (e) {
       if (String(e.message || e).includes('NO_CONFIG')) {
         const template = await nearestConfigTemplate(partnerId, businessDate);
+        if (!sameSaveScope()) {
+          status('messageStatus', 'Đối tác/ngày/miền đã đổi trong lúc kiểm tra bảng giá. Tin cũ chưa được lưu.', 'warn');
+          releaseMessageSave();
+          return null;
+        }
         setMissingConfigAction(true, template
           ? `Có bảng giá từ ${viDate(template.effective_from_date)}. Bạn có thể áp dụng cho ngày ${viDate(businessDate)} rồi tính ngay.`
           : 'Đối tác này chưa có bảng giá nào.', template, businessDate);
