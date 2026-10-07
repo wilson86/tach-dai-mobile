@@ -119,5 +119,35 @@ function fakeStore(messages) {
   const xout = await xctx.KTS_SETTLEMENT_PIPELINE.settleScope({ partner_id: 'p1', business_date: '2026-09-22', region: 'mb' });
   assert.strictEqual(xout.status, 'blocked');
   assert.match(xout.reason, /MB_XIEN_234_NOT_ALLOWED/);
+
+  // Background recalculation started before cancel must not overwrite the final cancelled scope.
+  {
+    const raceStore=fakeStore([{ id:'race1', partner_id:'p1', business_date:'2026-09-22', region:'mb', raw_text:'92 b 1n', status:'parsed_waiting_result', canonical_payload:{region:'mb',legs:[{code:'2CB',values:['92'],stake:'1'}]} }]);
+    const baseResolve=raceStore.resolveConfigForDate.bind(raceStore);
+    let releaseFirst;
+    const firstBlocked=new Promise(resolve=>{releaseFirst=resolve;});
+    let firstEnteredResolve;
+    const entered=new Promise(resolve=>{firstEnteredResolve=resolve;});
+    let resolveCalls=0;
+    raceStore.resolveConfigForDate=async(...args)=>{
+      resolveCalls++;
+      if(resolveCalls===1){ firstEnteredResolve(); await firstBlocked; }
+      return baseResolve(...args);
+    };
+    const raceCtx=loadContext(raceStore);
+    const RP=raceCtx.KTS_SETTLEMENT_PIPELINE;
+    assert.strictEqual(RP.version,'settlement-pipeline-v6-scope-queue');
+    const background=RP.settleScope({partner_id:'p1',business_date:'2026-09-22',region:'mb'});
+    await entered;
+    const cancel=RP.cancelMessage('race1');
+    releaseFirst();
+    await Promise.all([background,cancel]);
+    assert.strictEqual(raceStore.state.messages.find(x=>x.id==='race1').status,'cancelled');
+    assert.strictEqual(raceStore.state.settlements.length,1);
+    assert.strictEqual(raceStore.state.settlements[0].scope_status,'empty','queued cancel recalculation must be final');
+    assert.deepStrictEqual(Array.from(raceStore.state.settlements[0].message_ids),[]);
+    assert.strictEqual(raceStore.state.settlements[0].result_snapshot.total_xac,0);
+  }
+
   console.log('settlement pipeline tests PASS');
 })().catch(err => { console.error(err); process.exit(1); });
