@@ -40,6 +40,11 @@
   function sameScope(a, b) {
     return Boolean(a && b && String(a.business_date) === String(b.business_date) && String(a.region).toLowerCase() === String(b.region).toLowerCase());
   }
+  function pendingScopeNeedsResume(scope, snapshot, todayDate) {
+    if (!validScope(scope)) return false;
+    if (String(scope.business_date) === String(todayDate || localToday())) return true;
+    return !(snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified'));
+  }
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
   }
@@ -287,7 +292,7 @@
       for (const scope of remembered) {
         if (!active.has(scopeKey(scope))) continue;
         const snapshot = await store.get(store.STORES.results, scopeKey(scope));
-        if (snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified')) continue;
+        if (!pendingScopeNeedsResume(scope, snapshot, localToday())) continue;
         resume.push(scope);
       }
       writePendingScopes(resume);
@@ -508,13 +513,14 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v8-resume-safe',
+    version: 'result-auto-v9-stability-resume-safe',
     VIEW_MODE_KEY,
     PENDING_SCOPES_KEY,
     readPendingScopes,
     writePendingScopes,
     rememberPendingScope,
     forgetPendingScope,
+    pendingScopeNeedsResume,
     createManager,
     validScope,
     normalizeViewMode,
