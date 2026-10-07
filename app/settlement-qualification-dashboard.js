@@ -39,10 +39,18 @@
     const bad_scopes = [];
     for (const scope of scopes) {
       const status = String(scope && scope.result_verification_status || 'unverified').toLowerCase();
-      if (status === 'verified') verified += 1;
+      const evidenceValid = scope && scope.result_verification_evidence_valid === true;
+      if (status === 'verified' && evidenceValid) verified += 1;
       else {
         if (status === 'conflict') conflict += 1; else unverified += 1;
-        bad_scopes.push({ partner_id:String(scope.partner_id || ''), business_date:String(scope.business_date || ''), region:String(scope.region || '').toLowerCase(), verification_status:status });
+        bad_scopes.push({
+          partner_id:String(scope && scope.partner_id || ''),
+          business_date:String(scope && scope.business_date || ''),
+          region:String(scope && scope.region || '').toLowerCase(),
+          verification_status:status,
+          evidence_valid:evidenceValid,
+          reason:String(scope && scope.result_verification_reason || (status === 'verified' ? 'KQXS_STRICT_EVIDENCE_MISSING' : 'KQXS_NOT_VERIFIED'))
+        });
       }
     }
     return { total:scopes.length, verified, conflict, unverified, bad_scopes, met:scopes.length > 0 && verified === scopes.length };
@@ -267,7 +275,7 @@
   }
 
   global.KTS_SETTLEMENT_QUALIFICATION = Object.freeze({
-    version:'settlement-qualification-dashboard-v3-live-parser-backend',
+    version:'settlement-qualification-dashboard-v4-strict-kqxs-evidence',
     normalizeWindow, messageInWindow, kqxsVerificationGate, parserProvenanceGate, parserBackendGate,
     unverifiedFeatureGate, candidateSummary, combineQualification, runQualification
   });
