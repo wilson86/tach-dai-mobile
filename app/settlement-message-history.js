@@ -121,7 +121,7 @@
 
   function buildScopeSummary(scope, messages, settlements, resultSnapshot) {
     const scoped = (messages || []).filter(m => scopeMatch(m, scope));
-    const active = scoped.filter(m => String(m.status || '') !== 'cancelled');
+    const active = scoped.filter(m => String(m.status || '').toLowerCase() !== 'cancelled');
     const cancelled = scoped.length - active.length;
     const parserErrors = active.filter(m => m.parser_error || String(m.status || '') === 'parser_error').length;
     const settlement = settlementForScope(scope, settlements);
