@@ -521,9 +521,14 @@
     const incomingPartners = incoming[STORES.partners];
     const existingPartners = replace ? [] : (existing[STORES.partners] || []);
     const partnerIds = new Set([...existingPartners, ...incomingPartners].map(row => String(row && row.id || '')).filter(Boolean));
+    const existingPartnerMap = new Map(existingPartners.map(row => [String(row && row.id || ''), row]));
     for (const row of incomingPartners) {
       if (!String(row.id || '')) throw new Error('IMPORT_PARTNER_ID_REQUIRED');
-      normalizePartner(row);
+      const normalized = normalizePartner(row);
+      const prior = existingPartnerMap.get(String(row.id));
+      if (prior && String(prior.role || '').toLowerCase() !== String(normalized.role || '').toLowerCase()) {
+        throw new Error('IMPORT_PARTNER_ROLE_COLLISION:' + String(row.id));
+      }
     }
 
     const requirePartner = (row, storeName) => {
@@ -540,6 +545,18 @@
       if (String(row.id) !== partnerId + ':v' + String(normalized.version)) throw new Error('IMPORT_CONFIG_ID_SCOPE_MISMATCH:' + String(row.id));
       const prior = existingMap(STORES.configs).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.configs + ':' + String(row.id));
+      if (prior) {
+        const priorNormalized = normalizeConfig(prior);
+        const configCore = value => ({
+          partner_id:value.partner_id, version:value.version, effective_from_date:value.effective_from_date,
+          region_pricing:value.region_pricing, region_terms:value.region_terms,
+          mb_xien_234:value.mb_xien_234, tinh_ui:value.tinh_ui,
+          commission_type:value.commission_type
+        });
+        if (stableStringify(configCore(priorNormalized)) !== stableStringify(configCore(normalized))) {
+          throw new Error('IMPORT_CONFIG_CONTENT_COLLISION:' + String(row.id));
+        }
+      }
     }
 
     const combinedMessages = new Map();
@@ -555,7 +572,21 @@
       }
       const prior = existingMap(STORES.messages).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.messages + ':' + String(row.id));
-      combinedMessages.set(String(row.id), row);
+      if (prior) {
+        const messageCore = value => ({
+          partner_id:String(value.partner_id || ''),
+          business_date:String(value.business_date || ''),
+          region:String(value.region || '').toLowerCase(),
+          raw_text:String(value.raw_text || ''),
+          canonical_payload:value.canonical_payload || null,
+          canonical_version:value.canonical_version == null ? null : String(value.canonical_version),
+          parser_error:value.parser_error == null ? null : String(value.parser_error)
+        });
+        if (stableStringify(messageCore(prior)) !== stableStringify(messageCore(row))) {
+          throw new Error('IMPORT_MESSAGE_CONTENT_COLLISION:' + String(row.id));
+        }
+      }
+      combinedMessages.set(String(row.id), prior || row);
     }
 
     for (const row of incoming[STORES.settlements]) {
