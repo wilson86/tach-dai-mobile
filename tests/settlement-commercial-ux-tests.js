@@ -40,3 +40,7 @@ console.log('settlement-commercial-ux-tests: PASS');
 assert(ui.includes('ĐÃ ĐỦ KẾT QUẢ · CHỜ XÁC MINH'),'complete fallback KQXS must remain unclosed until verification');
 assert(ui.includes('ĐÃ ĐỐI CHIẾU 2 NGUỒN'));
 assert(!ui.includes("snapshot.complete ? '<span class=\"tag ok\">ĐÃ CHỐT</span>'"),'complete alone must never render ĐÃ CHỐT');
+
+assert(ui.includes('KQXS chưa xác minh đủ 2 nguồn. Chưa dùng báo cáo này để chốt.'),'partner report must warn on unverified KQXS');
+assert(ui.includes('KQXS đang lệch giữa các nguồn. Không dùng báo cáo này để chốt tiền.'));
+assert(ui.includes('KQXS CHƯA XÁC MINH'));
