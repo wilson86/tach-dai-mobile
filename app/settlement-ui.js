@@ -458,6 +458,25 @@
     } catch (e) { status('configStatus', String(e.message || e), 'err'); }
   }
 
+  function renderParsedPreview(message) {
+    const host = $('messageParsedPreview');
+    if (!host) return;
+    if (!message || !message.canonical_payload) { host.innerHTML = ''; host.classList.add('hidden'); return; }
+    const history = global.KTS_SETTLEMENT_MESSAGE_HISTORY;
+    let summary = '';
+    if (history && typeof history.canonicalSummary === 'function') summary = history.canonicalSummary(message);
+    if (!summary) {
+      const legs = Array.isArray(message.canonical_payload.legs) ? message.canonical_payload.legs : [];
+      summary = legs.map(leg => {
+        const stations = Array.isArray(leg.station_codes) && leg.station_codes.length ? leg.station_codes.join('+').toUpperCase() + ' · ' : '';
+        const values = Array.isArray(leg.values) ? leg.values.join(' ') : '';
+        return `${stations}${values} ${String(leg.code || '')} · ${String(leg.stake || '')}n`;
+      }).filter(Boolean).join(' | ');
+    }
+    host.innerHTML = summary ? `<b>Hệ thống đã đọc:</b> ${esc(summary)}` : '';
+    host.classList.toggle('hidden', !summary);
+  }
+
   async function saveMessage() {
     const partnerId = currentPartnerId();
     const raw = $('messageText').value.trim();
@@ -486,6 +505,7 @@
     savingMessage = true;
     const originalLabel = button ? button.textContent : '';
     if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
+    renderParsedPreview(null);
     status('messageStatus', 'Đang chạy canonical parser…', '');
     try {
       const outcome = await pipeline.parseAndSaveMessage({
@@ -496,9 +516,12 @@
         parser_provider: parserProvider
       });
       if (outcome.status === 'parser_error') {
+        renderParsedPreview(null);
         status('messageStatus', `${friendlyParserError(outcome.error)} Tin lỗi được giữ trong lịch sử để kiểm tra và đang chặn phạm vi cho đến khi hủy/sửa.`, 'err');
         return outcome;
       }
+
+      renderParsedPreview(outcome.message);
 
       // Start automatic KQXS tracking only after a canonical message is durable.
       // Missing config / parser errors never create a background polling job.
