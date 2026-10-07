@@ -70,7 +70,13 @@
     if (num(counts.mismatch) > 0) reasons.push({ code:'MISMATCH', label:`${num(counts.mismatch)} đối tác đang lệch đối soát` });
     if (num(counts.display_only) > 0) reasons.push({ code:'DISPLAY_ONLY', label:`${num(counts.display_only)} đối tác cần kiểm tra thêm` });
     if (num(counts.unverified) > 0) reasons.push({ code:'UNVERIFIED', label:`${num(counts.unverified)} đối tác chưa đối soát` });
-    const allRegions = ((model && model.partners) || []).flatMap(report => Array.isArray(report.regions) ? report.regions : []);
+    const partnerRows = Array.isArray(model && model.partners) ? model.partners : [];
+    const allRegions = partnerRows.flatMap(report => Array.isArray(report.regions) ? report.regions : []);
+    const missingPartnerRegionEvidence = partners > 0 && (
+      partnerRows.length !== partners ||
+      partnerRows.some(report => !Array.isArray(report.regions) || report.regions.length === 0)
+    );
+    if (missingPartnerRegionEvidence) reasons.push({ code:'KQXS_EVIDENCE_MISSING', label:'Chưa đủ bằng chứng KQXS theo từng đối tác/miền để chốt ngày' });
     const kqxsConflict = allRegions.filter(region => region && region.kqxs_conflict === true).length;
     const kqxsPending = allRegions.filter(region => region && region.kqxs_verified === false && region.kqxs_conflict !== true).length;
     if (kqxsConflict > 0) reasons.push({ code:'KQXS_CONFLICT', label:`${kqxsConflict} miền có lệch giữa các nguồn KQXS` });
