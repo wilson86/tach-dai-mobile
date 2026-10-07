@@ -92,7 +92,7 @@ function fixture() {
   assert.strictEqual(A.userResultState({...verifiedSnapshot,verification_sources:['primary']}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
-  assert.strictEqual(A.version, 'result-auto-v10-discover-pending-scopes');
+  assert.strictEqual(A.version, 'result-auto-v11-stale-safe-view-requests');
   assert.strictEqual(A.PENDING_SCOPES_KEY, 'kts_settlement_pending_result_scopes_v1');
   assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},verifiedSnapshot,'2026-10-07',true),true,'remembered verified current-day scope must resume unfinished stability confirmations');
   assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},verifiedSnapshot,'2026-10-07',false),false,'discovered verified scope without pending marker must not restart on every reload');
@@ -130,5 +130,13 @@ function fixture() {
   assert(source.includes('rememberedKeys.has(key)'));
   assert(source.includes("String(m.status || '').toLowerCase() !== 'cancelled'"));
   assert(source.includes("kts:settlement-message-activity-changed"));
+  assert(source.includes('let storedRenderEpoch = 0'));
+  assert(source.includes('let selectedFetchEpoch = 0'));
+  assert(source.includes('let realtimeViewEpoch = 0'));
+  assert(source.includes('epoch === storedRenderEpoch && sameScope(scope, currentScope())'));
+  assert(source.includes('epoch === selectedFetchEpoch && sameScope(scope, currentScope())'));
+  assert(source.includes('epoch === realtimeViewEpoch'));
+  assert(source.includes('if (!stillCurrent()) return saved.snapshot || snapshot'));
+
   console.log('result-auto-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
