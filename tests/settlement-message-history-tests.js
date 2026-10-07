@@ -74,7 +74,8 @@ const waiting = H.buildScopeSummary(scope, [messages[0]], [], null);
 assert.strictEqual(waiting.state.code, 'WAITING_RESULT');
 assert.strictEqual(waiting.kqxs.label, 'CHƯA CÓ KQ');
 
-console.log('settlement-message-history-tests: PASS');
+
 
 const historySource=fs.readFileSync(path.join(__dirname,'..','app','settlement-message-history.js'),'utf8');
 assert(historySource.includes("kts:settlement-message-activity-changed"));
+console.log('settlement-message-history-tests: PASS');
