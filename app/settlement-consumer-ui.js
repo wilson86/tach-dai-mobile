@@ -72,6 +72,7 @@
     const el=doc&&doc.getElementById?doc.getElementById('configDirtyStatus'):null;
     return Boolean(el&&/Chưa lưu thay đổi/i.test(String(el.textContent||'')));
   }
+  function hasMessageDraft(value){ return Boolean(String(value||'').trim()); }
 
   function installSaveGuard(doc){
     const save=doc.getElementById('saveMessage');
@@ -166,10 +167,58 @@
       new global.MutationObserver(clean).observe(root,{childList:true,characterData:true,subtree:true});
     }
   }
+
+  function installMessageScopeGuard(doc){
+    const textarea=doc.getElementById('messageText');
+    const partner=doc.getElementById('partnerSelect');
+    const date=doc.getElementById('messageDate');
+    const region=doc.getElementById('messageRegion');
+    const context=doc.getElementById('workContext');
+    if(!textarea)return;
+
+    let badge=doc.getElementById('messageDraftBadge');
+    if(!badge&&context){
+      badge=doc.createElement('span');
+      badge.id='messageDraftBadge';
+      badge.className='tag warn hidden';
+      badge.textContent='Tin chưa lưu';
+      context.appendChild(badge);
+    }
+    function updateBadge(){ if(badge)badge.classList.toggle('hidden',!hasMessageDraft(textarea.value)); }
+    textarea.addEventListener('input',updateBadge);
+
+    function guard(control,label){
+      if(!control)return;
+      let previous=String(control.value||'');
+      control.addEventListener('focus',()=>{ previous=String(control.value||''); },true);
+      control.addEventListener('change',event=>{
+        const next=String(control.value||'');
+        if(next===previous){updateBadge();return;}
+        if(hasMessageDraft(textarea.value)){
+          const ok=!global.confirm||global.confirm(`Ô Tin gốc còn nội dung chưa lưu. Bạn có chắc muốn đổi ${label}?\n\nNếu tiếp tục, nội dung vẫn được giữ nhưng sẽ được tính cho phạm vi mới khi bấm “Lưu + tính”.`);
+          if(!ok){
+            control.value=previous;
+            if(event&&typeof event.preventDefault==='function')event.preventDefault();
+            if(event&&typeof event.stopImmediatePropagation==='function')event.stopImmediatePropagation();
+            updateBadge();
+            return;
+          }
+        }
+        previous=next;
+        updateBadge();
+      },true);
+    }
+    guard(partner,'khách/chủ');
+    guard(date,'ngày');
+    guard(region,'miền');
+    updateBadge();
+  }
+
   function installUnsavedGuard(doc){
     if(typeof global.addEventListener!=='function')return;
     global.addEventListener('beforeunload',event=>{
-      if(!hasUnsavedConfig(doc))return;
+      const text=doc.getElementById('messageText');
+      if(!hasUnsavedConfig(doc)&&!hasMessageDraft(text&&text.value))return;
       event.preventDefault();
       event.returnValue='';
     });
@@ -208,12 +257,13 @@
     installSaveGuard(doc);
     installSyntaxReview(doc);
     installLanguageCleanup(doc);
+    installMessageScopeGuard(doc);
     installUnsavedGuard(doc);
     update();
   }
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
-    version:'settlement-consumer-ui-v3-commercial-safety',
+    version:'settlement-consumer-ui-v4-draft-scope-guard',
     compatibility:Object.freeze({version:'settlement-consumer-ui-v1'}),
     CODE_LABELS,
     regionName,
@@ -222,7 +272,8 @@
     canonicalSummary,
     friendlyParserError,
     cleanUserText,
-    hasUnsavedConfig
+    hasUnsavedConfig,
+    hasMessageDraft
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',install,{once:true});
   else install();
