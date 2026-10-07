@@ -42,7 +42,7 @@
   }
   function pendingScopeNeedsResume(scope, snapshot, todayDate, wasRemembered) {
     if (!validScope(scope)) return false;
-    const verified = Boolean(snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified'));
+    const verified = snapshotVerified(snapshot);
     if (wasRemembered === true && String(scope.business_date) === String(todayDate || localToday())) return true;
     return !verified;
   }
@@ -58,6 +58,25 @@
     const mode = normalizeViewMode(value);
     try { if (global.localStorage) global.localStorage.setItem(VIEW_MODE_KEY, mode); } catch (_) {}
     return mode;
+  }
+  function snapshotVerified(snapshot) {
+    if (!snapshot || snapshot.complete !== true) return false;
+    const claimed = snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified';
+    if (!claimed) return false;
+    const sources = Array.isArray(snapshot.verification_sources)
+      ? new Set(snapshot.verification_sources.map(x => String(x || '').trim()).filter(Boolean))
+      : new Set();
+    const conflicts = Array.isArray(snapshot.verification_conflicts) ? snapshot.verification_conflicts : [];
+    const expected = Array.isArray(snapshot.expected_station_codes)
+      ? snapshot.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const actual = Array.isArray(snapshot.stations)
+      ? snapshot.stations.map(row => String(row && row.code || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    return sources.size >= 2 && conflicts.length === 0 &&
+      expected.length > 0 && new Set(expected).size === expected.length &&
+      new Set(actual).size === actual.length && actual.length === expected.length &&
+      expected.every(code => actual.includes(code));
   }
   function verificationConflict(snapshot) {
     return Boolean(snapshot && String(snapshot.verification_status || '').toLowerCase() === 'conflict');
@@ -94,7 +113,7 @@
   }
   function userResultState(snapshot) {
     if (verificationConflict(snapshot)) return { label:'CÓ LỆCH NGUỒN', kind:'err' };
-    if (snapshot && (snapshot.verified === true || snapshot.verification_status === 'verified')) return { label:'ĐÃ ĐỐI CHIẾU 2 NGUỒN', kind:'ok' };
+    if (snapshotVerified(snapshot)) return { label:'ĐÃ ĐỐI CHIẾU 2 NGUỒN', kind:'ok' };
     if (snapshot && snapshot.complete) return { label:'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU', kind:'warn' };
     return { label:'ĐANG CẬP NHẬT', kind:'live' };
   }
@@ -535,6 +554,7 @@
     createManager,
     validScope,
     normalizeViewMode,
+    snapshotVerified,
     verificationConflict,
     verificationDetails,
     regionLabel,
