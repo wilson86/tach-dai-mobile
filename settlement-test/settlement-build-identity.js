@@ -1,7 +1,7 @@
 (function(global){
   'use strict';
   const critical=Object.freeze({
-    'app/settlement-store.js':'df448b54165b54ad5c28a45cf58c48a50ed32fb0',
+    'app/settlement-store.js':'f91e3326d12ecca44e4a565dcf829b1006d6ceaf',
     'app/settlement-engine.js':'93471a5e809746a91a847b0e64b2bff09cdc0a37',
     'app/settlement-mb-rules.js':'01e7636d0ea0ab5dbbb2e51e0968a5c5e2f73081',
     'app/settlement-category-map.js':'5cbd0575ec451b6a6a5a351fbe67d1599fccfb4d',
@@ -12,9 +12,9 @@
     'app/settlement-pipeline.js':'5f961f75aa432ceac36b2b0ec8ef58a4cd0a3966',
     'app/settlement-pricing-copy.js':'622f9b5018922d9abf14f6ff04a390c8511b7b51',
     'app/settlement-config-validation.js':'288688bceea58cb884f10fe9a7e36d9415ad85c1',
-    'app/settlement-ui.js':'e43ef1f7c889da4390aa6d2e50b745725ef5f6d4',
+    'app/settlement-ui.js':'1fb1406747d5a5c7eaab7b3c6f3d35003145c77f',
     'app/settlement-backup-ui.js':'36f835fc9476c5c507b3596e0450d4df04be3884',
-    'app/sw.js':'b272e21f52c6a654a8bc9c84e2d5e92d3c412ba7',
+    'app/sw.js':'425653e09c5597193ac70ec7f43c55e5e5a8cf29',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
@@ -42,7 +42,7 @@
     'app/settlement-preproduction-review-session.js':'0c3c9d7b5aaef15c23d1d76ae57ce409bf565d0f',
     'app/settlement-preproduction-orchestrator.js':'15f77c2ec3c041d35a4fff7e787e76399e05bef1',
     'app/result-service.js':'a5f386c724cb8751a7082a90c49c17af50d2be05',
-    'app/result-provider.js':'ec6b7859a3f801fa8d1ef870da47beccd641add5',
+    'app/result-provider.js':'6fccc72b98a49a2f047d76d587e67bafaead0dfd',
     'app/result-auto.js':'ea85864dbee2be24ee2a3ca71eb2bde0a1269d2a'
   });
   global.KTS_SETTLEMENT_BUILD_IDENTITY=Object.freeze({version:'settlement-build-identity-v1',algorithm:'git-blob-sha1',critical_git_blobs:critical,business_engine_sha256:'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c'});
