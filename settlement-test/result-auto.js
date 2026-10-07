@@ -40,10 +40,11 @@
   function sameScope(a, b) {
     return Boolean(a && b && String(a.business_date) === String(b.business_date) && String(a.region).toLowerCase() === String(b.region).toLowerCase());
   }
-  function pendingScopeNeedsResume(scope, snapshot, todayDate) {
+  function pendingScopeNeedsResume(scope, snapshot, todayDate, wasRemembered) {
     if (!validScope(scope)) return false;
-    if (String(scope.business_date) === String(todayDate || localToday())) return true;
-    return !(snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified'));
+    const verified = Boolean(snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified'));
+    if (wasRemembered === true && String(scope.business_date) === String(todayDate || localToday())) return true;
+    return !verified;
   }
   function esc(v) {
     return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
@@ -283,16 +284,26 @@
 
     async function resumePendingScopes() {
       const remembered = readPendingScopes();
-      if (!remembered.length) return [];
+      const rememberedKeys = new Set(remembered.map(scopeKey));
       const allMessages = await store.getAll(store.STORES.messages);
-      const active = new Set(allMessages
-        .filter(m => String(m.status || '').toLowerCase() !== 'cancelled')
-        .map(m => `${String(m.business_date || '')}:${String(m.region || '').toLowerCase()}`));
+      const activeScopes = new Map();
+      for (const message of allMessages) {
+        if (String(message && message.status || '').toLowerCase() === 'cancelled') continue;
+        const scope = { business_date:String(message && message.business_date || ''), region:String(message && message.region || '').toLowerCase() };
+        if (validScope(scope)) activeScopes.set(scopeKey(scope), scope);
+      }
+      for (const scope of remembered) if (validScope(scope)) activeScopes.set(scopeKey(scope), scope);
+
       const resume = [];
-      for (const scope of remembered) {
-        if (!active.has(scopeKey(scope))) continue;
-        const snapshot = await store.get(store.STORES.results, scopeKey(scope));
-        if (!pendingScopeNeedsResume(scope, snapshot, localToday())) continue;
+      for (const [key, scope] of activeScopes) {
+        const hasActiveMessage = allMessages.some(message =>
+          String(message && message.status || '').toLowerCase() !== 'cancelled' &&
+          String(message && message.business_date || '') === scope.business_date &&
+          String(message && message.region || '').toLowerCase() === scope.region
+        );
+        if (!hasActiveMessage) continue;
+        const snapshot = await store.get(store.STORES.results, key);
+        if (!pendingScopeNeedsResume(scope, snapshot, localToday(), rememberedKeys.has(key))) continue;
         resume.push(scope);
       }
       writePendingScopes(resume);
@@ -513,7 +524,7 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v9-stability-resume-safe',
+    version: 'result-auto-v10-discover-pending-scopes',
     VIEW_MODE_KEY,
     PENDING_SCOPES_KEY,
     readPendingScopes,
