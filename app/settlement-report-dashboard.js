@@ -236,14 +236,23 @@
     if (date) date.addEventListener('change', refresh);
     const load = doc.getElementById('loadReport');
     if (load) load.addEventListener('click', () => setTimeout(refresh, 0));
-    if (typeof global.addEventListener === 'function') global.addEventListener('kts:auto-result-recalculated', () => {
-      if (pane.classList.contains('active')) refresh().catch(() => {});
-    });
+    if (typeof global.addEventListener === 'function') {
+      for (const eventName of [
+        'kts:auto-result-recalculated',
+        'kts:settlement-message-saved',
+        'kts:settlement-message-activity-changed',
+        'kts:settlement-config-recalculated'
+      ]) {
+        global.addEventListener(eventName, () => {
+          if (pane.classList.contains('active')) refresh().catch(() => {});
+        });
+      }
+    }
     for (const button of doc.querySelectorAll('.nav button[data-pane="report"]')) button.addEventListener('click', refresh);
   }
 
   global.KTS_SETTLEMENT_REPORT_DASHBOARD = Object.freeze({
-    version:'settlement-report-dashboard-v3-readiness', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown, buildReadiness
+    version:'settlement-report-dashboard-v4-live-refresh', shadowLabel, shadowKind, dayStatus, direction, buildBreakdown, buildReadiness
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, {once:true});
   else install();
