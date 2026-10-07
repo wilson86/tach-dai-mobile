@@ -220,7 +220,15 @@
             updateBadge();
             return;
           }
-          draftOrigin=current();
+          const finalizeScope=()=>{
+            previous=String(control.value||'');
+            draftOrigin=current();
+            updateBadge();
+          };
+          if(typeof global.setTimeout==='function')global.setTimeout(finalizeScope,0);
+          else finalizeScope();
+          updateBadge();
+          return;
         }
         previous=next;
         updateBadge();
@@ -296,7 +304,7 @@
   }
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
-    version:'settlement-consumer-ui-v5-programmatic-scope-guard',
+    version:'settlement-consumer-ui-v6-deferred-draft-scope',
     compatibility:Object.freeze({version:'settlement-consumer-ui-v1'}),
     CODE_LABELS,
     regionName,
