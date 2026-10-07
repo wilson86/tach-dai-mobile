@@ -113,7 +113,7 @@
         const scope=info.scope||{};
         if(validScope(scope)&&scope.business_date===resultDate.value&&String(scope.region).toLowerCase()===resultRegion.value)updateLabel(scope);
         if(info.state==='error'&&/KQXS_HTTP_404/.test(String(info.error||''))&&/github\.io$/i.test(String(global.location&&global.location.hostname||''))){
-          const msg='Bản test public chưa nối backend KQXS. Cơ chế tự cập nhật đã chạy; khi backend được nối hệ thống sẽ tự lấy xổ, không cần thao tác.';
+          const msg='Bản thử nghiệm chưa kết nối máy chủ kết quả. Khi kết nối xong, hệ thống sẽ tự cập nhật; bạn không cần thao tác thêm.';
           const status=doc.getElementById('resultStatus');if(status){status.textContent=msg;status.className='status warn';}
           const auto=doc.getElementById('autoResultStatus');if(auto){auto.textContent=msg;auto.className='status warn';}
         }
@@ -127,6 +127,6 @@
     applyTech();
   }
 
-  global.KTS_RESULT_SIMPLE_UI=Object.freeze({version:'result-simple-ui-v1',regionName,validScope});
+  global.KTS_RESULT_SIMPLE_UI=Object.freeze({version:'result-simple-ui-v2-consumer',regionName,validScope});
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })(typeof window!=='undefined'?window:globalThis);

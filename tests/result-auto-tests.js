@@ -61,6 +61,14 @@ function fixture() {
   assert.strictEqual(A.normalizeViewMode('realtime'), 'realtime');
   assert.strictEqual(A.normalizeViewMode('anything-else'), 'realtime');
   assert.strictEqual(A.VIEW_MODE_KEY, 'kts_kqxs_view_mode_v1');
+  assert.strictEqual(A.regionLabel('mn'), 'Miền Nam');
+  assert.strictEqual(A.sourceLabel('https://www.xosominhngoc.com'), 'Xổ Số Minh Ngọc');
+  assert.strictEqual(A.sourceLabel('xskt.com.vn'), 'XSKT');
+  assert.strictEqual(A.dateLabel('2026-10-07'), '07/10/2026');
+  assert.strictEqual(A.userResultState({verified:true}).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
+  assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
+  assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
+  assert.strictEqual(A.version, 'result-auto-v6-consumer-result-view');
 
   const conflict = {
     verification_status: 'conflict',

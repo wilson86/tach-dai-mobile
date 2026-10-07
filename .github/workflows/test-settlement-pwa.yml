@@ -247,5 +247,8 @@ jobs:
       - name: KQXS simple automatic UI tests
         run: node tests/result-simple-ui-tests.js
 
+      - name: Settlement consumer UX tests
+        run: node tests/settlement-consumer-ui-tests.js
+
       - name: KQXS correction audit tests
         run: node tests/result-audit-ui-tests.js

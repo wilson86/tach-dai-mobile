@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('fs'),assert=require('assert'),vm=require('vm');
+const code=fs.readFileSync('app/settlement-consumer-ui.js','utf8');
+const html=fs.readFileSync('app/settlement.html','utf8');
+const sw=fs.readFileSync('app/sw.js','utf8');
+const ctx={globalThis:{}};vm.createContext(ctx);vm.runInContext(code,ctx);
+const U=ctx.globalThis.KTS_SETTLEMENT_CONSUMER_UI;
+assert(U);assert.strictEqual(U.version,'settlement-consumer-ui-v1');
+assert.strictEqual(U.regionName('mn'),'Miền Nam');
+assert.strictEqual(U.regionName('mt'),'Miền Trung');
+assert.strictEqual(U.regionName('mb'),'Miền Bắc');
+assert.strictEqual(U.formatDate('2026-10-07'),'07/10/2026');
+for(const needle of ['BẢN THỬ NGHIỆM','data-pane="partner">Đối tác','data-pane="config">Thiết lập','data-pane="message">Nhập tin','data-pane="result">Kết quả','id="workContext"','Cách tính Đá thẳng','Tùy chọn ít dùng'])assert(html.includes(needle));
+assert(html.includes('src="./settlement-consumer-ui.js"'));
+assert(sw.includes("'./settlement-consumer-ui.js'"));
+assert(sw.includes('v1.0.61-commercial-ui'));
+console.log('settlement-consumer-ui-tests: PASS');
