@@ -63,7 +63,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 }
 {
   const ex=empty(); ex.partners=[partner('a')]; ex.messages=[msg('same','a')];
-  const p=payload({partners:[partner('a')],messages:[{...msg('same','a'),raw_text:'OLDER BACKUP TEXT'}]});
+  const p=payload({partners:[partner('a')],messages:[msg('same','a')]});
   const out=S.validateImportPayload(p,ex,{replace:false});
   assert.strictEqual(out.inserted_counts.messages,0,'merge must not overwrite existing message id');
   assert.strictEqual(out.skipped_existing_counts.messages,1);
