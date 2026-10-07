@@ -2,6 +2,7 @@
   'use strict';
 
   const VIEW_MODE_KEY = 'kts_kqxs_view_mode_v1';
+  const PENDING_SCOPES_KEY = 'kts_settlement_pending_result_scopes_v1';
 
   function validScope(scope) {
     return Boolean(scope && /^\d{4}-\d{2}-\d{2}$/.test(String(scope.business_date || '')) && ['mn','mt','mb'].includes(String(scope.region || '').toLowerCase()));
@@ -11,6 +12,31 @@
     return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
   }
   function scopeKey(scope) { return `${scope.business_date}:${String(scope.region).toLowerCase()}`; }
+  function readPendingScopes() {
+    try {
+      const raw = global.localStorage && global.localStorage.getItem(PENDING_SCOPES_KEY);
+      const rows = raw ? JSON.parse(raw) : [];
+      if (!Array.isArray(rows)) return [];
+      const seen = new Set();
+      return rows.map(x => ({ business_date:String(x && x.business_date || ''), region:String(x && x.region || '').toLowerCase() }))
+        .filter(validScope).filter(x => { const key=scopeKey(x); if(seen.has(key)) return false; seen.add(key); return true; });
+    } catch (_) { return []; }
+  }
+  function writePendingScopes(scopes) {
+    const rows = (Array.isArray(scopes) ? scopes : []).filter(validScope);
+    try { if (global.localStorage) global.localStorage.setItem(PENDING_SCOPES_KEY, JSON.stringify(rows)); } catch (_) {}
+    return rows;
+  }
+  function rememberPendingScope(scope) {
+    if (!validScope(scope)) return readPendingScopes();
+    const rows = readPendingScopes();
+    if (!rows.some(x => scopeKey(x) === scopeKey(scope))) rows.push({ business_date:String(scope.business_date), region:String(scope.region).toLowerCase() });
+    return writePendingScopes(rows);
+  }
+  function forgetPendingScope(scope) {
+    if (!validScope(scope)) return readPendingScopes();
+    return writePendingScopes(readPendingScopes().filter(x => scopeKey(x) !== scopeKey(scope)));
+  }
   function sameScope(a, b) {
     return Boolean(a && b && String(a.business_date) === String(b.business_date) && String(a.region).toLowerCase() === String(b.region).toLowerCase());
   }
@@ -244,11 +270,30 @@
     async function hasMessagesForScope(scope) {
       if (!validScope(scope)) return false;
       const all = await store.getAll(store.STORES.messages);
-      return all.some(m => String(m.business_date) === scope.business_date && String(m.region || '').toLowerCase() === scope.region);
+      return all.some(m => String(m.status || '').toLowerCase() !== 'cancelled' && String(m.business_date) === scope.business_date && String(m.region || '').toLowerCase() === scope.region);
     }
 
     let realtimeDisplayActive = false;
     let realtimeViewScope = null;
+
+    async function resumePendingScopes() {
+      const remembered = readPendingScopes();
+      if (!remembered.length) return [];
+      const allMessages = await store.getAll(store.STORES.messages);
+      const active = new Set(allMessages
+        .filter(m => String(m.status || '').toLowerCase() !== 'cancelled')
+        .map(m => `${String(m.business_date || '')}:${String(m.region || '').toLowerCase()}`));
+      const resume = [];
+      for (const scope of remembered) {
+        if (!active.has(scopeKey(scope))) continue;
+        const snapshot = await store.get(store.STORES.results, scopeKey(scope));
+        if (snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified')) continue;
+        resume.push(scope);
+      }
+      writePendingScopes(resume);
+      for (const scope of resume) manager.ensureScope(scope).catch(error => emit('kts:auto-result-error', { scope, error: String(error && error.message || error) }));
+      return resume;
+    }
 
     async function releaseViewScope(scope) {
       if (!validScope(scope)) return;
@@ -402,6 +447,7 @@
         const detail = event && event.detail || {};
         const scope = detail.scope || {};
         if (!validScope(scope)) return;
+        rememberPendingScope(scope);
         setAutoStatus(`KQXS ${String(scope.region).toUpperCase()} ${scope.business_date}: đang tự theo dõi 90 giây/lần…`, 'warn');
         manager.ensureScope(scope).catch(error => {
           emit('kts:auto-result-error', { scope, error: String(error && error.message || error) });
@@ -411,6 +457,7 @@
         const info = event.detail || {};
         const scope = info.scope || {};
         const label = `${regionLabel(scope.region)} ${dateLabel(scope.business_date)}`.trim();
+        if (info.state === 'verified' || info.state === 'complete') forgetPendingScope(scope);
         if (info.state === 'fetching') setAutoStatus(`Kết quả ${label}: đang cập nhật…`, '');
         else if (info.state === 'waiting') setAutoStatus(`Kết quả ${label}: đang xổ · hệ thống tự kiểm tra lại.`, 'warn');
         else if (info.state === 'complete_waiting_confirmation') setAutoStatus(`Kết quả ${label}: đã đủ giải · đang kiểm tra lại độ ổn định.`, 'warn');
@@ -440,15 +487,34 @@
         const detail = event.detail || {};
         setAutoStatus(`KQXS đã lưu nhưng tính lại settlement lỗi: ${detail.error || 'UNKNOWN'}`, 'err');
       });
+      global.addEventListener('kts:settlement-message-activity-changed', event => {
+        const scope = event && event.detail && event.detail.scope || {};
+        if (!validScope(scope)) return;
+        hasMessagesForScope(scope).then(hasActive => {
+          if (hasActive) {
+            rememberPendingScope(scope);
+            return manager.ensureScope(scope);
+          }
+          forgetPendingScope(scope);
+          manager.stopScope(scope);
+          return null;
+        }).catch(error => emit('kts:auto-result-error', { scope, error: String(error && error.message || error) }));
+      });
       global.addEventListener('beforeunload', () => manager.stopAll());
     }
 
     installViewModeUi();
+    resumePendingScopes().catch(() => {});
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v7-accepted-message-trigger',
+    version: 'result-auto-v8-resume-safe',
     VIEW_MODE_KEY,
+    PENDING_SCOPES_KEY,
+    readPendingScopes,
+    writePendingScopes,
+    rememberPendingScope,
+    forgetPendingScope,
     createManager,
     validScope,
     normalizeViewMode,
