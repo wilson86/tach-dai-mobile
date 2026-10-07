@@ -23,5 +23,5 @@ assert(!replay.includes('saveConfig('));
 assert(!replay.includes('dismissCandidate('));
 assert(!replay.includes('confirmAndPin('));
 assert(sw.includes("'./settlement-parser-replay.js'"));
-assert(sw.includes("const CACHE='kts-tach-unified-v1.0."));
+assert(/const CACHE=\`\$\{CACHE_PREFIX\}v1\.0\.\d+-[^\`]+\`;/.test(sw),'parser replay wiring requires scope-isolated versioned cache');
 console.log('settlement-parser-replay-wiring-tests: PASS');
