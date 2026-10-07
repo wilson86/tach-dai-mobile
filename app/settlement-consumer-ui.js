@@ -1,6 +1,12 @@
 (function(global){
   'use strict';
 
+  const CODE_LABELS=Object.freeze({
+    '2CB':'2C lô','2CD':'2C ĐĐ','2CB7':'2C 7 lô','2CB8':'2C 8 lô',
+    DAT:'Đá thẳng',DAX:'Đá xuyên','3CB':'3C lô','3CB7':'3C 7 lô',
+    '3CDD':'3C ĐĐ','3CXC':'3C xỉu chủ','4C':'4C',MB_XIEN2:'Xiên 2',MB_XIEN3:'Xiên 3',MB_XIEN4:'Xiên 4',UI:'Ủi'
+  });
+
   function regionName(value){
     const v=String(value||'').toLowerCase();
     return v==='mn'?'Miền Nam':v==='mt'?'Miền Trung':v==='mb'?'Miền Bắc':'—';
@@ -13,6 +19,132 @@
     if(!select||!select.value)return 'Chưa chọn';
     const option=select.options&&select.options[select.selectedIndex];
     return option&&option.textContent?String(option.textContent).trim():'Đã chọn';
+  }
+  function canonicalSummary(canonical){
+    const legs=canonical&&Array.isArray(canonical.legs)?canonical.legs:[];
+    return legs.map(leg=>{
+      const stations=Array.isArray(leg.station_codes)&&leg.station_codes.length?leg.station_codes.map(x=>String(x).toUpperCase()).join('+')+' · ':'';
+      const code=String(leg.code||'').toUpperCase();
+      const label=CODE_LABELS[code]||code;
+      const values=Array.isArray(leg.values)?leg.values.map(String).join(' '):'';
+      const position=leg.position?' '+String(leg.position).toUpperCase():'';
+      const stake=leg.stake==null?'':' · '+String(leg.stake)+'n';
+      return (stations+values+' '+label+position+stake).trim();
+    }).filter(Boolean).join(' | ');
+  }
+  function friendlyParserError(error){
+    const text=String(error&&error.message||error||'');
+    const maps=[
+      ['SETTLEMENT_DUPLICATE_NUMBER','Có số bị lặp trong cùng một nhóm. Hãy kiểm tra lại tin.'],
+      ['SETTLEMENT_STATION_REQUIRED','Không nhận ra đài trong tin. Hãy kiểm tra tên hoặc viết tắt đài.'],
+      ['SETTLEMENT_ACTION_REQUIRED','Thiếu cách đánh sau nhóm số.'],
+      ['SETTLEMENT_STAKE_REQUIRED','Thiếu tiền cược hoặc đơn vị tiền.'],
+      ['INVALID_SETTLEMENT_STAKE','Tiền cược không hợp lệ.'],
+      ['UNVERIFIED_SETTLEMENT_ACTION','Cách đánh này chưa được xác nhận nên chưa tính.'],
+      ['SETTLEMENT_VALUE_REQUIRED','Thiếu số hoặc nhóm số không hợp lệ.'],
+      ['SETTLEMENT_MESSAGE_HAS_NO_LEGS','Không đọc được cách đánh nào trong tin.'],
+      ['PARSER_REGION_MISMATCH','Miền của tin không khớp miền đang chọn.'],
+      ['PARSER_MESSAGE_REQUIRED','Tin đang trống.']
+    ];
+    const hit=maps.find(([code])=>text.includes(code));
+    return hit?hit[1]:'Không đọc được cú pháp tin. Hãy kiểm tra lại trước khi lưu.';
+  }
+  function cleanUserText(value){
+    return String(value||'')
+      .replace(/fail-closed/gi,'chưa thể tính')
+      .replace(/HIOSKT/g,'nguồn đối chiếu')
+      .replace(/SHADOW/g,'đối soát')
+      .replace(/lỗi parser/gi,'lỗi cú pháp')
+      .replace(/canonical parser/gi,'bộ đọc cú pháp')
+      .replace(/settlement/gi,'kết quả tính tiền');
+  }
+
+  function installSaveGuard(doc){
+    const save=doc.getElementById('saveMessage');
+    const textarea=doc.getElementById('messageText');
+    const status=doc.getElementById('messageStatus');
+    if(!save||!textarea)return;
+    let busy=false,sawDisabled=false;
+    function claim(event){
+      if(busy){
+        if(event){event.preventDefault();event.stopImmediatePropagation();}
+        return false;
+      }
+      busy=true;sawDisabled=Boolean(save.disabled);return true;
+    }
+    function release(){busy=false;sawDisabled=false;}
+    save.addEventListener('click',event=>{claim(event);},true);
+    textarea.addEventListener('keydown',event=>{
+      if((event.ctrlKey||event.metaKey)&&event.key==='Enter')claim(event);
+    },true);
+    if(typeof global.MutationObserver==='function'){
+      new global.MutationObserver(()=>{
+        if(save.disabled)sawDisabled=true;
+        else if(busy&&sawDisabled)release();
+      }).observe(save,{attributes:true,attributeFilter:['disabled']});
+      if(status)new global.MutationObserver(()=>{
+        if(busy&&!sawDisabled&&!save.disabled&&String(status.textContent||'').trim())release();
+      }).observe(status,{childList:true,characterData:true,subtree:true});
+    }
+    if(typeof global.addEventListener==='function')global.addEventListener('pageshow',()=>{if(!save.disabled)release();});
+  }
+
+  function installSyntaxReview(doc){
+    const parser=global.KTS_SETTLEMENT_PARSER_PROVIDER;
+    const save=doc.getElementById('saveMessage');
+    const clear=doc.getElementById('clearMessage');
+    const textarea=doc.getElementById('messageText');
+    const date=doc.getElementById('messageDate');
+    const region=doc.getElementById('messageRegion');
+    if(!parser||typeof parser.fetchCanonical!=='function'||!save||!textarea||!date||!region)return;
+    const row=save.parentElement;
+    if(!row)return;
+    let button=doc.getElementById('checkMessageSyntax');
+    if(!button){
+      button=doc.createElement('button');button.id='checkMessageSyntax';button.type='button';button.className='btn soft';button.textContent='Kiểm tra cú pháp';
+      row.insertBefore(button,clear||save.nextSibling);
+    }
+    let preview=doc.getElementById('messageParsePreview');
+    if(!preview){
+      preview=doc.createElement('div');preview.id='messageParsePreview';preview.className='status';preview.setAttribute('aria-live','polite');row.insertAdjacentElement('afterend',preview);
+    }
+    function reset(){preview.textContent='';preview.className='status';}
+    button.addEventListener('click',async()=>{
+      const raw=String(textarea.value||'').trim();
+      if(!raw){preview.textContent='Chưa có tin để kiểm tra.';preview.className='status warn';return;}
+      button.disabled=true;const label=button.textContent;button.textContent='Đang kiểm tra…';
+      try{
+        const canonical=await parser.fetchCanonical(raw,String(region.value||''),String(date.value||''));
+        const summary=canonicalSummary(canonical);
+        preview.textContent=summary?'Hệ thống đọc: '+summary:'Không đọc được nội dung tin.';
+        preview.className='status '+(summary?'ok':'warn');
+      }catch(error){
+        preview.textContent=friendlyParserError(error);preview.className='status err';
+      }finally{button.disabled=false;button.textContent=label||'Kiểm tra cú pháp';}
+    });
+    textarea.addEventListener('input',reset);
+    date.addEventListener('change',reset);
+    region.addEventListener('change',reset);
+  }
+
+  function installLanguageCleanup(doc){
+    const root=doc.getElementById('pane-message');
+    if(!root||typeof global.MutationObserver!=='function')return;
+    let running=false;
+    function clean(){
+      if(running)return;running=true;
+      try{
+        const walker=doc.createTreeWalker(root,(global.NodeFilter&&global.NodeFilter.SHOW_TEXT)||4);
+        const nodes=[];let node;
+        while((node=walker.nextNode()))nodes.push(node);
+        for(const textNode of nodes){
+          const next=cleanUserText(textNode.nodeValue);
+          if(next!==textNode.nodeValue)textNode.nodeValue=next;
+        }
+      }finally{running=false;}
+    }
+    clean();
+    new global.MutationObserver(clean).observe(root,{childList:true,characterData:true,subtree:true});
   }
 
   function install(){
@@ -45,14 +177,21 @@
 
     const textarea=doc.getElementById('messageText');
     if(textarea)textarea.setAttribute('aria-label','Tin gốc cần tính');
+    installSaveGuard(doc);
+    installSyntaxReview(doc);
+    installLanguageCleanup(doc);
     update();
   }
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
-    version:'settlement-consumer-ui-v1',
+    version:'settlement-consumer-ui-v2-safety-review',
+    CODE_LABELS,
     regionName,
     formatDate,
-    partnerLabel
+    partnerLabel,
+    canonicalSummary,
+    friendlyParserError,
+    cleanUserText
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',install,{once:true});
   else install();
