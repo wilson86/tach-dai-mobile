@@ -117,14 +117,14 @@ assert(code.includes('Theo loại cược'));
 assert(code.includes('Xem chi tiết'));
 assert(code.includes('buildDailyOperationsReport'));
 
-assert(source.includes("kts:settlement-message-saved"));
-assert(source.includes("kts:settlement-message-activity-changed"));
-assert(source.includes("kts:settlement-config-recalculated"));
+assert(code.includes("kts:settlement-message-saved"));
+assert(code.includes("kts:settlement-message-activity-changed"));
+assert(code.includes("kts:settlement-config-recalculated"));
 
 
 // Empty/cancelled-only scopes are filtered by settlement-report before dashboard readiness.
 
-assert(source.includes('let refreshEpoch = 0'));
-assert(source.includes('const epoch = ++refreshEpoch'));
-assert(source.includes('epoch === refreshEpoch && scopeDate() === date'));
+assert(code.includes('let refreshEpoch = 0'));
+assert(code.includes('const epoch = ++refreshEpoch'));
+assert(code.includes('epoch === refreshEpoch && scopeDate() === date'));
 console.log('settlement-report-dashboard-tests: PASS');
