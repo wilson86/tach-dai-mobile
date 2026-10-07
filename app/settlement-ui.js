@@ -75,6 +75,10 @@
       ['UNVERIFIED_SETTLEMENT_ACTION','Cách đánh này chưa được xác nhận trong KTS nên chưa tính.'],
       ['SETTLEMENT_VALUE_REQUIRED','Thiếu số hoặc nhóm số không hợp lệ.'],
       ['SETTLEMENT_MESSAGE_HAS_NO_LEGS','Không đọc được cách đánh nào trong tin.'],
+      ['PARSER_REQUEST_TIMEOUT','Máy chủ đọc cú pháp phản hồi quá lâu. Tin chưa được lưu; hãy thử lại sau.'],
+      ['PARSER_IDENTITY_TIMEOUT','Máy chủ chưa xác nhận được bộ đọc cú pháp. Tin chưa được lưu; hãy thử lại sau.'],
+      ['PARSER_IDENTITY_REQUIRED_FOR_LIVE_PARSE','Máy chủ trả thiếu thông tin xác thực cú pháp. Tin chưa được lưu.'],
+      ['PARSER_REGION_REQUIRED_IN_RESPONSE','Máy chủ chưa xác nhận miền của tin. Tin chưa được lưu.'],
       ['PARSER_REGION_MISMATCH','Miền của tin không khớp miền đang chọn.'],
       ['PARSER_MESSAGE_REQUIRED','Tin đang trống.']
     ];
