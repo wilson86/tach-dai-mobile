@@ -9,7 +9,8 @@
   const pipeline = global.KTS_SETTLEMENT_PIPELINE;
   const reportApi = global.KTS_SETTLEMENT_REPORT;
   const pricingCopy = global.KTS_SETTLEMENT_PRICING_COPY;
-  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi || !pricingCopy) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
+  const configValidation = global.KTS_SETTLEMENT_CONFIG_VALIDATION;
+  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi || !pricingCopy || !configValidation) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
 
   const PRICES_MN_MT = [
     ['2CB', '2C lô'], ['2CD', '2C ĐĐ'], ['2CB7', '2C 7 lô'], ['DAT', '2C ĐáT'], ['DAX', '2C ĐáX'],
@@ -26,6 +27,9 @@
   let poller = null;
   let pendingConfigTemplate = null;
   let savingMessage = false;
+  let configDirty = false;
+  let loadedConfigPartnerId = '';
+  let loadedConfigDate = '';
 
   function today() {
     const d = new Date();
@@ -48,6 +52,24 @@
   function money(value) {
     const n = Number(value || 0);
     return Number.isFinite(n) ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(n) : '0';
+  }
+
+  function friendlyParserError(error) {
+    const text = String(error && error.message || error || '');
+    const maps = [
+      ['SETTLEMENT_DUPLICATE_NUMBER','Có số bị lặp trong cùng một nhóm. Hãy kiểm tra lại tin.'],
+      ['SETTLEMENT_STATION_REQUIRED','Không nhận ra đài trong tin. Hãy kiểm tra tên/viết tắt đài.'],
+      ['SETTLEMENT_ACTION_REQUIRED','Thiếu cách đánh sau nhóm số.'],
+      ['SETTLEMENT_STAKE_REQUIRED','Thiếu tiền cược hoặc đơn vị tiền.'],
+      ['INVALID_SETTLEMENT_STAKE','Tiền cược không hợp lệ.'],
+      ['UNVERIFIED_SETTLEMENT_ACTION','Cách đánh này chưa được xác nhận trong KTS nên chưa tính.'],
+      ['SETTLEMENT_VALUE_REQUIRED','Thiếu số hoặc nhóm số không hợp lệ.'],
+      ['SETTLEMENT_MESSAGE_HAS_NO_LEGS','Không đọc được cách đánh nào trong tin.'],
+      ['PARSER_REGION_MISMATCH','Miền của tin không khớp miền đang chọn.'],
+      ['PARSER_MESSAGE_REQUIRED','Tin đang trống.']
+    ];
+    const hit = maps.find(([code]) => text.includes(code));
+    return hit ? hit[1] : 'Không đọc được cú pháp tin. Tin chưa được tính; hãy kiểm tra và sửa lại.';
   }
 
   function renderPricing(targetId, rows, region) {
@@ -81,6 +103,29 @@
   function currentPartnerId() { return $('partnerSelect').value || ''; }
   function selectedPartner() { return partners.find(p => p.id === currentPartnerId()) || null; }
 
+  function setConfigDirty(value) {
+    configDirty = Boolean(value);
+    const el = $('configDirtyStatus');
+    if (el) {
+      el.textContent = configDirty ? 'Chưa lưu thay đổi' : 'Đã lưu';
+      el.className = 'tag ' + (configDirty ? 'warn' : 'ok');
+    }
+  }
+
+  function confirmDiscardConfigChanges() {
+    return !configDirty || !global.confirm || global.confirm('Thiết lập đang có thay đổi chưa lưu. Bỏ các thay đổi này?');
+  }
+
+  function isConfigEditableControl(el) {
+    if (!el) return false;
+    if (el.dataset && el.dataset.priceRegion) return true;
+    return new Set([
+      'commissionType','mnTotalPercent','mnRefundPercent','mnDatMode','mnDaxMode',
+      'mtTotalPercent','mtRefundPercent','mtDatMode','mtDaxMode',
+      'mbTotalPercent','mbRefundPercent','allowMbXien','allowUi'
+    ]).has(String(el.id || ''));
+  }
+
   async function refreshPartners(preferId) {
     const allPartners = await store.getAll(store.STORES.partners);
     partners = allPartners.filter(p => p.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
@@ -101,6 +146,8 @@
   function updatePartnerView() {
     const p = selectedPartner();
     $('partnerRoleView').textContent = p ? (p.role === 'owner' ? 'Chủ' : 'Khách') : '—';
+    const configName = $('configPartnerName');
+    if (configName) configName.textContent = p ? `${p.name} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}` : 'Chưa chọn đối tác';
   }
 
   async function addPartner() {
@@ -199,6 +246,7 @@
         pricing: priceInputsToObject()
       });
       applyCopiedRates(result);
+      setConfigDirty(true);
       status('copyRatesStatus', `Đã copy tỷ lệ ${regionDisplayName(result.source_region)} → ${regionDisplayName(result.target_region)}. ${result.zeroed_codes ? 'Cách đánh không có tương ứng đã về 0.' : 'Tất cả cách đánh đều có tương ứng.'} Chưa lưu cấu hình.`, 'ok');
     } catch (e) {
       const message = String(e && e.message || e);
@@ -224,7 +272,7 @@
       const region = input.dataset.priceRegion;
       const code = input.dataset.priceCode;
       const field = input.dataset.priceField;
-      const regionData = pricing[region] || (region === 'mt' ? pricing.mn : {}) || {};
+      const regionData = pricing[region] || {};
       input.value = regionData[code] && regionData[code][field] != null ? regionData[code][field] : '0';
     });
   }
@@ -263,6 +311,11 @@
     $('allowUi').checked = false;
     fillPricing(null);
     refreshGateVisuals();
+  }
+
+  function configNeedsMtPricing(config) {
+    const pricing = config && config.region_pricing || {};
+    return Boolean(pricing.mn && !pricing.mt);
   }
 
   function applyConfig(config) {
@@ -344,17 +397,28 @@
     try {
       const cfg = await store.resolveConfigForDate(partnerId, date);
       applyConfig(cfg);
-      status('configStatus', `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, 'ok');
+      loadedConfigPartnerId = partnerId;
+      loadedConfigDate = date;
+      setConfigDirty(false);
+      status('configStatus', configNeedsMtPricing(cfg)
+        ? `Cấu hình v${cfg.version} là dữ liệu cũ chưa có bảng giá Miền Trung riêng. MT đang để 0; kiểm tra rồi Lưu cấu hình trước khi tính MT.`
+        : `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, configNeedsMtPricing(cfg) ? 'warn' : 'ok');
     } catch (e) {
       if (String(e.message || e).includes('NO_CONFIG')) {
         const template = await nearestConfigTemplate(partnerId, date);
         if (template) {
           applyConfig(template);
           $('effectiveDate').value = date;
+          loadedConfigPartnerId = partnerId;
+          loadedConfigDate = date;
+          setConfigDirty(false);
           status('configStatus', `Ngày ${viDate(date)} chưa có thiết lập. Đã nạp bảng giá gần nhất từ ${viDate(template.effective_from_date)} làm mẫu; kiểm tra rồi bấm Lưu cấu hình.`, 'warn');
         } else {
           resetConfigForm();
           $('effectiveDate').value = date;
+          loadedConfigPartnerId = partnerId;
+          loadedConfigDate = date;
+          setConfigDirty(false);
           status('configStatus', 'Chưa có bảng giá nào cho đối tác này. Nhập tỷ lệ rồi bấm Lưu cấu hình.', 'warn');
         }
       } else status('configStatus', String(e.message || e), 'err');
@@ -367,11 +431,16 @@
     const effective = $('effectiveDate').value;
     if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
     try {
-      const terms = regionTermsFromForm();
+      const checked = configValidation.validate({
+        commission_type: $('commissionType').value,
+        region_terms: regionTermsFromForm(),
+        region_pricing: priceInputsToObject()
+      });
+      const terms = checked.region_terms;
       const cfg = await store.saveConfig({
         partner_id: partnerId,
         effective_from_date: effective,
-        commission_type: $('commissionType').value,
+        commission_type: checked.commission_type,
         region_terms: terms,
         total_percent: terms.mn.total_percent,
         refund_percent: terms.mn.refund_percent,
@@ -379,9 +448,12 @@
         dax_hit_mode: terms.mn.dax_hit_mode,
         mb_xien_234: $('allowMbXien').checked,
         tinh_ui: $('allowUi').checked,
-        region_pricing: priceInputsToObject()
+        region_pricing: checked.region_pricing
       });
       const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, effective);
+      loadedConfigPartnerId = partnerId;
+      loadedConfigDate = effective;
+      setConfigDirty(false);
       status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.`, 'ok');
     } catch (e) { status('configStatus', String(e.message || e), 'err'); }
   }
@@ -424,7 +496,7 @@
         parser_provider: parserProvider
       });
       if (outcome.status === 'parser_error') {
-        status('messageStatus', `Đã giữ tin ${outcome.message.id} nhưng KHÔNG tính tiền: ${outcome.error}`, 'err');
+        status('messageStatus', `${friendlyParserError(outcome.error)} Tin lỗi được giữ trong lịch sử để kiểm tra và đang chặn phạm vi cho đến khi hủy/sửa.`, 'err');
         return outcome;
       }
 
@@ -553,8 +625,33 @@
     $('parserEndpoint').value = parserProvider.endpoint();
     $('allowMbXien').addEventListener('change', refreshGateVisuals);
     $('allowUi').addEventListener('change', refreshGateVisuals);
-    $('partnerSelect').addEventListener('change', async () => { updatePartnerView(); $('reportPartner').value = currentPartnerId(); await loadConfigForDate(); });
-    $('effectiveDate').addEventListener('change', loadConfigForDate);
+    const configPane = $('pane-config');
+    if (configPane) {
+      for (const eventName of ['input','change']) configPane.addEventListener(eventName, event => {
+        if (isConfigEditableControl(event.target)) setConfigDirty(true);
+      });
+    }
+    $('partnerSelect').addEventListener('change', async () => {
+      const next = currentPartnerId();
+      if (loadedConfigPartnerId && next !== loadedConfigPartnerId && !confirmDiscardConfigChanges()) {
+        $('partnerSelect').value = loadedConfigPartnerId;
+        updatePartnerView();
+        return;
+      }
+      setConfigDirty(false);
+      updatePartnerView();
+      $('reportPartner').value = currentPartnerId();
+      await loadConfigForDate();
+    });
+    $('effectiveDate').addEventListener('change', async () => {
+      const nextDate = $('effectiveDate').value;
+      if (loadedConfigDate && nextDate !== loadedConfigDate && !confirmDiscardConfigChanges()) {
+        $('effectiveDate').value = loadedConfigDate;
+        return;
+      }
+      setConfigDirty(false);
+      await loadConfigForDate();
+    });
     $('addPartner').addEventListener('click', addPartner);
     $('copyPartner').addEventListener('click', copyPartner);
     $('deactivatePartner').addEventListener('click', deactivatePartner);

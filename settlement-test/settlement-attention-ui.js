@@ -19,11 +19,11 @@
 
   function statusLabel(status) {
     return ({
-      BLOCKED:'FAIL-CLOSED',
-      MISMATCH:'LỆCH HIOSKT',
+      BLOCKED:'CHƯA TÍNH',
+      MISMATCH:'LỆCH ĐỐI SOÁT',
       PROVISIONAL:'TẠM TÍNH',
       MATCH_DISPLAY_ONLY:'CHỈ KHỚP HIỂN THỊ',
-      INCOMPLETE_REFERENCE:'THIẾU SỐ HIOSKT',
+      INCOMPLETE_REFERENCE:'THIẾU DỮ LIỆU ĐỐI SOÁT',
       UNVERIFIED:'CHƯA ĐỐI CHIẾU',
       NO_DATA:'CHƯA CÓ DỮ LIỆU'
     })[String(status || '').toUpperCase()] || String(status || 'CHƯA ĐỐI CHIẾU');
@@ -76,7 +76,7 @@
       }
     }
     if (!lines.length && diagnostics.category_reference_missing && diagnostics.status === 'MISMATCH') {
-      lines.push('Lệch tổng nhưng HIOSKT chưa có chi tiết theo loại cược');
+      lines.push('Lệch tổng nhưng dữ liệu đối soát chưa có chi tiết theo loại cược');
     }
     if (!lines.length) {
       for (const issue of diagnostics.total_issues || []) lines.push(`${fieldLabel(issue.field)} ${formatDelta(issue.delta)}`);
@@ -152,7 +152,7 @@
     const card = doc.createElement('div');
     card.className = 'card';
     card.id = 'dailyAttention';
-    card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện các phạm vi chưa khớp exact. Ưu tiên fail-closed → lệch HIOSKT → tạm tính → chưa đối chiếu.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
+    card.innerHTML = `<div class="row" style="justify-content:space-between"><div><div class="section-title">Việc cần xử lý</div><div class="hint">Chỉ hiện những mục cần kiểm tra. Ưu tiên: chưa tính → lệch đối soát → tạm tính → chưa đối chiếu.</div></div><button id="refreshAttention" class="btn soft">Làm mới</button></div><div id="attentionStatus" class="status"></div><div id="attentionList" class="hint">Chưa tải.</div>`;
     if (anchor) anchor.insertAdjacentElement('afterend', card); else pane.appendChild(card);
 
     function setStatus(text, kind) {
@@ -273,7 +273,7 @@
   }
 
   global.KTS_SETTLEMENT_ATTENTION = Object.freeze({
-    version:'settlement-attention-v2-diagnostics', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
+    version:'settlement-attention-v3-consumer-labels', PRIORITY, statusLabel, statusKind, actionFor, actionForItem, actionLabel, fieldLabel, formatDelta, diagnosticSummary, buildAttention
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once:true });
   else install();

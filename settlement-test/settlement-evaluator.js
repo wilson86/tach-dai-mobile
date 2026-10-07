@@ -53,8 +53,7 @@
   function priceKey(code) { return String(code || '').toUpperCase() === '3CXC' ? '3CDD' : String(code || '').toUpperCase(); }
   function pricing(config, region, code) {
     const key = priceKey(code), byRegion = config && config.region_pricing && config.region_pricing[region];
-    const fallback = region === 'mt' && config && config.region_pricing ? config.region_pricing.mn : null;
-    const row = (byRegion && byRegion[key]) || (fallback && fallback[key]);
+    const row = byRegion && byRegion[key];
     if (!row) throw new Error('PRICE_MISSING:' + region + ':' + key);
     const commission = num(row.commission, 'commission'), win = num(row.win, 'win');
     if (commission < 0 || win < 0) throw new Error('PRICE_NEGATIVE:' + region + ':' + key);

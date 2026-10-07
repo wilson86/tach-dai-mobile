@@ -34,8 +34,34 @@
     const text = String(reason || '');
     if (text.includes('NO_CONFIG_FOR_BUSINESS_DATE')) return 'Chưa có thiết lập giá cho ngày này.';
     if (text.includes('KQXS_NOT_AVAILABLE')) return 'Chưa có kết quả xổ số cho ngày này.';
+    if (text.includes('PRICE_MISSING:mt:')) return 'Miền Trung chưa có bảng giá riêng. Mở Thiết lập và lưu bảng giá MT.';
+    if (text.includes('PRICE_MISSING:mn:')) return 'Miền Nam chưa có bảng giá cho cách đánh này.';
+    if (text.includes('PRICE_MISSING:mb:')) return 'Miền Bắc chưa có bảng giá cho cách đánh này.';
     if (text.startsWith('PENDING_PARSER:')) return 'Có tin chưa đọc được cú pháp.';
     return text;
+  }
+
+  const CODE_LABELS = Object.freeze({
+    '2CB':'2C lô','2CD':'2C ĐĐ','2CB7':'2C 7 lô','2CB8':'2C 8 lô',
+    DAT:'Đá thẳng',DAX:'Đá xuyên','3CB':'3C lô','3CB7':'3C 7 lô',
+    '3CDD':'3C ĐĐ','3CXC':'3C xỉu chủ','4C':'4C',
+    MB_XIEN2:'Xiên 2',MB_XIEN3:'Xiên 3',MB_XIEN4:'Xiên 4',UI:'Ủi'
+  });
+
+  function canonicalSummary(message) {
+    const canonical = message && message.canonical_payload;
+    const legs = canonical && Array.isArray(canonical.legs) ? canonical.legs : [];
+    return legs.map(leg => {
+      const stations = Array.isArray(leg.station_codes) && leg.station_codes.length
+        ? leg.station_codes.map(x => String(x).toUpperCase()).join('+') + ' · '
+        : '';
+      const code = String(leg.code || '').toUpperCase();
+      const label = CODE_LABELS[code] || code;
+      const numbers = Array.isArray(leg.values) ? leg.values.map(String).join(' ') : '';
+      const position = leg.position ? ' ' + String(leg.position).toUpperCase() : '';
+      const stake = leg.stake == null ? '' : ' · ' + String(leg.stake) + 'n';
+      return (stations + numbers + ' ' + label + position + stake).trim();
+    }).filter(Boolean).join(' | ');
   }
 
   function deriveState(message, settlement) {
@@ -186,7 +212,8 @@
         const action = cancelled
           ? `<button class="btn soft" data-restore-message="${esc(m.id)}">Khôi phục</button>`
           : `<button class="btn danger" data-cancel-message="${esc(m.id)}">Hủy tin</button>`;
-        return `<div class="report-message" data-message-id="${esc(m.id)}"><div class="row" style="justify-content:space-between"><div><span class="tag ${stateClass}">${esc(row.state.label)}</span> <span class="hint">${esc(m.created_at || '')}</span></div><div class="row"><button class="btn soft" data-reuse-message="${esc(m.id)}">Nạp lại</button>${action}</div></div><div class="raw">${esc(m.raw_text || '')}</div>${reason ? `<div class="status ${stateClass}">${esc(reason)}</div>` : ''}</div>`;
+        const parsed = !m.parser_error && m.canonical_payload ? canonicalSummary(m) : '';
+        return `<div class="report-message" data-message-id="${esc(m.id)}"><div class="row" style="justify-content:space-between"><div><span class="tag ${stateClass}">${esc(row.state.label)}</span> <span class="hint">${esc(m.created_at || '')}</span></div><div class="row"><button class="btn soft" data-reuse-message="${esc(m.id)}">Nạp lại</button>${action}</div></div><div class="raw">${esc(m.raw_text || '')}</div>${parsed ? `<div class="hint" style="margin-top:5px"><b>Hệ thống đã đọc:</b> ${esc(parsed)}</div>` : ''}${reason ? `<div class="status ${stateClass}">${esc(reason)}</div>` : ''}</div>`;
       }).join('');
       host.querySelectorAll('[data-reuse-message]').forEach(btn => btn.addEventListener('click', () => {
         const row = rows.find(x => x.message.id === btn.dataset.reuseMessage);
@@ -271,7 +298,7 @@
   }
 
   global.KTS_SETTLEMENT_MESSAGE_HISTORY = Object.freeze({
-    version: 'message-history-v4-consumer-reasons', scopeMatch, settlementForScope, friendlyReason, deriveState, buildRows, buildScopeSummary
+    version: 'message-history-v5-canonical-summary', scopeMatch, settlementForScope, friendlyReason, canonicalSummary, deriveState, buildRows, buildScopeSummary
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();

@@ -34,7 +34,7 @@
 
   <section id="pane-config" class="pane">
     <div class="card">
-      <div class="section-title">Thiết lập tính tiền</div>
+      <div class="section-title">Thiết lập tính tiền</div><div class="status ok" style="margin-top:0">Bảng giá riêng của: <b id="configPartnerName">Chưa chọn đối tác</b></div>
       <div class="hint" style="margin-bottom:8px">Mỗi khách/chủ có thiết lập riêng. Chọn ngày bắt đầu áp dụng rồi chỉnh từng miền bên dưới.</div>
       <div class="grid">
         <div><label>Áp dụng từ ngày</label><input id="effectiveDate" type="date"></div>
@@ -91,7 +91,7 @@
       <div class="row" style="margin-top:8px"><button id="copyRates" class="btn soft">Copy tỷ lệ</button></div>
       <div id="copyRatesStatus" class="status"></div>
     </div>
-    <div class="card"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><div id="configStatus" class="status"></div><div class="hint">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi; ngày trước vẫn dùng phiên bản cũ.</div></div>
+    <div class="card"><div class="row"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><span id="configDirtyStatus" class="tag ok">Đã lưu</span></div><div id="configStatus" class="status"></div><div class="hint">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi; ngày trước vẫn dùng phiên bản cũ.</div></div>
   </section>
 
   <section id="pane-message" class="pane">
@@ -110,7 +110,6 @@
     <div id="reportOutput" class="card hint">Chưa có báo cáo.</div>
   </section>
 </div>
-<script src="./test-backend-bootstrap.js"></script>
 <script src="./settlement-store.js"></script>
 <script src="./settlement-engine.js"></script>
 <script src="./settlement-mb-rules.js"></script>
@@ -132,6 +131,7 @@
 <script src="./result-auto.js"></script>
 <script src="./result-simple-ui.js"></script>
 <script src="./settlement-pricing-copy.js"></script>
+<script src="./settlement-config-validation.js"></script>
 <script src="./settlement-ui.js"></script>
 <script src="./settlement-message-history.js"></script>
 <script src="./result-audit-ui.js"></script>
