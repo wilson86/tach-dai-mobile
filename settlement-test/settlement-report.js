@@ -99,6 +99,11 @@
     for (const settlement of settlements) {
       if (businessDate && settlement.business_date !== businessDate) continue;
       if (partner.id && settlement.partner_id !== partner.id) continue;
+      const settlementScopeStatus = String(settlement.scope_status || '').toLowerCase();
+      // An empty scope means every message in that scope was cancelled/removed from calculation.
+      // Keep the durable settlement for audit, but do not let it create a ghost partner/region
+      // in money reports or end-of-day close gates.
+      if (settlementScopeStatus === 'empty') continue;
       partnerSettlements.push(settlement);
 
       const region = String(settlement.region || 'unknown').toLowerCase();
