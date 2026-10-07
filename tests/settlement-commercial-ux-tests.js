@@ -16,4 +16,7 @@ assert(attention.includes("BLOCKED:'CHƯA TÍNH'"));
 assert(attention.includes("MISMATCH:'LỆCH ĐỐI SOÁT'"));
 assert(!attention.includes("MISMATCH:'LỆCH HIOSKT'"));
 assert(!attention.includes('Ưu tiên fail-closed'));
+assert(html.includes('id="configDirtyStatus"'));
+assert(ui.includes('confirmDiscardConfigChanges'));
+assert(ui.includes('Chưa lưu thay đổi'));
 console.log('settlement-commercial-ux-tests: PASS');

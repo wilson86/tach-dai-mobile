@@ -22,6 +22,11 @@ const P = ctx.KTS_SETTLEMENT_PARSER_PROVIDER;
 (async()=>{
   assert.strictEqual(P.version, 'settlement-parser-provider-v2-live-identity');
   assert.strictEqual(P.endpoint(), '/api/settlement/parse');
+  ctx.KTS_SETTLEMENT_RUNTIME_ENDPOINTS={parser_endpoint:'https://runtime.example/api/settlement/parse'};
+  assert.strictEqual(P.runtimeEndpoint(),'https://runtime.example/api/settlement/parse');
+  assert.strictEqual(P.endpoint(),'https://runtime.example/api/settlement/parse');
+  assert.strictEqual(P.identityEndpoint(),'https://runtime.example/api/settlement/parser-identity');
+  delete ctx.KTS_SETTLEMENT_RUNTIME_ENDPOINTS;
   assert.strictEqual(P.identityEndpoint(), 'https://example.test/api/settlement/parser-identity');
   assert.strictEqual(P.setEndpoint('/kts-api/settlement/parse'), '/kts-api/settlement/parse');
   assert.strictEqual(P.endpoint(), '/kts-api/settlement/parse');

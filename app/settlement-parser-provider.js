@@ -6,7 +6,15 @@
   const SHA256_RE = /^[0-9a-f]{64}$/i;
   const IDENTITY_HASH_FIELDS = Object.freeze(['identity_sha256','parser_source_sha256','grammar_sha256','business_engine_sha256']);
 
+  function runtimeEndpoint() {
+    const cfg = global.KTS_SETTLEMENT_RUNTIME_ENDPOINTS;
+    const value = cfg && cfg.parser_endpoint ? String(cfg.parser_endpoint).trim() : '';
+    return value || '';
+  }
+
   function endpoint() {
+    const runtime = runtimeEndpoint();
+    if (runtime) return runtime;
     try {
       const saved = global.localStorage && global.localStorage.getItem(STORAGE_KEY);
       return String(saved || DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT;
@@ -153,6 +161,7 @@
     STORAGE_KEY,
     DEFAULT_ENDPOINT,
     IDENTITY_HASH_FIELDS,
+    runtimeEndpoint,
     endpoint,
     identityEndpoint,
     setEndpoint,

@@ -87,9 +87,9 @@ console.log('settlement MN/MT evaluator tests PASS');
   const strictCfg = JSON.parse(JSON.stringify(mnConfig));
   delete strictCfg.region_pricing.mt;
   assert.throws(() => E.evaluateCanonicalMessage({
-    canonical_payload:{region:'mt',legs:[{code:'2CB',values:['12'],stake:'1',station_codes:['dl']}]},
+    canonical_payload:{region:'mt',legs:[{code:'2CB',values:['12'],stake:'1',station_codes:['kh']}]},
     config_snapshot:strictCfg,
-    result_snapshot:makeMnMtResult('mt'),
+    result_snapshot:mtResult,
     region:'mt'
   }), /PRICE_MISSING:mt:2CB/);
 }

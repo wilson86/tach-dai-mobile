@@ -4,7 +4,15 @@
   const STORAGE_KEY = 'kts_kqxs_endpoint_v1';
   const DEFAULT_ENDPOINT = '/api/kqxs';
 
+  function runtimeEndpoint() {
+    const cfg = global.KTS_SETTLEMENT_RUNTIME_ENDPOINTS;
+    const value = cfg && cfg.kqxs_endpoint ? String(cfg.kqxs_endpoint).trim() : '';
+    return value || '';
+  }
+
   function endpoint() {
+    const runtime = runtimeEndpoint();
+    if (runtime) return runtime;
     try {
       const saved = global.localStorage && global.localStorage.getItem(STORAGE_KEY);
       return String(saved || DEFAULT_ENDPOINT).trim() || DEFAULT_ENDPOINT;
@@ -97,6 +105,7 @@
   global.KTS_RESULT_PROVIDER = Object.freeze({
     STORAGE_KEY,
     DEFAULT_ENDPOINT,
+    runtimeEndpoint,
     endpoint,
     setEndpoint,
     normalizeProviderPayload,

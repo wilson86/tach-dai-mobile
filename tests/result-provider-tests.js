@@ -40,6 +40,10 @@ vm.runInContext(code, sandbox);
 const P = sandbox.globalThis.KTS_RESULT_PROVIDER;
 
 assert.strictEqual(P.endpoint(), '/api/kqxs');
+sandbox.globalThis.KTS_SETTLEMENT_RUNTIME_ENDPOINTS={kqxs_endpoint:'https://runtime.example/api/kqxs'};
+assert.strictEqual(P.runtimeEndpoint(),'https://runtime.example/api/kqxs');
+assert.strictEqual(P.endpoint(),'https://runtime.example/api/kqxs');
+delete sandbox.globalThis.KTS_SETTLEMENT_RUNTIME_ENDPOINTS;
 assert.strictEqual(P.setEndpoint('/kts-api/kqxs'), '/kts-api/kqxs');
 assert.strictEqual(P.endpoint(), '/kts-api/kqxs');
 assert.throws(() => P.setEndpoint('javascript:alert(1)'), /KQXS_ENDPOINT/);
