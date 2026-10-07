@@ -66,6 +66,24 @@
     };
   }
 
+  async function fetchWithTimeout(url, options, timeoutMs, timeoutCode) {
+    if (typeof global.AbortController !== 'function' || typeof global.setTimeout !== 'function') {
+      return global.fetch(url, options);
+    }
+    const controller = new global.AbortController();
+    const timer = global.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await global.fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    } catch (error) {
+      if (error && (error.name === 'AbortError' || String(error.message || '').toLowerCase().includes('aborted'))) {
+        throw new Error(timeoutCode);
+      }
+      throw error;
+    } finally {
+      if (typeof global.clearTimeout === 'function') global.clearTimeout(timer);
+    }
+  }
+
   async function fetchSnapshot(scope) {
     if (!scope || !/^\d{4}-\d{2}-\d{2}$/.test(String(scope.business_date || ''))) {
       throw new Error('KQXS_DATE_REQUIRED');
@@ -77,12 +95,12 @@
     const url = new URL(base, global.location && global.location.href ? global.location.href : 'https://localhost/');
     url.searchParams.set('date', String(scope.business_date));
     url.searchParams.set('region', region);
-    const response = await global.fetch(url.toString(), {
+    const response = await fetchWithTimeout(url.toString(), {
       method: 'GET',
       cache: 'no-store',
       credentials: 'omit',
       headers: { Accept: 'application/json' }
-    });
+    }, 30000, 'KQXS_REQUEST_TIMEOUT');
     if (!response.ok) {
       let code = 'KQXS_HTTP_' + response.status;
       try {
