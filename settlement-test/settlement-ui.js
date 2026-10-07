@@ -374,18 +374,52 @@
 
   async function applyNearestConfigForMessageDate() {
     const partnerId = currentPartnerId();
-    const businessDate = $('messageDate').value;
-    const template = pendingConfigTemplate || await nearestConfigTemplate(partnerId, businessDate);
-    if (!partnerId || !businessDate || !template) return prepareConfigForMessageDate();
-    const ok = !global.confirm || global.confirm(`Dùng bảng giá đang áp dụng từ ${viDate(template.effective_from_date)} cho ngày ${viDate(businessDate)}?\n\nHệ thống sẽ tạo một phiên bản cấu hình mới từ ngày này rồi tính lại tin đang nhập.`);
-    if (!ok) return;
-    const input = configCloneInput(template, partnerId);
-    input.effective_from_date = businessDate;
-    const cfg = await store.saveConfig(input);
-    await pipeline.recalculatePartnerFromDate(partnerId, businessDate);
-    setMissingConfigAction(false, '', null, businessDate);
-    status('messageStatus', `Đã áp dụng bảng giá cho ${viDate(businessDate)}. Đang tính lại tin…`, 'ok');
-    return saveMessage();
+    const businessDate = String($('messageDate').value || '');
+    const region = String($('messageRegion').value || '').toLowerCase();
+    const raw = String($('messageText').value || '').trim();
+    if (!partnerId || !businessDate) return prepareConfigForMessageDate();
+    if (savingConfig) return status('messageStatus', 'Đang lưu một cấu hình khác. Chờ hoàn tất rồi thử lại.', 'warn');
+    if (savingMessage) return status('messageStatus', 'Một tin đang được lưu/tính. Chờ hoàn tất rồi mới áp dụng bảng giá.', 'warn');
+
+    const button = $('applyConfigForMessageDate');
+    const originalLabel = button ? button.textContent : '';
+    savingConfig = true;
+    if (button) { button.disabled = true; button.textContent = 'Đang áp dụng…'; }
+    let shouldSaveMessage = false;
+    let needManualConfig = false;
+    try {
+      const cachedTemplate = pendingConfigTemplate && String(pendingConfigTemplate.partner_id || '') === partnerId
+        ? pendingConfigTemplate : null;
+      const template = cachedTemplate || await nearestConfigTemplate(partnerId, businessDate);
+      if (!template) {
+        needManualConfig = true;
+      } else {
+        const ok = !global.confirm || global.confirm(`Dùng bảng giá đang áp dụng từ ${viDate(template.effective_from_date)} cho ngày ${viDate(businessDate)}?\n\nHệ thống sẽ tạo một phiên bản cấu hình mới từ ngày này rồi tính lại tin đang nhập.`);
+        if (!ok) return null;
+        const input = configCloneInput(template, partnerId);
+        input.effective_from_date = businessDate;
+        const cfg = await store.saveConfig(input);
+        const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, businessDate);
+        const sameMessageScope =
+          currentPartnerId() === partnerId &&
+          String($('messageDate').value || '') === businessDate &&
+          String($('messageRegion').value || '').toLowerCase() === region;
+        const sameMessageDraft = sameMessageScope && String($('messageText').value || '').trim() === raw;
+        if (sameMessageScope) setMissingConfigAction(false, '', null, businessDate);
+        status('messageStatus',
+          `Đã tạo cấu hình v${cfg.version} cho ${viDate(businessDate)} · đã rà lại ${recalculated.length} phạm vi.${sameMessageDraft ? ' Đang lưu tin…' : ' Tin/phạm vi hiện tại đã đổi nên hệ thống không tự lưu tin.'}`,
+          sameMessageDraft ? 'ok' : 'warn');
+        shouldSaveMessage = sameMessageDraft && Boolean(raw);
+      }
+    } catch (e) {
+      status('messageStatus', 'Không áp dụng được bảng giá: ' + String(e && e.message || e), 'err');
+    } finally {
+      savingConfig = false;
+      if (button) { button.disabled = false; button.textContent = originalLabel || 'Dùng bảng giá gần nhất & tính'; }
+    }
+    if (needManualConfig) return prepareConfigForMessageDate();
+    if (shouldSaveMessage) return saveMessage();
+    return null;
   }
 
   async function prepareConfigForMessageDate() {
