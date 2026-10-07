@@ -39,6 +39,10 @@ assert(page.includes('Ngày trước ngày hiệu lực tiếp tục dùng phiê
 assert(page.includes('Lưu + tính'));
 assert(page.includes('id="missingConfigAction"'));
 assert(page.includes('id="openConfigForMessageDate"'));
+assert(page.includes('id="applyConfigForMessageDate"'));
+assert(ui.includes('async function applyNearestConfigForMessageDate()'));
+assert(ui.includes('Đang tính lại tin'));
+assert(ui.includes('input.effective_from_date = businessDate'));
 assert(ui.includes('Tin chưa được lưu để tránh tính sai'));
 assert(ui.includes('prepareConfigForMessageDate'));
 assert(ui.includes('nearestConfigTemplate'));
