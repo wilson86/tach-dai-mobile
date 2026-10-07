@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),assert=require('assert');
 const sw=fs.readFileSync('app/sw.js','utf8');
-assert(sw.includes("const CACHE='kts-tach-unified-v1.0.95-safe-backup-merge'"));
+assert(sw.includes("const CACHE='kts-tach-unified-v1.0.96-no-ghost-scopes'"));
 assert(sw.includes('function withinWorkerScope(url)'));
 assert(sw.includes('self.registration.scope'));
 assert(sw.includes("url.pathname.startsWith(scope.pathname)"));
