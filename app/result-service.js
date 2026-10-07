@@ -161,14 +161,20 @@
       onStatus({ state: 'fetching', scope: clone(scope), last_snapshot: clone(lastSnapshot) });
       try {
         const raw = await fetchSnapshot(clone(scope));
-        const snapshot = normalizeSnapshot(Object.assign({}, raw, scope));
+        let snapshot = normalizeSnapshot(Object.assign({}, raw, scope));
         let changed = !lastSnapshot || lastSnapshot.fingerprint !== snapshot.fingerprint;
         let previous = lastSnapshot;
+        let staleIgnored = false;
 
         if (store && typeof store.saveResultSnapshot === 'function') {
           const saved = await store.saveResultSnapshot(snapshot);
           changed = saved.changed;
           previous = saved.previous;
+          staleIgnored = Boolean(saved.stale_ignored);
+          // saveResultSnapshot is the freshness authority. If it rejected an
+          // older concurrent response, continue UI/status/settlement with the
+          // canonical stored snapshot rather than the stale fetch object.
+          if (saved.snapshot) snapshot = normalizeSnapshot(saved.snapshot);
         }
 
         lastSnapshot = snapshot;
@@ -195,7 +201,8 @@
           complete_confirmed: confirmedComplete,
           verified: snapshot.verified,
           verification_status: snapshot.verification_status,
-          final: snapshot.verified
+          final: snapshot.verified,
+          stale_ignored: staleIgnored
         });
 
         if (snapshot.verification_status === 'conflict') {

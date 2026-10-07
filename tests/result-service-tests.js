@@ -261,5 +261,34 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
   });
   assert.strictEqual(twoSourceVerified.verified,true);
 
+  let staleObserved=null;
+  let staleMeta=null;
+  const canonicalNewer = R.normalizeSnapshot({
+    business_date:'2026-09-22',region:'mb',source:'primary',
+    fetched_at:'2026-10-07T10:00:02Z',
+    expected_station_codes:['mb'],
+    verification_status:'verified',verified:true,verification_sources:['primary','secondary'],
+    stations:[{code:'mb',prizes:mbPrizes()}]
+  });
+  const stalePoller = R.createPoller({
+    intervalMs:60000,
+    completeConfirmations:1,
+    fetchSnapshot:async scope=>({
+      business_date:scope.business_date,region:scope.region,source:'primary',
+      fetched_at:'2026-10-07T10:00:01Z',
+      expected_station_codes:['mb'],
+      verification_status:'unverified',verification_sources:['primary'],
+      stations:[{code:'mb',prizes:mbPrizes()}]
+    }),
+    store:{saveResultSnapshot:async()=>({
+      snapshot:canonicalNewer,changed:false,previous:canonicalNewer,stale_ignored:true
+    })},
+    onUpdate:(snapshot,meta)=>{staleObserved=snapshot;staleMeta=meta;}
+  });
+  await stalePoller.start({business_date:'2026-09-22',region:'mb'});
+  assert.strictEqual(staleObserved.fetched_at,'2026-10-07T10:00:02Z','poller must surface canonical stored KQXS after stale response is rejected');
+  assert.strictEqual(staleObserved.verified,true);
+  assert.strictEqual(staleMeta.stale_ignored,true);
+
   console.log('result-service-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
