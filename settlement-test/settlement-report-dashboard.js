@@ -144,7 +144,12 @@
     }
 
     function render(model) {
-      const statusInfo = dayStatus(model.status);
+      const gate = buildReadiness(model);
+      const statusInfo = gate.kqxs_conflict > 0
+        ? ['KQXS CÓ LỆCH NGUỒN','err']
+        : gate.kqxs_pending > 0
+          ? ['KQXS CHƯA XÁC MINH 2 NGUỒN','warn']
+          : dayStatus(model.status);
       setStatus(`${statusInfo[0]} · ${model.business_date}`, statusInfo[1]);
       renderReadiness(model);
       const totals = doc.getElementById('dailyOpsTotals');
