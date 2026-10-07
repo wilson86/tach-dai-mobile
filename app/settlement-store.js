@@ -14,6 +14,27 @@
     metadata: 'metadata'
   });
 
+  // Canonical KQXS completeness must be independently enforced by the durable
+  // store as well as by result-service. Backups/other callers may bypass the
+  // network normalizer, so metadata such as complete=true is never sufficient.
+  const RESULT_PRIZE_COUNTS = Object.freeze({
+    mn: Object.freeze({ G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1 }),
+    mt: Object.freeze({ G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1 }),
+    mb: Object.freeze({ G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1 })
+  });
+
+  function resultStationComplete(region, station) {
+    const expected = RESULT_PRIZE_COUNTS[String(region || '').toLowerCase()];
+    if (!expected) return false;
+    const raw = station && station.prizes || {};
+    const normalized = {};
+    for (const [key, values] of Object.entries(raw)) {
+      normalized[String(key).toUpperCase()] = (Array.isArray(values) ? values : [values])
+        .filter(value => value != null && String(value).trim() !== '');
+    }
+    return Object.entries(expected).every(([prize,count]) => (normalized[prize] || []).length === count);
+  }
+
   function requestToPromise(request) {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
@@ -205,9 +226,11 @@
       expectedStationCodes.length > 0 &&
       actualStationCodes.length === expectedStationCodes.length &&
       expectedStationCodes.every(code => actualStationCodes.includes(code));
+    const prizeDataComplete = stations.length > 0 && stations.every(station => resultStationComplete(region, station));
     const complete =
       requestedComplete &&
       stationCoverageComplete &&
+      prizeDataComplete &&
       requestedStatus !== 'error' &&
       requestedStatus !== 'stale';
     const status = requestedStatus === 'error' || requestedStatus === 'stale'
@@ -772,7 +795,10 @@
         const store = tx.objectStore(name);
         if (replace) {
           store.clear();
-          for (const row of ((payload.stores && payload.stores[name]) || [])) store.put(clone(row));
+          for (const row of ((payload.stores && payload.stores[name]) || [])) {
+            const value = name === STORES.results ? normalizeResultSnapshot(row) : clone(row);
+            store.put(value);
+          }
           continue;
         }
         const existingKeys = new Set((existing[name] || []).map(row => String(row && row[keyForStore(name)] || '')));
@@ -781,7 +807,8 @@
           if (existingKeys.has(key)) continue;
           // add(), not put(): if another tab inserts the same key after validation,
           // abort rather than overwrite newer local data.
-          store.add(clone(row));
+          const value = name === STORES.results ? normalizeResultSnapshot(row) : clone(row);
+          store.add(value);
         }
       }
       await txDone(tx);
