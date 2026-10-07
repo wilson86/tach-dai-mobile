@@ -273,6 +273,45 @@
     refreshGateVisuals();
   }
 
+  function viDate(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value || '');
+  }
+
+  function setMissingConfigAction(show, text) {
+    const row = $('missingConfigAction');
+    const hint = $('missingConfigHint');
+    if (row) row.classList.toggle('hidden', !show);
+    if (hint) hint.textContent = text || '';
+  }
+
+  async function nearestConfigTemplate(partnerId, businessDate) {
+    const configs = await store.listConfigsForPartner(partnerId);
+    if (!configs.length) return null;
+    const sorted = configs.slice().sort((a,b) => String(a.effective_from_date).localeCompare(String(b.effective_from_date)) || Number(a.version || 0) - Number(b.version || 0));
+    const future = sorted.filter(c => String(c.effective_from_date) > String(businessDate));
+    return future[0] || sorted[sorted.length - 1] || null;
+  }
+
+  async function prepareConfigForMessageDate() {
+    const partnerId = currentPartnerId();
+    const businessDate = $('messageDate').value;
+    if (!partnerId || !businessDate) return;
+    $('effectiveDate').value = businessDate;
+    const template = await nearestConfigTemplate(partnerId, businessDate);
+    if (template) {
+      applyConfig(template);
+      $('effectiveDate').value = businessDate;
+      status('configStatus', `Ngày ${viDate(businessDate)} chưa có thiết lập. Đã nạp bảng giá gần nhất từ ${viDate(template.effective_from_date)} làm mẫu; kiểm tra rồi bấm Lưu cấu hình.`, 'warn');
+    } else {
+      resetConfigForm();
+      $('effectiveDate').value = businessDate;
+      status('configStatus', `Chưa có bảng giá nào cho đối tác này. Nhập tỷ lệ rồi bấm Lưu cấu hình từ ${viDate(businessDate)}.`, 'warn');
+    }
+    const btn = document.querySelector('.nav button[data-pane="config"]');
+    if (btn) btn.click();
+  }
+
   async function loadConfigForDate() {
     const partnerId = currentPartnerId();
     if (!partnerId) { resetConfigForm(); return; }
@@ -282,9 +321,18 @@
       applyConfig(cfg);
       status('configStatus', `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, 'ok');
     } catch (e) {
-      resetConfigForm();
-      if (String(e.message || e).includes('NO_CONFIG')) status('configStatus', 'Chưa có cấu hình trước ngày này. Hãy tạo phiên bản đầu tiên.', 'warn');
-      else status('configStatus', String(e.message || e), 'err');
+      if (String(e.message || e).includes('NO_CONFIG')) {
+        const template = await nearestConfigTemplate(partnerId, date);
+        if (template) {
+          applyConfig(template);
+          $('effectiveDate').value = date;
+          status('configStatus', `Ngày ${viDate(date)} chưa có thiết lập. Đã nạp bảng giá gần nhất từ ${viDate(template.effective_from_date)} làm mẫu; kiểm tra rồi bấm Lưu cấu hình.`, 'warn');
+        } else {
+          resetConfigForm();
+          $('effectiveDate').value = date;
+          status('configStatus', 'Chưa có bảng giá nào cho đối tác này. Nhập tỷ lệ rồi bấm Lưu cấu hình.', 'warn');
+        }
+      } else status('configStatus', String(e.message || e), 'err');
     }
   }
 
@@ -321,6 +369,23 @@
     if (!raw) return status('messageStatus', 'Chưa có tin.', 'err');
     if (savingMessage) return status('messageStatus', 'Tin trước đang được lưu. Chờ hoàn tất để tránh gửi trùng.', 'warn');
 
+    const businessDate = $('messageDate').value;
+    try {
+      await store.resolveConfigForDate(partnerId, businessDate);
+      setMissingConfigAction(false, '');
+    } catch (e) {
+      if (String(e.message || e).includes('NO_CONFIG')) {
+        const template = await nearestConfigTemplate(partnerId, businessDate);
+        setMissingConfigAction(true, template
+          ? `Có bảng giá từ ${viDate(template.effective_from_date)}; có thể dùng làm mẫu cho ngày này.`
+          : 'Đối tác này chưa có bảng giá nào.');
+        status('messageStatus', `Chưa có thiết lập giá áp dụng cho ${viDate(businessDate)}. Tin chưa được lưu để tránh tính sai.`, 'warn');
+        return null;
+      }
+      status('messageStatus', 'Không kiểm tra được thiết lập giá. Vui lòng thử lại.', 'err');
+      return null;
+    }
+
     savingMessage = true;
     const originalLabel = button ? button.textContent : '';
     if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
@@ -350,7 +415,8 @@
         return outcome;
       }
       if (outcome.status === 'blocked') {
-        status('messageStatus', `Tin đã parse nhưng settlement đang chặn: ${outcome.settlement && outcome.settlement.reason ? outcome.settlement.reason : 'xem báo cáo'}`, 'err');
+        const reason = outcome.settlement && outcome.settlement.reason ? String(outcome.settlement.reason) : '';
+        status('messageStatus', reason.includes('NO_CONFIG') ? 'Thiếu thiết lập giá cho ngày này. Mở Thiết lập để kiểm tra.' : 'Tin chưa thể tính. Kiểm tra phần cảnh báo bên dưới.', 'err');
         return outcome;
       }
       status('messageStatus', `Đã lưu + tính tin ${outcome.message.id} · ${outcome.status === 'provisional' ? 'TẠM TÍNH' : 'chờ đối chiếu HIOSKT'}.`, outcome.status === 'provisional' ? 'warn' : 'ok');
@@ -477,7 +543,8 @@
         saveMessage();
       }
     });
-    $('clearMessage').addEventListener('click', () => { $('messageText').value = ''; status('messageStatus', '', ''); });
+    $('clearMessage').addEventListener('click', () => { $('messageText').value = ''; status('messageStatus', '', ''); setMissingConfigAction(false, ''); });
+    $('openConfigForMessageDate').addEventListener('click', () => { prepareConfigForMessageDate().catch(e => status('messageStatus', String(e.message || e), 'err')); });
     $('saveParserEndpoint').addEventListener('click', () => {
       try { $('parserEndpoint').value = parserProvider.setEndpoint($('parserEndpoint').value); status('messageStatus', 'Đã lưu endpoint canonical parser.', 'ok'); }
       catch (e) { status('messageStatus', String(e.message || e), 'err'); }

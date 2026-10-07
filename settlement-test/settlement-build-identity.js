@@ -11,7 +11,7 @@
     'app/settlement-parser-provider.js':'cb71d6e8b05bd0095a13afbd319942918084043f',
     'app/settlement-pipeline.js':'444d3d54a4e9bb0fbf1defbc90c761077f5521ad',
     'app/settlement-pricing-copy.js':'622f9b5018922d9abf14f6ff04a390c8511b7b51',
-    'app/settlement-ui.js':'bc6b064e7303cc8300ef9e5b2b6c4ef27774dbe3',
+    'app/settlement-ui.js':'f762ec8a1291aa5a023db76e35b3f794f07484a2',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
