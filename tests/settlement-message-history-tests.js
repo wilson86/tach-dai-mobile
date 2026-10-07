@@ -21,7 +21,7 @@ const settlements = [
   { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
-assert.strictEqual(H.version, 'message-history-v7-scope-mutation-lock');
+assert.strictEqual(H.version, 'message-history-v8-stale-safe-actions');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -103,4 +103,12 @@ assert.strictEqual(H.deriveState(legacyUpperCancelled,null).code,'CANCELLED');
 const legacySummary=H.buildScopeSummary(scope,[legacyUpperCancelled],[],null);
 assert.strictEqual(legacySummary.counts.active,0);
 assert.strictEqual(legacySummary.counts.cancelled,1);
+
+
+assert(historySource.includes('let refreshEpoch = 0'));
+assert(historySource.includes('const epoch = ++refreshEpoch'));
+assert(historySource.includes('epoch === refreshEpoch && scopeMatch(scope, currentScope())'));
+assert(historySource.includes('Phạm vi đã đổi. Không hủy tin từ danh sách cũ.'));
+assert(historySource.includes('Phạm vi đã đổi. Không khôi phục tin từ danh sách cũ.'));
+assert(historySource.includes("String(message.status || '').toLowerCase() === 'cancelled'"));
 console.log('settlement-message-history-tests: PASS');
