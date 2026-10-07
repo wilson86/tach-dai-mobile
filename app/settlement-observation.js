@@ -174,7 +174,8 @@
           final_net: Number(s.settlement_result && s.settlement_result.final_net != null ? s.settlement_result.final_net : 0),
           result_verification_status: kqxs.status,
           result_verification_evidence_valid: kqxs.valid,
-          result_verification_reason: kqxs.reason
+          result_verification_reason: kqxs.reason,
+          result_fingerprint: String(s.lottery_result_snapshot && s.lottery_result_snapshot.fingerprint || '')
         };
       })
       .sort((a, b) => a.business_date.localeCompare(b.business_date) || a.partner_id.localeCompare(b.partner_id) || a.region.localeCompare(b.region));
