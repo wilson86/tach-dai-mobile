@@ -73,6 +73,16 @@
     return Boolean(el&&/Chưa lưu thay đổi/i.test(String(el.textContent||'')));
   }
   function hasMessageDraft(value){ return Boolean(String(value||'').trim()); }
+  function messageScope(partner,date,region){
+    return Object.freeze({
+      partner_id:String(partner&&partner.value||''),
+      business_date:String(date&&date.value||''),
+      region:String(region&&region.value||'')
+    });
+  }
+  function sameMessageScope(a,b){
+    return Boolean(a&&b&&a.partner_id===b.partner_id&&a.business_date===b.business_date&&a.region===b.region);
+  }
 
   function installSaveGuard(doc){
     const save=doc.getElementById('saveMessage');
@@ -175,6 +185,7 @@
     const region=doc.getElementById('messageRegion');
     const context=doc.getElementById('workContext');
     if(!textarea)return;
+    let draftOrigin=null;
 
     let badge=doc.getElementById('messageDraftBadge');
     if(!badge&&context){
@@ -184,7 +195,13 @@
       badge.textContent='Tin chưa lưu';
       context.appendChild(badge);
     }
-    function updateBadge(){ if(badge)badge.classList.toggle('hidden',!hasMessageDraft(textarea.value)); }
+    function current(){ return messageScope(partner,date,region); }
+    function updateBadge(){
+      const draft=hasMessageDraft(textarea.value);
+      if(badge)badge.classList.toggle('hidden',!draft);
+      if(draft&&!draftOrigin)draftOrigin=current();
+      if(!draft)draftOrigin=null;
+    }
     textarea.addEventListener('input',updateBadge);
 
     function guard(control,label){
@@ -203,6 +220,7 @@
             updateBadge();
             return;
           }
+          draftOrigin=current();
         }
         previous=next;
         updateBadge();
@@ -211,6 +229,21 @@
     guard(partner,'khách/chủ');
     guard(date,'ngày');
     guard(region,'miền');
+
+    const messageNav=doc.querySelector('.nav button[data-pane="message"]');
+    if(messageNav)messageNav.addEventListener('click',event=>{
+      if(!hasMessageDraft(textarea.value)||!draftOrigin)return;
+      const now=current();
+      if(sameMessageScope(now,draftOrigin))return;
+      const ok=!global.confirm||global.confirm('Tin gốc chưa lưu đang thuộc phạm vi trước đó, nhưng app sắp mở một phạm vi khác.\n\nOK = chuyển tin nháp sang phạm vi mới. Hủy = giữ khách/ngày/miền cũ của tin nháp.');
+      if(ok){ draftOrigin=now; updateBadge(); return; }
+      if(partner)partner.value=draftOrigin.partner_id;
+      if(date)date.value=draftOrigin.business_date;
+      if(region)region.value=draftOrigin.region;
+      if(event&&typeof event.preventDefault==='function')event.preventDefault();
+      if(event&&typeof event.stopImmediatePropagation==='function')event.stopImmediatePropagation();
+      updateBadge();
+    },true);
     updateBadge();
   }
 
@@ -263,7 +296,7 @@
   }
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
-    version:'settlement-consumer-ui-v4-draft-scope-guard',
+    version:'settlement-consumer-ui-v5-programmatic-scope-guard',
     compatibility:Object.freeze({version:'settlement-consumer-ui-v1'}),
     CODE_LABELS,
     regionName,
@@ -273,7 +306,9 @@
     friendlyParserError,
     cleanUserText,
     hasUnsavedConfig,
-    hasMessageDraft
+    hasMessageDraft,
+    messageScope,
+    sameMessageScope
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',install,{once:true});
   else install();
