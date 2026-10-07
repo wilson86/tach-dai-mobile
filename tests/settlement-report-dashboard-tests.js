@@ -83,3 +83,5 @@ assert(code.includes('Xem chi tiết'));
 assert(code.includes('buildDailyOperationsReport'));
 
 console.log('settlement-report-dashboard-tests: PASS');
+
+// Empty/cancelled-only scopes are filtered by settlement-report before dashboard readiness.
