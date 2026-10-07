@@ -18,7 +18,7 @@
     const entries = Object.entries(files);
     if (entries.length < 15) throw new Error('QUALIFICATION_BUILD_IDENTITY_INCOMPLETE');
     for (const [path, hash] of entries) {
-      if (!/^app\/.+\.js$/.test(String(path)) || !GIT_BLOB_RE.test(String(hash || ''))) throw new Error('QUALIFICATION_BUILD_IDENTITY_ENTRY_INVALID:' + String(path));
+      if (!/^app\/.+\.(?:js|html)$/.test(String(path)) || !GIT_BLOB_RE.test(String(hash || ''))) throw new Error('QUALIFICATION_BUILD_IDENTITY_ENTRY_INVALID:' + String(path));
     }
     return identity;
   }
