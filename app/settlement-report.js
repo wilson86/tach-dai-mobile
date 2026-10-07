@@ -50,7 +50,12 @@
     if (!snapshot) return 'unverified';
     const status = String(snapshot.verification_status || '').toLowerCase();
     if (status === 'conflict') return 'conflict';
-    if (snapshot.verified === true || status === 'verified') return 'verified';
+    const sources = Array.isArray(snapshot.verification_sources)
+      ? new Set(snapshot.verification_sources.map(x => String(x || '').trim()).filter(Boolean))
+      : new Set();
+    const conflicts = Array.isArray(snapshot.verification_conflicts) ? snapshot.verification_conflicts : [];
+    const claimedVerified = snapshot.verified === true || status === 'verified';
+    if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0) return 'verified';
     return 'unverified';
   }
 
