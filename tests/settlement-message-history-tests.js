@@ -98,6 +98,11 @@ const incompletePrizeSummary = H.buildScopeSummary(scope, goodMessages, exactSet
   verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt',prizes:{G8:['10']}}]
 });
 assert.strictEqual(incompletePrizeSummary.kqxs.verified,false,'two-source metadata cannot override missing prize rows');
+const explicitIncompleteStationSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
+  id:'2026-10-06:mn',business_date:'2026-10-06',region:'mn',complete:true,verified:true,verification_status:'verified',
+  verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt',complete:false,prizes:fullMnPrizes('bt')}]
+});
+assert.strictEqual(explicitIncompleteStationSummary.kqxs.verified,false,'station.complete=false must remain unverified in message history');
 
 
 assert(historySource.includes('let scopeMutationBusy = false'));
