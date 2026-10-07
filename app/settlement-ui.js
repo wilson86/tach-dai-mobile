@@ -46,6 +46,11 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
   }
 
+  function emitSettlementEvent(name, detail) {
+    if (typeof global.dispatchEvent !== 'function' || typeof global.CustomEvent !== 'function') return;
+    try { global.dispatchEvent(new global.CustomEvent(name, { detail: detail || {} })); } catch (_) {}
+  }
+
   function status(id, text, kind) {
     const el = $(id);
     if (!el) return;
@@ -464,6 +469,10 @@
         input.effective_from_date = businessDate;
         const cfg = await store.saveConfig(input);
         const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, businessDate);
+        emitSettlementEvent('kts:settlement-config-recalculated', {
+          partner_id: partnerId, effective_from_date: businessDate,
+          scope_count: recalculated.length
+        });
         const sameMessageScope =
           currentPartnerId() === partnerId &&
           String($('messageDate').value || '') === businessDate &&
@@ -608,6 +617,10 @@
         region_pricing: checked.region_pricing
       });
       const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, effective);
+      emitSettlementEvent('kts:settlement-config-recalculated', {
+        partner_id: partnerId, effective_from_date: effective,
+        scope_count: recalculated.length
+      });
       const sameConfigView =
         currentPartnerId() === partnerId &&
         String($('effectiveDate').value || '') === effective &&
@@ -722,12 +735,11 @@
 
       // Start automatic KQXS tracking only after a canonical message is durable.
       // Missing config / parser errors never create a background polling job.
-      if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
-        global.dispatchEvent(new global.CustomEvent('kts:settlement-message-saved', { detail: {
-          message_id: outcome.message && outcome.message.id,
-          scope: { business_date: saveScope.business_date, region: saveScope.region }
-        }}));
-      }
+      emitSettlementEvent('kts:settlement-message-saved', {
+        message_id: outcome.message && outcome.message.id,
+        partner_id: saveScope.partner_id,
+        scope: { business_date: saveScope.business_date, region: saveScope.region }
+      });
 
       // Canonical message was accepted and is already durable. Clear the editor
       // so a fast second tap cannot accidentally create another identical bet.
@@ -925,6 +937,23 @@
       catch (e) { status('resultStatus', String(e.message || e), 'err'); }
     });
     $('loadReport').addEventListener('click', loadReport);
+    const refreshVisiblePartnerReport = () => {
+      const pane = $('pane-report');
+      if (!pane || !pane.classList.contains('active')) return;
+      Promise.resolve(loadReport()).catch(e => status('reportOutput', 'Không làm mới được báo cáo: ' + String(e && e.message || e), 'err'));
+    };
+    const reportRefreshEvents = [
+      'kts:auto-result-recalculated',
+      'kts:settlement-message-saved',
+      'kts:settlement-message-activity-changed',
+      'kts:settlement-config-recalculated'
+    ];
+    if (typeof global.addEventListener === 'function') {
+      for (const eventName of reportRefreshEvents) global.addEventListener(eventName, refreshVisiblePartnerReport);
+    }
+    for (const button of document.querySelectorAll('.nav button[data-pane="report"]')) {
+      button.addEventListener('click', () => global.setTimeout ? global.setTimeout(refreshVisiblePartnerReport, 0) : refreshVisiblePartnerReport());
+    }
     await refreshPartners();
   }
 
