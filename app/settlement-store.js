@@ -184,11 +184,11 @@
     const region = String(input.region || '').toLowerCase();
     if (!validDateOnly(businessDate)) throw new Error('RESULT_DATE_REQUIRED');
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('RESULT_REGION_REQUIRED');
-    const status = String(input.status || (input.complete ? 'complete' : 'partial')).toLowerCase();
-    if (!['partial', 'complete', 'error', 'stale'].includes(status)) throw new Error('INVALID_RESULT_STATUS');
+    const requestedStatus = String(input.status || (input.complete ? 'complete' : 'partial')).toLowerCase();
+    if (!['partial', 'complete', 'error', 'stale'].includes(requestedStatus)) throw new Error('INVALID_RESULT_STATUS');
     let verificationStatus = String(input.verification_status || (input.verified ? 'verified' : 'unverified')).toLowerCase();
     if (!['unverified', 'verified', 'conflict'].includes(verificationStatus)) verificationStatus = 'unverified';
-    const complete = Boolean(input.complete);
+    const requestedComplete = Boolean(input.complete);
     const fetchedAt = input.fetched_at || nowIso();
     const stations = clone(input.stations || []);
     const expectedStationCodes = Array.isArray(input.expected_station_codes)
@@ -205,6 +205,14 @@
       expectedStationCodes.length > 0 &&
       actualStationCodes.length === expectedStationCodes.length &&
       expectedStationCodes.every(code => actualStationCodes.includes(code));
+    const complete =
+      requestedComplete &&
+      stationCoverageComplete &&
+      requestedStatus !== 'error' &&
+      requestedStatus !== 'stale';
+    const status = requestedStatus === 'error' || requestedStatus === 'stale'
+      ? requestedStatus
+      : (complete ? 'complete' : 'partial');
     if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
     if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || verificationConflicts.length > 0 || !stationCoverageComplete)) verificationStatus = 'unverified';
     const coverageComplete = input.coverage_complete == null ? stationCoverageComplete : Boolean(input.coverage_complete) && stationCoverageComplete;
