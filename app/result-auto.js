@@ -270,11 +270,14 @@
     }
 
     async function renderStoredSelected(options) {
+      const epoch = ++storedRenderEpoch;
       const o = options || {};
       const scope = currentScope();
       const table = doc.getElementById('resultTable');
+      const stillCurrent = () => epoch === storedRenderEpoch && sameScope(scope, currentScope());
       if (!validScope(scope)) return null;
       const snapshot = await store.get(store.STORES.results, scopeKey(scope));
+      if (!stillCurrent()) return null;
       if (snapshot) {
         renderSnapshot(snapshot, { cached: true });
         if (o.status !== false) {
@@ -300,6 +303,9 @@
 
     let realtimeDisplayActive = false;
     let realtimeViewScope = null;
+    let storedRenderEpoch = 0;
+    let selectedFetchEpoch = 0;
+    let realtimeViewEpoch = 0;
 
     async function resumePendingScopes() {
       const remembered = readPendingScopes();
@@ -338,21 +344,34 @@
     }
 
     async function startRealtimeView() {
+      const epoch = ++realtimeViewEpoch;
       const date = doc.getElementById('resultDate');
       if (date) date.value = localToday();
       const next = currentScope();
+      const stillCurrent = () =>
+        epoch === realtimeViewEpoch &&
+        realtimeDisplayActive &&
+        realtimeViewScope && sameScope(next, realtimeViewScope) &&
+        sameScope(next, currentScope());
       if (!validScope(next)) return setResultStatus('Chưa chọn đủ ngày/miền KQXS.', 'err');
       const previous = realtimeViewScope;
       realtimeViewScope = Object.assign({}, next);
       realtimeDisplayActive = true;
       if (previous && !sameScope(previous, next)) await releaseViewScope(previous);
       await renderStoredSelected({ status: false });
+      if (!stillCurrent()) return null;
       setResultStatus(`THỜI GIAN THẬT · ${next.region.toUpperCase()} ${next.business_date} · tự cập nhật 90 giây/lần.`, 'warn');
-      try { await manager.ensureScope(next); }
-      catch (error) { setResultStatus(`Không bắt đầu được KQXS thời gian thật: ${String(error && error.message || error)}`, 'err'); }
+      try {
+        await manager.ensureScope(next);
+        return next;
+      } catch (error) {
+        if (stillCurrent()) setResultStatus(`Không bắt đầu được KQXS thời gian thật: ${String(error && error.message || error)}`, 'err');
+        return null;
+      }
     }
 
     async function stopRealtimeView() {
+      realtimeViewEpoch += 1;
       const scope = realtimeViewScope || currentScope();
       realtimeDisplayActive = false;
       realtimeViewScope = null;
@@ -364,20 +383,24 @@
     }
 
     async function fetchSelectedDateOnce() {
+      const epoch = ++selectedFetchEpoch;
       const scope = currentScope();
+      const stillCurrent = () => epoch === selectedFetchEpoch && sameScope(scope, currentScope());
       if (!validScope(scope)) return setResultStatus('Chưa chọn đủ ngày/miền KQXS.', 'err');
       realtimeDisplayActive = false;
+      realtimeViewEpoch += 1;
       setResultStatus(`Đang tải KQXS ${scope.region.toUpperCase()} ${scope.business_date} một lần…`, '');
       try {
         const raw = await provider.fetchSnapshot(scope);
         const snapshot = resultService.normalizeSnapshot(Object.assign({}, raw, scope));
         const saved = await store.saveResultSnapshot(snapshot);
-        renderSnapshot(saved.snapshot || snapshot, saved);
+        if (stillCurrent()) renderSnapshot(saved.snapshot || snapshot, saved);
         const rows = await pipeline.recalculateDateRegion({
           business_date: snapshot.business_date,
           region: snapshot.region,
           result_snapshot: saved.snapshot || snapshot
         });
+        if (!stillCurrent()) return saved.snapshot || snapshot;
         const blocked = rows.filter(x => x && x.status === 'blocked').length;
         if (verificationConflict(snapshot)) {
           setResultStatus(`Theo ngày chọn · KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN. Settlement đã được rà lại và fail-closed; KHÔNG chốt tiền.`, 'err');
@@ -387,8 +410,10 @@
           setResultStatus(`Theo ngày chọn · snapshot này chưa đủ giải. Không tự polling; bấm “Tải ngày đã chọn” để kiểm tra lại.`, 'warn');
         }
       } catch (error) {
+        if (!stillCurrent()) return null;
         await renderStoredSelected({ status: false }).catch(() => {});
-        setResultStatus(`Không tải được KQXS ngày chọn: ${String(error && error.message || error)}. Nếu có snapshot cũ thì vẫn giữ nguyên.`, 'err');
+        if (stillCurrent()) setResultStatus(`Không tải được KQXS ngày chọn: ${String(error && error.message || error)}. Nếu có snapshot cũ thì vẫn giữ nguyên.`, 'err');
+        return null;
       }
     }
 
@@ -543,7 +568,7 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v10-discover-pending-scopes',
+    version: 'result-auto-v11-stale-safe-view-requests',
     VIEW_MODE_KEY,
     PENDING_SCOPES_KEY,
     readPendingScopes,
