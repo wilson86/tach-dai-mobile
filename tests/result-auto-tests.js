@@ -68,7 +68,7 @@ function fixture() {
   assert.strictEqual(A.userResultState({verified:true}).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
-  assert.strictEqual(A.version, 'result-auto-v6-consumer-result-view');
+  assert.strictEqual(A.version, 'result-auto-v7-accepted-message-trigger');
 
   const conflict = {
     verification_status: 'conflict',
@@ -83,5 +83,13 @@ function fixture() {
   assert.deepStrictEqual(Array.from(details.conflicts), ['mb:G7']);
   assert.strictEqual(details.reason, 'KQXS_SOURCE_CONFLICT');
 
+  const source=fs.readFileSync(path.join(__dirname,'..','app','result-auto.js'),'utf8');
+  const uiSource=fs.readFileSync(path.join(__dirname,'..','app','settlement-ui.js'),'utf8');
+  assert(source.includes("global.addEventListener('kts:settlement-message-saved'"));
+  assert(!source.includes("save.addEventListener('click'"), 'KQXS polling must not start on raw save click');
+  const parserErrorPos=uiSource.indexOf("if (outcome.status === 'parser_error')");
+  const acceptedEventPos=uiSource.indexOf("new global.CustomEvent('kts:settlement-message-saved'");
+  assert(parserErrorPos>=0 && acceptedEventPos>parserErrorPos, 'accepted-message event must be after parser-error fail-closed branch');
+  assert(uiSource.includes("Missing config / parser errors never create a background polling job."));
   console.log('result-auto-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });

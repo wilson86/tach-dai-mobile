@@ -300,7 +300,7 @@
         });
         const blocked = rows.filter(x => x && x.status === 'blocked').length;
         if (verificationConflict(snapshot)) {
-          setResultStatus(`Theo ngày chọn · KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN. Đã tính shadow nhưng KHÔNG được coi là xác minh/chốt.`, 'err');
+          setResultStatus(`Theo ngày chọn · KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN. Settlement đã được rà lại và fail-closed; KHÔNG chốt tiền.`, 'err');
         } else if (snapshot.complete) {
           setResultStatus(`Theo ngày chọn · đã tải đủ KQXS ${scope.region.toUpperCase()} ${scope.business_date}. ${rows.length} phạm vi settlement đã rà lại${blocked ? ` · ${blocked} đang fail-closed` : ''}.`, blocked ? 'warn' : 'ok');
         } else {
@@ -397,22 +397,16 @@
       applyMode(false).catch(() => {});
     }
 
-    const save = doc.getElementById('saveMessage');
-    if (save) save.addEventListener('click', () => {
-      const date = doc.getElementById('messageDate');
-      const region = doc.getElementById('messageRegion');
-      const raw = doc.getElementById('messageText');
-      const partner = doc.getElementById('partnerSelect');
-      if (!date || !region || !date.value || !region.value || !raw || !raw.value.trim() || !partner || !partner.value) return;
-      setAutoStatus(`KQXS ${String(region.value).toUpperCase()} ${date.value}: đang tự theo dõi 90 giây/lần…`, 'warn');
-      manager.ensureScope({ business_date: date.value, region: region.value }).catch(error => {
-        if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
-          global.dispatchEvent(new global.CustomEvent('kts:auto-result-error', { detail: { scope: { business_date: date.value, region: region.value }, error: String(error && error.message || error) } }));
-        }
-      });
-    });
-
     if (typeof global.addEventListener === 'function') {
+      global.addEventListener('kts:settlement-message-saved', event => {
+        const detail = event && event.detail || {};
+        const scope = detail.scope || {};
+        if (!validScope(scope)) return;
+        setAutoStatus(`KQXS ${String(scope.region).toUpperCase()} ${scope.business_date}: đang tự theo dõi 90 giây/lần…`, 'warn');
+        manager.ensureScope(scope).catch(error => {
+          emit('kts:auto-result-error', { scope, error: String(error && error.message || error) });
+        });
+      });
       global.addEventListener('kts:auto-result-status', event => {
         const info = event.detail || {};
         const scope = info.scope || {};
@@ -453,7 +447,7 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v6-consumer-result-view',
+    version: 'result-auto-v7-accepted-message-trigger',
     VIEW_MODE_KEY,
     createManager,
     validScope,

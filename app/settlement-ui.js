@@ -216,7 +216,7 @@
   async function restorePartner() {
     const id = $('inactivePartnerSelect').value;
     const source = inactivePartners.find(p => p.id === id);
-    if (!source) return status('partnerStatus', 'Không có khách/chủ đã xóa để khôi phục.', 'warn');
+    if (!source) return status('partnerStatus', 'Không có khách/chủ đã ngừng sử dụng để khôi phục.', 'warn');
     try {
       const saved = await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:true, created_at:source.created_at });
       await refreshPartners(saved.id);
@@ -498,6 +498,15 @@
       if (outcome.status === 'parser_error') {
         status('messageStatus', `${friendlyParserError(outcome.error)} Tin lỗi được giữ trong lịch sử để kiểm tra và đang chặn phạm vi cho đến khi hủy/sửa.`, 'err');
         return outcome;
+      }
+
+      // Start automatic KQXS tracking only after a canonical message is durable.
+      // Missing config / parser errors never create a background polling job.
+      if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+        global.dispatchEvent(new global.CustomEvent('kts:settlement-message-saved', { detail: {
+          message_id: outcome.message && outcome.message.id,
+          scope: { business_date: businessDate, region: String($('messageRegion').value || '').toLowerCase() }
+        }}));
       }
 
       // Canonical message was accepted and is already durable. Clear the editor

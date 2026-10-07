@@ -105,4 +105,19 @@ assert(Math.abs(ops.exact_totals.final_net - (-61.32)) < 1e-9);
 assert.deepStrictEqual(Array.from(ops.partners, x => x.partner.name), ['Hiền','Thái','Trúc']);
 assert.strictEqual(R.categoryLabel('MB_XIEN3'), 'Xiên 3');
 
+const allRegions = R.buildDailyPartnerReport({
+  partner:{id:'all3',name:'All 3',role:'customer'},business_date:'2026-10-06',messages_by_id:{},
+  settlements:[
+    {id:'mn',partner_id:'all3',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:{total_xac:10,total_qua_co:8,total_payout:1,refund_amount:0,final_net:7}},
+    {id:'mt',partner_id:'all3',business_date:'2026-10-06',region:'mt',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:{total_xac:20,total_qua_co:16,total_payout:2,refund_amount:1,final_net:13}},
+    {id:'mb',partner_id:'all3',business_date:'2026-10-06',region:'mb',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:{total_xac:30,total_qua_co:24,total_payout:3,refund_amount:2,final_net:19}}
+  ]
+});
+assert.deepStrictEqual(Array.from(allRegions.regions,x=>x.region),['mn','mt','mb'],'daily report must keep MN/MT/MB separate in canonical order');
+assert.deepStrictEqual(Array.from(allRegions.regions,x=>x.total_xac),[10,20,30]);
+assert.strictEqual(allRegions.totals.xac,60);
+assert.strictEqual(allRegions.totals.qua_co,48);
+assert.strictEqual(allRegions.totals.payout,6);
+assert.strictEqual(allRegions.totals.refund_amount,3);
+assert.strictEqual(allRegions.totals.final_net,39);
 console.log('settlement-report-tests: PASS');
