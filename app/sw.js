@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.59-region-terms';
+const CACHE='kts-tach-unified-v1.0.60-kqxs-simple';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
@@ -7,7 +7,7 @@ const CORE=[
   './settlement-runtime.js','./settlement-evaluator.js','./settlement-parser-provider.js','./settlement-pipeline.js',
   './settlement-report.js','./settlement-report-dashboard.js','./settlement-shadow.js','./settlement-shadow-runtime.js','./settlement-regression-cases.js','./settlement-shadow-guard.js','./settlement-shadow-ui.js','./settlement-shadow-batch.js','./settlement-regression-candidates.js','./settlement-regression-review.js','./settlement-repair-workflow.js','./settlement-parser-replay.js','./settlement-repair-readiness.js','./settlement-qualification-dashboard.js','./settlement-build-identity.js','./settlement-qualification-history.js','./settlement-qualification-history-bridge.js','./settlement-preproduction-package.js','./settlement-preproduction-review.js','./settlement-preproduction-review-history.js','./settlement-preproduction-review-bundle.js','./settlement-preproduction-receipt.js','./settlement-preproduction-handoff.js','./settlement-preproduction-offline-verifier.js','./settlement-preproduction-candidate.js','./settlement-preproduction-boundary.js','./settlement-preproduction-audit-pack.js','./settlement-preproduction-audit-offline-verifier.js','./settlement-preproduction-decision-dossier.js','./settlement-preproduction-freeze-manifest.js','./settlement-preproduction-decision-recheck.js','./settlement-preproduction-review-session.js','./settlement-preproduction-orchestrator.js','./settlement-attention-ui.js',
   './settlement-observation.js','./settlement-observation-ui.js','./settlement-backup-ui.js','./settlement-message-history.js','./settlement-scope-sync.js','./settlement-report-simple-ui.js',
-  './result-service.js','./result-provider.js','./result-auto.js','./result-audit-ui.js','./settlement-ui.js',
+  './result-service.js','./result-provider.js','./result-auto.js','./result-simple-ui.js','./result-audit-ui.js','./settlement-ui.js',
   '../icon-192.png','../icon-512.png'
 ];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));

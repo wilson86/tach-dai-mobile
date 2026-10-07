@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('fs'),assert=require('assert'),vm=require('vm');
+const code=fs.readFileSync('app/result-simple-ui.js','utf8');
+const html=fs.readFileSync('app/settlement.html','utf8');
+const sw=fs.readFileSync('app/sw.js','utf8');
+const ctx={globalThis:{}};vm.createContext(ctx);vm.runInContext(code,ctx);
+const U=ctx.globalThis.KTS_RESULT_SIMPLE_UI;
+assert(U);assert.strictEqual(U.version,'result-simple-ui-v1');
+assert.strictEqual(U.regionName('mn'),'Miền Nam');
+assert.strictEqual(U.regionName('mt'),'Miền Trung');
+assert.strictEqual(U.regionName('mb'),'Miền Bắc');
+assert.strictEqual(U.validScope({business_date:'2026-10-07',region:'mn'}),true);
+assert.strictEqual(U.validScope({business_date:'bad',region:'mn'}),false);
+for(const needle of ['TỰ CẬP NHẬT','Không cần bấm bắt đầu hay dừng','Xem ngày cũ / kỹ thuật','manager.ensureScope(scope)','KQXS_HTTP_404','Bản test public chưa nối backend KQXS'])assert(code.includes(needle));
+assert(html.includes('src="./result-simple-ui.js"'));
+assert(sw.includes("'./result-simple-ui.js'"));
+assert(sw.includes('v1.0.60-kqxs-simple'));
+console.log('result-simple-ui-tests: PASS');
