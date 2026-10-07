@@ -82,7 +82,7 @@
     if (!stations.length) throw new Error('RESULT_STATIONS_REQUIRED');
     if (new Set(stations.map(s => s.code)).size !== stations.length) throw new Error('RESULT_STATION_DUPLICATE');
     const expectedStationCodes = normalizeExpectedStationCodes(input);
-    const coverageComplete = stationCoverage(expectedStationCodes, stations);
+    const coverageComplete = expectedStationCodes.length > 0 && stationCoverage(expectedStationCodes, stations);
     const complete = coverageComplete && stations.every(s => s.complete);
     const status = complete ? 'complete' : 'partial';
     const verificationSources = Array.isArray(input.verification_sources) ? input.verification_sources.map(String) : [];
