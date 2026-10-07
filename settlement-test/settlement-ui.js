@@ -132,13 +132,13 @@
     inactivePartners = allPartners.filter(p => p.active === false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
     const options = partners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
     $('partnerSelect').innerHTML = options || '<option value="">Chưa có đối tác</option>';
-    $('reportPartner').innerHTML = options || '<option value="">Chưa có đối tác</option>';
+    const reportRows = partners.concat(inactivePartners).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+    const reportOptions = reportRows.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}${p.active === false ? ' · Đã ngừng' : ''}</option>`).join('');
+    $('reportPartner').innerHTML = reportOptions || '<option value="">Chưa có đối tác</option>';
     const inactive = inactivePartners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
     $('inactivePartnerSelect').innerHTML = inactive || '<option value="">Không có</option>';
-    if (preferId && partners.some(p => p.id === preferId)) {
-      $('partnerSelect').value = preferId;
-      $('reportPartner').value = preferId;
-    }
+    if (preferId && partners.some(p => p.id === preferId)) $('partnerSelect').value = preferId;
+    if (preferId && reportRows.some(p => p.id === preferId)) $('reportPartner').value = preferId;
     updatePartnerView();
     await loadConfigForDate();
   }
@@ -203,20 +203,20 @@
 
   async function deactivatePartner() {
     const source = selectedPartner();
-    if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để xóa.', 'err');
-    const ok = !global.confirm || global.confirm(`Xóa ${source.name} khỏi danh sách đang dùng?\n\nTin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
+    if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để ngừng sử dụng.', 'err');
+    const ok = !global.confirm || global.confirm(`Ngừng sử dụng ${source.name}?\n\nĐối tác sẽ chỉ bị ẩn khỏi danh sách đang dùng. Tin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
     if (!ok) return;
     try {
       await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:false, created_at:source.created_at });
       await refreshPartners();
-      status('partnerStatus', `Đã xóa ${source.name} khỏi danh sách đang dùng. Lịch sử cũ vẫn được giữ và có thể khôi phục.`, 'ok');
+      status('partnerStatus', `Đã ngừng sử dụng ${source.name}. Lịch sử cũ vẫn được giữ và có thể khôi phục.`, 'ok');
     } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
   }
 
   async function restorePartner() {
     const id = $('inactivePartnerSelect').value;
     const source = inactivePartners.find(p => p.id === id);
-    if (!source) return status('partnerStatus', 'Không có khách/chủ đã xóa để khôi phục.', 'warn');
+    if (!source) return status('partnerStatus', 'Không có khách/chủ đã ngừng sử dụng để khôi phục.', 'warn');
     try {
       const saved = await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:true, created_at:source.created_at });
       await refreshPartners(saved.id);
@@ -500,6 +500,15 @@
         return outcome;
       }
 
+      // Start automatic KQXS tracking only after a canonical message is durable.
+      // Missing config / parser errors never create a background polling job.
+      if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
+        global.dispatchEvent(new global.CustomEvent('kts:settlement-message-saved', { detail: {
+          message_id: outcome.message && outcome.message.id,
+          scope: { business_date: businessDate, region: String($('messageRegion').value || '').toLowerCase() }
+        }}));
+      }
+
       // Canonical message was accepted and is already durable. Clear the editor
       // so a fast second tap cannot accidentally create another identical bet.
       // Intentionally retyping/pasting the same line after this completes still
@@ -600,7 +609,7 @@
     const partnerId = $('reportPartner').value;
     const date = $('reportDate').value;
     if (!partnerId || !date) return;
-    const partner = partners.find(p => p.id === partnerId) || { id: partnerId };
+    const partner = partners.concat(inactivePartners).find(p => p.id === partnerId) || { id: partnerId };
     const settlements = await store.getAll(store.STORES.settlements);
     const messages = await store.getAll(store.STORES.messages);
     const messagesById = Object.fromEntries(messages.map(m => [m.id, m]));

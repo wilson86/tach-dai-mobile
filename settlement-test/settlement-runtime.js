@@ -1,11 +1,6 @@
 (function (global) {
   'use strict';
 
-  global.KTS_SETTLEMENT_RUNTIME_ENDPOINTS = Object.freeze({
-    parser_endpoint: 'https://kts-settlement-api-test.onrender.com/api/settlement/parse',
-    kqxs_endpoint: 'https://kts-settlement-api-test.onrender.com/api/kqxs'
-  });
-
   function deps() {
     const engine = global.KTS_SETTLEMENT_ENGINE;
     const gates = global.KTS_SETTLEMENT_FEATURE_GATES;

@@ -61,16 +61,16 @@
         status('Đang kiểm tra và khôi phục backup…', '');
         const text = await file.text();
         const payload = JSON.parse(text);
-        await store.importAll(payload, { replace: false });
-        const total = Object.values(payload.stores || {}).reduce((sum, rows) => sum + (Array.isArray(rows) ? rows.length : 0), 0);
-        status(`Đã gộp backup hợp lệ · ${total} bản ghi. Tải lại trang để mọi danh sách cập nhật.`, 'ok');
+        const validation = await store.importAll(payload, { replace: false });
+        const total = Object.values(validation.counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
+        status(`Đã kiểm tra an toàn và gộp backup · ${total} bản ghi. Tải lại trang để mọi danh sách cập nhật.`, 'ok');
       } catch (e) {
         status('KHÔNG khôi phục: ' + String(e && e.message || e), 'err');
       }
     });
   }
 
-  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v1', filename });
+  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v2-validated-import', filename });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
