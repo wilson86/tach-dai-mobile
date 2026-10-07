@@ -32,6 +32,7 @@
   let configDirty = false;
   let loadedConfigPartnerId = '';
   let loadedConfigDate = '';
+  let configLoadEpoch = 0;
 
   function today() {
     const d = new Date();
@@ -396,6 +397,14 @@
         pendingConfigBusinessDate === businessDate
           ? pendingConfigTemplate : null;
       const template = cachedTemplate || await nearestConfigTemplate(partnerId, businessDate);
+      const scopeStillCurrent =
+        currentPartnerId() === partnerId &&
+        String($('messageDate').value || '') === businessDate &&
+        String($('messageRegion').value || '').toLowerCase() === region;
+      if (!scopeStillCurrent) {
+        status('messageStatus', 'Đối tác/ngày/miền đã đổi. Không áp dụng bảng giá của phạm vi cũ.', 'warn');
+        return null;
+      }
       if (!template) {
         needManualConfig = true;
       } else {
@@ -429,17 +438,31 @@
 
   async function prepareConfigForMessageDate() {
     const partnerId = currentPartnerId();
-    const businessDate = $('messageDate').value;
+    const businessDate = String($('messageDate').value || '');
     if (!partnerId || !businessDate) return;
-    $('effectiveDate').value = businessDate;
+    // Invalidate any older async loadConfigForDate() that may still be in flight.
+    configLoadEpoch += 1;
+    const stillSameMessageScope = () =>
+      currentPartnerId() === partnerId &&
+      String($('messageDate').value || '') === businessDate;
     const template = await nearestConfigTemplate(partnerId, businessDate);
+    if (!stillSameMessageScope()) {
+      return status('messageStatus', 'Đối tác/ngày đã đổi trong lúc chuẩn bị thiết lập. Không nạp bảng giá cũ vào màn hình mới.', 'warn');
+    }
+    $('effectiveDate').value = businessDate;
     if (template) {
       applyConfig(template);
       $('effectiveDate').value = businessDate;
+      loadedConfigPartnerId = partnerId;
+      loadedConfigDate = businessDate;
+      setConfigDirty(false);
       status('configStatus', `Ngày ${viDate(businessDate)} chưa có thiết lập. Đã nạp bảng giá gần nhất từ ${viDate(template.effective_from_date)} làm mẫu; kiểm tra rồi bấm Lưu cấu hình.`, 'warn');
     } else {
       resetConfigForm();
       $('effectiveDate').value = businessDate;
+      loadedConfigPartnerId = partnerId;
+      loadedConfigDate = businessDate;
+      setConfigDirty(false);
       status('configStatus', `Chưa có bảng giá nào cho đối tác này. Nhập tỷ lệ rồi bấm Lưu cấu hình từ ${viDate(businessDate)}.`, 'warn');
     }
     const btn = document.querySelector('.nav button[data-pane="config"]');
@@ -447,11 +470,25 @@
   }
 
   async function loadConfigForDate() {
+    const epoch = ++configLoadEpoch;
     const partnerId = currentPartnerId();
-    if (!partnerId) { resetConfigForm(); return; }
-    const date = $('effectiveDate').value || today();
+    if (!partnerId) {
+      if (epoch === configLoadEpoch) {
+        resetConfigForm();
+        loadedConfigPartnerId = '';
+        loadedConfigDate = '';
+        setConfigDirty(false);
+      }
+      return null;
+    }
+    const date = String($('effectiveDate').value || today());
+    const stillCurrent = () =>
+      epoch === configLoadEpoch &&
+      currentPartnerId() === partnerId &&
+      String($('effectiveDate').value || today()) === date;
     try {
       const cfg = await store.resolveConfigForDate(partnerId, date);
+      if (!stillCurrent()) return null;
       applyConfig(cfg);
       loadedConfigPartnerId = partnerId;
       loadedConfigDate = date;
@@ -459,9 +496,12 @@
       status('configStatus', configNeedsMtPricing(cfg)
         ? `Cấu hình v${cfg.version} là dữ liệu cũ chưa có bảng giá Miền Trung riêng. MT đang để 0; kiểm tra rồi Lưu cấu hình trước khi tính MT.`
         : `Đang xem cấu hình v${cfg.version} hiệu lực từ ${cfg.effective_from_date}.`, configNeedsMtPricing(cfg) ? 'warn' : 'ok');
+      return cfg;
     } catch (e) {
+      if (!stillCurrent()) return null;
       if (String(e.message || e).includes('NO_CONFIG')) {
         const template = await nearestConfigTemplate(partnerId, date);
+        if (!stillCurrent()) return null;
         if (template) {
           applyConfig(template);
           $('effectiveDate').value = date;
@@ -477,7 +517,10 @@
           setConfigDirty(false);
           status('configStatus', 'Chưa có bảng giá nào cho đối tác này. Nhập tỷ lệ rồi bấm Lưu cấu hình.', 'warn');
         }
-      } else status('configStatus', String(e.message || e), 'err');
+        return null;
+      }
+      status('configStatus', String(e.message || e), 'err');
+      return null;
     }
   }
 
