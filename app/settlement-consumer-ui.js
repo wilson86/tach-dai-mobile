@@ -185,6 +185,7 @@
 
   global.KTS_SETTLEMENT_CONSUMER_UI=Object.freeze({
     version:'settlement-consumer-ui-v2-safety-review',
+    compatibility:Object.freeze({version:'settlement-consumer-ui-v1'}),
     CODE_LABELS,
     regionName,
     formatDate,
