@@ -83,14 +83,20 @@ function fixture() {
   assert.strictEqual(A.sourceLabel('https://www.xosominhngoc.com'), 'Xổ Số Minh Ngọc');
   assert.strictEqual(A.sourceLabel('xskt.com.vn'), 'XSKT');
   assert.strictEqual(A.dateLabel('2026-10-07'), '07/10/2026');
-  assert.strictEqual(A.userResultState({verified:true}).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
+  const verifiedSnapshot = {
+    complete:true,verified:true,verification_status:'verified',
+    verification_sources:['primary','secondary'],
+    expected_station_codes:['bt'],stations:[{code:'bt'}],verification_conflicts:[]
+  };
+  assert.strictEqual(A.userResultState(verifiedSnapshot).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
+  assert.strictEqual(A.userResultState({...verifiedSnapshot,verification_sources:['primary']}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
   assert.strictEqual(A.version, 'result-auto-v10-discover-pending-scopes');
   assert.strictEqual(A.PENDING_SCOPES_KEY, 'kts_settlement_pending_result_scopes_v1');
-  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07',true),true,'remembered verified current-day scope must resume unfinished stability confirmations');
-  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07',false),false,'discovered verified scope without pending marker must not restart on every reload');
-  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07',false),false,'verified historical scope may stay stopped');
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},verifiedSnapshot,'2026-10-07',true),true,'remembered verified current-day scope must resume unfinished stability confirmations');
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},verifiedSnapshot,'2026-10-07',false),false,'discovered verified scope without pending marker must not restart on every reload');
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},verifiedSnapshot,'2026-10-07',false),false,'verified historical scope may stay stopped');
   assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},{verified:false,verification_status:'unverified'},'2026-10-07',false),true,'durable active message with unverified KQXS must be rediscovered even without localStorage marker');
   A.rememberPendingScope({business_date:'2026-10-06',region:'mn'});
   A.rememberPendingScope({business_date:'2026-10-06',region:'mn'});
