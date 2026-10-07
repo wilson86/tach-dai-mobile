@@ -3,7 +3,7 @@ const fs=require('fs'),assert=require('assert');
 const sw=fs.readFileSync('app/sw.js','utf8');
 assert(sw.includes("const CACHE_SCOPE=new URL(self.registration.scope).pathname"));
 assert(sw.includes("const CACHE_PREFIX=\`kts-tach-unified-\${CACHE_SCOPE}-\`"));
-assert(sw.includes("v1.0.130-scope-isolated"));
+assert(/const CACHE=\`\$\{CACHE_PREFIX\}v1\.0\.[0-9]+-[^\`]+\`;/.test(sw),'cache must be revisioned without hard-coding one release number');
 assert(sw.includes("k.startsWith(CACHE_PREFIX)&&k!==CACHE"));
 assert(!sw.includes("k.startsWith('kts-tach-unified-')&&k!==CACHE"));
 assert(sw.includes('function withinWorkerScope(url)'));
