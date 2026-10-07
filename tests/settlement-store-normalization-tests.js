@@ -54,6 +54,11 @@ assert.strictEqual(legacyCfg.region_terms.mt.total_percent,'88');
 assert.strictEqual(legacyCfg.region_terms.mb.refund_percent,'3');
 assert.throws(()=>S.normalizeConfig({partner_id:'p3',version:1,effective_from_date:'2026-10-07',region_terms:{mn:{dat_hit_mode:'bad'}}}),/INVALID_HIT_MODE/);
 
+function fullMnPrizes(prefix) {
+  const mk=(name,count)=>Array.from({length:count},(_,i)=>String(prefix)+'-'+name+'-'+String(i+1));
+  return { G8:mk('G8',1),G7:mk('G7',1),G6:mk('G6',3),G5:mk('G5',1),G4:mk('G4',7),G3:mk('G3',2),G2:mk('G2',1),G1:mk('G1',1),DB:mk('DB',1) };
+}
+
 const base = {
   business_date: '2026-10-06',
   region: 'mn',
@@ -67,9 +72,9 @@ const base = {
   verification_reason: 'KQXS_SOURCE_CONFLICT',
   verification_conflicts: ['bli:G8'],
   stations: [
-    { code: 'bt', prizes: { G8: ['10'] } },
-    { code: 'vt', prizes: { G8: ['20'] } },
-    { code: 'bli', prizes: { G8: ['30'] } }
+    { code: 'bt', prizes: fullMnPrizes('bt') },
+    { code: 'vt', prizes: fullMnPrizes('vt') },
+    { code: 'bli', prizes: fullMnPrizes('bli') }
   ]
 };
 
@@ -145,6 +150,19 @@ const strongVerified=S.normalizeResultSnapshot({
 });
 assert.strictEqual(strongVerified.verified,true);
 
+const incompletePrizeClaim=S.normalizeResultSnapshot({
+  ...base,
+  verification_status:'verified',verified:true,
+  verification_sources:['primary','secondary'],verification_conflicts:[],
+  stations:[
+    {code:'bt',prizes:{G8:['10']}},
+    {code:'vt',prizes:fullMnPrizes('vt')},
+    {code:'bli',prizes:fullMnPrizes('bli')}
+  ]
+});
+assert.strictEqual(incompletePrizeClaim.complete,false,'missing prize rows must downgrade complete=true at durable store boundary');
+assert.strictEqual(incompletePrizeClaim.verified,false,'incomplete prize data must never remain verified');
+
 const conflictEvidenceWins=S.normalizeResultSnapshot({
   ...base,verification_status:'verified',verified:true,
   verification_sources:['primary','secondary'],verification_conflicts:['bli:G8']
@@ -170,6 +188,7 @@ assert.strictEqual(S.resultSnapshotIsOlder(
 ),false);
 assert(storeSource.includes("db.transaction([STORES.results, STORES.resultEvents], 'readwrite')"),'KQXS freshness check + save must be one atomic readwrite transaction');
 assert(storeSource.includes('stale_ignored: true'),'older KQXS responses must be retained as ignored rather than overwrite canonical result');
+assert(storeSource.includes("name === STORES.results ? normalizeResultSnapshot(row) : clone(row)"),'backup restore must normalize canonical result rows before persistence');
 
 const coverageDowngraded=S.normalizeResultSnapshot({
   ...base,complete:true,status:'complete',
