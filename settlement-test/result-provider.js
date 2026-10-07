@@ -39,8 +39,10 @@
     const requestedRegion = String(scope && scope.region || '').toLowerCase();
     const bodyDate = String(body.business_date || body.date || '').slice(0, 10);
     const bodyRegion = String(body.region || '').toLowerCase();
-    if (bodyDate && bodyDate !== requestedDate) throw new Error('KQXS_PROVIDER_SCOPE_MISMATCH:DATE');
-    if (bodyRegion && bodyRegion !== requestedRegion) throw new Error('KQXS_PROVIDER_SCOPE_MISMATCH:REGION');
+    if (!bodyDate) throw new Error('KQXS_PROVIDER_SCOPE_REQUIRED:DATE');
+    if (!bodyRegion) throw new Error('KQXS_PROVIDER_SCOPE_REQUIRED:REGION');
+    if (bodyDate !== requestedDate) throw new Error('KQXS_PROVIDER_SCOPE_MISMATCH:DATE');
+    if (bodyRegion !== requestedRegion) throw new Error('KQXS_PROVIDER_SCOPE_MISMATCH:REGION');
     const stations = body.stations || body.results || [];
     if (!Array.isArray(stations) || !stations.length) throw new Error('KQXS_PROVIDER_STATIONS_REQUIRED');
     const expectedStationCodes = Array.isArray(body.expected_station_codes)
