@@ -34,6 +34,7 @@
   let loadedConfigPartnerId = '';
   let loadedConfigDate = '';
   let configLoadEpoch = 0;
+  let reportLoadEpoch = 0;
 
   function today() {
     const d = new Date();
@@ -855,14 +856,24 @@
   }
 
   async function loadReport() {
-    const partnerId = $('reportPartner').value;
-    const date = $('reportDate').value;
+    const epoch = ++reportLoadEpoch;
+    const partnerId = String($('reportPartner').value || '');
+    const date = String($('reportDate').value || '');
     if (!partnerId || !date) return;
+    const stillCurrent = () =>
+      epoch === reportLoadEpoch &&
+      String($('reportPartner').value || '') === partnerId &&
+      String($('reportDate').value || '') === date;
     const partner = partners.concat(inactivePartners).find(p => p.id === partnerId) || { id: partnerId };
     const settlements = await store.getAll(store.STORES.settlements);
+    if (!stillCurrent()) return null;
     const messages = await store.getAll(store.STORES.messages);
+    if (!stillCurrent()) return null;
     const messagesById = Object.fromEntries(messages.map(m => [m.id, m]));
-    renderReport(reportApi.buildDailyPartnerReport({ partner, business_date: date, settlements, messages_by_id: messagesById }));
+    const model = reportApi.buildDailyPartnerReport({ partner, business_date: date, settlements, messages_by_id: messagesById });
+    if (!stillCurrent()) return null;
+    renderReport(model);
+    return model;
   }
 
   function nav() {
