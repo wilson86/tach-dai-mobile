@@ -86,11 +86,12 @@ function fixture() {
   assert.strictEqual(A.userResultState({verified:true}).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
-  assert.strictEqual(A.version, 'result-auto-v9-stability-resume-safe');
+  assert.strictEqual(A.version, 'result-auto-v10-discover-pending-scopes');
   assert.strictEqual(A.PENDING_SCOPES_KEY, 'kts_settlement_pending_result_scopes_v1');
-  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07'),true,'verified current-day scope still pending must resume stability confirmations');
-  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07'),false,'verified historical scope may stay stopped');
-  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},{verified:false,verification_status:'unverified'},'2026-10-07'),true);
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07',true),true,'remembered verified current-day scope must resume unfinished stability confirmations');
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07',false),false,'discovered verified scope without pending marker must not restart on every reload');
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},{verified:true,verification_status:'verified'},'2026-10-07',false),false,'verified historical scope may stay stopped');
+  assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-06',region:'mn'},{verified:false,verification_status:'unverified'},'2026-10-07',false),true,'durable active message with unverified KQXS must be rediscovered even without localStorage marker');
   A.rememberPendingScope({business_date:'2026-10-06',region:'mn'});
   A.rememberPendingScope({business_date:'2026-10-06',region:'mn'});
   assert.strictEqual(A.readPendingScopes().length,1,'pending scope persistence must dedupe');
@@ -119,6 +120,8 @@ function fixture() {
   assert(parserErrorPos>=0 && acceptedEventPos>parserErrorPos, 'accepted-message event must be after parser-error fail-closed branch');
   assert(uiSource.includes("Missing config / parser errors never create a background polling job."));
   assert(source.includes('resumePendingScopes'));
+  assert(source.includes('const activeScopes = new Map()'));
+  assert(source.includes('rememberedKeys.has(key)'));
   assert(source.includes("String(m.status || '').toLowerCase() !== 'cancelled'"));
   assert(source.includes("kts:settlement-message-activity-changed"));
   console.log('result-auto-tests: PASS');
