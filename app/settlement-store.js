@@ -640,8 +640,12 @@
     for (const row of (replace ? [] : (existing[STORES.results] || []))) combinedResults.set(String(row.id || ''), row);
     for (const row of incoming[STORES.results]) {
       const normalized = normalizeResultSnapshot(row);
+      const recomputed = normalizeResultSnapshot(Object.assign({}, row, { fingerprint: null }));
       const expectedResultId = `${normalized.business_date}:${normalized.region}`;
       if (String(row.id || '') !== expectedResultId) throw new Error('IMPORT_RESULT_ID_SCOPE_MISMATCH:' + String(row.id));
+      if (row.fingerprint != null && String(row.fingerprint) !== String(recomputed.fingerprint)) {
+        throw new Error('IMPORT_RESULT_FINGERPRINT_MISMATCH:' + String(row.id));
+      }
       combinedResults.set(String(row.id), row);
     }
     for (const row of incoming[STORES.resultEvents]) {
@@ -649,13 +653,21 @@
       const expectedResultId = `${String(row.business_date)}:${String(row.region).toLowerCase()}`;
       if (row.result_id != null && String(row.result_id) !== expectedResultId) throw new Error('IMPORT_RESULT_EVENT_ID_SCOPE_MISMATCH:' + String(row.id));
       if (row.result_id != null && !combinedResults.has(String(row.result_id))) throw new Error('IMPORT_RESULT_EVENT_RESULT_MISSING:' + String(row.id));
+      const recomputed = normalizeResultSnapshot(Object.assign({}, row, { id: expectedResultId, fingerprint: null }));
+      if (row.fingerprint != null && String(row.fingerprint) !== String(recomputed.fingerprint)) {
+        throw new Error('IMPORT_RESULT_EVENT_FINGERPRINT_MISMATCH:' + String(row.id));
+      }
     }
     for (const row of incoming[STORES.shadowEvents]) {
       const partnerId = requirePartner(row, STORES.shadowEvents);
       const normalized = normalizeShadowEvent(row);
+      const recomputedShadow = normalizeShadowEvent(Object.assign({}, row, { evidence_fingerprint: null }));
       if (String(normalized.partner_id) !== partnerId) throw new Error('IMPORT_SHADOW_PARTNER_MISMATCH:' + String(row.id));
       const expectedScopeId = `scope:${partnerId}:${normalized.business_date}:${normalized.region}`;
       if (String(normalized.scope_id || '') !== expectedScopeId) throw new Error('IMPORT_SHADOW_SCOPE_ID_MISMATCH:' + String(row.id));
+      if (row.evidence_fingerprint != null && String(row.evidence_fingerprint) !== String(recomputedShadow.evidence_fingerprint)) {
+        throw new Error('IMPORT_SHADOW_FINGERPRINT_MISMATCH:' + String(row.id));
+      }
       const prior = existingMap(STORES.shadowEvents).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.shadowEvents + ':' + String(row.id));
     }
