@@ -43,5 +43,5 @@ assert(code.includes('Tin gốc chưa lưu đang thuộc phạm vi trước đó
 assert(code.includes("'reportOutput'"));
 assert(html.includes('src="./settlement-consumer-ui.js"'));
 assert(sw.includes("'./settlement-consumer-ui.js'"));
-assert(sw.includes('v1.0.94-partner-report-kqxs-gate'));
+assert(sw.includes('v1.0.95-safe-backup-merge'));
 console.log('settlement-consumer-ui-tests: PASS');
