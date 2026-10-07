@@ -10,7 +10,7 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const D = sandbox.globalThis.KTS_SETTLEMENT_REPORT_DASHBOARD;
 
-assert.strictEqual(D.version, 'settlement-report-dashboard-v3-readiness');
+assert.strictEqual(D.version, 'settlement-report-dashboard-v4-live-refresh');
 assert.strictEqual(D.shadowLabel('MATCH_EXACT'), 'ĐÃ ĐỐI SOÁT');
 assert.strictEqual(D.shadowLabel('MISMATCH'), 'LỆCH ĐỐI SOÁT');
 assert.strictEqual(D.shadowKind('MATCH_EXACT'), 'ok');
@@ -82,6 +82,9 @@ assert(code.includes('Theo loại cược'));
 assert(code.includes('Xem chi tiết'));
 assert(code.includes('buildDailyOperationsReport'));
 
+assert(source.includes("kts:settlement-message-saved"));
+assert(source.includes("kts:settlement-message-activity-changed"));
+assert(source.includes("kts:settlement-config-recalculated"));
 console.log('settlement-report-dashboard-tests: PASS');
 
 // Empty/cancelled-only scopes are filtered by settlement-report before dashboard readiness.
