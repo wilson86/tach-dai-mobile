@@ -449,9 +449,110 @@
     return payload;
   }
 
-  async function importAll(payload, options) {
+  function validateImportPayload(payload, existingByStore, options) {
     const replace = Boolean(options && options.replace);
     if (!payload || payload.format !== 'kts-settlement-export' || ![1, 2, 3, 4, 5].includes(payload.version)) throw new Error('INVALID_KTS_EXPORT');
+    if (!payload.stores || typeof payload.stores !== 'object' || Array.isArray(payload.stores)) throw new Error('INVALID_KTS_EXPORT_STORES');
+
+    const existing = existingByStore || {};
+    const incoming = {};
+    const keyForStore = name => name === STORES.metadata ? 'key' : 'id';
+    for (const name of Object.values(STORES)) {
+      const rows = payload.stores[name] == null ? [] : payload.stores[name];
+      if (!Array.isArray(rows)) throw new Error('INVALID_KTS_EXPORT_STORE:' + name);
+      const seen = new Set();
+      incoming[name] = rows.map(row => {
+        if (!row || typeof row !== 'object' || Array.isArray(row)) throw new Error('INVALID_KTS_EXPORT_ROW:' + name);
+        const keyField = keyForStore(name);
+        const key = String(row[keyField] == null ? '' : row[keyField]);
+        if (!key) throw new Error('INVALID_KTS_EXPORT_KEY:' + name);
+        if (seen.has(key)) throw new Error('DUPLICATE_KTS_EXPORT_KEY:' + name + ':' + key);
+        seen.add(key);
+        return row;
+      });
+    }
+
+    const incomingPartners = incoming[STORES.partners];
+    const existingPartners = replace ? [] : (existing[STORES.partners] || []);
+    const partnerIds = new Set([...existingPartners, ...incomingPartners].map(row => String(row && row.id || '')).filter(Boolean));
+    for (const row of incomingPartners) {
+      if (!String(row.id || '')) throw new Error('IMPORT_PARTNER_ID_REQUIRED');
+      normalizePartner(row);
+    }
+
+    const requirePartner = (row, storeName) => {
+      const partnerId = String(row && row.partner_id || '');
+      if (!partnerId || !partnerIds.has(partnerId)) throw new Error('IMPORT_UNKNOWN_PARTNER:' + storeName + ':' + partnerId);
+      return partnerId;
+    };
+    const validRegion = value => ['mn','mt','mb'].includes(String(value || '').toLowerCase());
+    const existingMap = name => new Map((replace ? [] : (existing[name] || [])).map(row => [String(row && row[keyForStore(name)] || ''), row]));
+
+    for (const row of incoming[STORES.configs]) {
+      const partnerId = requirePartner(row, STORES.configs);
+      const normalized = normalizeConfig(row);
+      if (String(row.id) !== partnerId + ':v' + String(normalized.version)) throw new Error('IMPORT_CONFIG_ID_SCOPE_MISMATCH:' + String(row.id));
+      const prior = existingMap(STORES.configs).get(String(row.id));
+      if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.configs + ':' + String(row.id));
+    }
+
+    const combinedMessages = new Map();
+    for (const row of (replace ? [] : (existing[STORES.messages] || []))) combinedMessages.set(String(row.id || ''), row);
+    for (const row of incoming[STORES.messages]) {
+      const partnerId = requirePartner(row, STORES.messages);
+      if (!validDateOnly(String(row.business_date || ''))) throw new Error('IMPORT_MESSAGE_DATE_INVALID:' + String(row.id));
+      if (!validRegion(row.region)) throw new Error('IMPORT_MESSAGE_REGION_INVALID:' + String(row.id));
+      assertConfigPartner(row.config_snapshot || null, partnerId);
+      if (row.canonical_payload && row.canonical_payload.region &&
+          String(row.canonical_payload.region).toLowerCase() !== String(row.region).toLowerCase()) {
+        throw new Error('MESSAGE_CANONICAL_SCOPE_MISMATCH');
+      }
+      const prior = existingMap(STORES.messages).get(String(row.id));
+      if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.messages + ':' + String(row.id));
+      combinedMessages.set(String(row.id), row);
+    }
+
+    for (const row of incoming[STORES.settlements]) {
+      const partnerId = requirePartner(row, STORES.settlements);
+      if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_SETTLEMENT_SCOPE_INVALID:' + String(row.id));
+      assertConfigPartner(row.config_snapshot || null, partnerId);
+      const prior = existingMap(STORES.settlements).get(String(row.id));
+      if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.settlements + ':' + String(row.id));
+      const messageIds = Array.isArray(row.message_ids) ? row.message_ids : (row.message_id ? [row.message_id] : []);
+      for (const messageId of messageIds) {
+        const message = combinedMessages.get(String(messageId));
+        if (!message) continue;
+        if (String(message.partner_id || '') !== partnerId ||
+            String(message.business_date || '') !== String(row.business_date || '') ||
+            String(message.region || '').toLowerCase() !== String(row.region || '').toLowerCase()) {
+          throw new Error('IMPORT_SETTLEMENT_MESSAGE_SCOPE_MISMATCH:' + String(row.id) + ':' + String(messageId));
+        }
+      }
+    }
+
+    for (const row of incoming[STORES.results]) normalizeResultSnapshot(row);
+    for (const row of incoming[STORES.resultEvents]) {
+      if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_RESULT_EVENT_SCOPE_INVALID:' + String(row.id));
+    }
+    for (const row of incoming[STORES.shadowEvents]) {
+      const partnerId = requirePartner(row, STORES.shadowEvents);
+      const normalized = normalizeShadowEvent(row);
+      if (String(normalized.partner_id) !== partnerId) throw new Error('IMPORT_SHADOW_PARTNER_MISMATCH:' + String(row.id));
+      const prior = existingMap(STORES.shadowEvents).get(String(row.id));
+      if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.shadowEvents + ':' + String(row.id));
+    }
+
+    const counts = {};
+    for (const name of Object.values(STORES)) counts[name] = incoming[name].length;
+    return { valid: true, replace, counts };
+  }
+
+  async function importAll(payload, options) {
+    const replace = Boolean(options && options.replace);
+    const existing = {};
+    for (const name of Object.values(STORES)) existing[name] = replace ? [] : await getAll(name);
+    const validation = validateImportPayload(payload, existing, { replace });
+
     const db = await openDb();
     try {
       const names = Object.values(STORES);
@@ -463,6 +564,7 @@
       }
       await txDone(tx);
     } finally { db.close(); }
+    return validation;
   }
 
   global.KTS_SETTLEMENT_STORE = Object.freeze({
@@ -470,6 +572,6 @@
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, stableStringify
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, validateImportPayload, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);

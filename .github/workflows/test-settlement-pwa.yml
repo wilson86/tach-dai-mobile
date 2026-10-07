@@ -250,6 +250,9 @@ jobs:
       - name: Settlement store normalization tests
         run: node tests/settlement-store-normalization-tests.js
 
+      - name: Settlement backup validation tests
+        run: node tests/settlement-backup-validation-tests.js
+
       - name: KQXS result service tests
         run: node tests/result-service-tests.js
 

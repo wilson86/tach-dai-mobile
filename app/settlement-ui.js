@@ -203,13 +203,13 @@
 
   async function deactivatePartner() {
     const source = selectedPartner();
-    if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để xóa.', 'err');
-    const ok = !global.confirm || global.confirm(`Xóa ${source.name} khỏi danh sách đang dùng?\n\nTin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
+    if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để ngừng sử dụng.', 'err');
+    const ok = !global.confirm || global.confirm(`Ngừng sử dụng ${source.name}?\n\nĐối tác sẽ chỉ bị ẩn khỏi danh sách đang dùng. Tin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
     if (!ok) return;
     try {
       await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:false, created_at:source.created_at });
       await refreshPartners();
-      status('partnerStatus', `Đã xóa ${source.name} khỏi danh sách đang dùng. Lịch sử cũ vẫn được giữ và có thể khôi phục.`, 'ok');
+      status('partnerStatus', `Đã ngừng sử dụng ${source.name}. Lịch sử cũ vẫn được giữ và có thể khôi phục.`, 'ok');
     } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
   }
 
