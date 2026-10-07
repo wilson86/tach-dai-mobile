@@ -97,9 +97,24 @@
     const messages = input.messages || await findScopeMessages(partnerId, businessDate, region);
     if (!messages.length) return saveEmptyScope({ partner_id: partnerId, business_date: businessDate, region });
 
+    const foreignMessage = messages.find(message =>
+      String(message && message.partner_id || '') !== String(partnerId) ||
+      String(message && message.business_date || '') !== String(businessDate) ||
+      String(message && message.region || '').toLowerCase() !== region
+    );
+    if (foreignMessage) {
+      return saveBlockedScope({
+        partner_id: partnerId, business_date: businessDate, region, messages: [],
+        reason: `MESSAGE_SCOPE_MISMATCH:${String(foreignMessage.id || 'unknown')}`
+      });
+    }
+
     let config;
     try { config = await d.store.resolveConfigForDate(partnerId, businessDate); }
     catch (e) { return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: String(e.message || e) }); }
+    if (!config || String(config.partner_id || '') !== String(partnerId)) {
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: 'CONFIG_PARTNER_MISMATCH' });
+    }
 
     const pending = messages.filter(m => !m.canonical_payload || String(m.status || '').startsWith('pending') || String(m.status || '').startsWith('parser_error'));
     if (pending.length) {
@@ -109,6 +124,20 @@
     const resultSnapshot = input.result_snapshot || await findResult(businessDate, region);
     if (!resultSnapshot) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: 'KQXS_NOT_AVAILABLE' });
+    }
+    const resultDate = String(resultSnapshot.business_date || '').slice(0, 10);
+    const resultRegion = String(resultSnapshot.region || '').toLowerCase();
+    if (resultDate !== String(businessDate) || resultRegion !== region) {
+      return saveBlockedScope({
+        partner_id: partnerId, business_date: businessDate, region, messages,
+        config_snapshot: config, result_snapshot: resultSnapshot, reason: 'KQXS_SCOPE_MISMATCH'
+      });
+    }
+    if (String(resultSnapshot.verification_status || '').toLowerCase() === 'conflict') {
+      return saveBlockedScope({
+        partner_id: partnerId, business_date: businessDate, region, messages,
+        config_snapshot: config, result_snapshot: resultSnapshot, reason: 'KQXS_SOURCE_CONFLICT'
+      });
     }
 
     const categoryInputs = [];
@@ -204,36 +233,50 @@
 
   async function parseAndSaveMessage(input) {
     const d = deps();
+    const partnerId = String(input && input.partner_id || '');
+    const businessDate = String(input && input.business_date || '');
+    const region = String(input && input.region || '').toLowerCase();
+    const rawText = String(input && input.raw_text || '');
+    if (!partnerId || !/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) throw new Error('SETTLEMENT_SCOPE_REQUIRED');
+    if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('SETTLEMENT_REGION_REQUIRED');
+    if (!rawText.trim()) throw new Error('SETTLEMENT_MESSAGE_REQUIRED');
+
+    // Domain-level preflight: callers outside the UI must not hit the parser or
+    // persist a message until the exact partner/date pricing config exists.
+    const config = await d.store.resolveConfigForDate(partnerId, businessDate);
+    if (!config || String(config.partner_id || '') !== partnerId) throw new Error('CONFIG_PARTNER_MISMATCH');
+
     const parser = input.parser_provider || global.KTS_SETTLEMENT_PARSER_PROVIDER;
     if (!parser || typeof parser.fetchCanonical !== 'function') throw new Error('SETTLEMENT_PARSER_PROVIDER_MISSING');
     const base = {
-      partner_id: input.partner_id,
-      business_date: input.business_date,
-      region: input.region,
-      raw_text: input.raw_text
+      partner_id: partnerId,
+      business_date: businessDate,
+      region,
+      raw_text: rawText,
+      config_snapshot: config
     };
     let canonical;
     try {
-      canonical = await parser.fetchCanonical(input.raw_text, input.region, input.business_date);
+      canonical = await parser.fetchCanonical(rawText, region, businessDate);
     } catch (e) {
       const savedPending = await d.store.saveMessage(Object.assign({}, base, {
         canonical_payload: null,
         parser_error: String(e.message || e),
         status: 'parser_error'
       }));
-      await settleScope({ partner_id: input.partner_id, business_date: input.business_date, region: input.region });
+      await settleScope({ partner_id: partnerId, business_date: businessDate, region });
       return { status: 'parser_error', message: savedPending, error: String(e.message || e) };
     }
 
-    if (String(canonical.region || '').toLowerCase() !== String(input.region || '').toLowerCase()) throw new Error('PARSER_REGION_MISMATCH');
+    if (String(canonical.region || '').toLowerCase() !== region) throw new Error('PARSER_REGION_MISMATCH');
     const saved = await d.store.saveMessage(Object.assign({}, base, {
       canonical_payload: canonical,
       canonical_version: canonical.parser_version || 'canonical-settlement-v1',
       parser_error: null,
       status: 'parsed_waiting_result'
     }));
-    const result = await findResult(input.business_date, input.region);
-    const settlement = result ? await settleScope({ partner_id: input.partner_id, business_date: input.business_date, region: input.region, result_snapshot: result }) : null;
+    const result = await findResult(businessDate, region);
+    const settlement = result ? await settleScope({ partner_id: partnerId, business_date: businessDate, region, result_snapshot: result }) : null;
     return { status: settlement ? settlement.status : 'parsed_waiting_result', message: saved, settlement };
   }
 
@@ -260,7 +303,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v3-region-terms',
+    version: 'settlement-pipeline-v4-scope-safety',
     scopeId,
     isCancelled,
     findScopeMessages,

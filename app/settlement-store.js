@@ -337,11 +337,22 @@
     return clone(eligible[eligible.length - 1]);
   }
 
+  function assertConfigPartner(configSnapshot, partnerId) {
+    if (!configSnapshot) return true;
+    if (String(configSnapshot.partner_id || '') !== String(partnerId || '')) throw new Error('CONFIG_PARTNER_MISMATCH');
+    return true;
+  }
+
   async function saveMessage(input) {
     if (!input.partner_id) throw new Error('MESSAGE_PARTNER_REQUIRED');
     if (!validDateOnly(input.business_date)) throw new Error('MESSAGE_DATE_REQUIRED');
     const now = nowIso();
     const configSnapshot = input.config_snapshot || await resolveConfigForDate(input.partner_id, input.business_date);
+    assertConfigPartner(configSnapshot, input.partner_id);
+    if (input.canonical_payload && input.canonical_payload.region &&
+        String(input.canonical_payload.region).toLowerCase() !== String(input.region || '').toLowerCase()) {
+      throw new Error('MESSAGE_CANONICAL_SCOPE_MISMATCH');
+    }
     const v = {
       id: input.id || makeId('msg'),
       partner_id: input.partner_id,
@@ -362,6 +373,7 @@
 
   async function saveSettlement(input) {
     if (!input.partner_id || !validDateOnly(input.business_date)) throw new Error('SETTLEMENT_SCOPE_REQUIRED');
+    assertConfigPartner(input.config_snapshot || null, input.partner_id);
     const now = nowIso();
     const v = {
       id: input.id || makeId('settlement'),
@@ -458,6 +470,6 @@
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, stableStringify
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);

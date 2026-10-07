@@ -14,6 +14,9 @@ assert.strictEqual(S.STORES.shadowEvents, 'shadow_events');
 assert.strictEqual(typeof S.normalizeShadowEvent, 'function');
 assert.strictEqual(typeof S.saveShadowEvent, 'function');
 assert.strictEqual(typeof S.listShadowEvents, 'function');
+assert.strictEqual(typeof S.assertConfigPartner, 'function');
+assert.strictEqual(S.assertConfigPartner({partner_id:'p1'}, 'p1'), true);
+assert.throws(() => S.assertConfigPartner({partner_id:'p2'}, 'p1'), /CONFIG_PARTNER_MISMATCH/);
 
 const regionCfg = S.normalizeConfig({
   partner_id:'p1', version:1, effective_from_date:'2026-10-07',

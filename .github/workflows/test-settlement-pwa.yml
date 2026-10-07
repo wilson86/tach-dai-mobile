@@ -67,6 +67,9 @@ jobs:
       - name: Settlement partner config isolation tests
         run: node tests/settlement-partner-config-isolation-tests.js
 
+      - name: Settlement safety audit regression tests
+        run: node tests/settlement-safety-audit-tests.js
+
       - name: Settlement commercial UX guard tests
         run: node tests/settlement-commercial-ux-tests.js
 
