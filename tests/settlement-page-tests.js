@@ -124,6 +124,8 @@ assert(pricingCopy.includes("version:'settlement-pricing-copy-v1'"));
 assert(configValidation.includes("version:'settlement-config-validation-v1'"));
 assert(ui.includes('configValidation.validate'));
 assert(ui.includes('friendlyParserError'));
+assert(page.includes('id="messageParsedPreview"'));
+assert(ui.includes('renderParsedPreview(outcome.message)'));
 assert(messageHistory.includes('Hệ thống đã đọc:'));
 assert(page.includes('Bảng giá riêng của:'));
 assert(page.includes('id="configPartnerName"'));
