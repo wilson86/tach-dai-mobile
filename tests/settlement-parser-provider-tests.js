@@ -20,7 +20,7 @@ vm.runInContext(fs.readFileSync('app/settlement-parser-provider.js', 'utf8'), ct
 const P = ctx.KTS_SETTLEMENT_PARSER_PROVIDER;
 
 (async()=>{
-  assert.strictEqual(P.version, 'settlement-parser-provider-v2-live-identity');
+  assert.strictEqual(P.version, 'settlement-parser-provider-v3-strict-live-scope');
   assert.strictEqual(P.endpoint(), '/api/settlement/parse');
   ctx.KTS_SETTLEMENT_RUNTIME_ENDPOINTS={parser_endpoint:'https://runtime.example/api/settlement/parse'};
   assert.strictEqual(P.runtimeEndpoint(),'https://runtime.example/api/settlement/parse');
@@ -78,6 +78,29 @@ const P = ctx.KTS_SETTLEMENT_PARSER_PROVIDER;
   assert.strictEqual(requested.options.method,'GET');
   assert.strictEqual(requested.options.cache,'no-store');
   assert.strictEqual(live.identities.mb.identity_sha256,H);
+
+  assert.throws(() => P.normalizeCanonicalPayload({
+    legs:[{code:'2CB',values:['92'],stake:'1'}]
+  }, 'mb'), /PARSER_REGION_REQUIRED_IN_RESPONSE/);
+  assert.throws(() => P.normalizeCanonicalPayload({
+    region:'mn',legs:[{code:'2CB',values:['92'],stake:'1'}]
+  }, 'mb'), /PARSER_REGION_MISMATCH/);
+
+  let liveParseRequest=null;
+  ctx.fetch=async(url,options)=>({
+    ok:true,status:200,
+    async json(){return {
+      parser_version:'grammar_v3',
+      parser_identity:{identity_sha256:H},
+      canonical_payload:{raw_text:'92 b 1n',region:'mb',parser_version:'grammar_v3',parser_identity:{identity_sha256:H},legs:[{code:'2CB',values:['92'],stake:'1'}]}
+    };}
+  });
+  const parsedLive=await P.fetchCanonical('92 b 1n','mb','2026-10-07');
+  assert.strictEqual(parsedLive.region,'mb');
+  assert.strictEqual(parsedLive.parser_identity.identity_sha256,H);
+
+  ctx.fetch=async()=>({ok:true,status:200,async json(){return {canonical_payload:{raw_text:'92 b 1n',region:'mb',legs:[{code:'2CB',values:['92'],stake:'1'}]}};}});
+  await assert.rejects(()=>P.fetchCanonical('92 b 1n','mb','2026-10-07'),/PARSER_IDENTITY_REQUIRED_FOR_LIVE_PARSE/);
 
   console.log('settlement parser provider tests PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
