@@ -10,7 +10,7 @@
     'app/settlement-evaluator.js':'bb358dbfd6e5ad263e2af3df7295c1f0dcb8eb15',
     'app/settlement-parser-provider.js':'cb71d6e8b05bd0095a13afbd319942918084043f',
     'app/settlement-pipeline.js':'765ed2670eaf850d69e3bc45cb592dcc62b2c4a6',
-    'app/settlement-ui.js':'c29df184e776e120f7b358d53fe718fd8f079adf',
+    'app/settlement-ui.js':'816aad87f23a701ac866875118f46dd825a63f34',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',

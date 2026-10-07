@@ -21,6 +21,7 @@
   ];
 
   let partners = [];
+  let inactivePartners = [];
   let poller = null;
   let savingMessage = false;
 
@@ -69,10 +70,14 @@
   function selectedPartner() { return partners.find(p => p.id === currentPartnerId()) || null; }
 
   async function refreshPartners(preferId) {
-    partners = (await store.getAll(store.STORES.partners)).filter(p => p.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+    const allPartners = await store.getAll(store.STORES.partners);
+    partners = allPartners.filter(p => p.active !== false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
+    inactivePartners = allPartners.filter(p => p.active === false).sort((a, b) => String(a.name).localeCompare(String(b.name), 'vi'));
     const options = partners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
     $('partnerSelect').innerHTML = options || '<option value="">Chưa có đối tác</option>';
     $('reportPartner').innerHTML = options || '<option value="">Chưa có đối tác</option>';
+    const inactive = inactivePartners.map(p => `<option value="${esc(p.id)}">${esc(p.name)} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}</option>`).join('');
+    $('inactivePartnerSelect').innerHTML = inactive || '<option value="">Không có</option>';
     if (preferId && partners.some(p => p.id === preferId)) {
       $('partnerSelect').value = preferId;
       $('reportPartner').value = preferId;
@@ -94,6 +99,68 @@
       $('partnerName').value = '';
       await refreshPartners(saved.id);
       status('partnerStatus', `Đã lưu ${saved.name}.`, 'ok');
+    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+  }
+
+  function configCloneInput(cfg, partnerId) {
+    return {
+      partner_id: partnerId,
+      effective_from_date: cfg.effective_from_date,
+      region_pricing: JSON.parse(JSON.stringify(cfg.region_pricing || {})),
+      dat_hit_mode: cfg.dat_hit_mode,
+      dax_hit_mode: cfg.dax_hit_mode,
+      mb_xien_234: cfg.mb_xien_234 === true,
+      tinh_ui: cfg.tinh_ui === true,
+      total_percent: cfg.total_percent,
+      refund_percent: cfg.refund_percent,
+      commission_type: cfg.commission_type
+    };
+  }
+
+  async function copyPartner() {
+    const source = selectedPartner();
+    if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để copy.', 'err');
+    const proposed = source.name + ' - Copy';
+    const entered = global.prompt ? global.prompt('Tên khách/chủ mới', proposed) : proposed;
+    if (entered == null) return;
+    const name = String(entered || '').trim();
+    if (!name) return status('partnerStatus', 'Tên bản copy không được để trống.', 'err');
+    try {
+      let cfg = null;
+      const date = $('effectiveDate').value || today();
+      try { cfg = await store.resolveConfigForDate(source.id, date); }
+      catch (e) {
+        if (!String(e && e.message || e).includes('NO_CONFIG')) throw e;
+      }
+      const saved = await store.savePartner({ name, role: source.role, phone: source.phone || '' });
+      if (cfg) await store.saveConfig(configCloneInput(cfg, saved.id));
+      await refreshPartners(saved.id);
+      status('partnerStatus', cfg
+        ? `Đã copy ${source.name} → ${saved.name}, gồm cấu hình đang áp dụng. Không copy tin/KQXS/lịch sử tiền.`
+        : `Đã copy ${source.name} → ${saved.name}. Nguồn chưa có cấu hình nên chỉ copy khách/chủ.`, 'ok');
+    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+  }
+
+  async function deactivatePartner() {
+    const source = selectedPartner();
+    if (!source) return status('partnerStatus', 'Chưa chọn khách/chủ để xóa.', 'err');
+    const ok = !global.confirm || global.confirm(`Xóa ${source.name} khỏi danh sách đang dùng?\n\nTin, settlement và lịch sử cũ vẫn được giữ để đối soát.`);
+    if (!ok) return;
+    try {
+      await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:false, created_at:source.created_at });
+      await refreshPartners();
+      status('partnerStatus', `Đã xóa ${source.name} khỏi danh sách đang dùng. Lịch sử cũ vẫn được giữ và có thể khôi phục.`, 'ok');
+    } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+  }
+
+  async function restorePartner() {
+    const id = $('inactivePartnerSelect').value;
+    const source = inactivePartners.find(p => p.id === id);
+    if (!source) return status('partnerStatus', 'Không có khách/chủ đã xóa để khôi phục.', 'warn');
+    try {
+      const saved = await store.savePartner({ id:source.id, name:source.name, phone:source.phone || '', role:source.role, active:true, created_at:source.created_at });
+      await refreshPartners(saved.id);
+      status('partnerStatus', `Đã khôi phục ${saved.name}.`, 'ok');
     } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
   }
 
@@ -334,6 +401,9 @@
     $('partnerSelect').addEventListener('change', async () => { updatePartnerView(); $('reportPartner').value = currentPartnerId(); await loadConfigForDate(); });
     $('effectiveDate').addEventListener('change', loadConfigForDate);
     $('addPartner').addEventListener('click', addPartner);
+    $('copyPartner').addEventListener('click', copyPartner);
+    $('deactivatePartner').addEventListener('click', deactivatePartner);
+    $('restorePartner').addEventListener('click', restorePartner);
     $('saveConfig').addEventListener('click', saveConfig);
     $('saveMessage').addEventListener('click', saveMessage);
     $('messageText').addEventListener('keydown', event => {

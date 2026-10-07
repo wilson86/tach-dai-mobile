@@ -58,6 +58,9 @@ jobs:
       - name: Settlement MN MT separation tests
         run: node tests/settlement-mn-mt-separation-tests.js
 
+      - name: Settlement partner copy delete restore tests
+        run: node tests/settlement-partner-actions-tests.js
+
       - name: Settlement simple report UI tests
         run: node tests/settlement-report-simple-ui-tests.js
 
