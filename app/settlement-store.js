@@ -553,13 +553,15 @@
     for (const row of incoming[STORES.settlements]) {
       const partnerId = requirePartner(row, STORES.settlements);
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_SETTLEMENT_SCOPE_INVALID:' + String(row.id));
+      const expectedScopeId = `scope:${partnerId}:${String(row.business_date)}:${String(row.region).toLowerCase()}`;
+      if (String(row.id || '') !== expectedScopeId) throw new Error('IMPORT_SETTLEMENT_ID_SCOPE_MISMATCH:' + String(row.id));
       assertConfigPartner(row.config_snapshot || null, partnerId);
       const prior = existingMap(STORES.settlements).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.settlements + ':' + String(row.id));
       const messageIds = Array.isArray(row.message_ids) ? row.message_ids : (row.message_id ? [row.message_id] : []);
       for (const messageId of messageIds) {
         const message = combinedMessages.get(String(messageId));
-        if (!message) continue;
+        if (!message) throw new Error('IMPORT_SETTLEMENT_MESSAGE_MISSING:' + String(row.id) + ':' + String(messageId));
         if (String(message.partner_id || '') !== partnerId ||
             String(message.business_date || '') !== String(row.business_date || '') ||
             String(message.region || '').toLowerCase() !== String(row.region || '').toLowerCase()) {
@@ -568,21 +570,40 @@
       }
     }
 
-    for (const row of incoming[STORES.results]) normalizeResultSnapshot(row);
+    const combinedResults = new Map();
+    for (const row of (replace ? [] : (existing[STORES.results] || []))) combinedResults.set(String(row.id || ''), row);
+    for (const row of incoming[STORES.results]) {
+      const normalized = normalizeResultSnapshot(row);
+      const expectedResultId = `${normalized.business_date}:${normalized.region}`;
+      if (String(row.id || '') !== expectedResultId) throw new Error('IMPORT_RESULT_ID_SCOPE_MISMATCH:' + String(row.id));
+      combinedResults.set(String(row.id), row);
+    }
     for (const row of incoming[STORES.resultEvents]) {
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_RESULT_EVENT_SCOPE_INVALID:' + String(row.id));
+      const expectedResultId = `${String(row.business_date)}:${String(row.region).toLowerCase()}`;
+      if (row.result_id != null && String(row.result_id) !== expectedResultId) throw new Error('IMPORT_RESULT_EVENT_ID_SCOPE_MISMATCH:' + String(row.id));
+      if (row.result_id != null && !combinedResults.has(String(row.result_id))) throw new Error('IMPORT_RESULT_EVENT_RESULT_MISSING:' + String(row.id));
     }
     for (const row of incoming[STORES.shadowEvents]) {
       const partnerId = requirePartner(row, STORES.shadowEvents);
       const normalized = normalizeShadowEvent(row);
       if (String(normalized.partner_id) !== partnerId) throw new Error('IMPORT_SHADOW_PARTNER_MISMATCH:' + String(row.id));
+      const expectedScopeId = `scope:${partnerId}:${normalized.business_date}:${normalized.region}`;
+      if (String(normalized.scope_id || '') !== expectedScopeId) throw new Error('IMPORT_SHADOW_SCOPE_ID_MISMATCH:' + String(row.id));
       const prior = existingMap(STORES.shadowEvents).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.shadowEvents + ':' + String(row.id));
     }
 
     const counts = {};
-    for (const name of Object.values(STORES)) counts[name] = incoming[name].length;
-    return { valid: true, replace, counts };
+    const inserted_counts = {};
+    const skipped_existing_counts = {};
+    for (const name of Object.values(STORES)) {
+      counts[name] = incoming[name].length;
+      const existingKeys = new Set((replace ? [] : (existing[name] || [])).map(row => String(row && row[keyForStore(name)] || '')));
+      skipped_existing_counts[name] = incoming[name].filter(row => existingKeys.has(String(row[keyForStore(name)]))).length;
+      inserted_counts[name] = counts[name] - skipped_existing_counts[name];
+    }
+    return { valid: true, replace, counts, inserted_counts, skipped_existing_counts };
   }
 
   async function importAll(payload, options) {
@@ -595,10 +616,22 @@
     try {
       const names = Object.values(STORES);
       const tx = db.transaction(names, 'readwrite');
+      const keyForStore = name => name === STORES.metadata ? 'key' : 'id';
       for (const name of names) {
         const store = tx.objectStore(name);
-        if (replace) store.clear();
-        for (const row of ((payload.stores && payload.stores[name]) || [])) store.put(clone(row));
+        if (replace) {
+          store.clear();
+          for (const row of ((payload.stores && payload.stores[name]) || [])) store.put(clone(row));
+          continue;
+        }
+        const existingKeys = new Set((existing[name] || []).map(row => String(row && row[keyForStore(name)] || '')));
+        for (const row of ((payload.stores && payload.stores[name]) || [])) {
+          const key = String(row && row[keyForStore(name)] || '');
+          if (existingKeys.has(key)) continue;
+          // add(), not put(): if another tab inserts the same key after validation,
+          // abort rather than overwrite newer local data.
+          store.add(clone(row));
+        }
       }
       await txDone(tx);
     } finally { db.close(); }
