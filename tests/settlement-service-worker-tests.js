@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('fs'),assert=require('assert');
+const sw=fs.readFileSync('app/sw.js','utf8');
+assert(sw.includes("const CACHE='kts-tach-unified-v1.0.70-scope-safe'"));
+assert(sw.includes('function withinWorkerScope(url)'));
+assert(sw.includes('self.registration.scope'));
+assert(sw.includes("url.pathname.startsWith(scope.pathname)"));
+assert(!sw.includes("url.pathname.includes('/tach-dai-mobile/app/')"));
+assert(!sw.includes("url.pathname.includes('/tach-dai-mobile/settlement-test/')"));
+assert(sw.includes("url.pathname.includes('/api/settlement/parse')"));
+assert(sw.includes("url.pathname.includes('/api/kqxs')"));
+assert(sw.includes("fetch(req,{cache:'no-store'})"));
+assert(sw.includes("url.pathname.endsWith('/version.json')"));
+assert(sw.indexOf("url.pathname.includes('/api/kqxs')")<sw.indexOf('if(!withinWorkerScope(url))'));
+assert(sw.includes("if(req.mode==='navigate')"));
+assert(sw.includes("caches.match('./index.html')"));
+console.log('settlement-service-worker-tests: PASS');

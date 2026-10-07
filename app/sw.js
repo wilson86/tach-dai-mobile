@@ -1,6 +1,6 @@
 'use strict';
-// Consumer-safety refresh: UX + direct/programmatic draft-scope guard; evidence cache namespace stays unchanged.
-const CACHE='kts-tach-unified-v1.0.69-audit-runtime-dirty';
+// Scope-safe service worker for both /app/ and isolated /settlement-test/ deployments.
+const CACHE='kts-tach-unified-v1.0.70-scope-safe';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
@@ -11,10 +11,22 @@ const CORE=[
   './result-service.js','./result-provider.js','./result-auto.js','./result-simple-ui.js','./result-audit-ui.js','./settlement-ui.js','./settlement-consumer-ui.js',
   '../icon-192.png','../icon-512.png'
 ];
-self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
-self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+
+function withinWorkerScope(url){
+  const scope=new URL(self.registration.scope);
+  return url.origin===scope.origin && url.pathname.startsWith(scope.pathname);
+}
+
+self.addEventListener('install',event=>event.waitUntil(
+  caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())
+));
+self.addEventListener('activate',event=>event.waitUntil(
+  caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())
+));
 self.addEventListener('fetch',event=>{
-  const req=event.request, url=new URL(req.url);
+  const req=event.request,url=new URL(req.url);
+
+  // Settlement parser/result traffic must always bypass HTTP caches.
   if(url.pathname.includes('/api/settlement/parse')||url.pathname.includes('/kts-api/settlement/parse')||url.pathname.includes('/api/settlement/parser-identity')||url.pathname.includes('/kts-api/settlement/parser-identity')){
     event.respondWith(fetch(req,{cache:'no-store'}));return;
   }
@@ -22,13 +34,28 @@ self.addEventListener('fetch',event=>{
   if(url.pathname.includes('/api/kqxs')||url.pathname.includes('/kts-api/kqxs')){
     event.respondWith(fetch(req,{cache:'no-store'}));return;
   }
-  if(url.pathname.endsWith('/app/version.json')){
+  if(url.pathname.endsWith('/version.json')){
     event.respondWith(fetch(req,{cache:'no-store'}).catch(()=>caches.match('./version.json')));return;
   }
-  if(req.mode==='navigate'&&url.pathname.includes('/tach-dai-mobile/app')){
-    event.respondWith(fetch(req).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy));return res}).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html'))));return;
+
+  // The same worker is copied from /app/ to /settlement-test/. Never hard-code
+  // either deployment path: registration.scope is the authority.
+  if(!withinWorkerScope(url)) return;
+
+  if(req.mode==='navigate'){
+    event.respondWith(
+      fetch(req,{cache:'no-store'}).then(res=>{
+        const copy=res.clone();
+        caches.open(CACHE).then(c=>c.put(req,copy));
+        return res;
+      }).catch(()=>caches.match(req).then(r=>r||caches.match('./index.html')))
+    );
+    return;
   }
-  if(url.pathname.includes('/tach-dai-mobile/app/')||url.pathname.endsWith('/tach-dai-mobile/icon-192.png')||url.pathname.endsWith('/tach-dai-mobile/icon-512.png')){
-    event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(res=>{const copy=res.clone();caches.open(CACHE).then(c=>c.put(req,copy));return res})));
-  }
+
+  event.respondWith(caches.match(req).then(cached=>cached||fetch(req).then(res=>{
+    const copy=res.clone();
+    caches.open(CACHE).then(c=>c.put(req,copy));
+    return res;
+  })));
 });

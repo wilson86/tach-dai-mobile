@@ -244,6 +244,9 @@ jobs:
       - name: Settlement page tests
         run: node tests/settlement-page-tests.js
 
+      - name: Settlement service worker scope/cache tests
+        run: node tests/settlement-service-worker-tests.js
+
       - name: Settlement scope synchronization tests
         run: node tests/settlement-scope-sync-tests.js
 
