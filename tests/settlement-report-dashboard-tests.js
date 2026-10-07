@@ -74,6 +74,8 @@ assert(code.includes("regionCard('Miền Trung'"));
 assert(code.includes("regionCard('Miền Bắc'"));
 assert(code.includes('Tổng cộng cả 3 miền / kiểm tra vai trò'));
 assert(code.includes('TRẠNG THÁI CHỐT NGÀY'));
+assert(code.includes('KQXS CHƯA XÁC MINH 2 NGUỒN'));
+assert(code.includes('KQXS CÓ LỆCH NGUỒN'));
 assert(code.includes('không tự chốt hoặc khóa ngày'));
 assert(code.includes('Không dùng tổng này để chốt'));
 assert(code.includes('Theo loại cược'));
