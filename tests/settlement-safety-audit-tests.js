@@ -144,5 +144,10 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   assert(ui.includes("if (sameSaveScope()) setMissingConfigAction(false, '', null, businessDate)"));
   assert(ui.includes('Đối tác/ngày/miền đã đổi trong lúc kiểm tra bảng giá. Tin cũ chưa được lưu.'));
 
+  const pipelineSource=fs.readFileSync('app/settlement-pipeline.js','utf8');
+  assert(pipelineSource.includes('const scopeSettlementQueues = new Map()'));
+  assert(pipelineSource.includes('function settleScope(input)'));
+  assert(pipelineSource.includes('scopeSettlementQueues.set(key, tracked)'));
+
   console.log('settlement-safety-audit-tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
