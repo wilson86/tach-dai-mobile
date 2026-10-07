@@ -571,7 +571,8 @@
     savingMessage = true;
     const originalLabel = button ? button.textContent : '';
     const releaseMessageSave = () => {
-      releaseMessageSave();
+      savingMessage = false;
+      if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu + tính'; }
     };
     if (button) { button.disabled = true; button.textContent = 'Đang kiểm tra…'; }
     try {
@@ -650,8 +651,7 @@
       return null;
     } finally {
       if (slowParserNotice != null && global.clearTimeout) global.clearTimeout(slowParserNotice);
-      savingMessage = false;
-      if (button) { button.disabled = false; button.textContent = originalLabel || 'Lưu + tính'; }
+      releaseMessageSave();
     }
   }
 
