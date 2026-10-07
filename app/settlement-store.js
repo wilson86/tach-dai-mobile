@@ -243,6 +243,33 @@
     };
   }
 
+  function legacyResultFingerprint(input) {
+    const businessDate = String(input && input.business_date || '').slice(0, 10);
+    const region = String(input && input.region || '').toLowerCase();
+    const status = String(input && input.status || (input && input.complete ? 'complete' : 'partial')).toLowerCase();
+    let verificationStatus = String(input && input.verification_status || (input && input.verified ? 'verified' : 'unverified')).toLowerCase();
+    if (!['unverified','verified','conflict'].includes(verificationStatus)) verificationStatus = 'unverified';
+    const complete = Boolean(input && input.complete);
+    if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
+    const expectedStationCodes = Array.isArray(input && input.expected_station_codes)
+      ? input.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const core = {
+      business_date: businessDate,
+      region,
+      status,
+      complete,
+      coverage_complete: input && input.coverage_complete == null ? null : Boolean(input && input.coverage_complete),
+      verification_status: verificationStatus,
+      verification_sources: Array.isArray(input && input.verification_sources) ? input.verification_sources.map(String) : [],
+      verification_reason: input && input.verification_reason == null ? null : String(input.verification_reason),
+      verification_conflicts: Array.isArray(input && input.verification_conflicts) ? input.verification_conflicts.map(String) : [],
+      expected_station_codes: expectedStationCodes,
+      stations: clone(input && input.stations || [])
+    };
+    return stableStringify(core);
+  }
+
   function normalizeShadowEvent(input) {
     const partnerId = String(input && input.partner_id || '');
     const businessDate = String(input && input.business_date || '').slice(0, 10);
@@ -643,8 +670,12 @@
       const recomputed = normalizeResultSnapshot(Object.assign({}, row, { fingerprint: null }));
       const expectedResultId = `${normalized.business_date}:${normalized.region}`;
       if (String(row.id || '') !== expectedResultId) throw new Error('IMPORT_RESULT_ID_SCOPE_MISMATCH:' + String(row.id));
-      if (row.fingerprint != null && String(row.fingerprint) !== String(recomputed.fingerprint)) {
-        throw new Error('IMPORT_RESULT_FINGERPRINT_MISMATCH:' + String(row.id));
+      if (row.fingerprint != null) {
+        const supplied = String(row.fingerprint);
+        const legacy = legacyResultFingerprint(row);
+        if (supplied !== String(recomputed.fingerprint) && supplied !== legacy) {
+          throw new Error('IMPORT_RESULT_FINGERPRINT_MISMATCH:' + String(row.id));
+        }
       }
       combinedResults.set(String(row.id), row);
     }
@@ -654,8 +685,12 @@
       if (row.result_id != null && String(row.result_id) !== expectedResultId) throw new Error('IMPORT_RESULT_EVENT_ID_SCOPE_MISMATCH:' + String(row.id));
       if (row.result_id != null && !combinedResults.has(String(row.result_id))) throw new Error('IMPORT_RESULT_EVENT_RESULT_MISSING:' + String(row.id));
       const recomputed = normalizeResultSnapshot(Object.assign({}, row, { id: expectedResultId, fingerprint: null }));
-      if (row.fingerprint != null && String(row.fingerprint) !== String(recomputed.fingerprint)) {
-        throw new Error('IMPORT_RESULT_EVENT_FINGERPRINT_MISMATCH:' + String(row.id));
+      if (row.fingerprint != null) {
+        const supplied = String(row.fingerprint);
+        const legacy = legacyResultFingerprint(row);
+        if (supplied !== String(recomputed.fingerprint) && supplied !== legacy) {
+          throw new Error('IMPORT_RESULT_EVENT_FINGERPRINT_MISMATCH:' + String(row.id));
+        }
       }
     }
     for (const row of incoming[STORES.shadowEvents]) {
