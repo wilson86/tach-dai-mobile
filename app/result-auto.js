@@ -283,9 +283,12 @@
         if (o.status !== false) {
           if (verificationConflict(snapshot)) {
             setResultStatus(`Hai nguồn kết quả ${regionLabel(scope.region)} ${dateLabel(scope.business_date)} đang lệch nhau · chưa dùng để chốt tiền.`, 'err');
+          } else if (snapshotVerified(snapshot)) {
+            setResultStatus(`Đã đối chiếu 2 nguồn · ${regionLabel(scope.region)} ${dateLabel(scope.business_date)}.`, 'ok');
+          } else if (snapshot.complete) {
+            setResultStatus(`Đã đủ kết quả ${regionLabel(scope.region)} ${dateLabel(scope.business_date)} · đang chờ xác minh đủ 2 nguồn.`, 'warn');
           } else {
-            const label = snapshot.complete ? 'Đã có kết quả đã lưu.' : 'Đã có kết quả đang cập nhật.';
-            setResultStatus(`${label} ${regionLabel(scope.region)} ${dateLabel(scope.business_date)}.`, snapshot.complete ? 'ok' : 'warn');
+            setResultStatus(`Đã có kết quả đang cập nhật · ${regionLabel(scope.region)} ${dateLabel(scope.business_date)}.`, 'warn');
           }
         }
         return snapshot;
@@ -404,8 +407,10 @@
         const blocked = rows.filter(x => x && x.status === 'blocked').length;
         if (verificationConflict(snapshot)) {
           setResultStatus(`Theo ngày chọn · KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN. Settlement đã được rà lại và fail-closed; KHÔNG chốt tiền.`, 'err');
+        } else if (snapshotVerified(snapshot)) {
+          setResultStatus(`Theo ngày chọn · đã tải đủ và xác minh 2 nguồn KQXS ${scope.region.toUpperCase()} ${scope.business_date}. ${rows.length} phạm vi settlement đã rà lại${blocked ? ` · ${blocked} đang fail-closed` : ''}.`, blocked ? 'warn' : 'ok');
         } else if (snapshot.complete) {
-          setResultStatus(`Theo ngày chọn · đã tải đủ KQXS ${scope.region.toUpperCase()} ${scope.business_date}. ${rows.length} phạm vi settlement đã rà lại${blocked ? ` · ${blocked} đang fail-closed` : ''}.`, blocked ? 'warn' : 'ok');
+          setResultStatus(`Theo ngày chọn · đã tải đủ KQXS ${scope.region.toUpperCase()} ${scope.business_date} nhưng chưa xác minh đủ 2 nguồn. ${rows.length} phạm vi đã rà lại · chưa dùng để chốt.`, 'warn');
         } else {
           setResultStatus(`Theo ngày chọn · snapshot này chưa đủ giải. Không tự polling; bấm “Tải ngày đã chọn” để kiểm tra lại.`, 'warn');
         }
@@ -523,7 +528,7 @@
         else if (info.state === 'complete_waiting_confirmation') setAutoStatus(`Kết quả ${label}: đã đủ giải · đang kiểm tra lại độ ổn định.`, 'warn');
         else if (info.state === 'verification_pending') setAutoStatus(`Kết quả ${label}: đã đủ · đang đối chiếu nguồn còn lại.`, 'warn');
         else if (info.state === 'conflict') setAutoStatus(`Kết quả ${label}: hai nguồn đang lệch nhau · chưa chốt tiền.`, 'err');
-        else if (info.state === 'complete') setAutoStatus(`Kết quả ${label}: đã đủ · đang chờ đối chiếu nguồn.`, 'ok');
+        else if (info.state === 'complete') setAutoStatus(`Kết quả ${label}: đã đủ · đang chờ đối chiếu nguồn.`, 'warn');
         else if (info.state === 'verified') setAutoStatus(`Kết quả ${label}: Xổ Số Minh Ngọc + XSKT đã khớp.`, 'ok');
         else if (info.state === 'error') setAutoStatus(`Kết quả ${label}: tạm chưa cập nhật được · giữ dữ liệu gần nhất và sẽ tự thử lại.`, 'err');
 
@@ -533,7 +538,7 @@
           else if (info.state === 'complete_waiting_confirmation') setResultStatus(`Đã đủ kết quả · đang kiểm tra lại.`, 'warn');
           else if (info.state === 'verification_pending') setResultStatus('Đã đủ kết quả · đang đối chiếu nguồn thứ hai.', 'warn');
           else if (info.state === 'conflict') setResultStatus('Hai nguồn đang lệch nhau · chưa dùng để chốt tiền.', 'err');
-          else if (info.state === 'complete') setResultStatus('Đã đủ kết quả · đang chờ đối chiếu nguồn.', 'ok');
+          else if (info.state === 'complete') setResultStatus('Đã đủ kết quả · đang chờ đối chiếu nguồn.', 'warn');
           else if (info.state === 'verified') setResultStatus('Đã đối chiếu Xổ Số Minh Ngọc + XSKT · khớp.', 'ok');
           else if (info.state === 'error') setResultStatus(`Tạm chưa cập nhật được kết quả · vẫn giữ dữ liệu gần nhất.`, 'err');
         }
@@ -568,7 +573,7 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v11-stale-safe-view-requests',
+    version: 'result-auto-v12-strict-verification-status',
     VIEW_MODE_KEY,
     PENDING_SCOPES_KEY,
     readPendingScopes,
