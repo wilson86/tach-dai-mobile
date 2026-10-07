@@ -124,10 +124,9 @@
   }
 
   function verificationPending(snapshot) {
-    if (!snapshot || snapshot.verification_status !== 'unverified') return false;
-    const sources = Array.isArray(snapshot.verification_sources) ? snapshot.verification_sources : [];
-    const reason = String(snapshot.verification_reason || '');
-    return sources.length >= 2 || reason.startsWith('SECONDARY_');
+    return Boolean(snapshot) &&
+      String(snapshot.verification_status || '').toLowerCase() === 'unverified' &&
+      snapshot.verified !== true;
   }
 
   function createPoller(options) {
@@ -192,9 +191,11 @@
 
         if (snapshot.verification_status === 'conflict') {
           onStatus({ state: 'conflict', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
-        } else if (snapshot.verified) {
+        } else if (snapshot.verified && confirmedComplete) {
           onStatus({ state: 'verified', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
           stop();
+        } else if (snapshot.verified) {
+          onStatus({ state: 'complete_waiting_confirmation', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak, complete_confirmations_required: completeConfirmations });
         } else if (confirmedComplete && verificationPending(snapshot)) {
           onStatus({ state: 'verification_pending', scope: clone(scope), snapshot: clone(snapshot), complete_confirmations: completeStreak });
         } else if (confirmedComplete) {
