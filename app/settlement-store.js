@@ -199,9 +199,15 @@
     const verificationReason = input.verification_reason == null ? null : String(input.verification_reason);
     const verificationConflicts = Array.isArray(input.verification_conflicts) ? input.verification_conflicts.map(String) : [];
     const distinctVerificationSources = new Set(verificationSources.map(x => String(x || '').trim()).filter(Boolean));
+    const actualStationCodes = stations.map(row => String(row && row.code || '').trim().toLowerCase()).filter(Boolean);
+    if (new Set(actualStationCodes).size !== actualStationCodes.length) throw new Error('RESULT_STATION_DUPLICATE');
+    const stationCoverageComplete =
+      expectedStationCodes.length > 0 &&
+      actualStationCodes.length === expectedStationCodes.length &&
+      expectedStationCodes.every(code => actualStationCodes.includes(code));
     if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
-    if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || verificationConflicts.length > 0)) verificationStatus = 'unverified';
-    const coverageComplete = input.coverage_complete == null ? null : Boolean(input.coverage_complete);
+    if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || verificationConflicts.length > 0 || !stationCoverageComplete)) verificationStatus = 'unverified';
+    const coverageComplete = input.coverage_complete == null ? stationCoverageComplete : Boolean(input.coverage_complete) && stationCoverageComplete;
     const core = {
       business_date: businessDate,
       region,
