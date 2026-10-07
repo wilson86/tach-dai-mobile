@@ -19,6 +19,26 @@
       .sort((a, b) => String(b.observed_at || b.fetched_at || '').localeCompare(String(a.observed_at || a.fetched_at || '')));
   }
 
+  function snapshotVerified(snapshot) {
+    if (!snapshot || snapshot.complete !== true) return false;
+    const claimed = snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified';
+    if (!claimed) return false;
+    const sources = Array.isArray(snapshot.verification_sources)
+      ? new Set(snapshot.verification_sources.map(x => String(x || '').trim()).filter(Boolean))
+      : new Set();
+    const conflicts = Array.isArray(snapshot.verification_conflicts) ? snapshot.verification_conflicts : [];
+    const expected = Array.isArray(snapshot.expected_station_codes)
+      ? snapshot.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    const actual = Array.isArray(snapshot.stations)
+      ? snapshot.stations.map(row => String(row && row.code || '').trim().toLowerCase()).filter(Boolean)
+      : [];
+    return sources.size >= 2 && conflicts.length === 0 &&
+      expected.length > 0 && new Set(expected).size === expected.length &&
+      new Set(actual).size === actual.length && actual.length === expected.length &&
+      expected.every(code => actual.includes(code));
+  }
+
   function summarize(events) {
     const rows = events || [];
     if (!rows.length) return { count: 0, changed: false, sources: [] };
@@ -43,6 +63,8 @@
     card.innerHTML = '<div class="row" style="justify-content:space-between"><div class="section-title">Lịch sử KQXS / sửa kết quả</div><button id="refreshResultAudit" class="btn soft">Làm mới</button></div><div id="resultAuditStatus" class="status"></div><div id="resultAudit" class="hint">Chưa có lịch sử.</div>';
     tableCard.insertAdjacentElement('afterend', card);
 
+    let refreshEpoch = 0;
+
     function currentScope() {
       const date = doc.getElementById('resultDate');
       const region = doc.getElementById('resultRegion');
@@ -57,10 +79,16 @@
     }
 
     async function refresh() {
+      const epoch = ++refreshEpoch;
       const scope = currentScope();
       const host = doc.getElementById('resultAudit');
+      const stillCurrent = () => {
+        const now = currentScope();
+        return epoch === refreshEpoch && now.date === scope.date && now.region === scope.region;
+      };
       if (!/^\d{4}-\d{2}-\d{2}$/.test(scope.date) || !['mn','mt','mb'].includes(scope.region)) return [];
       const all = await store.getAll(store.STORES.resultEvents);
+      if (!stillCurrent()) return [];
       const rows = listEvents(all, scope.date, scope.region);
       const summary = summarize(rows);
       if (!host) return rows;
@@ -70,7 +98,7 @@
         return rows;
       }
       host.innerHTML = rows.map((row, index) => {
-        const verification = row.verified === true || row.verification_status === 'verified' ? 'ĐÃ XÁC MINH' : row.complete ? 'ĐỦ KQ' : 'TẠM';
+        const verification = snapshotVerified(row) ? 'ĐÃ XÁC MINH' : row.complete ? 'ĐỦ KQ · CHỜ XÁC MINH' : 'TẠM';
         const fingerprint = String(row.fingerprint || '').slice(0, 16);
         return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><span class="tag ${index === 0 ? 'ok' : ''}">${index === 0 ? 'MỚI NHẤT' : 'TRƯỚC ĐÓ'}</span> <b>${esc(verification)}</b></div><span class="hint">${esc(row.observed_at || row.fetched_at || '')}</span></div><div class="hint">Nguồn: ${esc(row.source || 'unknown')} · fetched ${esc(row.fetched_at || '')}${fingerprint ? ` · fp ${esc(fingerprint)}` : ''}</div></div>`;
       }).join('');
@@ -92,7 +120,7 @@
     }
   }
 
-  global.KTS_RESULT_AUDIT_UI = Object.freeze({ version: 'result-audit-ui-v1', scopeKey, listEvents, summarize });
+  global.KTS_RESULT_AUDIT_UI = Object.freeze({ version: 'result-audit-ui-v2-stale-safe-strict-verified', scopeKey, listEvents, summarize, snapshotVerified });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
