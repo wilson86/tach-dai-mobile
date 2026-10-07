@@ -8,7 +8,8 @@
   const parserProvider = global.KTS_SETTLEMENT_PARSER_PROVIDER;
   const pipeline = global.KTS_SETTLEMENT_PIPELINE;
   const reportApi = global.KTS_SETTLEMENT_REPORT;
-  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
+  const pricingCopy = global.KTS_SETTLEMENT_PRICING_COPY;
+  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi || !pricingCopy) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
 
   const PRICES_MN_MT = [
     ['2CB', '2C lô'], ['2CD', '2C ĐĐ'], ['2CB7', '2C 7 lô'], ['DAT', '2C ĐáT'], ['DAX', '2C ĐáX'],
@@ -163,6 +164,35 @@
       await refreshPartners(saved.id);
       status('partnerStatus', `Đã khôi phục ${saved.name}.`, 'ok');
     } catch (e) { status('partnerStatus', String(e.message || e), 'err'); }
+  }
+
+  function regionDisplayName(region) {
+    return region === 'mn' ? 'Miền Nam' : region === 'mt' ? 'Miền Trung' : region === 'mb' ? 'Miền Bắc' : String(region || '');
+  }
+
+  function applyCopiedRates(result) {
+    const target = result.target_region;
+    for (const [code, row] of Object.entries(result.target_pricing || {})) {
+      for (const field of ['commission','win']) {
+        const input = document.querySelector(`[data-price-region="${target}"][data-price-code="${code}"][data-price-field="${field}"]`);
+        if (input) input.value = row && row[field] != null ? String(row[field]) : '0';
+      }
+    }
+  }
+
+  function copyRatesFromUi() {
+    try {
+      const result = pricingCopy.copyRates({
+        source_region: $('copyRateSource').value,
+        target_region: $('copyRateTarget').value,
+        pricing: priceInputsToObject()
+      });
+      applyCopiedRates(result);
+      status('copyRatesStatus', `Đã copy tỷ lệ ${regionDisplayName(result.source_region)} → ${regionDisplayName(result.target_region)}. ${result.zeroed_codes ? 'Cách đánh không có tương ứng đã về 0.' : 'Tất cả cách đánh đều có tương ứng.'} Chưa lưu cấu hình.`, 'ok');
+    } catch (e) {
+      const message = String(e && e.message || e);
+      status('copyRatesStatus', message === 'COPY_RATE_SAME_REGION' ? 'Chọn hai miền khác nhau để copy.' : message, 'err');
+    }
   }
 
   function priceInputsToObject() {
@@ -428,6 +458,7 @@
     $('copyPartner').addEventListener('click', copyPartner);
     $('deactivatePartner').addEventListener('click', deactivatePartner);
     $('restorePartner').addEventListener('click', restorePartner);
+    $('copyRates').addEventListener('click', copyRatesFromUi);
     $('saveConfig').addEventListener('click', saveConfig);
     $('saveMessage').addEventListener('click', saveMessage);
     $('messageText').addEventListener('keydown', event => {

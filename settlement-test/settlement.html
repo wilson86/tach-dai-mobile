@@ -81,6 +81,16 @@
       <div class="hint" style="margin-top:8px">Đá Miền Bắc tính <b>nhiều cặp</b> theo quy tắc đã chốt.</div>
       <div id="priceMb" style="margin-top:8px"></div>
     </div>
+    <div class="card">
+      <div class="section-title">Copy tỷ lệ giữa các miền</div>
+      <div class="hint" style="margin-bottom:8px">Chỉ copy tỷ lệ <b>Cò + Trúng</b>. Cách đánh không có tương ứng ở miền đích sẽ tự về <b>0</b>. % tổng, % hồi và chế độ Đá không đổi.</div>
+      <div class="grid">
+        <div><label>Từ miền</label><select id="copyRateSource"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
+        <div><label>Sang miền</label><select id="copyRateTarget"><option value="mt">Miền Trung</option><option value="mn">Miền Nam</option><option value="mb">Miền Bắc</option></select></div>
+      </div>
+      <div class="row" style="margin-top:8px"><button id="copyRates" class="btn soft">Copy tỷ lệ</button></div>
+      <div id="copyRatesStatus" class="status"></div>
+    </div>
     <div class="card"><button id="saveConfig" class="btn primary">Lưu cấu hình từ ngày đã chọn</button><div id="configStatus" class="status"></div><div class="hint">Lưu cấu hình mới sẽ tính lại các ngày từ ngày hiệu lực trở đi; ngày trước vẫn dùng phiên bản cũ.</div></div>
   </section>
 
@@ -120,6 +130,7 @@
 <script src="./result-provider.js"></script>
 <script src="./result-auto.js"></script>
 <script src="./result-simple-ui.js"></script>
+<script src="./settlement-pricing-copy.js"></script>
 <script src="./settlement-ui.js"></script>
 <script src="./settlement-message-history.js"></script>
 <script src="./result-audit-ui.js"></script>
