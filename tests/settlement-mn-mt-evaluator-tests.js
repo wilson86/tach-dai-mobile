@@ -81,7 +81,7 @@ assert.strictEqual(mtEval.category_inputs[0].xac,18);
 assert.strictEqual(mtEval.detail_rows[0].selector,'one_time');
 assert.strictEqual(E.regionTerms(mnConfig,'mn').dat_hit_mode,'ky_ruoi');
 assert.strictEqual(E.regionTerms(mnConfig,'mt').dat_hit_mode,'one_time');
-console.log('settlement MN/MT evaluator tests PASS');
+
 
 {
   const strictCfg = JSON.parse(JSON.stringify(mnConfig));
@@ -93,3 +93,4 @@ console.log('settlement MN/MT evaluator tests PASS');
     region:'mt'
   }), /PRICE_MISSING:mt:2CB/);
 }
+console.log('settlement MN/MT evaluator tests PASS');
