@@ -315,17 +315,47 @@
       .sort((a, b) => a.effective_from_date.localeCompare(b.effective_from_date) || Number(a.version) - Number(b.version));
   }
 
+  function nextConfigVersionFromRows(rows) {
+    return (Array.isArray(rows) ? rows : []).reduce((m, x) => Math.max(m, Number(x && x.version) || 0), 0) + 1;
+  }
+
   async function nextConfigVersion(partnerId) {
     const rows = await listConfigsForPartner(partnerId);
-    return rows.reduce((m, x) => Math.max(m, Number(x.version) || 0), 0) + 1;
+    return nextConfigVersionFromRows(rows);
   }
 
   async function saveConfig(input) {
-    const copy = Object.assign({}, input);
-    if (copy.version == null) copy.version = await nextConfigVersion(copy.partner_id);
-    const v = normalizeConfig(copy);
-    await put(STORES.configs, v);
-    return v;
+    const base = Object.assign({}, input);
+    if (!base.partner_id) throw new Error('CONFIG_PARTNER_REQUIRED');
+    const autoVersion = base.version == null;
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+      let value = null;
+      let failure = null;
+      const tx = db.transaction(STORES.configs, 'readwrite');
+      const store = tx.objectStore(STORES.configs);
+      const rowsReq = store.index('by_partner').getAll(String(base.partner_id));
+
+      rowsReq.onerror = () => {
+        failure = rowsReq.error || new Error('CONFIG_VERSION_READ_FAILED');
+        try { tx.abort(); } catch (_) {}
+      };
+      rowsReq.onsuccess = () => {
+        try {
+          const copy = Object.assign({}, base);
+          if (autoVersion) copy.version = nextConfigVersionFromRows(rowsReq.result || []);
+          value = normalizeConfig(copy);
+          if (autoVersion) store.add(value);
+          else store.put(value);
+        } catch (error) {
+          failure = error;
+          try { tx.abort(); } catch (_) {}
+        }
+      };
+      tx.oncomplete = () => { db.close(); resolve(value); };
+      tx.onerror = () => { const err = failure || tx.error || new Error('CONFIG_SAVE_FAILED'); db.close(); reject(err); };
+      tx.onabort = () => { const err = failure || tx.error || new Error('CONFIG_SAVE_ABORTED'); db.close(); reject(err); };
+    });
   }
 
   function resolveConfigFromRows(rows, partnerId, businessDate) {
@@ -580,6 +610,6 @@
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, validateImportPayload, stableStringify
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, nextConfigVersionFromRows, validateImportPayload, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);
