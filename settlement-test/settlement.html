@@ -17,6 +17,7 @@
 <body>
 <div class="wrap">
   <div class="top"><div><h1>KTS Kế Toán</h1><div class="hint">Tính tiền · dò xổ · báo cáo</div></div><span class="pill">BẢN THỬ NGHIỆM</span></div>
+  <div id="swUpdateStatus" class="status warn hidden" style="margin:0 2px 8px"></div>
   <div id="workContext" class="work-context"><span>Đối tác: <b id="contextPartner">Chưa chọn</b></span><span>Đang làm: <b id="contextScope">—</b></span></div>
   <div class="nav">
     <button class="active" data-pane="partner">Đối tác</button>
@@ -154,6 +155,25 @@
 <script src="./settlement-consumer-ui.js"></script>
 <script>
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const hadController = Boolean(navigator.serviceWorker.controller);
+  let reloadingForWorker = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloadingForWorker) return;
+    const draft = document.getElementById('messageText');
+    const dirty = document.getElementById('configDirtyStatus');
+    const hasDraft = Boolean(draft && String(draft.value || '').trim());
+    const hasDirtyConfig = Boolean(dirty && /Chưa lưu thay đổi/i.test(String(dirty.textContent || '')));
+    if (!hasDraft && !hasDirtyConfig) {
+      reloadingForWorker = true;
+      location.reload();
+      return;
+    }
+    const notice = document.getElementById('swUpdateStatus');
+    if (notice) {
+      notice.textContent = 'Có bản thử nghiệm mới. Nội dung chưa lưu đang được giữ; tải lại trang sau khi lưu xong để dùng bản mới.';
+      notice.classList.remove('hidden');
+    }
+  });
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js', { scope: './' })
       .then(registration => registration.update().catch(() => {}))
