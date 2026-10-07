@@ -107,6 +107,10 @@ function fakeStore(messages) {
   assert.deepStrictEqual(Array.from(restored.settlement.settlement.message_ids), ['m2']);
   assert.strictEqual(store.state.messages.find(x => x.id === 'm2').status, 'settled_unverified');
 
+  store.state.messages.push({ id:'legacy-cancel', partner_id:'p1', business_date:'2026-09-22', region:'mb', status:'CANCELLED', raw_text:'legacy', canonical_payload:{region:'mb',legs:[{code:'2CB',values:['92'],stake:'1'}]} });
+  const activeBeforeLegacyCheck = await P.findScopeMessages('p1', '2026-09-22', 'mb');
+  assert(!activeBeforeLegacyCheck.some(x => x.id === 'legacy-cancel'),'legacy uppercase CANCELLED must stay inactive');
+
   const active = await P.findScopeMessages('p1', '2026-09-22', 'mb');
   assert.deepStrictEqual(Array.from(active.map(x => x.id)), ['m2']);
 
