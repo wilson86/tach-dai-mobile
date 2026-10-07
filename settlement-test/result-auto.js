@@ -40,6 +40,33 @@
     };
   }
 
+  function regionLabel(value) {
+    const v = String(value || '').toLowerCase();
+    return v === 'mn' ? 'Miền Nam' : v === 'mt' ? 'Miền Trung' : v === 'mb' ? 'Miền Bắc' : v.toUpperCase();
+  }
+  function sourceLabel(value) {
+    const v = String(value || '').toLowerCase();
+    if (v.includes('xosominhngoc')) return 'Xổ Số Minh Ngọc';
+    if (v.includes('xskt')) return 'XSKT';
+    return String(value || 'Nguồn dữ liệu');
+  }
+  function dateLabel(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value || '');
+  }
+  function timeLabel(value) {
+    const d = new Date(value || '');
+    if (!Number.isFinite(d.getTime())) return '';
+    try { return d.toLocaleTimeString('vi-VN', { hour:'2-digit', minute:'2-digit', second:'2-digit' }); }
+    catch (_) { return d.toISOString().slice(11,19); }
+  }
+  function userResultState(snapshot) {
+    if (verificationConflict(snapshot)) return { label:'CÓ LỆCH NGUỒN', kind:'err' };
+    if (snapshot && (snapshot.verified === true || snapshot.verification_status === 'verified')) return { label:'ĐÃ ĐỐI CHIẾU 2 NGUỒN', kind:'ok' };
+    if (snapshot && snapshot.complete) return { label:'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU', kind:'warn' };
+    return { label:'ĐANG CẬP NHẬT', kind:'live' };
+  }
+
   function createManager(options) {
     const o = options || {};
     const resultService = o.resultService;
@@ -161,32 +188,33 @@
       const table = doc.getElementById('resultTable');
       if (!table || !sameScope(scope, snapshot)) return;
 
-      const conflict = verificationConflict(snapshot);
-      const verified = snapshot.verified === true || snapshot.verification_status === 'verified';
-      const badge = conflict
-        ? '<span class="tag err">XUNG ĐỘT NGUỒN KQXS</span>'
-        : verified
-          ? '<span class="tag ok">ĐÃ XÁC MINH</span>'
-          : snapshot.complete
-            ? '<span class="tag warn">ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU</span>'
-            : '<span class="tag warn">TẠM TÍNH</span>';
-      const modeBadge = currentViewMode() === 'realtime' ? '<span class="tag">THỜI GIAN THẬT</span>' : `<span class="tag">NGÀY ${esc(snapshot.business_date)}</span>`;
-      const parts = [`<div class="row" style="justify-content:space-between"><div>${badge} ${modeBadge} <span class="hint">${esc(snapshot.source)} · ${esc(snapshot.fetched_at)}</span></div></div>`];
+      const state = userResultState(snapshot);
       const verify = verificationDetails(snapshot);
-      if (conflict) {
-        const sourceText = verify.sources.length ? ` · nguồn: ${esc(verify.sources.join(' ↔ '))}` : '';
-        const conflictText = verify.conflicts.length ? ` · lệch: ${esc(verify.conflicts.join(', '))}` : '';
-        parts.push(`<div class="status err">Không được coi KQXS này là đã xác minh${sourceText}${conflictText}. Hệ thống tiếp tục kiểm tra lại; settlement chỉ dùng ở trạng thái shadow/chưa xác minh.</div>`);
-      } else if (verify.reason && String(verify.reason).startsWith('SECONDARY_')) {
-        parts.push(`<div class="status warn">Nguồn đối chiếu thứ hai chưa sẵn sàng (${esc(verify.reason)}). Kết quả nguồn chính vẫn hiển thị nhưng chưa xác minh.</div>`);
+      const shownSource = sourceLabel(snapshot.source);
+      const sourceNames = verify.sources.length ? verify.sources.map(sourceLabel) : [shownSource];
+      const updated = timeLabel(snapshot.fetched_at);
+      const parts = [
+        `<div class="kqxs-result-head"><span class="tag ${state.kind}">${esc(state.label)}</span><b>${esc(regionLabel(snapshot.region))} · ${esc(dateLabel(snapshot.business_date))}</b></div>`
+      ];
+
+      if (verificationConflict(snapshot)) {
+        parts.push('<div class="status err">Hai nguồn kết quả đang lệch nhau. Hệ thống chưa dùng kết quả này để chốt tiền và sẽ tự kiểm tra lại.</div>');
+      } else if (verify.reason && (String(verify.reason).startsWith('SOURCE_UNAVAILABLE:') || String(verify.reason).startsWith('SECONDARY_'))) {
+        parts.push('<div class="status warn">Tạm thời mới đọc được một nguồn. Kết quả vẫn hiển thị để theo dõi nhưng sẽ chỉ được xác nhận khi nguồn còn lại khớp.</div>');
       }
+
       const order = snapshot.region === 'mb' ? ['DB','G1','G2','G3','G4','G5','G6','G7'] : ['G8','G7','G6','G5','G4','G3','G2','G1','DB'];
       for (const station of (snapshot.stations || [])) {
-        parts.push(`<h3 style="margin:12px 0 4px">${esc(station.name || station.code)}</h3><table><thead><tr><th>Giải</th><th>Kết quả</th></tr></thead><tbody>`);
-        for (const prize of order) parts.push(`<tr><td><b>${prize}</b></td><td>${esc(((station.prizes || {})[prize] || []).join(' · '))}</td></tr>`);
-        parts.push('</tbody></table>');
+        parts.push(`<section class="kqxs-station-card"><div class="kqxs-station-head">${esc(station.name || station.code)}</div>`);
+        for (const prize of order) {
+          const values = ((station.prizes || {})[prize] || []);
+          parts.push(`<div class="kqxs-prize-row ${prize === 'DB' ? 'kqxs-db' : ''}"><div class="kqxs-prize-label">${esc(prize)}</div><div class="kqxs-prize-values">${values.length ? esc(values.join(' · ')) : '<span class="hint">…</span>'}</div></div>`);
+        }
+        parts.push('</section>');
       }
-      if (meta && meta.changed && meta.previous) parts.push('<div class="status warn">Nguồn KQXS vừa thay đổi so với snapshot trước. Đã lưu lịch sử sửa và tính lại settlement liên quan.</div>');
+
+      parts.push(`<details class="kqxs-source-detail"><summary>Nguồn và lần cập nhật</summary><div class="hint" style="margin-top:6px">Hiển thị từ <b>${esc(shownSource)}</b> · Đối chiếu: ${esc(sourceNames.join(' + '))}${updated ? ' · Cập nhật ' + esc(updated) : ''}</div></details>`);
+      if (meta && meta.changed && meta.previous) parts.push('<div class="status warn">Kết quả vừa có thay đổi. Hệ thống đã lưu lịch sử và tự tính lại các tin liên quan.</div>');
       table.innerHTML = parts.join('');
     }
 
@@ -200,16 +228,16 @@
         renderSnapshot(snapshot, { cached: true });
         if (o.status !== false) {
           if (verificationConflict(snapshot)) {
-            setResultStatus(`KQXS ${scope.region.toUpperCase()} ${scope.business_date} đang XUNG ĐỘT NGUỒN · không được chốt.`, 'err');
+            setResultStatus(`Hai nguồn kết quả ${regionLabel(scope.region)} ${dateLabel(scope.business_date)} đang lệch nhau · chưa dùng để chốt tiền.`, 'err');
           } else {
-            const label = snapshot.complete ? 'Đã nạp KQXS đã lưu.' : 'Đã nạp snapshot KQXS tạm đã lưu.';
-            setResultStatus(`${label} ${scope.region.toUpperCase()} ${scope.business_date}.`, snapshot.complete ? 'ok' : 'warn');
+            const label = snapshot.complete ? 'Đã có kết quả đã lưu.' : 'Đã có kết quả đang cập nhật.';
+            setResultStatus(`${label} ${regionLabel(scope.region)} ${dateLabel(scope.business_date)}.`, snapshot.complete ? 'ok' : 'warn');
           }
         }
         return snapshot;
       }
       if (table) table.innerHTML = '<div class="hint">Chưa có dữ liệu cho ngày/miền này.</div>';
-      if (o.status !== false) setResultStatus(`Chưa có KQXS đã lưu cho ${scope.region.toUpperCase()} ${scope.business_date}.`, 'warn');
+      if (o.status !== false) setResultStatus(`Chưa có kết quả ${regionLabel(scope.region)} ${dateLabel(scope.business_date)}. Hệ thống sẽ tự cập nhật.`, 'warn');
       return null;
     }
 
@@ -388,25 +416,25 @@
       global.addEventListener('kts:auto-result-status', event => {
         const info = event.detail || {};
         const scope = info.scope || {};
-        const label = `${String(scope.region || '').toUpperCase()} ${scope.business_date || ''}`.trim();
-        if (info.state === 'fetching') setAutoStatus(`KQXS ${label}: đang cập nhật…`, '');
-        else if (info.state === 'waiting') setAutoStatus(`KQXS ${label}: chưa đủ giải · tự kiểm tra lại sau 90 giây.`, 'warn');
-        else if (info.state === 'complete_waiting_confirmation') setAutoStatus(`KQXS ${label}: đã đủ giải lần ${info.complete_confirmations}/${info.complete_confirmations_required} · đang xác nhận lại để bắt sửa kết quả.`, 'warn');
-        else if (info.state === 'verification_pending') setAutoStatus(`KQXS ${label}: đã đủ nhưng nguồn đối chiếu thứ hai chưa xác nhận · tiếp tục kiểm tra 90 giây/lần.`, 'warn');
-        else if (info.state === 'conflict') setAutoStatus(`KQXS ${label}: XUNG ĐỘT GIỮA CÁC NGUỒN · không chốt, tiếp tục kiểm tra lại.`, 'err');
-        else if (info.state === 'complete') setAutoStatus(`KQXS ${label}: đã đủ và ổn định qua ${info.complete_confirmations || 1} lần lấy · chờ đối chiếu độc lập.`, 'ok');
-        else if (info.state === 'verified') setAutoStatus(`KQXS ${label}: đã xác minh từ nguồn độc lập.`, 'ok');
-        else if (info.state === 'error') setAutoStatus(`KQXS ${label}: lỗi ${info.error} · giữ dữ liệu gần nhất và sẽ thử lại.`, 'err');
+        const label = `${regionLabel(scope.region)} ${dateLabel(scope.business_date)}`.trim();
+        if (info.state === 'fetching') setAutoStatus(`Kết quả ${label}: đang cập nhật…`, '');
+        else if (info.state === 'waiting') setAutoStatus(`Kết quả ${label}: đang xổ · hệ thống tự kiểm tra lại.`, 'warn');
+        else if (info.state === 'complete_waiting_confirmation') setAutoStatus(`Kết quả ${label}: đã đủ giải · đang kiểm tra lại độ ổn định.`, 'warn');
+        else if (info.state === 'verification_pending') setAutoStatus(`Kết quả ${label}: đã đủ · đang đối chiếu nguồn còn lại.`, 'warn');
+        else if (info.state === 'conflict') setAutoStatus(`Kết quả ${label}: hai nguồn đang lệch nhau · chưa chốt tiền.`, 'err');
+        else if (info.state === 'complete') setAutoStatus(`Kết quả ${label}: đã đủ · đang chờ đối chiếu nguồn.`, 'ok');
+        else if (info.state === 'verified') setAutoStatus(`Kết quả ${label}: Xổ Số Minh Ngọc + XSKT đã khớp.`, 'ok');
+        else if (info.state === 'error') setAutoStatus(`Kết quả ${label}: tạm chưa cập nhật được · giữ dữ liệu gần nhất và sẽ tự thử lại.`, 'err');
 
         if (currentViewMode() === 'realtime' && realtimeDisplayActive && sameScope(scope, currentScope())) {
-          if (info.state === 'fetching') setResultStatus('THỜI GIAN THẬT · đang lấy KQXS…', '');
-          else if (info.state === 'waiting') setResultStatus('THỜI GIAN THẬT · chưa đủ giải · tự kiểm tra lại sau 90 giây.', 'warn');
-          else if (info.state === 'complete_waiting_confirmation') setResultStatus(`THỜI GIAN THẬT · đủ giải lần ${info.complete_confirmations}/${info.complete_confirmations_required} · đang xác nhận lại.`, 'warn');
-          else if (info.state === 'verification_pending') setResultStatus('THỜI GIAN THẬT · kết quả đã đủ nhưng nguồn thứ hai chưa xác nhận · tiếp tục kiểm tra.', 'warn');
-          else if (info.state === 'conflict') setResultStatus('THỜI GIAN THẬT · XUNG ĐỘT NGUỒN KQXS · không chốt, tiếp tục kiểm tra lại.', 'err');
-          else if (info.state === 'complete') setResultStatus('THỜI GIAN THẬT · kết quả đã đủ và ổn định · chờ đối chiếu độc lập.', 'ok');
-          else if (info.state === 'verified') setResultStatus('THỜI GIAN THẬT · kết quả đã xác minh từ nguồn độc lập.', 'ok');
-          else if (info.state === 'error') setResultStatus(`THỜI GIAN THẬT · lỗi ${info.error} · giữ snapshot gần nhất.`, 'err');
+          if (info.state === 'fetching') setResultStatus('Đang cập nhật kết quả…', '');
+          else if (info.state === 'waiting') setResultStatus('Đang xổ · hệ thống tự cập nhật.', 'warn');
+          else if (info.state === 'complete_waiting_confirmation') setResultStatus(`Đã đủ kết quả · đang kiểm tra lại.`, 'warn');
+          else if (info.state === 'verification_pending') setResultStatus('Đã đủ kết quả · đang đối chiếu nguồn thứ hai.', 'warn');
+          else if (info.state === 'conflict') setResultStatus('Hai nguồn đang lệch nhau · chưa dùng để chốt tiền.', 'err');
+          else if (info.state === 'complete') setResultStatus('Đã đủ kết quả · đang chờ đối chiếu nguồn.', 'ok');
+          else if (info.state === 'verified') setResultStatus('Đã đối chiếu Xổ Số Minh Ngọc + XSKT · khớp.', 'ok');
+          else if (info.state === 'error') setResultStatus(`Tạm chưa cập nhật được kết quả · vẫn giữ dữ liệu gần nhất.`, 'err');
         }
       });
       global.addEventListener('kts:auto-result-update', event => {
@@ -425,13 +453,17 @@
   }
 
   global.KTS_RESULT_AUTO = Object.freeze({
-    version: 'result-auto-v5-cross-source',
+    version: 'result-auto-v6-consumer-result-view',
     VIEW_MODE_KEY,
     createManager,
     validScope,
     normalizeViewMode,
     verificationConflict,
-    verificationDetails
+    verificationDetails,
+    regionLabel,
+    sourceLabel,
+    dateLabel,
+    userResultState
   });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();

@@ -39,7 +39,7 @@
     'app/settlement-preproduction-orchestrator.js':'15f77c2ec3c041d35a4fff7e787e76399e05bef1',
     'app/result-service.js':'a5f386c724cb8751a7082a90c49c17af50d2be05',
     'app/result-provider.js':'65d00f0bf0e250a17f41fbff5d3926373205c0b2',
-    'app/result-auto.js':'92f49d694a08a1ff7ab81eebdda52054bec1989c'
+    'app/result-auto.js':'b2b8e637844bffee44f125c328c58d65c752694c'
   });
   global.KTS_SETTLEMENT_BUILD_IDENTITY=Object.freeze({version:'settlement-build-identity-v1',algorithm:'git-blob-sha1',critical_git_blobs:critical,business_engine_sha256:'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c'});
 })(typeof window!=='undefined'?window:globalThis);
