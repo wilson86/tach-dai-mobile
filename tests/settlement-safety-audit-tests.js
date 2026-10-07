@@ -105,3 +105,11 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
 
   console.log('settlement-safety-audit-tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
+
+const releaseStart=ui.indexOf('const releaseMessageSave = () => {');
+assert(releaseStart>=0,'message save release helper required');
+const releaseEnd=ui.indexOf('};',releaseStart);
+const releaseBody=ui.slice(releaseStart,releaseEnd);
+assert(releaseBody.includes('savingMessage = false'),'release helper must clear save lock');
+assert(releaseBody.includes('button.disabled = false'),'release helper must restore save button');
+assert(!releaseBody.includes('releaseMessageSave();'),'release helper must not recurse');
