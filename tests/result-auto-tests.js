@@ -5,7 +5,11 @@ const path = require('path');
 const assert = require('assert');
 
 const code = fs.readFileSync(path.join(__dirname, '..', 'app', 'result-auto.js'), 'utf8');
-const sandbox = { globalThis: {} };
+const pendingMem = new Map();
+const sandbox = { globalThis: { localStorage: {
+  getItem:k => pendingMem.has(k) ? pendingMem.get(k) : null,
+  setItem:(k,v) => pendingMem.set(k,String(v))
+} } };
 vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const A = sandbox.globalThis.KTS_RESULT_AUTO;
@@ -82,7 +86,13 @@ function fixture() {
   assert.strictEqual(A.userResultState({verified:true}).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
-  assert.strictEqual(A.version, 'result-auto-v7-accepted-message-trigger');
+  assert.strictEqual(A.version, 'result-auto-v8-resume-safe');
+  assert.strictEqual(A.PENDING_SCOPES_KEY, 'kts_settlement_pending_result_scopes_v1');
+  A.rememberPendingScope({business_date:'2026-10-06',region:'mn'});
+  A.rememberPendingScope({business_date:'2026-10-06',region:'mn'});
+  assert.strictEqual(A.readPendingScopes().length,1,'pending scope persistence must dedupe');
+  A.forgetPendingScope({business_date:'2026-10-06',region:'mn'});
+  assert.strictEqual(A.readPendingScopes().length,0);
 
   const conflict = {
     verification_status: 'conflict',
@@ -105,5 +115,8 @@ function fixture() {
   const acceptedEventPos=uiSource.indexOf("new global.CustomEvent('kts:settlement-message-saved'");
   assert(parserErrorPos>=0 && acceptedEventPos>parserErrorPos, 'accepted-message event must be after parser-error fail-closed branch');
   assert(uiSource.includes("Missing config / parser errors never create a background polling job."));
+  assert(source.includes('resumePendingScopes'));
+  assert(source.includes("String(m.status || '').toLowerCase() !== 'cancelled'"));
+  assert(source.includes("kts:settlement-message-activity-changed"));
   console.log('result-auto-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
