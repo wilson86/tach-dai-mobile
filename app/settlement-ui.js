@@ -718,10 +718,21 @@
     if (!report.messages.length && !report.blocked) { $('reportOutput').innerHTML = '<div class="hint">Ngày này chưa có settlement.</div>'; return; }
     if (report.blocked) out.push(`<div class="status err">FAIL-CLOSED: có ${report.blocked_scopes.length} phạm vi chưa đủ điều kiện tính. Không dùng tổng tiền này để chốt.</div>`);
     else if (report.provisional) out.push('<div class="status warn">TẠM TÍNH: KQXS chưa hoàn tất.</div>');
+    else if (report.kqxs_conflict) out.push('<div class="status err">KQXS đang lệch giữa các nguồn. Không dùng báo cáo này để chốt tiền.</div>');
+    else if (report.kqxs_verified === false) out.push('<div class="status warn">Tiền đã tính nhưng KQXS chưa xác minh đủ 2 nguồn. Chưa dùng báo cáo này để chốt.</div>');
     out.push(`<details style="margin:8px 0"><summary class="hint">Tổng cộng cả 3 miền</summary><div style="margin-top:6px"><span class="money">XÁC ${money(report.totals.xac)}</span> · QUA CÒ <span class="money">${money(report.totals.qua_co)}</span> · TRẢ TRÚNG <span class="money">${money(report.totals.payout)}</span> · HỒI <span class="money">${money(report.totals.refund_amount)}</span></div><div class="status ${report.totals.direction === 'THU' ? 'ok' : report.totals.direction === 'BU' ? 'err' : ''}">${report.totals.direction}: ${money(report.totals.final_net)}</div></details>`);
     for (const region of report.regions) {
       const regionName = region.region === 'mn' ? 'MIỀN NAM' : region.region === 'mt' ? 'MIỀN TRUNG' : region.region === 'mb' ? 'MIỀN BẮC' : region.region.toUpperCase();
-      out.push(`<h3>${regionName} ${region.blocked ? '<span class="tag warn">BLOCKED</span>' : region.provisional ? '<span class="tag warn">TẠM TÍNH</span>' : ''}</h3><div class="hint">XÁC ${money(region.total_xac)} · QUA CÒ ${money(region.total_qua_co)} · TRẢ ${money(region.total_payout)} · HỒI ${money(region.refund_amount)} · ${region.direction}: ${money(Math.abs(Number(region.final_net || 0)))}</div><table><thead><tr><th>Loại</th><th>XÁC</th><th>Qua cò</th><th>Trúng</th><th>Trả</th></tr></thead><tbody>`);
+      const regionGate = region.blocked
+        ? '<span class="tag warn">CHƯA TÍNH</span>'
+        : region.provisional
+          ? '<span class="tag warn">TẠM TÍNH</span>'
+          : region.kqxs_conflict
+            ? '<span class="tag err">KQXS LỆCH NGUỒN</span>'
+            : region.kqxs_verified === false
+              ? '<span class="tag warn">KQXS CHƯA XÁC MINH</span>'
+              : '';
+      out.push(`<h3>${regionName} ${regionGate}</h3><div class="hint">XÁC ${money(region.total_xac)} · QUA CÒ ${money(region.total_qua_co)} · TRẢ ${money(region.total_payout)} · HỒI ${money(region.refund_amount)} · ${region.direction}: ${money(Math.abs(Number(region.final_net || 0)))}</div><table><thead><tr><th>Loại</th><th>XÁC</th><th>Qua cò</th><th>Trúng</th><th>Trả</th></tr></thead><tbody>`);
       for (const row of region.categories) out.push(`<tr><td>${esc(row.code)}</td><td>${money(row.xac)}</td><td>${money(row.qua_co)}</td><td>${money(row.hit_units)}</td><td>${money(row.payout)}</td></tr>`);
       out.push('</tbody></table>');
       for (const msg of region.messages) {
