@@ -2,6 +2,40 @@
   'use strict';
 
   const HASH_RE = /^[0-9a-f]{64}$/i;
+  const RESULT_PRIZE_COUNTS = Object.freeze({
+    mn:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mt:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mb:Object.freeze({G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1})
+  });
+  function stationPrizeComplete(region,station){
+    const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
+    if(!expected||!station||station.complete===false)return false;
+    const prizes=station.prizes||{};
+    return Object.entries(expected).every(([prize,count])=>{
+      const found=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
+      const values=found?(Array.isArray(found[1])?found[1]:[found[1]]):[];
+      return values.filter(v=>v!=null&&String(v).trim()!=='').length===count;
+    });
+  }
+  function canonicalResultEvidence(scope,result){
+    if(!result)return {status:'unverified',valid:false,reason:'KQXS_CANONICAL_RESULT_MISSING'};
+    const date=String(scope&&scope.business_date||'').slice(0,10),region=String(scope&&scope.region||'').toLowerCase();
+    if(String(result.business_date||'').slice(0,10)!==date||String(result.region||'').toLowerCase()!==region)return {status:'unverified',valid:false,reason:'KQXS_CANONICAL_SCOPE_MISMATCH'};
+    const conflicts=Array.isArray(result.verification_conflicts)?result.verification_conflicts:[];
+    const status=String(result.verification_status||'').toLowerCase();
+    if(status==='conflict'||conflicts.length)return {status:'conflict',valid:false,reason:'KQXS_SOURCE_CONFLICT'};
+    if(result.complete!==true||result.coverage_complete!==true)return {status:'unverified',valid:false,reason:'KQXS_CANONICAL_INCOMPLETE'};
+    const sources=new Set((Array.isArray(result.verification_sources)?result.verification_sources:[]).map(x=>String(x||'').trim()).filter(Boolean));
+    if(sources.size<2)return {status:'unverified',valid:false,reason:'KQXS_SOURCES_INSUFFICIENT'};
+    const expected=Array.isArray(result.expected_station_codes)?result.expected_station_codes.map(x=>String(x||'').trim().toLowerCase()).filter(Boolean):[];
+    const stations=Array.isArray(result.stations)?result.stations:[];
+    const actual=stations.map(x=>String(x&&x.code||'').trim().toLowerCase()).filter(Boolean);
+    const coverage=expected.length>0&&new Set(expected).size===expected.length&&new Set(actual).size===actual.length&&actual.length===expected.length&&expected.every(code=>actual.includes(code));
+    if(!coverage)return {status:'unverified',valid:false,reason:'KQXS_COVERAGE_INCOMPLETE'};
+    if(!stations.every(station=>stationPrizeComplete(region,station)))return {status:'unverified',valid:false,reason:'KQXS_PRIZE_DATA_INCOMPLETE'};
+    if(!(result.verified===true||status==='verified'))return {status:'unverified',valid:false,reason:'KQXS_NOT_VERIFIED'};
+    return {status:'verified',valid:true,reason:null};
+  }
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function esc(v) { return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#039;'); }
   function validDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
@@ -33,23 +67,37 @@
     if (o.regions.length && !o.regions.includes(String(message.region || '').toLowerCase())) return false;
     return String(message && message.status || '').toLowerCase() !== 'cancelled';
   }
-  function kqxsVerificationGate(observationSummary) {
+  function kqxsVerificationGate(observationSummary, results) {
     const scopes = observationSummary && Array.isArray(observationSummary.scopes) ? observationSummary.scopes : [];
+    const resultMap=new Map((Array.isArray(results)?results:[]).map(row=>[`${String(row&&row.business_date||'').slice(0,10)}:${String(row&&row.region||'').toLowerCase()}`,row]));
     let verified = 0, conflict = 0, unverified = 0;
     const bad_scopes = [];
     for (const scope of scopes) {
       const status = String(scope && scope.result_verification_status || 'unverified').toLowerCase();
       const evidenceValid = scope && scope.result_verification_evidence_valid === true;
-      if (status === 'verified' && evidenceValid) verified += 1;
+      const current=resultMap.get(`${String(scope&&scope.business_date||'').slice(0,10)}:${String(scope&&scope.region||'').toLowerCase()}`)||null;
+      const currentEvidence=canonicalResultEvidence(scope,current);
+      const settlementFingerprint=String(scope&&scope.result_fingerprint||'');
+      const currentFingerprint=String(current&&current.fingerprint||'');
+      const fingerprintMatch=Boolean(settlementFingerprint&&currentFingerprint&&settlementFingerprint===currentFingerprint);
+      if (status === 'verified' && evidenceValid && currentEvidence.valid === true && fingerprintMatch) verified += 1;
       else {
-        if (status === 'conflict') conflict += 1; else unverified += 1;
+        const isConflict=status==='conflict'||currentEvidence.status==='conflict';
+        if (isConflict) conflict += 1; else unverified += 1;
+        let reason=String(scope && scope.result_verification_reason || '');
+        if(!reason&&status==='verified'&&!evidenceValid)reason='KQXS_STRICT_EVIDENCE_MISSING';
+        if(!reason&&!currentEvidence.valid)reason=currentEvidence.reason;
+        if(!reason&&!fingerprintMatch)reason='KQXS_SETTLEMENT_RESULT_DRIFT';
+        if(!reason)reason='KQXS_NOT_VERIFIED';
         bad_scopes.push({
           partner_id:String(scope && scope.partner_id || ''),
           business_date:String(scope && scope.business_date || ''),
           region:String(scope && scope.region || '').toLowerCase(),
           verification_status:status,
           evidence_valid:evidenceValid,
-          reason:String(scope && scope.result_verification_reason || (status === 'verified' ? 'KQXS_STRICT_EVIDENCE_MISSING' : 'KQXS_NOT_VERIFIED'))
+          canonical_result_status:currentEvidence.status,
+          fingerprint_match:fingerprintMatch,
+          reason
         });
       }
     }
@@ -182,9 +230,10 @@
   }
   async function runQualification(options) {
     const d = deps(), o = options || {};
-    const [settlements, messages, regressionSummary, candidateRows] = await Promise.all([
+    const [settlements, messages, results, regressionSummary, candidateRows] = await Promise.all([
       d.store.getAll(d.store.STORES.settlements),
       d.store.getAll(d.store.STORES.messages),
+      d.store.getAll(d.store.STORES.results),
       d.regression.runPinnedCases(),
       d.candidates.listCandidates()
     ]);
@@ -207,7 +256,7 @@
       observation:observationSummary,
       regression:regressionSummary,
       candidates:cs,
-      kqxs:kqxsVerificationGate(observationSummary),
+      kqxs:kqxsVerificationGate(observationSummary,results),
       parser_provenance:parserProvenanceGate(messages, o),
       parser_backend:backendGate,
       feature_safety:unverifiedFeatureGate(settlements, observationSummary),
@@ -276,7 +325,7 @@
 
   global.KTS_SETTLEMENT_QUALIFICATION = Object.freeze({
     version:'settlement-qualification-dashboard-v4-strict-kqxs-evidence',
-    normalizeWindow, messageInWindow, kqxsVerificationGate, parserProvenanceGate, parserBackendGate,
+    normalizeWindow, messageInWindow, canonicalResultEvidence, kqxsVerificationGate, parserProvenanceGate, parserBackendGate,
     unverifiedFeatureGate, candidateSummary, combineQualification, runQualification
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
