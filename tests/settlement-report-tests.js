@@ -120,7 +120,7 @@ assert.strictEqual(allRegions.totals.qua_co,48);
 assert.strictEqual(allRegions.totals.payout,6);
 assert.strictEqual(allRegions.totals.refund_amount,3);
 assert.strictEqual(allRegions.totals.final_net,39);
-console.log('settlement-report-tests: PASS');
+
 
 
 const kqxsGateReport = R.buildDailyPartnerReport({
@@ -139,3 +139,4 @@ assert.strictEqual(kqxsGateReport.kqxs_conflict,false);
 assert.strictEqual(kqxsGateReport.regions.find(x=>x.region==='mn').kqxs_verified,true);
 assert.strictEqual(kqxsGateReport.regions.find(x=>x.region==='mb').kqxs_verified,false);
 assert.strictEqual(R.kqxsVerificationStatus({lottery_result_snapshot:{verification_status:'conflict'}}),'conflict');
+console.log('settlement-report-tests: PASS');
