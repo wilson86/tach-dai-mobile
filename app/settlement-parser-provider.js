@@ -96,8 +96,11 @@
   function normalizeCanonicalPayload(payload, requestedRegion) {
     if (!payload || typeof payload !== 'object') throw new Error('PARSER_INVALID_JSON');
     const body = payload.canonical_payload || payload.data || payload;
-    const region = String(body.region || requestedRegion || '').toLowerCase();
+    const declaredRegion = String(body.region || '').toLowerCase();
+    if (!declaredRegion) throw new Error('PARSER_REGION_REQUIRED_IN_RESPONSE');
+    const region = declaredRegion;
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('PARSER_REGION_INVALID');
+    if (requestedRegion && region !== String(requestedRegion).toLowerCase()) throw new Error('PARSER_REGION_MISMATCH');
     const legs = Array.isArray(body.legs) ? body.legs.map(normalizeLeg) : [];
     if (!legs.length) throw new Error('PARSER_NO_LEGS');
     const parserVersion = String(body.parser_version || payload.parser_version || 'canonical-settlement-v1');
@@ -153,11 +156,15 @@
       } catch (_) {}
       throw new Error(code);
     }
-    return normalizeCanonicalPayload(await response.json(), r);
+    const canonical = normalizeCanonicalPayload(await response.json(), r);
+    if (!canonical.parser_identity || !canonical.parser_identity.identity_sha256) {
+      throw new Error('PARSER_IDENTITY_REQUIRED_FOR_LIVE_PARSE');
+    }
+    return canonical;
   }
 
   global.KTS_SETTLEMENT_PARSER_PROVIDER = Object.freeze({
-    version: 'settlement-parser-provider-v2-live-identity',
+    version: 'settlement-parser-provider-v3-strict-live-scope',
     STORAGE_KEY,
     DEFAULT_ENDPOINT,
     IDENTITY_HASH_FIELDS,
