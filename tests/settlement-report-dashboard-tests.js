@@ -10,7 +10,7 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const D = sandbox.globalThis.KTS_SETTLEMENT_REPORT_DASHBOARD;
 
-assert.strictEqual(D.version, 'settlement-report-dashboard-v4-live-refresh');
+assert.strictEqual(D.version, 'settlement-report-dashboard-v5-kqxs-evidence-required');
 assert.strictEqual(D.shadowLabel('MATCH_EXACT'), 'ĐÃ ĐỐI SOÁT');
 assert.strictEqual(D.shadowLabel('MISMATCH'), 'LỆCH ĐỐI SOÁT');
 assert.strictEqual(D.shadowKind('MATCH_EXACT'), 'ok');
@@ -38,18 +38,45 @@ assert.strictEqual(breakdown.region_totals.mn.xac, 60);
 assert.strictEqual(breakdown.region_totals.mb.final_net, 30.4);
 assert.strictEqual(breakdown.region_totals.mt.final_net, 42);
 
-const ready = D.buildReadiness({ status:'MATCH_EXACT', counts:{ partners:3, exact:3, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 } });
+const ready = D.buildReadiness({
+  status:'MATCH_EXACT',
+  counts:{ partners:3, exact:3, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 },
+  partners:[
+    {regions:[{region:'mn',kqxs_verified:true,kqxs_conflict:false}]},
+    {regions:[{region:'mt',kqxs_verified:true,kqxs_conflict:false}]},
+    {regions:[{region:'mb',kqxs_verified:true,kqxs_conflict:false}]}
+  ]
+});
 assert.strictEqual(ready.ready, true);
 assert.strictEqual(ready.reasons.length, 0);
-const notReady = D.buildReadiness({ status:'BLOCKED', counts:{ partners:3, exact:1, blocked:1, provisional:1, mismatch:0, display_only:0, unverified:1 } });
+const notReady = D.buildReadiness({
+  status:'BLOCKED',
+  counts:{ partners:3, exact:1, blocked:1, provisional:1, mismatch:0, display_only:0, unverified:1 },
+  partners:[
+    {regions:[{region:'mn',kqxs_verified:true,kqxs_conflict:false}]},
+    {regions:[{region:'mt',kqxs_verified:true,kqxs_conflict:false}]},
+    {regions:[{region:'mb',kqxs_verified:true,kqxs_conflict:false}]}
+  ]
+});
 assert.strictEqual(notReady.ready, false);
 assert.deepStrictEqual(Array.from(notReady.reasons, r => r.code), ['BLOCKED','PROVISIONAL','UNVERIFIED']);
-const displayOnly = D.buildReadiness({ status:'MATCH_DISPLAY_ONLY', counts:{ partners:1, exact:0, blocked:0, provisional:0, mismatch:0, display_only:1, unverified:0 } });
+const displayOnly = D.buildReadiness({
+  status:'MATCH_DISPLAY_ONLY',
+  counts:{ partners:1, exact:0, blocked:0, provisional:0, mismatch:0, display_only:1, unverified:0 },
+  partners:[{regions:[{region:'mn',kqxs_verified:true,kqxs_conflict:false}]}]
+});
 assert.strictEqual(displayOnly.ready, false);
 assert.strictEqual(displayOnly.reasons[0].code, 'DISPLAY_ONLY');
 const empty = D.buildReadiness({ status:'EMPTY', counts:{ partners:0 } });
 assert.strictEqual(empty.ready, false);
 assert.strictEqual(empty.reasons[0].code, 'NO_DATA');
+
+const missingKqxsEvidence = D.buildReadiness({
+  status:'MATCH_EXACT',
+  counts:{ partners:1, exact:1, blocked:0, provisional:0, mismatch:0, display_only:0, unverified:0 }
+});
+assert.strictEqual(missingKqxsEvidence.ready,false,'daily close must fail closed when partner counts exist without region/KQXS evidence');
+assert(missingKqxsEvidence.reasons.some(r=>r.code==='KQXS_EVIDENCE_MISSING'));
 
 const kqxsPending = D.buildReadiness({
   status:'MATCH_EXACT',
