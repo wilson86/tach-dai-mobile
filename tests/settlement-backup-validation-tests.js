@@ -136,4 +136,23 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   const p=payload({partners:[partner('a')],shadow_events:[core]});
   assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_FINGERPRINT_MISMATCH/);
 }
+
+
+{
+  const legacyResult={
+    id:'2026-10-06:mn',business_date:'2026-10-06',region:'mn',status:'complete',complete:true,
+    coverage_complete:null,verified:true,verification_status:'verified',
+    verification_sources:['primary'],verification_conflicts:[],
+    expected_station_codes:['bt'],stations:[{code:'bt',prizes:{}}]
+  };
+  const legacyCore={
+    business_date:'2026-10-06',region:'mn',status:'complete',complete:true,coverage_complete:null,
+    verification_status:'verified',verification_sources:['primary'],verification_reason:null,verification_conflicts:[],
+    expected_station_codes:['bt'],stations:[{code:'bt',prizes:{}}]
+  };
+  legacyResult.fingerprint=S.stableStringify(legacyCore);
+  const p=payload({results:[legacyResult]});
+  const out=S.validateImportPayload(p,empty(),{});
+  assert.strictEqual(out.valid,true,'legacy fingerprint compatible backup must remain importable');
+}
 console.log('settlement-backup-validation-tests: PASS');
