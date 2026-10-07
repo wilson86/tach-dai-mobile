@@ -124,6 +124,16 @@ assert.strictEqual(R.stationComplete('mb', { prizes: mbPrizes() }), true);
   assert.strictEqual(conflict.verification_status, 'conflict');
   assert.deepStrictEqual(Array.from(conflict.verification_conflicts), ['mb:G7']);
   assert.notStrictEqual(conflict.fingerprint, clean.fingerprint);
+
+  const conflictEvidenceWins = R.normalizeSnapshot({
+    ...base,
+    verification_status: 'verified',
+    verified: true,
+    verification_sources: ['primary', 'secondary'],
+    verification_conflicts: ['mb:G7']
+  });
+  assert.strictEqual(conflictEvidenceWins.verified, false);
+  assert.strictEqual(conflictEvidenceWins.verification_status, 'conflict', 'conflict evidence must override a contradictory verified=true claim');
 }
 
 assert.throws(() => R.normalizeSnapshot({

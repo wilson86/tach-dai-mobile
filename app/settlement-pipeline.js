@@ -123,7 +123,11 @@
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: `PENDING_PARSER:${pending.map(m => m.id).join(',')}` });
     }
 
-    const resultSnapshot = input.result_snapshot || await findResult(businessDate, region);
+    // Store is the canonical KQXS authority. Callers may pass a snapshot as a
+    // bootstrap only when none is stored yet; once a scope has persisted KQXS,
+    // queued/stale callbacks must not overwrite settlement with older evidence.
+    const storedResultSnapshot = await findResult(businessDate, region);
+    const resultSnapshot = storedResultSnapshot || input.result_snapshot || null;
     if (!resultSnapshot) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: 'KQXS_NOT_AVAILABLE' });
     }
@@ -320,7 +324,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v6-scope-queue',
+    version: 'settlement-pipeline-v7-result-store-authority',
     scopeId,
     isCancelled,
     findScopeMessages,

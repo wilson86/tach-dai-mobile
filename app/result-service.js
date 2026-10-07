@@ -90,7 +90,12 @@
     const verificationConflicts = Array.isArray(input.verification_conflicts) ? input.verification_conflicts.map(String) : [];
     let verificationStatus = normalizeVerification(input, complete);
     const distinctVerificationSources = new Set(verificationSources.map(x => String(x || '').trim()).filter(Boolean));
-    if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || verificationConflicts.length > 0)) {
+    if (verificationConflicts.length > 0) {
+      // Conflict evidence is authoritative even if a malformed/upstream payload
+      // also claims verified=true. Never downgrade an explicit conflict to merely
+      // "unverified", because settlement must fail closed on conflicting sources.
+      verificationStatus = 'conflict';
+    } else if (verificationStatus === 'verified' && distinctVerificationSources.size < 2) {
       verificationStatus = 'unverified';
     }
     const verified = complete && verificationStatus === 'verified';

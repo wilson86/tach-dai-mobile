@@ -145,6 +145,23 @@ const strongVerified=S.normalizeResultSnapshot({
 });
 assert.strictEqual(strongVerified.verified,true);
 
+const conflictEvidenceWins=S.normalizeResultSnapshot({
+  ...base,verification_status:'verified',verified:true,
+  verification_sources:['primary','secondary'],verification_conflicts:['bli:G8']
+});
+assert.strictEqual(conflictEvidenceWins.verified,false);
+assert.strictEqual(conflictEvidenceWins.verification_status,'conflict','conflict evidence must dominate contradictory verified=true metadata');
+
+assert.strictEqual(S.resultSnapshotIsOlder(
+  {fetched_at:'2026-10-07T10:00:00Z'},
+  {fetched_at:'2026-10-07T10:00:01Z'}
+),true);
+assert.strictEqual(S.resultSnapshotIsOlder(
+  {fetched_at:'2026-10-07T10:00:02Z'},
+  {fetched_at:'2026-10-07T10:00:01Z'}
+),false);
+assert(storeSource.includes("db.transaction([STORES.results, STORES.resultEvents], 'readwrite')"),'KQXS freshness check + save must be one atomic readwrite transaction');
+assert(storeSource.includes('stale_ignored: true'),'older KQXS responses must be retained as ignored rather than overwrite canonical result');
 
 const coverageDowngraded=S.normalizeResultSnapshot({
   ...base,complete:true,status:'complete',

@@ -76,6 +76,18 @@ function fakeStore(messages) {
   approx(out.settlement.result_snapshot.final_net, 28.28);
   assert.strictEqual(out.settlement.message_breakdown.length, 2);
 
+  const contradictoryCallerSnapshot = {
+    ...makeResult(true),
+    verification_status:'conflict',
+    verification_conflicts:['mb:G7']
+  };
+  const authorityOut = await P.settleScope({
+    partner_id:'p1', business_date:'2026-09-22', region:'mb',
+    result_snapshot: contradictoryCallerSnapshot
+  });
+  assert.strictEqual(authorityOut.status,'complete_unverified','stored KQXS must remain canonical over a stale queued caller snapshot');
+  assert.strictEqual(authorityOut.settlement.lottery_result_snapshot.verification_status,undefined);
+
   store.state.messages.push({ id: 'm3', partner_id: 'p1', business_date: '2026-09-22', region: 'mb', raw_text: 'bad', status: 'parser_error', canonical_payload: null });
   const blocked = await P.settleScope({ partner_id: 'p1', business_date: '2026-09-22', region: 'mb' });
   assert.strictEqual(blocked.status, 'blocked');
@@ -136,7 +148,7 @@ function fakeStore(messages) {
     };
     const raceCtx=loadContext(raceStore);
     const RP=raceCtx.KTS_SETTLEMENT_PIPELINE;
-    assert.strictEqual(RP.version,'settlement-pipeline-v6-scope-queue');
+    assert.strictEqual(RP.version,'settlement-pipeline-v7-result-store-authority');
     const background=RP.settleScope({partner_id:'p1',business_date:'2026-09-22',region:'mb'});
     await entered;
     const cancel=RP.cancelMessage('race1');

@@ -213,8 +213,12 @@
     const status = requestedStatus === 'error' || requestedStatus === 'stale'
       ? requestedStatus
       : (complete ? 'complete' : 'partial');
-    if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
-    if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || verificationConflicts.length > 0 || !stationCoverageComplete)) verificationStatus = 'unverified';
+    if (verificationConflicts.length > 0) {
+      verificationStatus = 'conflict';
+    } else {
+      if (!complete && verificationStatus === 'verified') verificationStatus = 'unverified';
+      if (verificationStatus === 'verified' && (distinctVerificationSources.size < 2 || !stationCoverageComplete)) verificationStatus = 'unverified';
+    }
     const coverageComplete = input.coverage_complete == null ? stationCoverageComplete : Boolean(input.coverage_complete) && stationCoverageComplete;
     const core = {
       business_date: businessDate,
@@ -482,20 +486,46 @@
     return v;
   }
 
+  function resultSnapshotIsOlder(candidate, previous) {
+    if (!candidate || !previous) return false;
+    const candidateMs = Date.parse(String(candidate.fetched_at || ''));
+    const previousMs = Date.parse(String(previous.fetched_at || ''));
+    return Number.isFinite(candidateMs) && Number.isFinite(previousMs) && candidateMs < previousMs;
+  }
+
   async function saveResultSnapshot(input) {
     const v = normalizeResultSnapshot(input);
-    const previous = await get(STORES.results, v.id);
-    const changed = !previous || previous.fingerprint !== v.fingerprint;
-    await put(STORES.results, v);
-    if (changed) {
-      const event = Object.assign({}, clone(v), {
-        id: makeId('result_event'),
-        result_id: v.id,
-        observed_at: nowIso()
-      });
-      await put(STORES.resultEvents, event);
-    }
-    return { snapshot: v, changed, previous: previous || null };
+    const db = await openDb();
+    let outcome = null;
+    try {
+      // Read freshness + write snapshot + append audit event atomically.
+      // IndexedDB serializes overlapping readwrite transactions, so a slower
+      // stale request cannot overwrite a newer KQXS snapshot from another UI path/tab.
+      const tx = db.transaction([STORES.results, STORES.resultEvents], 'readwrite');
+      const resultStore = tx.objectStore(STORES.results);
+      const eventStore = tx.objectStore(STORES.resultEvents);
+      const req = resultStore.get(v.id);
+      req.onsuccess = () => {
+        const previous = req.result || null;
+        if (previous && resultSnapshotIsOlder(v, previous)) {
+          outcome = { snapshot: clone(previous), changed: false, previous: clone(previous), stale_ignored: true };
+          return;
+        }
+        const changed = !previous || previous.fingerprint !== v.fingerprint;
+        resultStore.put(clone(v));
+        if (changed) {
+          eventStore.put(Object.assign({}, clone(v), {
+            id: makeId('result_event'),
+            result_id: v.id,
+            observed_at: nowIso()
+          }));
+        }
+        outcome = { snapshot: clone(v), changed, previous: previous ? clone(previous) : null, stale_ignored: false };
+      };
+      await txDone(tx);
+      if (!outcome) throw new Error('RESULT_SAVE_FAILED');
+      return outcome;
+    } finally { db.close(); }
   }
 
   async function listShadowEvents(input) {
@@ -764,6 +794,6 @@
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
-    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, nextConfigVersionFromRows, validateImportPayload, stableStringify
+    normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, nextConfigVersionFromRows, validateImportPayload, resultSnapshotIsOlder, stableStringify
   });
 })(typeof window !== 'undefined' ? window : globalThis);
