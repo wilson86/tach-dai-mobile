@@ -21,7 +21,7 @@ const settlements = [
   { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
-assert.strictEqual(H.version, 'message-history-v5-canonical-summary');
+assert.strictEqual(H.version, 'message-history-v6-strict-kqxs');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -37,7 +37,9 @@ assert.strictEqual(H.deriveState({ status: 'cancelled', parser_error: 'old error
 assert.strictEqual(H.settlementForScope(scope, settlements).id, 'scope:p1:2026-10-06:mn');
 
 const blockedSummary = H.buildScopeSummary(scope, messages, settlements, {
-  id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true, verification_status:'verified'
+  id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true, verified:true, verification_status:'verified',
+  verification_sources:['primary','secondary'], expected_station_codes:['bt','vt','bli'],
+  stations:[{code:'bt'},{code:'vt'},{code:'bli'}]
 });
 assert.strictEqual(blockedSummary.counts.total, 3);
 assert.strictEqual(blockedSummary.counts.active, 2);
@@ -78,4 +80,12 @@ assert.strictEqual(waiting.kqxs.label, 'CHƯA CÓ KQ');
 
 const historySource=fs.readFileSync(path.join(__dirname,'..','app','settlement-message-history.js'),'utf8');
 assert(historySource.includes("kts:settlement-message-activity-changed"));
+
+
+const weakSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
+  id:'2026-10-06:mn',business_date:'2026-10-06',region:'mn',complete:true,verified:true,verification_status:'verified',
+  verification_sources:['primary'],expected_station_codes:['bt'],stations:[{code:'bt'}]
+});
+assert.strictEqual(weakSummary.kqxs.verified,false);
+assert.strictEqual(weakSummary.kqxs.label,'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHIẾU');
 console.log('settlement-message-history-tests: PASS');
