@@ -59,7 +59,8 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   // Conflicting sources are visible/auditable but must produce zero settlement money.
   {
     const s=makeStore([msg('ma')]); const P=load(s);
-    const out=await P.settleScope({partner_id:'a',business_date:'2026-09-22',region:'mb',result_snapshot:result({verification_status:'conflict',verified:false,verification_reason:'KQXS_SOURCE_CONFLICT'})});
+    s.state.results[0]=result({verification_status:'conflict',verified:false,verification_reason:'KQXS_SOURCE_CONFLICT'});
+    const out=await P.settleScope({partner_id:'a',business_date:'2026-09-22',region:'mb'});
     assert.strictEqual(out.status,'blocked'); assert.strictEqual(out.reason,'KQXS_SOURCE_CONFLICT');
     assert.strictEqual(out.settlement.result_snapshot.total_xac,0);
   }
@@ -69,9 +70,9 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
     const store=makeStore([msg('ma')]); const P=load(store);
     const first=await P.settleScope({partner_id:'a',business_date:'2026-09-22',region:'mb',result_snapshot:result()});
     assert.notStrictEqual(first.settlement.result_snapshot.total_xac,0,'precondition: scope must have settled money before conflict');
+    store.state.results[0]=result({verification_status:'conflict',verified:false,verification_reason:'KQXS_SOURCE_CONFLICT'});
     const conflicted=await P.settleScope({
-      partner_id:'a',business_date:'2026-09-22',region:'mb',
-      result_snapshot:result({verification_status:'conflict',verified:false,verification_reason:'KQXS_SOURCE_CONFLICT'})
+      partner_id:'a',business_date:'2026-09-22',region:'mb'
     });
     assert.strictEqual(conflicted.status,'blocked');
     assert.strictEqual(conflicted.reason,'KQXS_SOURCE_CONFLICT');
@@ -86,7 +87,8 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
   // A result snapshot from another date/region cannot be reused by mistake.
   {
     const s=makeStore([msg('ma')]); const P=load(s);
-    const out=await P.settleScope({partner_id:'a',business_date:'2026-09-22',region:'mb',result_snapshot:result({business_date:'2026-09-21'})});
+    s.state.results[0]=result({business_date:'2026-09-21'});
+    const out=await P.settleScope({partner_id:'a',business_date:'2026-09-22',region:'mb'});
     assert.strictEqual(out.status,'blocked'); assert.strictEqual(out.reason,'KQXS_SCOPE_MISMATCH');
   }
 
