@@ -14,6 +14,11 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const A = sandbox.globalThis.KTS_RESULT_AUTO;
 
+function fullMnPrizes(prefix){
+  const counts={G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1};
+  return Object.fromEntries(Object.entries(counts).map(([k,n])=>[k,Array.from({length:n},(_,i)=>String(prefix)+'-'+k+'-'+String(i+1))]));
+}
+
 function fixture() {
   const created = [];
   const recalcs = [];
@@ -84,15 +89,16 @@ function fixture() {
   assert.strictEqual(A.sourceLabel('xskt.com.vn'), 'XSKT');
   assert.strictEqual(A.dateLabel('2026-10-07'), '07/10/2026');
   const verifiedSnapshot = {
-    complete:true,verified:true,verification_status:'verified',
+    region:'mn',complete:true,verified:true,verification_status:'verified',
     verification_sources:['primary','secondary'],
-    expected_station_codes:['bt'],stations:[{code:'bt'}],verification_conflicts:[]
+    expected_station_codes:['bt'],stations:[{code:'bt',prizes:fullMnPrizes('bt')}],verification_conflicts:[]
   };
   assert.strictEqual(A.userResultState(verifiedSnapshot).label, 'ĐÃ ĐỐI CHIẾU 2 NGUỒN');
   assert.strictEqual(A.userResultState({...verifiedSnapshot,verification_sources:['primary']}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
+  assert.strictEqual(A.userResultState({...verifiedSnapshot,stations:[{code:'bt',prizes:{G8:['10']}}]}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU','missing prize rows must not render as verified');
   assert.strictEqual(A.userResultState({complete:true,verified:false}).label, 'ĐÃ ĐỦ KẾT QUẢ · ĐANG ĐỐI CHIẾU');
   assert.strictEqual(A.userResultState({verification_status:'conflict'}).label, 'CÓ LỆCH NGUỒN');
-  assert.strictEqual(A.version, 'result-auto-v12-strict-verification-status');
+  assert.strictEqual(A.version, 'result-auto-v13-prize-complete-verification');
   assert.strictEqual(A.PENDING_SCOPES_KEY, 'kts_settlement_pending_result_scopes_v1');
   assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},verifiedSnapshot,'2026-10-07',true),true,'remembered verified current-day scope must resume unfinished stability confirmations');
   assert.strictEqual(A.pendingScopeNeedsResume({business_date:'2026-10-07',region:'mn'},verifiedSnapshot,'2026-10-07',false),false,'discovered verified scope without pending marker must not restart on every reload');
