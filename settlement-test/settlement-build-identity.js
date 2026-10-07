@@ -2,7 +2,7 @@
   'use strict';
   const critical=Object.freeze({
     'app/settlement.html':'3ec859e323144716d70d39bbccf0141cca83196f',
-    'app/settlement-store.js':'24047ed1e07c637f7ea50a10a85bd666c5c2a946',
+    'app/settlement-store.js':'49b4c2e21a2dda5b0dfdc5fd5856617cc943aeac',
     'app/settlement-engine.js':'93471a5e809746a91a847b0e64b2bff09cdc0a37',
     'app/settlement-mb-rules.js':'01e7636d0ea0ab5dbbb2e51e0968a5c5e2f73081',
     'app/settlement-category-map.js':'5cbd0575ec451b6a6a5a351fbe67d1599fccfb4d',
@@ -10,15 +10,15 @@
     'app/settlement-runtime.js':'b8da8e854b680cfc984dc936440cc2c4a43ddcf7',
     'app/settlement-evaluator.js':'f659fa130cecf63b6a07291ccfd3e36da1040986',
     'app/settlement-parser-provider.js':'33b28eeea8a1c4063e1d793c4ab82a8b6fc7d51f',
-    'app/settlement-pipeline.js':'331e3bd905c29195eb3900426426a0ddc06f194f',
+    'app/settlement-pipeline.js':'10a7ba1498882f33a877d8be226fef6b55e3f353',
     'app/settlement-pricing-copy.js':'622f9b5018922d9abf14f6ff04a390c8511b7b51',
     'app/settlement-config-validation.js':'288688bceea58cb884f10fe9a7e36d9415ad85c1',
     'app/settlement-report.js':'7287e6e215f9de8c3afc5c0016c3ee8f2915d62e',
-    'app/settlement-report-dashboard.js':'572c3ec8e3f3fad74c236d29f3086474fa952ae2',
-    'app/settlement-attention-ui.js':'215128989fdf6bbfd96afb1efb112b0cec510c55',
-    'app/settlement-ui.js':'2e36e09ea8e93d9ca5e610a616a5f6aaff49c876',
+    'app/settlement-report-dashboard.js':'ac76ba97db5ddfa9f36317aa6d9f3a6c095e6195',
+    'app/settlement-attention-ui.js':'b820a264e637f8531e9a30a298bb844b7720e052',
+    'app/settlement-ui.js':'46c25100678c607b6237cef7d585961bf5da19cc',
     'app/settlement-backup-ui.js':'782fc8664dd57d619cc295ef956e7634c947ca8a',
-    'app/sw.js':'e437809583c8774e564c66d18ab3a56acd8431e4',
+    'app/sw.js':'8c37faa693335411f30014baf34dfcc93951b2ec',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
@@ -59,7 +59,7 @@
     'app/settlement-observation-ui.js':'7fd27d230fb05b847b0931f148283176ed385715',
     'app/settlement-scope-sync.js':'25e170a0eed8688c1b0173cc3469e13495596519',
     'app/settlement-report-simple-ui.js':'87fe1d52560e4b649d3770ff8cc6fe68c292b48e',
-    'app/settlement-consumer-ui.js':'6e9d3592be4015681192d1f5bc98ef40219ce8d2'
+    'app/settlement-consumer-ui.js':'43d0afd4a3da522a56a79ad75ffe408337304c84'
   });
   global.KTS_SETTLEMENT_BUILD_IDENTITY=Object.freeze({version:'settlement-build-identity-v1',algorithm:'git-blob-sha1',critical_git_blobs:critical,business_engine_sha256:'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c'});
 })(typeof window!=='undefined'?window:globalThis);
