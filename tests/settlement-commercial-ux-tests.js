@@ -47,7 +47,7 @@ assert(ui.includes('KQXS CHƯA XÁC MINH'));
 
 
 const backupUi=fs.readFileSync('app/settlement-backup-ui.js','utf8');
-assert(backupUi.includes("version: 'settlement-backup-ui-v4-operation-lock'"));
+assert(backupUi.includes("version: 'settlement-backup-ui-v5-recalculate-imported-scopes'"));
 assert(backupUi.includes('let backupBusy = false'));
 assert(backupUi.includes('function') || backupUi.includes('const setBackupBusy = value =>'));
 assert(backupUi.includes("['settlementExportBackup','settlementImportBackup','settlementImportFile']"));
@@ -60,4 +60,9 @@ assert(ui.includes("kts:settlement-message-activity-changed"));
 assert(ui.includes('refreshVisiblePartnerReport'));
 assert(ui.includes("document.querySelectorAll('.nav button[data-pane=\"report\"]')"));
 assert(ui.includes('reportLoadEpoch'));
+assert(backupUi.includes('async function recalculateImportedScopes(payload)'));
+assert(backupUi.includes('pipeline.settleScope(scope)'));
+assert(backupUi.includes('IMPORT_RECALC_FAILED:'));
+assert(backupUi.includes('total_xac:0,total_qua_co:0,total_payout:0'));
+assert(backupUi.includes('đã tính lại'));
 console.log('settlement-commercial-ux-tests: PASS');
