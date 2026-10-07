@@ -151,6 +151,9 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
       region: scope.region,
       source: 'fixture',
       expected_station_codes: ['bli'],
+      verification_status: 'verified',
+      verified: true,
+      verification_sources: ['primary','secondary'],
       stations: [{ code: 'bli', name: 'Bạc Liêu', prizes: mnPrizes() }]
     }),
     onStatus: info => states.push(info.state)
@@ -207,6 +210,28 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
   assert.strictEqual(pendingPoller.getState().running, true, 'secondary pending must keep polling');
   assert(pendingStates.includes('verification_pending'));
   pendingPoller.stop();
+
+  const singleSourceStates = [];
+  const singleSourcePoller = R.createPoller({
+    intervalMs: 60000,
+    completeConfirmations: 1,
+    fetchSnapshot: async scope => ({
+      business_date: scope.business_date,
+      region: scope.region,
+      source: 'primary',
+      expected_station_codes: ['mb'],
+      verification_status: 'unverified',
+      verified: false,
+      verification_sources: ['primary'],
+      verification_reason: 'SOURCE_UNAVAILABLE:TIMEOUT',
+      stations: [{ code: 'mb', prizes: mbPrizes() }]
+    }),
+    onStatus: info => singleSourceStates.push(info.state)
+  });
+  await singleSourcePoller.start({ business_date: '2026-09-22', region: 'mb' });
+  assert.strictEqual(singleSourcePoller.getState().running, true, 'one-source complete result must keep polling until verified');
+  assert(singleSourceStates.includes('verification_pending'));
+  singleSourcePoller.stop();
 
   console.log('result-service-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
