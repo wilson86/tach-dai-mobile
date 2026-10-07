@@ -233,5 +233,23 @@ assert.throws(() => R.createPoller({ fetchSnapshot: async () => ({}), completeCo
   assert(singleSourceStates.includes('verification_pending'));
   singleSourcePoller.stop();
 
+
+  const oneSourceClaimedVerified = R.normalizeSnapshot({
+    business_date:'2026-09-22',region:'mb',
+    expected_station_codes:['mb'],
+    verification_status:'verified',verified:true,verification_sources:['primary'],
+    stations:[{code:'mb',prizes:mbPrizes()}]
+  });
+  assert.strictEqual(oneSourceClaimedVerified.verified,false,'one source must never qualify as VERIFIED');
+  assert.strictEqual(oneSourceClaimedVerified.verification_status,'unverified');
+
+  const twoSourceVerified = R.normalizeSnapshot({
+    business_date:'2026-09-22',region:'mb',
+    expected_station_codes:['mb'],
+    verification_status:'verified',verified:true,verification_sources:['primary','secondary'],
+    stations:[{code:'mb',prizes:mbPrizes()}]
+  });
+  assert.strictEqual(twoSourceVerified.verified,true);
+
   console.log('result-service-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
