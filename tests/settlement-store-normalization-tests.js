@@ -152,6 +152,14 @@ const conflictEvidenceWins=S.normalizeResultSnapshot({
 assert.strictEqual(conflictEvidenceWins.verified,false);
 assert.strictEqual(conflictEvidenceWins.verification_status,'conflict','conflict evidence must dominate contradictory verified=true metadata');
 
+const forgedFingerprint=S.normalizeResultSnapshot({
+  ...base,verification_status:'verified',verified:true,
+  verification_sources:['primary','secondary'],verification_conflicts:[],
+  fingerprint:'caller-stale-fingerprint'
+});
+assert.notStrictEqual(forgedFingerprint.fingerprint,'caller-stale-fingerprint','store normalization must recompute KQXS fingerprint instead of trusting caller metadata');
+assert.strictEqual(forgedFingerprint.fingerprint,strongVerified.fingerprint,'same canonical KQXS core must have deterministic store-owned fingerprint');
+
 assert.strictEqual(S.resultSnapshotIsOlder(
   {fetched_at:'2026-10-07T10:00:00Z'},
   {fetched_at:'2026-10-07T10:00:01Z'}
