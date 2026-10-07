@@ -70,11 +70,16 @@
     if (num(counts.mismatch) > 0) reasons.push({ code:'MISMATCH', label:`${num(counts.mismatch)} đối tác đang lệch đối soát` });
     if (num(counts.display_only) > 0) reasons.push({ code:'DISPLAY_ONLY', label:`${num(counts.display_only)} đối tác cần kiểm tra thêm` });
     if (num(counts.unverified) > 0) reasons.push({ code:'UNVERIFIED', label:`${num(counts.unverified)} đối tác chưa đối soát` });
+    const allRegions = ((model && model.partners) || []).flatMap(report => Array.isArray(report.regions) ? report.regions : []);
+    const kqxsConflict = allRegions.filter(region => region && region.kqxs_conflict === true).length;
+    const kqxsPending = allRegions.filter(region => region && region.kqxs_verified === false && region.kqxs_conflict !== true).length;
+    if (kqxsConflict > 0) reasons.push({ code:'KQXS_CONFLICT', label:`${kqxsConflict} miền có lệch giữa các nguồn KQXS` });
+    if (kqxsPending > 0) reasons.push({ code:'KQXS_UNVERIFIED', label:`${kqxsPending} miền chưa xác minh KQXS từ 2 nguồn` });
     const exact = num(counts.exact);
     if (partners > 0 && exact !== partners && !reasons.length) reasons.push({ code:'NOT_ALL_EXACT', label:'Chưa phải tất cả đối tác đều hoàn tất đối soát' });
     return {
       ready: reasons.length === 0 && String(model && model.status || '') === 'MATCH_EXACT' && partners > 0,
-      reasons, exact, partners
+      reasons, exact, partners, kqxs_pending:kqxsPending, kqxs_conflict:kqxsConflict
     };
   }
 
@@ -113,8 +118,8 @@
     }
     function regionSummary(report) {
       return (report.regions || []).map(r => {
-        const cls = r.blocked ? 'err' : r.provisional ? 'warn' : shadowKind(r.shadow_status);
-        const state = r.blocked ? 'CHƯA TÍNH' : r.provisional ? 'TẠM' : shadowLabel(r.shadow_status);
+        const cls = r.blocked || r.kqxs_conflict ? 'err' : r.provisional || r.kqxs_verified === false ? 'warn' : shadowKind(r.shadow_status);
+        const state = r.blocked ? 'CHƯA TÍNH' : r.provisional ? 'TẠM' : r.kqxs_conflict ? 'KQXS LỆCH NGUỒN' : r.kqxs_verified === false ? 'CHỜ XÁC MINH KQXS' : shadowLabel(r.shadow_status);
         return `<span class="tag ${cls}">${esc(r.region.toUpperCase())} · ${esc(state)}</span>`;
       }).join(' ');
     }
@@ -163,17 +168,21 @@
           <div style="margin:6px 0"><b>Tổng 3 miền:</b> XÁC <span class="money">${money(model.totals.xac)}</span> · QUA CÒ <span class="money">${money(model.totals.qua_co)}</span> · TRẢ <span class="money">${money(model.totals.payout)}</span> · HỒI <span class="money">${money(model.totals.refund_amount)}</span> · <b>${esc(direction(model.totals.final_net))} ${money(Math.abs(num(model.totals.final_net)))}</b></div>
           <div class="result-grid"><table><thead><tr><th>Vai trò</th><th>XÁC</th><th>Qua cò</th><th>Trả</th><th>Hồi</th><th>Thu/Bù</th></tr></thead><tbody>${totalsRow('Khách', breakdown.role_totals.customer)}${totalsRow('Chủ', breakdown.role_totals.owner)}</tbody></table></div>
         </details>
-        <div class="hint">Đã đối soát ${model.counts.exact}/${model.counts.partners} đối tác · chưa tính ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch}.</div>`;
+        <div class="hint">Đã đối soát ${model.counts.exact}/${model.counts.partners} đối tác · chưa tính ${model.counts.blocked} · tạm tính ${model.counts.provisional} · lệch ${model.counts.mismatch} · KQXS chờ xác minh ${buildReadiness(model).kqxs_pending}.</div>`;
 
       partners.innerHTML = model.partners.map(report => {
-        const cls = report.blocked ? 'err' : report.provisional ? 'warn' : shadowKind(report.shadow_status);
-        const state = report.blocked ? 'CHƯA TÍNH' : report.provisional ? 'TẠM TÍNH' : shadowLabel(report.shadow_status);
+        const cls = report.blocked || report.kqxs_conflict ? 'err' : report.provisional || report.kqxs_verified === false ? 'warn' : shadowKind(report.shadow_status);
+        const state = report.blocked ? 'CHƯA TÍNH' : report.provisional ? 'TẠM TÍNH' : report.kqxs_conflict ? 'KQXS LỆCH NGUỒN' : report.kqxs_verified === false ? 'CHỜ XÁC MINH KQXS' : shadowLabel(report.shadow_status);
         const warning = report.blocked
           ? `<div class="status err">Không dùng tổng này để chốt · ${report.blocked_scopes.length} phạm vi bị chặn.</div>`
           : report.provisional
             ? '<div class="status warn">KQXS chưa hoàn tất · số tiền còn tạm.</div>'
-            : report.shadow_status !== 'MATCH_EXACT'
-              ? '<div class="status warn">Tiền đã tính nhưng chưa hoàn tất đối soát.</div>' : '';
+            : report.kqxs_conflict
+              ? '<div class="status err">KQXS đang lệch nguồn · không dùng để chốt.</div>'
+              : report.kqxs_verified === false
+                ? '<div class="status warn">Tiền đã đối soát nhưng KQXS chưa xác minh đủ 2 nguồn · chưa chốt.</div>'
+                : report.shadow_status !== 'MATCH_EXACT'
+                  ? '<div class="status warn">Tiền đã tính nhưng chưa hoàn tất đối soát.</div>' : '';
         const cats = (report.categories || []).map(c => `${esc(c.label || c.code)}: XÁC ${money(c.xac)} · QUA ${money(c.qua_co)} · TRẢ ${money(c.payout)}`).join('<br>');
         return `<div class="report-message" data-ops-partner="${esc(report.partner.id)}">
           <div class="row" style="justify-content:space-between">
