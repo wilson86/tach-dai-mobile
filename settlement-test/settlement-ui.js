@@ -449,6 +449,7 @@
     const effective = $('effectiveDate').value;
     if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
     if (savingConfig) return status('configStatus', 'Cấu hình trước đang được lưu. Vui lòng chờ hoàn tất.', 'warn');
+    if (savingMessage) return status('configStatus', 'Một tin đang được lưu/tính. Chờ tin đó hoàn tất rồi mới đổi cấu hình để tránh tin dùng nhầm bảng giá.', 'warn');
     savingConfig = true;
     const originalLabel = button ? button.textContent : '';
     const saveDraftSignature = configEditorSignature();
@@ -521,6 +522,7 @@
     if (!partnerId) return status('messageStatus', 'Chưa chọn đối tác.', 'err');
     if (!raw) return status('messageStatus', 'Chưa có tin.', 'err');
     if (savingMessage) return status('messageStatus', 'Tin trước đang được lưu. Chờ hoàn tất để tránh gửi trùng.', 'warn');
+    if (savingConfig) return status('messageStatus', 'Thiết lập giá đang được lưu. Chờ hoàn tất rồi mới lưu tin để chắc chắn tin dùng đúng bảng giá.', 'warn');
 
     const businessDate = $('messageDate').value;
     const region = String($('messageRegion').value || '').toLowerCase();
