@@ -26,6 +26,7 @@
   let inactivePartners = [];
   let poller = null;
   let pendingConfigTemplate = null;
+  let pendingConfigBusinessDate = '';
   let savingMessage = false;
   let savingConfig = false;
   let configDirty = false;
@@ -354,6 +355,7 @@
     const hint = $('missingConfigHint');
     const apply = $('applyConfigForMessageDate');
     pendingConfigTemplate = show && template ? template : null;
+    pendingConfigBusinessDate = show && businessDate ? String(businessDate) : '';
     if (row) row.classList.toggle('hidden', !show);
     if (hint) hint.textContent = text || '';
     if (apply) {
@@ -388,8 +390,11 @@
     let shouldSaveMessage = false;
     let needManualConfig = false;
     try {
-      const cachedTemplate = pendingConfigTemplate && String(pendingConfigTemplate.partner_id || '') === partnerId
-        ? pendingConfigTemplate : null;
+      const cachedTemplate =
+        pendingConfigTemplate &&
+        String(pendingConfigTemplate.partner_id || '') === partnerId &&
+        pendingConfigBusinessDate === businessDate
+          ? pendingConfigTemplate : null;
       const template = cachedTemplate || await nearestConfigTemplate(partnerId, businessDate);
       if (!template) {
         needManualConfig = true;
