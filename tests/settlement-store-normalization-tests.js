@@ -19,6 +19,9 @@ assert.strictEqual(S.assertConfigPartner({partner_id:'p1'}, 'p1'), true);
 assert.throws(() => S.assertConfigPartner({partner_id:'p2'}, 'p1'), /CONFIG_PARTNER_MISMATCH/);
 
 assert.strictEqual(typeof S.resolveConfigFromRows, 'function');
+assert.strictEqual(typeof S.nextConfigVersionFromRows, 'function');
+assert.strictEqual(S.nextConfigVersionFromRows([]),1);
+assert.strictEqual(S.nextConfigVersionFromRows([{version:1},{version:4},{version:2}]),5);
 const versionRows = [
   S.normalizeConfig({partner_id:'p1',version:1,effective_from_date:'2026-10-06'}),
   S.normalizeConfig({partner_id:'p1',version:2,effective_from_date:'2026-10-07'}),
@@ -122,3 +125,9 @@ assert.throws(() => S.normalizeShadowEvent({...evidenceBase,business_date:'bad'}
 assert.throws(() => S.normalizeShadowEvent({...evidenceBase,region:'xx'}), /SHADOW_EVENT_REGION_REQUIRED/);
 
 console.log('settlement-store-normalization-tests: PASS');
+const storeSource=fs.readFileSync('app/settlement-store.js','utf8');
+const saveConfigSource=storeSource.slice(storeSource.indexOf('async function saveConfig'),storeSource.indexOf('function resolveConfigFromRows'));
+assert(saveConfigSource.includes("db.transaction(STORES.configs, 'readwrite')"),'config version read + write must share one readwrite transaction');
+assert(saveConfigSource.includes("store.index('by_partner').getAll"),'atomic config save must read existing partner versions inside that transaction');
+assert(saveConfigSource.includes('store.add(value)'),'auto version write must use add() to fail rather than overwrite on unexpected collision');
+assert(!saveConfigSource.includes('await nextConfigVersion('),'saveConfig must not allocate version in a separate async transaction');
