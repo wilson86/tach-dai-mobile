@@ -20,7 +20,7 @@ vm.runInContext(fs.readFileSync('app/settlement-parser-provider.js', 'utf8'), ct
 const P = ctx.KTS_SETTLEMENT_PARSER_PROVIDER;
 
 (async()=>{
-  assert.strictEqual(P.version, 'settlement-parser-provider-v3-strict-live-scope');
+  assert.strictEqual(P.version, 'settlement-parser-provider-v4-network-timeout');
   assert.strictEqual(P.endpoint(), '/api/settlement/parse');
   ctx.KTS_SETTLEMENT_RUNTIME_ENDPOINTS={parser_endpoint:'https://runtime.example/api/settlement/parse'};
   assert.strictEqual(P.runtimeEndpoint(),'https://runtime.example/api/settlement/parse');
@@ -102,5 +102,8 @@ const P = ctx.KTS_SETTLEMENT_PARSER_PROVIDER;
   ctx.fetch=async()=>({ok:true,status:200,async json(){return {canonical_payload:{raw_text:'92 b 1n',region:'mb',legs:[{code:'2CB',values:['92'],stake:'1'}]}};}});
   await assert.rejects(()=>P.fetchCanonical('92 b 1n','mb','2026-10-07'),/PARSER_IDENTITY_REQUIRED_FOR_LIVE_PARSE/);
 
+  assert(source.includes('async function fetchWithTimeout('));
+  assert(source.includes("45000, 'PARSER_REQUEST_TIMEOUT'"));
+  assert(source.includes("30000, 'PARSER_IDENTITY_TIMEOUT'"));
   console.log('settlement parser provider tests PASS');
 })().catch(e=>{console.error(e);process.exit(1);});
