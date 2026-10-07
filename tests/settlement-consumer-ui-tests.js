@@ -45,7 +45,7 @@ assert(code.includes('Tin gốc chưa lưu đang thuộc phạm vi trước đó
 assert(code.includes("'reportOutput'"));
 assert(html.includes('src="./settlement-consumer-ui.js"'));
 assert(sw.includes("'./settlement-consumer-ui.js'"));
-assert(sw.includes('v1.0.117-stale-safe-report-panels'));
+assert(sw.includes('v1.0.119-stale-safe-history-audit'));
 assert(source.includes('let reviewEpoch=0'));
 assert(source.includes('const epoch=++reviewEpoch'));
 assert(source.includes('epoch===reviewEpoch'));
