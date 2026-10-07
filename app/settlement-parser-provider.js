@@ -114,13 +114,31 @@
     };
   }
 
+  async function fetchWithTimeout(url, options, timeoutMs, timeoutCode) {
+    if (typeof global.AbortController !== 'function' || typeof global.setTimeout !== 'function') {
+      return global.fetch(url, options);
+    }
+    const controller = new global.AbortController();
+    const timer = global.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await global.fetch(url, Object.assign({}, options, { signal: controller.signal }));
+    } catch (error) {
+      if (error && (error.name === 'AbortError' || String(error.message || '').toLowerCase().includes('aborted'))) {
+        throw new Error(timeoutCode);
+      }
+      throw error;
+    } finally {
+      if (typeof global.clearTimeout === 'function') global.clearTimeout(timer);
+    }
+  }
+
   async function fetchIdentity() {
-    const response = await global.fetch(identityEndpoint(), {
+    const response = await fetchWithTimeout(identityEndpoint(), {
       method: 'GET',
       cache: 'no-store',
       credentials: 'omit',
       headers: { Accept: 'application/json' }
-    });
+    }, 30000, 'PARSER_IDENTITY_TIMEOUT');
     if (!response.ok) {
       let code = 'PARSER_IDENTITY_HTTP_' + response.status;
       try {
@@ -141,13 +159,13 @@
     if (r !== 'mb' && !/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error('PARSER_BUSINESS_DATE_REQUIRED');
 
     const url = new URL(endpoint(), global.location && global.location.href ? global.location.href : 'https://localhost/');
-    const response = await global.fetch(url.toString(), {
+    const response = await fetchWithTimeout(url.toString(), {
       method: 'POST',
       cache: 'no-store',
       credentials: 'omit',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ raw_text: raw, region: r, business_date: d || null })
-    });
+    }, 45000, 'PARSER_REQUEST_TIMEOUT');
     if (!response.ok) {
       let code = 'PARSER_HTTP_' + response.status;
       try {
@@ -164,7 +182,7 @@
   }
 
   global.KTS_SETTLEMENT_PARSER_PROVIDER = Object.freeze({
-    version: 'settlement-parser-provider-v3-strict-live-scope',
+    version: 'settlement-parser-provider-v4-network-timeout',
     STORAGE_KEY,
     DEFAULT_ENDPOINT,
     IDENTITY_HASH_FIELDS,
