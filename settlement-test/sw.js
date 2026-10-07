@@ -1,5 +1,5 @@
 'use strict';
-const CACHE='kts-tach-unified-v1.0.64-missing-config-ux-render-free-test';
+const CACHE='kts-tach-unified-v1.0.65-one-tap-config-fix-render-free-test';
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json','./test-backend-bootstrap.js',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',

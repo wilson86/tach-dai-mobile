@@ -24,6 +24,7 @@
   let partners = [];
   let inactivePartners = [];
   let poller = null;
+  let pendingConfigTemplate = null;
   let savingMessage = false;
 
   function today() {
@@ -278,11 +279,19 @@
     return m ? `${m[3]}/${m[2]}/${m[1]}` : String(value || '');
   }
 
-  function setMissingConfigAction(show, text) {
+  function setMissingConfigAction(show, text, template, businessDate) {
     const row = $('missingConfigAction');
     const hint = $('missingConfigHint');
+    const apply = $('applyConfigForMessageDate');
+    pendingConfigTemplate = show && template ? template : null;
     if (row) row.classList.toggle('hidden', !show);
     if (hint) hint.textContent = text || '';
+    if (apply) {
+      apply.classList.toggle('hidden', !pendingConfigTemplate);
+      apply.textContent = pendingConfigTemplate
+        ? `Dùng bảng giá ${viDate(pendingConfigTemplate.effective_from_date)} cho ${viDate(businessDate)} & tính`
+        : 'Dùng bảng giá gần nhất & tính';
+    }
   }
 
   async function nearestConfigTemplate(partnerId, businessDate) {
@@ -291,6 +300,22 @@
     const sorted = configs.slice().sort((a,b) => String(a.effective_from_date).localeCompare(String(b.effective_from_date)) || Number(a.version || 0) - Number(b.version || 0));
     const future = sorted.filter(c => String(c.effective_from_date) > String(businessDate));
     return future[0] || sorted[sorted.length - 1] || null;
+  }
+
+  async function applyNearestConfigForMessageDate() {
+    const partnerId = currentPartnerId();
+    const businessDate = $('messageDate').value;
+    const template = pendingConfigTemplate || await nearestConfigTemplate(partnerId, businessDate);
+    if (!partnerId || !businessDate || !template) return prepareConfigForMessageDate();
+    const ok = !global.confirm || global.confirm(`Dùng bảng giá đang áp dụng từ ${viDate(template.effective_from_date)} cho ngày ${viDate(businessDate)}?\n\nHệ thống sẽ tạo một phiên bản cấu hình mới từ ngày này rồi tính lại tin đang nhập.`);
+    if (!ok) return;
+    const input = configCloneInput(template, partnerId);
+    input.effective_from_date = businessDate;
+    const cfg = await store.saveConfig(input);
+    await pipeline.recalculatePartnerFromDate(partnerId, businessDate);
+    setMissingConfigAction(false, '', null, businessDate);
+    status('messageStatus', `Đã áp dụng bảng giá cho ${viDate(businessDate)}. Đang tính lại tin…`, 'ok');
+    return saveMessage();
   }
 
   async function prepareConfigForMessageDate() {
@@ -372,13 +397,13 @@
     const businessDate = $('messageDate').value;
     try {
       await store.resolveConfigForDate(partnerId, businessDate);
-      setMissingConfigAction(false, '');
+      setMissingConfigAction(false, '', null, businessDate);
     } catch (e) {
       if (String(e.message || e).includes('NO_CONFIG')) {
         const template = await nearestConfigTemplate(partnerId, businessDate);
         setMissingConfigAction(true, template
-          ? `Có bảng giá từ ${viDate(template.effective_from_date)}; có thể dùng làm mẫu cho ngày này.`
-          : 'Đối tác này chưa có bảng giá nào.');
+          ? `Có bảng giá từ ${viDate(template.effective_from_date)}. Bạn có thể áp dụng cho ngày ${viDate(businessDate)} rồi tính ngay.`
+          : 'Đối tác này chưa có bảng giá nào.', template, businessDate);
         status('messageStatus', `Chưa có thiết lập giá áp dụng cho ${viDate(businessDate)}. Tin chưa được lưu để tránh tính sai.`, 'warn');
         return null;
       }
@@ -544,6 +569,7 @@
       }
     });
     $('clearMessage').addEventListener('click', () => { $('messageText').value = ''; status('messageStatus', '', ''); setMissingConfigAction(false, ''); });
+    $('applyConfigForMessageDate').addEventListener('click', () => { applyNearestConfigForMessageDate().catch(e => status('messageStatus', 'Không áp dụng được bảng giá. Vui lòng mở Thiết lập để kiểm tra.', 'err')); });
     $('openConfigForMessageDate').addEventListener('click', () => { prepareConfigForMessageDate().catch(e => status('messageStatus', String(e.message || e), 'err')); });
     $('saveParserEndpoint').addEventListener('click', () => {
       try { $('parserEndpoint').value = parserProvider.setEndpoint($('parserEndpoint').value); status('messageStatus', 'Đã lưu endpoint canonical parser.', 'ok'); }
