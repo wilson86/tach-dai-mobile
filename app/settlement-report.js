@@ -19,7 +19,7 @@
   });
   function resultStationComplete(region, station) {
     const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
-    if(!expected) return false;
+    if(!expected || (station && station.complete===false)) return false;
     const prizes=station&&station.prizes||{};
     return Object.entries(expected).every(([prize,count])=>{
       const raw=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
@@ -70,6 +70,11 @@
     if (!snapshot) return 'unverified';
     const status = String(snapshot.verification_status || '').toLowerCase();
     if (status === 'conflict') return 'conflict';
+    const settlementDate=String(settlement && settlement.business_date || '').slice(0,10);
+    const settlementRegion=String(settlement && settlement.region || '').toLowerCase();
+    const snapshotDate=String(snapshot.business_date || '').slice(0,10);
+    const snapshotRegion=String(snapshot.region || '').toLowerCase();
+    if (!settlementDate || !settlementRegion || snapshotDate !== settlementDate || snapshotRegion !== settlementRegion) return 'unverified';
     const sources = Array.isArray(snapshot.verification_sources)
       ? new Set(snapshot.verification_sources.map(x => String(x || '').trim()).filter(Boolean))
       : new Set();
@@ -298,7 +303,7 @@
   }
 
   global.KTS_SETTLEMENT_REPORT = Object.freeze({
-    version: 'settlement-report-v4-prize-complete-kqxs-gate',
+    version: 'settlement-report-v5-scope-prize-kqxs-gate',
     CATEGORY_LABELS,
     categoryLabel,
     kqxsVerificationStatus,
