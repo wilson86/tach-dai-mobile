@@ -14,5 +14,5 @@ assert.strictEqual(U.validScope({business_date:'bad',region:'mn'}),false);
 for(const needle of ['TỰ CẬP NHẬT','Không cần bấm bắt đầu hay dừng','Xem ngày cũ / kỹ thuật','manager.ensureScope(scope)','KQXS_HTTP_404','Bản thử nghiệm chưa kết nối máy chủ kết quả'])assert(code.includes(needle));
 assert(html.includes('src="./result-simple-ui.js"'));
 assert(sw.includes("'./result-simple-ui.js'"));
-assert(sw.includes('v1.0.69-audit-runtime-dirty'));
+assert(sw.includes('v1.0.70-scope-safe'));
 console.log('result-simple-ui-tests: PASS');
