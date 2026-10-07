@@ -23,8 +23,9 @@
   </div>
 
   <section id="pane-partner" class="pane active">
-    <div class="card"><div class="section-title">Đối tác</div><div class="grid"><div><label>Đang chọn</label><select id="partnerSelect"></select></div><div><label>Vai trò</label><div id="partnerRoleView" class="tag">—</div></div></div></div>
+    <div class="card"><div class="section-title">Đối tác</div><div class="grid"><div><label>Đang chọn</label><select id="partnerSelect"></select></div><div><label>Vai trò</label><div id="partnerRoleView" class="tag">—</div></div></div><div class="row" style="margin-top:8px"><button id="copyPartner" class="btn soft">Copy khách/chủ</button><button id="deactivatePartner" class="btn danger">Xóa khỏi danh sách</button></div><div class="hint" style="margin-top:6px">Copy sẽ sao chép thông tin + cấu hình đang áp dụng, không copy tin/KQXS/lịch sử tiền. Xóa chỉ ngừng sử dụng và giữ nguyên lịch sử đối soát.</div></div>
     <div class="card"><div class="section-title">Thêm khách/chủ</div><div class="grid"><div><label>Tên</label><input id="partnerName" placeholder="Ví dụ: Hiền"></div><div><label>Vai trò đối tác</label><select id="partnerRole"><option value="customer">Khách</option><option value="owner">Chủ</option></select></div></div><div class="row" style="margin-top:8px"><button id="addPartner" class="btn primary">Lưu đối tác</button></div><div id="partnerStatus" class="status"></div></div>
+    <div class="card"><details><summary class="hint">Khách/chủ đã xóa khỏi danh sách</summary><div class="row" style="margin-top:8px"><select id="inactivePartnerSelect" style="flex:1 1 240px"></select><button id="restorePartner" class="btn soft">Khôi phục</button></div></details></div>
   </section>
 
   <section id="pane-config" class="pane">
