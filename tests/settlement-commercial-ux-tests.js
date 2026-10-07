@@ -65,4 +65,6 @@ assert(backupUi.includes('pipeline.settleScope(scope)'));
 assert(backupUi.includes('IMPORT_RECALC_FAILED:'));
 assert(backupUi.includes('total_xac:0,total_qua_co:0,total_payout:0'));
 assert(backupUi.includes('đã tính lại'));
+assert(ui.includes('Máy chủ đọc cú pháp phản hồi quá lâu'));
+assert(ui.includes('Máy chủ trả thiếu thông tin xác thực cú pháp'));
 console.log('settlement-commercial-ux-tests: PASS');
