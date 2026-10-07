@@ -64,6 +64,25 @@ const msg=(id,partner='a')=>({id,partner_id:partner,business_date:'2026-09-22',r
     assert.strictEqual(out.settlement.result_snapshot.total_xac,0);
   }
 
+  // Previously settled money must be zeroed immediately if KQXS later becomes conflict.
+  {
+    const store=makeStore([msg('ma')]); const P=load(store);
+    const first=await P.settleScope({partner_id:'a',business_date:'2026-09-22',region:'mb',result_snapshot:result()});
+    assert.notStrictEqual(first.settlement.result_snapshot.total_xac,0,'precondition: scope must have settled money before conflict');
+    const conflicted=await P.settleScope({
+      partner_id:'a',business_date:'2026-09-22',region:'mb',
+      result_snapshot:result({verification_status:'conflict',verified:false,verification_reason:'KQXS_SOURCE_CONFLICT'})
+    });
+    assert.strictEqual(conflicted.status,'blocked');
+    assert.strictEqual(conflicted.reason,'KQXS_SOURCE_CONFLICT');
+    assert.strictEqual(store.state.settlements.length,1,'conflict must replace the deterministic scope settlement');
+    assert.strictEqual(store.state.settlements[0].scope_status,'blocked');
+    assert.strictEqual(store.state.settlements[0].result_snapshot.total_xac,0,'stale settled money must be zeroed');
+    assert.strictEqual(store.state.settlements[0].result_snapshot.total_qua_co,0);
+    assert.strictEqual(store.state.settlements[0].result_snapshot.total_payout,0);
+    assert.strictEqual(store.state.settlements[0].result_snapshot.final_net,0);
+  }
+
   // A result snapshot from another date/region cannot be reused by mistake.
   {
     const s=makeStore([msg('ma')]); const P=load(s);
