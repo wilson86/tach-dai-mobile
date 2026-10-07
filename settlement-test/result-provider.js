@@ -35,14 +35,22 @@
   function normalizeProviderPayload(payload, scope) {
     if (!payload || typeof payload !== 'object') throw new Error('KQXS_PROVIDER_INVALID_JSON');
     const body = payload.data && typeof payload.data === 'object' ? payload.data : payload;
+    const requestedDate = String(scope && scope.business_date || '').slice(0, 10);
+    const requestedRegion = String(scope && scope.region || '').toLowerCase();
+    const bodyDate = String(body.business_date || body.date || '').slice(0, 10);
+    const bodyRegion = String(body.region || '').toLowerCase();
+    if (bodyDate && bodyDate !== requestedDate) throw new Error('KQXS_PROVIDER_SCOPE_MISMATCH:DATE');
+    if (bodyRegion && bodyRegion !== requestedRegion) throw new Error('KQXS_PROVIDER_SCOPE_MISMATCH:REGION');
     const stations = body.stations || body.results || [];
     if (!Array.isArray(stations) || !stations.length) throw new Error('KQXS_PROVIDER_STATIONS_REQUIRED');
     const expectedStationCodes = Array.isArray(body.expected_station_codes)
       ? body.expected_station_codes.map(x => String(x || '').trim().toLowerCase()).filter(Boolean)
       : [];
+    if (!expectedStationCodes.length) throw new Error('KQXS_PROVIDER_EXPECTED_STATIONS_REQUIRED');
+    if (new Set(expectedStationCodes).size !== expectedStationCodes.length) throw new Error('KQXS_PROVIDER_EXPECTED_STATIONS_DUPLICATE');
     return {
-      business_date: scope.business_date,
-      region: scope.region,
+      business_date: requestedDate,
+      region: requestedRegion,
       source: String(body.source || payload.source || 'kqxs-proxy'),
       fetched_at: body.fetched_at || payload.fetched_at || new Date().toISOString(),
       provider_revision: body.provider_revision == null ? null : String(body.provider_revision),
