@@ -21,7 +21,7 @@ const settlements = [
   { id: 'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids: ['m1','m2'], scope_status: 'blocked', comparison_status:'blocked', blocked_reasons: ['PENDING_PARSER:m2'], settlement_result:{ total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0 } }
 ];
 
-assert.strictEqual(H.version, 'message-history-v4-consumer-reasons');
+assert.strictEqual(H.version, 'message-history-v5-canonical-summary');
 assert.strictEqual(H.scopeMatch(messages[0], scope), true);
 assert.strictEqual(H.scopeMatch(messages[3], scope), false);
 const rows = H.buildRows(scope, messages, settlements);
@@ -62,6 +62,12 @@ assert.strictEqual(exactSummary.kqxs.label, 'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHI�
 assert.strictEqual(exactSummary.totals.xac, 18);
 assert.strictEqual(exactSummary.totals.direction, 'BÙ');
 assert(Math.abs(exactSummary.totals.final_net - (-61.32)) < 1e-9);
+
+const parsedSample={canonical_payload:{legs:[
+  {code:'DAX',values:['28','68','69'],stake:'5',station_codes:['bt','vt']},
+  {code:'3CXC',values:['123'],stake:'2',station_codes:['bt'],position:'duoi'}
+]}};
+assert.strictEqual(H.canonicalSummary(parsedSample),'BT+VT · 28 68 69 Đá xuyên · 5n | BT · 123 3C xỉu chủ DUOI · 2n');
 
 const waiting = H.buildScopeSummary(scope, [messages[0]], [], null);
 assert.strictEqual(waiting.state.code, 'WAITING_RESULT');

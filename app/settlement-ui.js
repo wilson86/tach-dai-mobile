@@ -9,7 +9,8 @@
   const pipeline = global.KTS_SETTLEMENT_PIPELINE;
   const reportApi = global.KTS_SETTLEMENT_REPORT;
   const pricingCopy = global.KTS_SETTLEMENT_PRICING_COPY;
-  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi || !pricingCopy) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
+  const configValidation = global.KTS_SETTLEMENT_CONFIG_VALIDATION;
+  if (!store || !resultService || !resultProvider || !parserProvider || !pipeline || !reportApi || !pricingCopy || !configValidation) throw new Error('SETTLEMENT_UI_DEPENDENCY_MISSING');
 
   const PRICES_MN_MT = [
     ['2CB', '2C lô'], ['2CD', '2C ĐĐ'], ['2CB7', '2C 7 lô'], ['DAT', '2C ĐáT'], ['DAX', '2C ĐáX'],
@@ -48,6 +49,24 @@
   function money(value) {
     const n = Number(value || 0);
     return Number.isFinite(n) ? new Intl.NumberFormat('vi-VN', { maximumFractionDigits: 4 }).format(n) : '0';
+  }
+
+  function friendlyParserError(error) {
+    const text = String(error && error.message || error || '');
+    const maps = [
+      ['SETTLEMENT_DUPLICATE_NUMBER','Có số bị lặp trong cùng một nhóm. Hãy kiểm tra lại tin.'],
+      ['SETTLEMENT_STATION_REQUIRED','Không nhận ra đài trong tin. Hãy kiểm tra tên/viết tắt đài.'],
+      ['SETTLEMENT_ACTION_REQUIRED','Thiếu cách đánh sau nhóm số.'],
+      ['SETTLEMENT_STAKE_REQUIRED','Thiếu tiền cược hoặc đơn vị tiền.'],
+      ['INVALID_SETTLEMENT_STAKE','Tiền cược không hợp lệ.'],
+      ['UNVERIFIED_SETTLEMENT_ACTION','Cách đánh này chưa được xác nhận trong KTS nên chưa tính.'],
+      ['SETTLEMENT_VALUE_REQUIRED','Thiếu số hoặc nhóm số không hợp lệ.'],
+      ['SETTLEMENT_MESSAGE_HAS_NO_LEGS','Không đọc được cách đánh nào trong tin.'],
+      ['PARSER_REGION_MISMATCH','Miền của tin không khớp miền đang chọn.'],
+      ['PARSER_MESSAGE_REQUIRED','Tin đang trống.']
+    ];
+    const hit = maps.find(([code]) => text.includes(code));
+    return hit ? hit[1] : 'Không đọc được cú pháp tin. Tin chưa được tính; hãy kiểm tra và sửa lại.';
   }
 
   function renderPricing(targetId, rows, region) {
@@ -101,6 +120,8 @@
   function updatePartnerView() {
     const p = selectedPartner();
     $('partnerRoleView').textContent = p ? (p.role === 'owner' ? 'Chủ' : 'Khách') : '—';
+    const configName = $('configPartnerName');
+    if (configName) configName.textContent = p ? `${p.name} · ${p.role === 'owner' ? 'Chủ' : 'Khách'}` : 'Chưa chọn đối tác';
   }
 
   async function addPartner() {
@@ -367,11 +388,16 @@
     const effective = $('effectiveDate').value;
     if (!effective) return status('configStatus', 'Chọn ngày bắt đầu áp dụng.', 'err');
     try {
-      const terms = regionTermsFromForm();
+      const checked = configValidation.validate({
+        commission_type: $('commissionType').value,
+        region_terms: regionTermsFromForm(),
+        region_pricing: priceInputsToObject()
+      });
+      const terms = checked.region_terms;
       const cfg = await store.saveConfig({
         partner_id: partnerId,
         effective_from_date: effective,
-        commission_type: $('commissionType').value,
+        commission_type: checked.commission_type,
         region_terms: terms,
         total_percent: terms.mn.total_percent,
         refund_percent: terms.mn.refund_percent,
@@ -379,7 +405,7 @@
         dax_hit_mode: terms.mn.dax_hit_mode,
         mb_xien_234: $('allowMbXien').checked,
         tinh_ui: $('allowUi').checked,
-        region_pricing: priceInputsToObject()
+        region_pricing: checked.region_pricing
       });
       const recalculated = await pipeline.recalculatePartnerFromDate(partnerId, effective);
       status('configStatus', `Đã lưu v${cfg.version}, áp dụng từ ${cfg.effective_from_date}. Ngày trước giữ rule cũ · đã rà lại ${recalculated.length} phạm vi có tin.`, 'ok');
@@ -424,7 +450,7 @@
         parser_provider: parserProvider
       });
       if (outcome.status === 'parser_error') {
-        status('messageStatus', `Đã giữ tin ${outcome.message.id} nhưng KHÔNG tính tiền: ${outcome.error}`, 'err');
+        status('messageStatus', `${friendlyParserError(outcome.error)} Tin lỗi được giữ trong lịch sử để kiểm tra và đang chặn phạm vi cho đến khi hủy/sửa.`, 'err');
         return outcome;
       }
 

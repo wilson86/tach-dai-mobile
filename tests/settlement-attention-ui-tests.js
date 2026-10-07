@@ -10,7 +10,7 @@ vm.createContext(sandbox);
 vm.runInContext(code, sandbox);
 const A = sandbox.globalThis.KTS_SETTLEMENT_ATTENTION;
 
-assert.strictEqual(A.version, 'settlement-attention-v2-diagnostics');
+assert.strictEqual(A.version, 'settlement-attention-v3-consumer-labels');
 assert.strictEqual(A.actionFor('BLOCKED'), 'message');
 assert.strictEqual(A.actionFor('PROVISIONAL'), 'result');
 assert.strictEqual(A.actionFor('MISMATCH'), 'shadow');
@@ -34,7 +34,7 @@ assert.deepStrictEqual(Array.from(diag.lines), ['DAT · QUA CÒ -1 · TRẢ +650
 assert.deepStrictEqual(Array.from(diag.messages), ['92 61 44 da 1n']);
 
 const missingDetail = A.diagnosticSummary({ status:'MISMATCH', category_reference_missing:true, category_issues:[], total_issues:[{field:'final_net',delta:10}] });
-assert.deepStrictEqual(Array.from(missingDetail.lines), ['Lệch tổng nhưng HIOSKT chưa có chi tiết theo loại cược']);
+assert.deepStrictEqual(Array.from(missingDetail.lines), ['Lệch tổng nhưng dữ liệu đối soát chưa có chi tiết theo loại cược']);
 
 const model = {
   business_date: '2026-10-06',
@@ -98,6 +98,8 @@ const clear = A.buildAttention({ business_date:'2026-10-06', status:'MATCH_EXACT
 assert.strictEqual(clear.items.length, 0);
 assert.strictEqual(clear.clear, true);
 assert(code.includes('Việc cần xử lý'));
+assert.strictEqual(A.statusLabel('BLOCKED'),'CHƯA TÍNH');
+assert.strictEqual(A.statusLabel('MISMATCH'),'LỆCH ĐỐI SOÁT');
 assert(code.includes('Khoanh vùng:'));
 assert(code.includes('Tin liên quan'));
 assert(code.includes('shadowRuntime.getDiagnostics'));

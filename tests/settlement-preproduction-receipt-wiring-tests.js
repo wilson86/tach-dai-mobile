@@ -11,7 +11,7 @@ for(const lock of ['production_enabled:false','merge_authorized:false','deploy_a
 assert(receipt.includes('verifyReceiptAgainstBundle'));
 assert(!receipt.includes('saveSettlement('));assert(!receipt.includes('saveConfig('));assert(!receipt.includes('writeRow('));
 assert(bridge.includes("'./settlement-preproduction-receipt.js'"));assert(bridge.includes('data-kts-preproduction-receipt'));
-assert(sw.includes("'./settlement-preproduction-receipt.js'"));assert(sw.includes('v1.0.65-one-tap-config-fix'));
+assert(sw.includes("'./settlement-preproduction-receipt.js'"));assert(sw.includes('v1.0.66-audit-hardening'));
 assert(identity.includes("'app/settlement-preproduction-receipt.js'"));
 assert(bridge.includes("'./settlement-preproduction-offline-verifier.js'"));assert(bridge.includes("'./settlement-preproduction-candidate.js'"));assert(sw.includes("'./settlement-preproduction-offline-verifier.js'"));assert(sw.includes("'./settlement-preproduction-candidate.js'"));assert(identity.includes("'app/settlement-preproduction-offline-verifier.js'"));assert(identity.includes("'app/settlement-preproduction-candidate.js'"));
 console.log('settlement-preproduction-receipt-wiring-tests: PASS');
