@@ -18,7 +18,7 @@
     'app/settlement-attention-ui.js':'215128989fdf6bbfd96afb1efb112b0cec510c55',
     'app/settlement-ui.js':'2e36e09ea8e93d9ca5e610a616a5f6aaff49c876',
     'app/settlement-backup-ui.js':'782fc8664dd57d619cc295ef956e7634c947ca8a',
-    'app/sw.js':'fcce1a570911da2155422139a11eaf4abb4fb6b6',
+    'app/sw.js':'ede31eea5d6f2312ee9fd0569d0202fd26a5b710',
     'app/settlement-shadow.js':'a918339e8f55eff95d177039f42ef2248ed5b77b',
     'app/settlement-shadow-runtime.js':'2d508809a7d7f97d7fdbea004783bf2d57001c65',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
@@ -59,7 +59,7 @@
     'app/settlement-observation-ui.js':'7fd27d230fb05b847b0931f148283176ed385715',
     'app/settlement-scope-sync.js':'25e170a0eed8688c1b0173cc3469e13495596519',
     'app/settlement-report-simple-ui.js':'87fe1d52560e4b649d3770ff8cc6fe68c292b48e',
-    'app/settlement-consumer-ui.js':'6e9d3592be4015681192d1f5bc98ef40219ce8d2'
+    'app/settlement-consumer-ui.js':'43d0afd4a3da522a56a79ad75ffe408337304c84'
   });
   global.KTS_SETTLEMENT_BUILD_IDENTITY=Object.freeze({version:'settlement-build-identity-v1',algorithm:'git-blob-sha1',critical_git_blobs:critical,business_engine_sha256:'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c'});
 })(typeof window!=='undefined'?window:globalThis);
