@@ -82,5 +82,13 @@ assert.throws(() => P.normalizeProviderPayload({
   assert.strictEqual(requested.options.cache, 'no-store');
   assert.strictEqual(requested.options.credentials, 'omit');
   assert(!JSON.stringify(requested.options).toLowerCase().includes('api-key'));
-  console.log('result-provider-tests: PASS');
+  
 })().catch(err => { console.error(err); process.exit(1); });
+
+assert.throws(() => P.normalizeProviderPayload({
+  region:'mn', expected_station_codes:['bt'], stations:[{code:'bt'}]
+}, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_SCOPE_REQUIRED:DATE/);
+assert.throws(() => P.normalizeProviderPayload({
+  business_date:'2026-10-05', expected_station_codes:['bt'], stations:[{code:'bt'}]
+}, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_SCOPE_REQUIRED:REGION/);
+console.log('result-provider-tests: PASS');
