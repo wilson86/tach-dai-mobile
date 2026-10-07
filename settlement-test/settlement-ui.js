@@ -669,7 +669,11 @@
   }
 
   function renderResult(snapshot, meta) {
-    const badge = snapshot.complete ? '<span class="tag ok">ĐÃ CHỐT</span>' : '<span class="tag warn">TẠM TÍNH</span>';
+    const badge = snapshot && (snapshot.verified === true || String(snapshot.verification_status || '').toLowerCase() === 'verified')
+      ? '<span class="tag ok">ĐÃ ĐỐI CHIẾU 2 NGUỒN</span>'
+      : snapshot.complete
+        ? '<span class="tag warn">ĐÃ ĐỦ KẾT QUẢ · CHỜ XÁC MINH</span>'
+        : '<span class="tag warn">TẠM TÍNH</span>';
     const parts = [`<div class="row" style="justify-content:space-between"><div>${badge} <span class="hint">${esc(snapshot.source)} · ${esc(snapshot.fetched_at)}</span></div></div>`];
     for (const station of snapshot.stations) {
       parts.push(`<h3 style="margin:12px 0 4px">${esc(station.name)}</h3><table><thead><tr><th>Giải</th><th>Kết quả</th></tr></thead><tbody>`);
@@ -686,7 +690,7 @@
     const state = info && info.state;
     if (state === 'fetching') status('resultStatus', 'Đang lấy KQXS…', '');
     else if (state === 'waiting') status('resultStatus', 'Chưa đủ giải · sẽ cập nhật lại sau 90 giây · settlement chỉ TẠM TÍNH.', 'warn');
-    else if (state === 'complete') status('resultStatus', 'Đã đủ kết quả · dừng polling · settlement được tính lại và chờ shadow đối chiếu.', 'ok');
+    else if (state === 'complete') status('resultStatus', 'Đã đủ kết quả · chưa coi là chốt nếu chưa xác minh đủ nguồn.', 'warn');
     else if (state === 'error') status('resultStatus', `Chưa lấy được KQXS: ${info.error}. Giữ dữ liệu gần nhất và sẽ thử lại.`, 'err');
   }
 
