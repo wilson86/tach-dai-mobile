@@ -113,3 +113,6 @@ const releaseBody=ui.slice(releaseStart,releaseEnd);
 assert(releaseBody.includes('savingMessage = false'),'release helper must clear save lock');
 assert(releaseBody.includes('button.disabled = false'),'release helper must restore save button');
 assert(!releaseBody.includes('releaseMessageSave();'),'release helper must not recurse');
+
+assert(ui.includes("let pendingConfigBusinessDate = ''"),'pending config cache must track target date');
+assert(ui.includes('pendingConfigBusinessDate === businessDate'),'cached config template must match current message date');
