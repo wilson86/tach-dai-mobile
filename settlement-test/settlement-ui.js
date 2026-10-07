@@ -531,6 +531,15 @@
       currentPartnerId() === saveScope.partner_id &&
       String($('messageDate').value || '') === saveScope.business_date &&
       String($('messageRegion').value || '').toLowerCase() === saveScope.region;
+
+    // Claim the save lock before the first async preflight so two fast taps
+    // cannot both pass resolveConfigForDate() and create duplicate messages.
+    savingMessage = true;
+    const originalLabel = button ? button.textContent : '';
+    const releaseMessageSave = () => {
+      releaseMessageSave();
+    };
+    if (button) { button.disabled = true; button.textContent = 'Đang kiểm tra…'; }
     try {
       await store.resolveConfigForDate(partnerId, businessDate);
       setMissingConfigAction(false, '', null, businessDate);
@@ -541,15 +550,15 @@
           ? `Có bảng giá từ ${viDate(template.effective_from_date)}. Bạn có thể áp dụng cho ngày ${viDate(businessDate)} rồi tính ngay.`
           : 'Đối tác này chưa có bảng giá nào.', template, businessDate);
         status('messageStatus', `Chưa có thiết lập giá áp dụng cho ${viDate(businessDate)}. Tin chưa được lưu để tránh tính sai.`, 'warn');
+        releaseMessageSave();
         return null;
       }
       status('messageStatus', 'Không kiểm tra được thiết lập giá. Vui lòng thử lại.', 'err');
+      releaseMessageSave();
       return null;
     }
 
-    savingMessage = true;
-    const originalLabel = button ? button.textContent : '';
-    if (button) { button.disabled = true; button.textContent = 'Đang lưu…'; }
+    if (button) button.textContent = 'Đang lưu…';
     renderParsedPreview(null);
     status('messageStatus', 'Đang đọc cú pháp…', '');
     const slowParserNotice = global.setTimeout ? global.setTimeout(() => {
