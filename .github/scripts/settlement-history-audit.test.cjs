@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.156-regression-complete-gate'));
+  assert.ok(sw.includes('v1.0.157-message-row-attribution'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -583,4 +583,33 @@ test('READY requires every pinned golden case to pass, not merely zero failures'
   assert.equal(H.validateSnapshotDecision(canonical).reason,'READY_GATE_EVIDENCE_CONTRADICTION_REGRESSION_GATE');
   canonical.regression_gate.passed=3;
   assert.equal(H.validateSnapshotDecision(canonical).valid,true);
+});
+
+test('pipeline guard preserves per-message row attribution after forbidden UI disappears',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const gates=ctx.window.KTS_SETTLEMENT_FEATURE_GATES;
+  const guard=ctx.window.KTS_SETTLEMENT_PIPELINE.guardedMessageEvaluation;
+  const cfg={tinh_ui:true,mb_xien_234:false};
+  assert.equal(gates.UI_CONFIRMED,false);
+  const a=guard({category_inputs:[{code:'2CD',xac:10},{code:'UI',xac:0}],
+    detail_rows:[{code:'2CD',numbers:'11'},{code:'UI',numbers:'12'}]},cfg,gates);
+  const b=guard({category_inputs:[{code:'2CB',xac:20}],
+    detail_rows:[{code:'2CB',numbers:'22'}]},cfg,gates);
+  assert.equal(a.category_inputs.length,1);
+  assert.equal(a.detail_rows.length,1);
+  assert.equal(a.detail_rows[0].code,'2CD');
+  assert.equal(b.category_inputs.length,1);
+  const aggregate=[...a.category_inputs,...b.category_inputs];
+  const first=aggregate.slice(0,a.category_inputs.length);
+  const second=aggregate.slice(a.category_inputs.length,a.category_inputs.length+b.category_inputs.length);
+  assert.equal(first.length,1);
+  assert.equal(first[0].code,'2CD');
+  assert.equal(second.length,1);
+  assert.equal(second[0].code,'2CB');
+  assert.throws(()=>guard({category_inputs:[{code:'MB_XIEN2'}],detail_rows:[]},cfg,gates),/MB_XIEN_234_NOT_ALLOWED/);
+  const source=readFileSync(resolve(root,'settlement-test','settlement-pipeline.js'),'utf8');
+  assert.ok(source.includes('const guarded = guardedMessageEvaluation(evaluated, config, d.gates)'));
+  assert.ok(source.includes("reason:'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH'"));
 });
