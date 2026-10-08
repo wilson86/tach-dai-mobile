@@ -1088,6 +1088,31 @@
     fail('QUALIFICATION_HISTORY_BLOCKED_APPEND_ORDER');
   }
 
+  // Reverting the entire result component to the old READY hash must never
+  // resurrect a READY that a later BLOCKED qualification superseded.
+  const exactRevertVerdict=qualificationHistory.classifyHistoryValidity(
+    eventsAfterBlocked,
+    persistedReady.component_fingerprints,
+    persistedReady.input_fingerprint_sha256,
+    {status:'available',identity:{}}
+  );
+  if(exactRevertVerdict.status!=='READY_EVIDENCE_STALE'||
+     exactRevertVerdict.current!==false||
+     exactRevertVerdict.invalidated_by_blocked_qualification!==true||
+     exactRevertVerdict.invalidated_by_event_id!==persistedBlocked.id){
+    fail('QUALIFICATION_HISTORY_BLOCKED_REVERT_RESURRECTED_READY');
+  }
+  const backendUnavailableVerdict=qualificationHistory.classifyHistoryValidity(
+    eventsAfterBlocked,
+    persistedReady.component_fingerprints,
+    persistedReady.input_fingerprint_sha256,
+    {status:'unavailable',error:'TEST_BACKEND_UNAVAILABLE'}
+  );
+  if(backendUnavailableVerdict.status!=='READY_EVIDENCE_UNVERIFIABLE'||
+     backendUnavailableVerdict.current!==false){
+    fail('QUALIFICATION_HISTORY_BLOCKED_REVERT_UNVERIFIABLE_ESCALATION');
+  }
+
   const restoredQualificationResult=await store.saveResultSnapshot({
     ...qualificationBaseResult,
     fetched_at:'2099-01-03T00:00:00.000Z',
@@ -1240,6 +1265,7 @@
     'QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_CURRENT=PASS',
     'QUALIFICATION_HISTORY_SEMANTIC_DRIFT_STALE=PASS',
     'QUALIFICATION_HISTORY_BLOCKED_EVENT_APPENDED=PASS',
+    'QUALIFICATION_HISTORY_BLOCKED_REVERT_FAIL_CLOSED=PASS',
     'QUALIFICATION_HISTORY_RESULT_CORE_RECOVERED=PASS',
     'QUALIFICATION_HISTORY_REQUALIFIED_APPENDED=PASS',
     'QUALIFICATION_HISTORY_REQUALIFIED_CURRENT=PASS'
