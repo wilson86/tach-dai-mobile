@@ -520,6 +520,57 @@
     fail('FIXTURE_DAILY_CLOSE_COUNTS');
   }
 
+  const conflictResult=await store.saveResultSnapshot({
+    ...fixtureResult,
+    verification_status:'conflict',
+    verified:false,
+    verification_reason:'acceptance-conflict',
+    verification_conflicts:['mb:G7'],
+    verification_sources:['primary','secondary']
+  });
+  if(!conflictResult||!conflictResult.snapshot)fail('FIXTURE_CONFLICT_SAVE_FAILED');
+  if(conflictResult.snapshot.verification_status!=='conflict'||conflictResult.snapshot.verified!==false){
+    fail('FIXTURE_CONFLICT_NOT_AUTHORITATIVE');
+  }
+
+  const resultEvents=await store.getAll(store.STORES.resultEvents);
+  const fixtureEvents=resultEvents.filter(e=>e&&e.result_id==='2026-09-22:mb');
+  if(fixtureEvents.length<2)fail('FIXTURE_RESULT_AUDIT_TRANSITION_MISSING');
+
+  const conflictSettlement=await pipeline.settleScope({
+    partner_id:smokePartner.id,
+    business_date:'2026-09-22',
+    region:'mb'
+  });
+  if(!conflictSettlement||conflictSettlement.status!=='blocked')fail('FIXTURE_CONFLICT_NOT_BLOCKED');
+  if(String(conflictSettlement.reason||'')!=='KQXS_SOURCE_CONFLICT'){
+    fail('FIXTURE_CONFLICT_REASON:'+String(conflictSettlement.reason||''));
+  }
+  const conflictSaved=conflictSettlement.settlement||{};
+  if(conflictSaved.scope_status!=='blocked')fail('FIXTURE_CONFLICT_SCOPE_STATUS');
+  const conflictReasons=Array.isArray(conflictSaved.blocked_reasons)?conflictSaved.blocked_reasons.map(String):[];
+  if(!conflictReasons.includes('KQXS_SOURCE_CONFLICT'))fail('FIXTURE_CONFLICT_BLOCK_REASON_MISSING');
+  const conflictTotals=conflictSaved.result_snapshot||{};
+  for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
+    if(Number(conflictTotals[field]||0)!==0)fail('FIXTURE_CONFLICT_NONZERO_'+field.toUpperCase());
+  }
+
+  const conflictSettlements=await store.getAll(store.STORES.settlements);
+  const conflictMessages=await store.getAll(store.STORES.messages);
+  const conflictReport=reportApi.buildDailyPartnerReport({
+    partner:smokePartner,
+    business_date:'2026-09-22',
+    settlements:conflictSettlements,
+    messages_by_id:Object.fromEntries(conflictMessages.map(m=>[m.id,m]))
+  });
+  if(conflictReport.blocked!==true)fail('FIXTURE_CONFLICT_REPORT_NOT_BLOCKED');
+  if(conflictReport.kqxs_conflict!==true)fail('FIXTURE_CONFLICT_REPORT_FLAG_MISSING');
+  for(const field of ['xac','qua_co','payout','refund_amount','final_net']){
+    if(Number(conflictReport.totals&&conflictReport.totals[field]||0)!==0){
+      fail('FIXTURE_CONFLICT_REPORT_NONZERO_'+field.toUpperCase());
+    }
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -551,7 +602,10 @@
     'SETTLEMENT_CANONICAL_TOTALS=PASS',
     'REPORT_CANONICAL_TOTALS=PASS',
     'SHADOW_UNVERIFIED_FAIL_CLOSED=PASS',
-    'DAILY_CLOSE_REQUIRES_MATCH_EXACT=PASS'
+    'DAILY_CLOSE_REQUIRES_MATCH_EXACT=PASS',
+    'KQXS_CONFLICT_AUTHORITY=PASS',
+    'KQXS_CONFLICT_SETTLEMENT_BLOCKED=PASS',
+    'KQXS_CONFLICT_ZERO_MONEY=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
