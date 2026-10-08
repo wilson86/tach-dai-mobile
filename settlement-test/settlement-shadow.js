@@ -96,17 +96,25 @@
     if (local == null || reference == null) return { status: 'NOT_COMPARABLE', local, reference, delta: null };
     const delta = local - reference;
 
-    const hasExact = localExactValue != null && localExactValue !== '';
-    if (hasExact) {
+    const hasLocalExact = localExactValue != null && localExactValue !== '';
+    const hasReferenceExact = referenceExactValue != null && referenceExactValue !== '';
+    let localCanonical=null,referenceCanonical=null;
+    // Exact fields are optional only when ABSENT. If explicitly supplied but
+    // invalid, they are contradictory monetary evidence, not an invitation to
+    // retry a tolerant floating point comparison and call it an exact match.
+    if (hasLocalExact || hasReferenceExact) {
       try {
-        const a = decimalCanonical(localExactValue);
-        const b = decimalCanonical(referenceExactValue == null || referenceExactValue === '' ? referenceValue : referenceExactValue);
-        if (a === b) return { status: 'MATCH_EXACT', local, reference, delta, local_exact: a, reference_exact: b };
-        if (roundDisplay(local, digits) === roundDisplay(reference, digits)) return { status: 'MATCH_DISPLAY', local, reference, delta, local_exact: a, reference_exact: b };
-        return { status: 'MISMATCH', local, reference, delta, local_exact: a, reference_exact: b };
+        if (hasLocalExact) localCanonical=decimalCanonical(localExactValue);
+        referenceCanonical=decimalCanonical(hasReferenceExact?referenceExactValue:referenceValue);
       } catch (_) {
-        // Older snapshots may not have canonical decimal evidence. Fall through.
+        return { status: 'NOT_COMPARABLE', local, reference, delta,
+          reason: 'INVALID_EXACT_MONETARY_EVIDENCE' };
       }
+    }
+    if (hasLocalExact) {
+      if (localCanonical === referenceCanonical) return { status: 'MATCH_EXACT', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
+      if (roundDisplay(local, digits) === roundDisplay(reference, digits)) return { status: 'MATCH_DISPLAY', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
+      return { status: 'MISMATCH', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
     }
 
     if (Math.abs(delta) <= tolerance) return { status: 'MATCH_EXACT', local, reference, delta };
@@ -242,7 +250,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v5-typed-reference-decimal',
+    version: 'settlement-shadow-v6-invalid-exact-fail-closed',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
