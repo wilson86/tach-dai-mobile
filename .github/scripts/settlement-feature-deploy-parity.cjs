@@ -47,7 +47,8 @@ for(const name of runtime){
 const workerSource=readFileSync(join(deploy,'sw.js'),'utf8');
 if(workerSource!==sw)mismatches.push('sw.js:worker-parity-diff');
 console.log('SETTLEMENT_RUNTIME_FILES_CHECKED='+checked.size);
-const cacheVersionMatch=workerSource.includes('v1.0.151-history-window-state-consistency')&&workerSource===sw;
+const featureCacheVersion=sw.match(/const CACHE=.*?(v\d+\.\d+\.\d+-[a-z0-9-]+)/)?.[1]||null;
+const cacheVersionMatch=Boolean(featureCacheVersion&&workerSource===sw&&workerSource.includes(featureCacheVersion));
 console.log('WORKER_CACHE_VERSION_MATCH='+String(cacheVersionMatch));
 if(!cacheVersionMatch)mismatches.push('sw.js:cache-version-mismatch');
 if(mismatches.length){
