@@ -233,7 +233,7 @@
           ['kqxs_verification',exact(kv.total,kv.verified)&&zero(kv.conflict)&&zero(kv.unverified)],
           ['parser_provenance',exact(pp.total,pp.known)&&zero(pp.unknown)&&zero(pp.invalid)&&zero(pp.parser_errors)&&zero(pp.missing_canonical)],
           ['parser_backend',exact(pb.total,pb.matched)&&zero(pb.mismatched)&&pb.unreachable===false],
-          ['regression_gate',pos(rg.total)&&zero(rg.failed)],
+          ['regression_gate',exact(rg.total,rg.passed)&&zero(rg.failed)],
           ['candidate_gate',zero(cg.pending)],
           ['feature_safety',zero(fs.unsafe_count)]
         ]){

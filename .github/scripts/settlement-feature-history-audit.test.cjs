@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.155-regression-runtime-parity'));
+  assert.ok(source.includes('v1.0.156-regression-complete-gate'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -409,4 +409,30 @@ test('golden regression replays through actual production regional runtime and c
   assert.throws(()=>replay(unsafe),/REGRESSION_FEATURE_GATE_MB_XIEN_CLOSED/);
   const runtime=sandboxReplay.window.KTS_SETTLEMENT_RUNTIME;
   assert.equal(runtime.version,'settlement-runtime-v2-region-terms');
+});
+
+test('READY requires every pinned golden case to pass, not merely zero failures',()=>{
+  const gates={observation:{promotion_ready:true,blockers:[]},kqxs:{met:true},parser_provenance:{met:true},
+    parser_backend:{met:true},candidates:{pending:0},feature_safety:{met:true}};
+  const incomplete=Q.combineQualification({...gates,regression:{total:3,passed:2,failed:0}});
+  assert.equal(incomplete.qualification_state,'BLOCKED_SHADOW_QUALIFICATION');
+  assert.equal(incomplete.ready_for_production_review,false);
+  assert.equal(incomplete.regression_gate.met,false);
+  assert.ok(incomplete.blockers.includes('REGRESSION_NOT_ALL_PASSED:2/3'));
+  const complete=Q.combineQualification({...gates,regression:{total:3,passed:3,failed:0}});
+  assert.equal(complete.regression_gate.met,true);
+  assert.equal(complete.ready_for_production_review,true);
+  const canonical={format:'kts-final-qualification-v2-live-parser',
+    qualification_state:'READY_FOR_PRODUCTION_REVIEW',ready_for_production_review:true,
+    blockers:[],production_enabled:false,merge_authorized:false,
+    observation:{promotion_ready:true,counts:{total:1,exact:1,missing_scopes:0},blockers:[]},
+    kqxs_verification:{met:true,total:1,verified:1,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:1,known:1,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:1,matched:1,mismatched:0,unreachable:false},
+    regression_gate:{met:true,total:3,passed:2,failed:0},
+    candidate_gate:{met:true,pending:0},feature_safety:{met:true,unsafe_count:0}
+  };
+  assert.equal(H.validateSnapshotDecision(canonical).reason,'READY_GATE_EVIDENCE_CONTRADICTION_REGRESSION_GATE');
+  canonical.regression_gate.passed=3;
+  assert.equal(H.validateSnapshotDecision(canonical).valid,true);
 });

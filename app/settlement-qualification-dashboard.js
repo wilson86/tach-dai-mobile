@@ -195,8 +195,14 @@
     const features = x.feature_safety || {met:true,unsafe_count:0};
     const readiness = x.repair_readiness || {summary:{total:0,ready:0,blocked:0,all_ready:false},items:[]};
     const blockers = new Set(Array.isArray(observation.blockers) ? observation.blockers : []);
+    // Every golden case must PASS. A zero failure counter with missing/unrun
+    // cases is not evidence that the full regression suite succeeded.
+    const regressionExact = Number.isInteger(regression.total) && regression.total > 0 &&
+      Number.isInteger(regression.passed) && regression.passed === regression.total &&
+      Number.isInteger(regression.failed) && regression.failed === 0;
     if (!(regression.total > 0)) blockers.add('NO_PINNED_REGRESSION_CASES');
     if (regression.failed > 0) blockers.add(`REGRESSION_FAILED:${regression.failed}/${regression.total}`);
+    if (regression.total > 0 && !regressionExact) blockers.add(`REGRESSION_NOT_ALL_PASSED:${Number(regression.passed||0)}/${Number(regression.total||0)}`);
     if (candidates.pending > 0) {
       const rs = readiness.summary || {};
       if (rs.total > 0 && rs.ready === rs.total) blockers.add(`OPERATOR_CONFIRMATION_PENDING:${candidates.pending}`);
@@ -209,7 +215,7 @@
       else blockers.add(`PARSER_BACKEND_IDENTITY_MISMATCH:${Number(parserBackend.matched||0)}/${Number(parserBackend.total||0)}`);
     }
     if (!features.met) blockers.add(`UNVERIFIED_UI_FEATURE_ACTIVE:${Number(features.unsafe_count||0)}`);
-    const ready = observation.promotion_ready === true && regression.total > 0 && regression.failed === 0 && candidates.pending === 0 && kqxs.met === true && provenance.met === true && parserBackend.met === true && features.met === true;
+    const ready = observation.promotion_ready === true && regressionExact && candidates.pending === 0 && kqxs.met === true && provenance.met === true && parserBackend.met === true && features.met === true;
     return {
       format:'kts-final-qualification-v2-live-parser',
       generated_at:new Date().toISOString(),
@@ -221,7 +227,7 @@
       kqxs_verification:clone(kqxs),
       parser_provenance:clone(provenance),
       parser_backend:clone(parserBackend),
-      regression_gate:{ total:Number(regression.total||0), passed:Number(regression.passed||0), failed:Number(regression.failed||0), met:regression.total>0&&regression.failed===0 },
+      regression_gate:{ total:Number(regression.total||0), passed:Number(regression.passed||0), failed:Number(regression.failed||0), met:regressionExact },
       candidate_gate:Object.assign({}, clone(candidates), { met:candidates.pending===0 }),
       repair_readiness:clone(readiness),
       feature_safety:clone(features),
