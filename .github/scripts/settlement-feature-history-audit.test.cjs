@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.178-shadow-category-coverage'));
+  assert.ok(source.includes('v1.0.179-no-epsilon-exact'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1137,4 +1137,24 @@ test('shadow cannot promote omitted, empty, or ungrounded HIOSKT category claims
   const extraLocal={...local,category_rows:[...local.category_rows,{code:'DD',xac:0}]};
   assert.equal(compare(extraLocal,{totals,categories:[{code:'B',xac:0}]}).safe_to_promote,true,
     'PARTIAL_BUT_VALID_CATEGORY_REFERENCE_SHOULD_REMAIN_COMPATIBLE');
+});
+
+test('tiny money differences and reference-only exact evidence cannot be promoted as exact',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const s=ctx.window.KTS_SETTLEMENT_SHADOW;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}};
+  const zero={totals:{xac:0,qua_co:0,payout:0,final:0}};
+  assert.equal(s.compareSettlement(local,zero).safe_to_promote,true);
+  const tiny=s.compareSettlement(local,{totals:{...zero.totals,final:'0.000000001'}});
+  assert.equal(tiny.safe_to_promote,false,'SUB_CENT_TOLERANCE_PROMOTED_MONEY');
+  assert.equal(tiny.required_totals_exact,false);
+  assert.equal(tiny.totals.final_net.status,'MATCH_DISPLAY');
+  const onlyRefExact=s.compareSettlement(local,{totals:{...zero.totals,
+    exact:{final_net:'0.04'},final:0}});
+  assert.equal(onlyRefExact.safe_to_promote,false,'REFERENCE_ONLY_EXACT_PROMOTED');
+  assert.equal(onlyRefExact.totals.final_net.status,'MATCH_DISPLAY');
+  assert.equal(s.compareNumber(0,0.000000001,{tolerance:1}).status,'MATCH_DISPLAY');
+  assert.equal(s.compareNumber(0.1,0.1).status,'MATCH_EXACT');
+  assert.equal(s.compareNumber('0.10','0.1000').status,'MATCH_EXACT');
 });

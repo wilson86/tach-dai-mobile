@@ -89,7 +89,6 @@
 
   function compareNumber(localValue, referenceValue, options, localExactValue, referenceExactValue) {
     const opts = options || {};
-    const tolerance = Number(opts.tolerance == null ? 1e-8 : opts.tolerance);
     const digits = Number(opts.display_digits == null ? 1 : opts.display_digits);
     const local = numeric(localValue);
     const reference = numeric(referenceValue);
@@ -104,7 +103,7 @@
     // retry a tolerant floating point comparison and call it an exact match.
     if (hasLocalExact || hasReferenceExact) {
       try {
-        if (hasLocalExact) localCanonical=decimalCanonical(localExactValue);
+        localCanonical=decimalCanonical(hasLocalExact?localExactValue:localValue);
         referenceCanonical=decimalCanonical(hasReferenceExact?referenceExactValue:referenceValue);
       } catch (_) {
         return { status: 'NOT_COMPARABLE', local, reference, delta,
@@ -122,13 +121,20 @@
       if (hasReferenceExact && roundDisplay(Number(referenceCanonical),digits)!==shownRef)
         return {status:'NOT_COMPARABLE',local,reference,delta,reason:'REFERENCE_EXACT_DISPLAY_CONTRADICTION'};
     }
-    if (hasLocalExact) {
+    if (hasLocalExact || hasReferenceExact) {
       if (localCanonical === referenceCanonical) return { status: 'MATCH_EXACT', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
       if (roundDisplay(local, digits) === roundDisplay(reference, digits)) return { status: 'MATCH_DISPLAY', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
       return { status: 'MISMATCH', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
     }
 
-    if (Math.abs(delta) <= tolerance) return { status: 'MATCH_EXACT', local, reference, delta };
+    // An epsilon difference may be visually negligible, but it is NOT an
+    // exact match suitable for promotion of independently observed money.
+    try {
+      if (decimalCanonical(localValue) === decimalCanonical(referenceValue))
+        return { status: 'MATCH_EXACT', local, reference, delta };
+    } catch (_) {
+      return { status: 'NOT_COMPARABLE', local, reference, delta, reason: 'INVALID_MONETARY_DECIMAL' };
+    }
     if (roundDisplay(local, digits) === roundDisplay(reference, digits)) return { status: 'MATCH_DISPLAY', local, reference, delta };
     return { status: 'MISMATCH', local, reference, delta };
   }
@@ -323,7 +329,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v10-category-coverage-evidence',
+    version: 'settlement-shadow-v11-no-epsilon-exact-money',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
