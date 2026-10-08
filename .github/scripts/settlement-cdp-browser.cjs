@@ -35,7 +35,10 @@ function serve(){
 async function waitFor(fn,timeoutMs,label){
   const end=Date.now()+timeoutMs;let last;
   while(Date.now()<end){
-    try{const result=await fn();if(result)return result;}catch(e){last=e;}
+    try{const result=await fn();if(result)return result;}catch(e){
+      if(String(e&&e.message||'').startsWith('BROWSER_RUNTIME_FAILED:'))throw e;
+      last=e;
+    }
     await pause(250);
   }
   throw Error('TIMED_OUT_'+label+(last?':'+last.message:''));
@@ -127,7 +130,7 @@ async function waitResult(browser,expected,timeout=90000){
 }
 async function closeChrome(browser){
   if(!browser)return;
-  try{await browser.conn.send('Browser.close')}catch(_){}
+  try{await Promise.race([browser.conn.send('Browser.close'),pause(1200)])}catch(_){}
   browser.conn.close();
   browser.proc.kill('SIGTERM');
   await pause(500);
