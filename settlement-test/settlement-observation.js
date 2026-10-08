@@ -10,6 +10,48 @@
     UNVERIFIED: 'UNVERIFIED'
   });
 
+  const RESULT_PRIZE_COUNTS = Object.freeze({
+    mn:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mt:Object.freeze({G8:1,G7:1,G6:3,G5:1,G4:7,G3:2,G2:1,G1:1,DB:1}),
+    mb:Object.freeze({G7:4,G6:3,G5:6,G4:4,G3:6,G2:2,G1:1,DB:1})
+  });
+
+  function stationPrizeComplete(region, station) {
+    const expected=RESULT_PRIZE_COUNTS[String(region||'').toLowerCase()];
+    if(!expected || !station || station.complete===false) return false;
+    const prizes=station.prizes||{};
+    return Object.entries(expected).every(([prize,count])=>{
+      const found=Object.entries(prizes).find(([key])=>String(key).toUpperCase()===prize);
+      const values=found ? (Array.isArray(found[1]) ? found[1] : [found[1]]) : [];
+      return values.filter(v=>v!=null&&String(v).trim()!=='').length===count;
+    });
+  }
+
+  function resultEvidence(settlement) {
+    const snapshot=settlement&&settlement.lottery_result_snapshot||null;
+    const businessDate=String(settlement&&settlement.business_date||'').slice(0,10);
+    const region=String(settlement&&settlement.region||'').toLowerCase();
+    if(!snapshot) return {status:'unverified',valid:false,reason:'KQXS_SNAPSHOT_MISSING'};
+    const conflicts=Array.isArray(snapshot.verification_conflicts)?snapshot.verification_conflicts:[];
+    const status=String(snapshot.verification_status||'').toLowerCase();
+    if(status==='conflict'||conflicts.length) return {status:'conflict',valid:false,reason:'KQXS_SOURCE_CONFLICT'};
+    const snapshotDate=String(snapshot.business_date||'').slice(0,10);
+    const snapshotRegion=String(snapshot.region||'').toLowerCase();
+    if(snapshotDate!==businessDate||snapshotRegion!==region) return {status:'unverified',valid:false,reason:'KQXS_SCOPE_MISMATCH'};
+    if(snapshot.complete!==true) return {status:'unverified',valid:false,reason:'KQXS_INCOMPLETE'};
+    const sources=new Set((Array.isArray(snapshot.verification_sources)?snapshot.verification_sources:[]).map(x=>String(x||'').trim()).filter(Boolean));
+    if(sources.size<2) return {status:'unverified',valid:false,reason:'KQXS_SOURCES_INSUFFICIENT'};
+    const expected=Array.isArray(snapshot.expected_station_codes)?snapshot.expected_station_codes.map(x=>String(x||'').trim().toLowerCase()).filter(Boolean):[];
+    const stations=Array.isArray(snapshot.stations)?snapshot.stations:[];
+    const actual=stations.map(x=>String(x&&x.code||'').trim().toLowerCase()).filter(Boolean);
+    const coverage=expected.length>0&&new Set(expected).size===expected.length&&new Set(actual).size===actual.length&&actual.length===expected.length&&expected.every(code=>actual.includes(code));
+    if(!coverage) return {status:'unverified',valid:false,reason:'KQXS_COVERAGE_INCOMPLETE'};
+    if(!stations.every(station=>stationPrizeComplete(region,station))) return {status:'unverified',valid:false,reason:'KQXS_PRIZE_DATA_INCOMPLETE'};
+    const claimed=snapshot.verified===true||status==='verified';
+    if(!claimed) return {status:'unverified',valid:false,reason:'KQXS_NOT_VERIFIED'};
+    return {status:'verified',valid:true,reason:null};
+  }
+
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function validDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
 
@@ -120,16 +162,22 @@
       .filter(s => !o.partner_id || String(s.partner_id) === o.partner_id)
       .filter(s => !o.regions.length || o.regions.includes(String(s.region).toLowerCase()))
       .filter(s => !coverageEnabled || expectedMap.has(scopeKey(s)))
-      .map(s => ({
-        id: s.id || scopeKey(s),
-        partner_id: String(s.partner_id),
-        business_date: String(s.business_date),
-        region: String(s.region).toLowerCase(),
-        scope_status: String(s.scope_status || ''),
-        comparison_status: comparisonStatus(s),
-        final_net: Number(s.settlement_result && s.settlement_result.final_net != null ? s.settlement_result.final_net : 0),
-        result_verification_status: String(s.lottery_result_snapshot && s.lottery_result_snapshot.verification_status || 'unverified').toLowerCase()
-      }))
+      .map(s => {
+        const kqxs=resultEvidence(s);
+        return {
+          id: s.id || scopeKey(s),
+          partner_id: String(s.partner_id),
+          business_date: String(s.business_date),
+          region: String(s.region).toLowerCase(),
+          scope_status: String(s.scope_status || ''),
+          comparison_status: comparisonStatus(s),
+          final_net: Number(s.settlement_result && s.settlement_result.final_net != null ? s.settlement_result.final_net : 0),
+          result_verification_status: kqxs.status,
+          result_verification_evidence_valid: kqxs.valid,
+          result_verification_reason: kqxs.reason,
+          result_fingerprint: String(s.lottery_result_snapshot && s.lottery_result_snapshot.fingerprint || '')
+        };
+      })
       .sort((a, b) => a.business_date.localeCompare(b.business_date) || a.partner_id.localeCompare(b.partner_id) || a.region.localeCompare(b.region));
 
     const actualMap = new Map(rows.map(row => [scopeKey(row), row]));
@@ -163,7 +211,7 @@
       const expectedRows = coverageEnabled ? [...expectedMap.values()].filter(r => r.business_date === businessDate) : [];
       const missing = coverageEnabled ? expectedRows.filter(r => !actualMap.has(r.key)) : [];
       const expectedScopes = coverageEnabled ? expectedRows.length : dateRows.length;
-      const exact = expectedScopes > 0 && missing.length === 0 && dateRows.length === expectedScopes && dateRows.every(r => r.comparison_status === STATUS.EXACT);
+      const exact = expectedScopes > 0 && missing.length === 0 && dateRows.length === expectedScopes && dateRows.every(r => r.comparison_status === STATUS.EXACT && r.result_verification_evidence_valid === true);
       const hasMismatch = dateRows.some(r => [STATUS.DISPLAY, STATUS.MISMATCH].includes(r.comparison_status));
       const hasBlocked = missing.length > 0 || dateRows.some(r => [STATUS.BLOCKED, STATUS.PROVISIONAL, STATUS.UNVERIFIED].includes(r.comparison_status));
       return {
@@ -178,6 +226,10 @@
 
     const exactDays = dates.filter(x => x.exact).length;
     const allExact = counts.total > 0 && counts.exact === counts.total && missingScopes.length === 0;
+    const kqxsVerified = rows.filter(r=>r.result_verification_evidence_valid===true).length;
+    const kqxsConflict = rows.filter(r=>r.result_verification_status==='conflict').length;
+    const kqxsUnverified = rows.length-kqxsVerified-kqxsConflict;
+    const allKqxsVerified = rows.length>0 && kqxsVerified===rows.length;
     const durationConfigured = o.required_observation_days > 0;
     const durationMet = durationConfigured && exactDays >= o.required_observation_days;
     const regressionEnabled = Boolean(o.regression_summary && o.regression_summary.total > 0);
@@ -192,13 +244,15 @@
     if (counts.blocked) blockers.push(`BLOCKED:${counts.blocked}`);
     if (counts.provisional) blockers.push(`PROVISIONAL:${counts.provisional}`);
     if (counts.unverified) blockers.push(`UNVERIFIED:${counts.unverified}`);
+    if (kqxsConflict) blockers.push(`KQXS_CONFLICT:${kqxsConflict}`);
+    if (kqxsUnverified) blockers.push(`KQXS_NOT_FULLY_VERIFIED:${kqxsVerified}/${rows.length}`);
     if (candidateEnabled && !candidateMet) blockers.push(`REGRESSION_CANDIDATE_PENDING:${o.candidate_summary.pending}`);
     if (regressionEnabled && !regressionMet) blockers.push(`REGRESSION_FAILED:${o.regression_summary.failed}/${o.regression_summary.total}`);
     if (!durationConfigured) blockers.push('OBSERVATION_DURATION_NOT_CONFIGURED');
     else if (!durationMet) blockers.push(`OBSERVATION_DAYS:${exactDays}/${o.required_observation_days}`);
 
     return {
-      version: 'settlement-observation-v4-candidate-review-gate',
+      version: 'settlement-observation-v5-strict-kqxs-promotion',
       options: clone(o),
       counts,
       coverage: {
@@ -225,9 +279,10 @@
       observed_days: dates.length,
       all_scopes_exact: allExact,
       zero_money_mismatch: counts.mismatch === 0 && counts.display_only === 0,
+      kqxs_gate:{ total:rows.length, verified:kqxsVerified, conflict:kqxsConflict, unverified:kqxsUnverified, met:allKqxsVerified },
       duration_gate_configured: durationConfigured,
       duration_gate_met: durationMet,
-      promotion_ready: allExact && durationMet && regressionMet && candidateMet,
+      promotion_ready: allExact && allKqxsVerified && durationMet && regressionMet && candidateMet,
       blockers,
       dates,
       scopes: rows
@@ -235,13 +290,15 @@
   }
 
   global.KTS_SETTLEMENT_OBSERVATION = Object.freeze({
-    version: 'settlement-observation-v4-candidate-review-gate',
+    version: 'settlement-observation-v5-strict-kqxs-promotion',
     STATUS,
     comparisonStatus,
     scopeKey,
     normalizeRegressionSummary,
     normalizeCandidateSummary,
     messageScopeCoverage,
+    stationPrizeComplete,
+    resultEvidence,
     buildObservation
   });
 })(typeof window !== 'undefined' ? window : globalThis);
