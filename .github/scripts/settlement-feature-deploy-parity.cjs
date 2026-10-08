@@ -15,7 +15,7 @@ if(source!==target)throw new Error('BUILD_IDENTITY_MANIFEST_MISMATCH');
 const m=source.match(/critical\s*=\s*Object\.freeze\(\{([\s\S]*?)\}\)/);
 if(!m)throw new Error('CRITICAL_MANIFEST_MISSING');
 const records=[...m[1].matchAll(/'(app\/[^']+)':'([0-9a-f]{40})'/g)].map(x=>({path:x[1],sha:x[2]}));
-if(records.length<61)throw new Error('CRITICAL_MANIFEST_TOO_SMALL:'+records.length);
+if(records.length<62)throw new Error('CRITICAL_MANIFEST_TOO_SMALL:'+records.length);
 const hash=path=>execFileSync('git',['hash-object',path],{cwd:root,encoding:'utf8'}).trim();
 const checked=new Set();let mismatches=[];
 for(const {path,sha} of records){
