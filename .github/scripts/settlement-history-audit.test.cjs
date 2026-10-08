@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.162-blocked-empty-revalidation'));
+  assert.ok(sw.includes('v1.0.163-parser-error-hard-block'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -809,4 +809,68 @@ test('stale empty and blocked scope attempts never overwrite newly arrived bets'
   out=await pipeline.settleScope({...scope,messages:[]});
   assert.equal(out.status,'empty');
   assert.equal(saved.length,1);
+});
+
+test('parser error cannot be bypassed by stale canonical content and successful status',async()=>{
+  const ctx={window:{}},clone=v=>JSON.parse(JSON.stringify(v));
+  let writes=0,evals=0,runtimes=0;
+  const scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const message={...scope,id:'msg1',status:'parsed_waiting_result',
+    raw_text:'11 b 1n',parser_error:'PARSER_SOURCE_INVALID',canonical_payload:{region:'mn',legs:[{code:'2CB'}]}};
+  const config={id:'c1',partner_id:'synthetic',version:1,region_terms:{}};
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[clone(message)],
+    resolveConfigForDate:async()=>clone(config),
+    saveSettlement:async s=>{writes++;return s;},
+    get:async()=>null
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{
+    evals++;throw Error('MUST_NOT_EVALUATE_FAILED_PARSER');
+  }};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{
+    runtimes++;throw Error('MUST_NOT_SETTLE_FAILED_PARSER');
+  }};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const result=await ctx.window.KTS_SETTLEMENT_PIPELINE.settleScope({...scope,messages:[clone(message)]});
+  assert.equal(result.status,'blocked');
+  assert.equal(result.settlement.scope_status,'blocked');
+  assert.equal(result.reason,'PENDING_PARSER:msg1');
+  assert.equal(writes,1,'BLOCKED_SCOPE_RECEIPT_MUST_BE_WRITTEN');
+  assert.equal(evals,0);assert.equal(runtimes,0);
+});
+
+test('blocked KQXS conflict cannot overwrite newer verified source',async()=>{
+  const ctx={window:{}},copy=v=>JSON.parse(JSON.stringify(v));
+  const scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const msg={...scope,id:'msg1',status:'parsed_waiting_result',
+    canonical_payload:{region:'mn',legs:[{code:'2CB',values:['11'],stake:1}]}};
+  const config={id:'c1',partner_id:'synthetic',version:1};
+  let reads=0,writes=0;
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[copy(msg)],
+    resolveConfigForDate:async()=>copy(config),
+    get:async(name)=>{
+      if(name!=='results')return null;
+      reads++;
+      return copy({business_date:'2026-09-22',region:'mn',complete:true,
+        fingerprint:'same-prize-fingerprint',
+        verification_status:reads===1?'conflict':'verified',
+        verification_conflicts:reads===1?['SOURCE_DIFF']:[]});
+    },
+    saveSettlement:async s=>{writes++;return s;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{throw Error('UNEXPECTED_EVALUATION')}};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('UNEXPECTED_SETTLE')}};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const result=await ctx.window.KTS_SETTLEMENT_PIPELINE.settleScope({...scope,messages:[msg]});
+  assert.equal(result.status,'superseded');
+  assert.equal(result.reason,'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT');
+  assert.equal(reads,2);
+  assert.equal(writes,0,'STALE_CONFLICT_MUST_NOT_OVERWRITE_UPDATED_SCOPE');
 });
