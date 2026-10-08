@@ -111,6 +111,7 @@
     if(events.some(e=>e.production_enabled!==false||e.merge_authorized!==false)){
       fail('QUALIFICATION_AUTHORITY_ESCALATION');
     }
+  out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
       'QUALIFICATION_CROSS_IFRAME_CONCURRENT_APPEND=PASS',
@@ -121,6 +122,7 @@
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
     ].join('\n');
   }catch(error){
+  out.dataset.state='fail';
     out.textContent='QUALIFICATION_INDEXEDDB_BROWSER=FAIL '+String(error&&error.stack||error);
   }
 })();
