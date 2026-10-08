@@ -15,7 +15,7 @@ if(identity?.version!=='settlement-build-identity-v1'||identity.algorithm!=='git
   throw Error('PREDEPLOY_INVALID_BUILD_IDENTITY');
 const pins=identity.critical_git_blobs;
 const names=Object.keys(pins||{});
-if(names.length<59)throw Error('PREDEPLOY_CRITICAL_MANIFEST_TOO_SMALL:'+names.length);
+if(names.length<61)throw Error('PREDEPLOY_CRITICAL_MANIFEST_TOO_SMALL:'+names.length);
 let checked=0;
 for(const key of names){
   if(!/^app\/[a-zA-Z0-9_.-]+\.(js|html)$/.test(key))throw Error('PREDEPLOY_MANIFEST_KEY_INVALID:'+key);
@@ -30,6 +30,18 @@ const match=sw.match(/const CORE=\[([\s\S]*?)\];/);
 if(!match)throw Error('PREDEPLOY_SW_CORE_MISSING');
 const core=[...match[1].matchAll(/'((?:\.\/|\.\.\/)[^']+)'/g)].map(x=>x[1]);
 if(core.length<60)throw Error('PREDEPLOY_SW_CORE_TOO_SMALL:'+core.length);
+// The manifest is self-referential: its own blob cannot be pinned without
+// changing itself. Every other cached JS asset, plus the settlement shell and
+// worker, must be anchored. Catch new modules omitted from the manifest.
+const coreJavaScript=core.filter(item=>item.startsWith('./')&&item.endsWith('.js'));
+const unpinned=coreJavaScript
+  .filter(item=>item!=='./settlement-build-identity.js')
+  .map(item=>'app/'+item.slice(2))
+  .filter(key=>!Object.prototype.hasOwnProperty.call(pins,key));
+if(unpinned.length)throw Error('PREDEPLOY_UNPINNED_CACHED_JS:'+unpinned.join(','));
+for(const key of ['app/sw.js','app/settlement.html']){
+  if(!Object.prototype.hasOwnProperty.call(pins,key))throw Error('PREDEPLOY_REQUIRED_PIN_MISSING:'+key);
+}
 for(const item of core){
   const file=resolve(folder,item);
   if(!file.startsWith(root+'/')||!existsSync(file))
@@ -42,6 +54,7 @@ for(const file of jsFiles){
   try{new vm.Script(source,{filename:file});}catch(e){throw Error('PREDEPLOY_JS_SYNTAX_ERROR:'+file+':'+e.message);}
 }
 console.log('PREDEPLOY_CRITICAL_BLOB_PINS='+checked);
+console.log('PREDEPLOY_PINNED_CACHED_JS='+String(coreJavaScript.length-1)+'/'+String(coreJavaScript.length-1));
 console.log('PREDEPLOY_SW_CACHE_ASSETS='+core.length);
 console.log('PREDEPLOY_JS_SYNTAX_FILES='+jsFiles.length);
 console.log('PREDEPLOY_SOURCE_INTEGRITY=PASS');
