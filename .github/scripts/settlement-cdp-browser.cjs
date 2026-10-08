@@ -191,20 +191,23 @@ async function checkAcceptance(browser,base){
     if(state.state==='fail')throw Error('BROWSER_RUNTIME_FAILED:'+state.text);
     return state.state==='pass'?state:null;
   },145000,'ACCEPTANCE_RUNTIME');
-  for(const marker of [
-    'ACCEPTANCE_SMOKE=PASS',
-    'BROWSER_CORS_PARSER=PASS code=DAT',
-    'UI_GATE_BROWSER_LOCKED=PASS',
-    'CONFIG_UNCONFIRMED_GATES_OFF=PASS',
-    'KQXS_VERIFIED_FIXTURE=PASS',
-    'SETTLEMENT_CANONICAL_TOTALS=PASS',
-    'SHADOW_MATCH_EXACT=PASS',
-    'QUALIFICATION_HISTORY_BLOCKED_REVERT_FAIL_CLOSED=PASS',
-    'QUALIFICATION_HISTORY_REQUALIFIED_CURRENT=PASS',
-    'QUALIFICATION_HISTORY_NO_AUTHORITY_ESCALATION=PASS'
-  ])assert(result.text.includes(marker),'ACCEPTANCE_MARKER_MISSING:'+marker);
+  // The static checkout was byte-verified against deployed Pages by the
+  // preceding workflow step. Extract the complete published smoke contract,
+  // not a hand-picked subset; every one of its 62 result lines is mandatory.
+  const fixture=fs.readFileSync(path.join(root,'settlement-test','acceptance-smoke.html'),'utf8');
+  const end=fixture.lastIndexOf('  out.textContent=[');
+  assert(end>=0,'ACCEPTANCE_RESULT_CONTRACT_MISSING');
+  const contract=fixture.slice(end);
+  const markers=[...contract.matchAll(/^\\s*'([^']+=PASS(?:[^']*)?)',?\\s*$/gm)].map(m=>m[1]);
+  assert(markers.length>=62,'ACCEPTANCE_RESULT_CONTRACT_SHRANK:'+markers.length);
+  assert(new Set(markers).size===markers.length,'ACCEPTANCE_DUPLICATED_MARKERS');
+  const observed=result.text.split(/\\r?\\n/);
+  for(const marker of markers){
+    assert(observed.includes(marker),'ACCEPTANCE_MARKER_MISSING:'+marker);
+  }
+  assert(observed.length===markers.length,'ACCEPTANCE_RESULT_COUNT_MISMATCH:'+observed.length);
   console.log('ACCEPTANCE_SMOKE=PASS');
-  console.log('ACCEPTANCE_CHECK_COUNT='+result.text.split('\\n').filter(x=>x.includes('=PASS')).length);
+  console.log('ACCEPTANCE_CHECK_COUNT='+markers.length);
   console.log('CDP_ACCEPTANCE_RESULT_VERIFIED=PASS');
 }
 
