@@ -6,8 +6,9 @@
     const evaluator = global.KTS_SETTLEMENT_EVALUATOR;
     const runtime = global.KTS_SETTLEMENT_RUNTIME;
     const engine = global.KTS_SETTLEMENT_ENGINE;
-    if (!store || !evaluator || !runtime || !engine) throw new Error('SETTLEMENT_PIPELINE_DEPENDENCY_MISSING');
-    return { store, evaluator, runtime, engine };
+    const gates = global.KTS_SETTLEMENT_FEATURE_GATES;
+    if (!store || !evaluator || !runtime || !engine || !gates || typeof gates.guardCategoryRows !== 'function' || typeof gates.uiEnabled !== 'function') throw new Error('SETTLEMENT_PIPELINE_DEPENDENCY_MISSING');
+    return { store, evaluator, runtime, engine, gates };
   }
 
   const scopeSettlementQueues = new Map();
@@ -43,6 +44,20 @@
       result.business_date || '', result.region || '', Boolean(result.complete),
       result.verification_status || '', result.expected_station_codes || [], result.stations || []
     ]);
+  }
+
+  // Keep each message's category counts aligned with the rows the runtime
+  // will actually settle. Dropped unconfirmed UI rows must never shift the
+  // next message's attribution or appear in detailed reports.
+  function guardedMessageEvaluation(evaluated, config, gates) {
+    if (!evaluated || !Array.isArray(evaluated.category_inputs) || !Array.isArray(evaluated.detail_rows))
+      throw new Error('SETTLEMENT_EVALUATION_INVALID');
+    if (!gates || typeof gates.guardCategoryRows !== 'function' || typeof gates.uiEnabled !== 'function')
+      throw new Error('SETTLEMENT_FEATURE_GATES_NOT_LOADED');
+    const category_inputs = gates.guardCategoryRows(evaluated.category_inputs, config);
+    const uiAllowed = gates.uiEnabled(config);
+    const detail_rows = evaluated.detail_rows.filter(row => uiAllowed || String(row && row.code || '').toUpperCase() !== 'UI');
+    return { category_inputs, detail_rows };
   }
 
   function zeroResult(reason) {
@@ -172,7 +187,6 @@
     }
 
     const categoryInputs = [];
-    const rowOwners = [];
     const detailRows = [];
     const messageEval = [];
     try {
@@ -183,13 +197,11 @@
           result_snapshot: resultSnapshot,
           region
         });
+        const guarded = guardedMessageEvaluation(evaluated, config, d.gates);
         const start = categoryInputs.length;
-        for (const row of evaluated.category_inputs) {
-          categoryInputs.push(row);
-          rowOwners.push(message.id);
-        }
-        for (const detail of evaluated.detail_rows) detailRows.push(Object.assign({ message_id: message.id }, detail));
-        messageEval.push({ message_id: message.id, start, count: evaluated.category_inputs.length });
+        for (const row of guarded.category_inputs) categoryInputs.push(row);
+        for (const detail of guarded.detail_rows) detailRows.push(Object.assign({ message_id: message.id }, detail));
+        messageEval.push({ message_id: message.id, start, count: guarded.category_inputs.length });
       }
     } catch (e) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
@@ -204,6 +216,12 @@
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
     }
 
+    // engine.settle preserves row order; count mismatch means attribution
+    // is unsafe. Block instead of assigning another message's winnings.
+    if (!settled || !Array.isArray(settled.rows) || settled.rows.length !== categoryInputs.length) {
+      return saveBlockedScope({partner_id:partnerId,business_date:businessDate,region,messages,
+        config_snapshot:config,result_snapshot:resultSnapshot,reason:'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH'});
+    }
     const breakdown = messageEval.map(item => ({
       message_id: item.message_id,
       category_rows: settled.rows.slice(item.start, item.start + item.count).map(clone)
@@ -369,9 +387,10 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v8-scope-revalidate',
+    version: 'settlement-pipeline-v9-guarded-row-attribution',
     scopeId,
     isCancelled,
+    guardedMessageEvaluation,
     findScopeMessages,
     findResult,
     settleScope,
