@@ -701,6 +701,51 @@
     fail('SHADOW_EXACT_READINESS_COUNTS');
   }
 
+  const observationApi=w.KTS_SETTLEMENT_OBSERVATION;
+  if(!observationApi||typeof observationApi.buildObservation!=='function')fail('OBSERVATION_API_REQUIRED');
+
+  const observationOptions={
+    from_date:'2026-09-22',
+    to_date:'2026-09-22',
+    partner_id:smokePartner.id,
+    regions:['mb'],
+    required_observation_days:1,
+    messages:exactMessages,
+    regression_summary:{total:1,passed:1,failed:0},
+    candidate_summary:{pending:0,promoted:1,dismissed:0}
+  };
+  const exactObservation=observationApi.buildObservation(exactSettlements,observationOptions);
+  if(!exactObservation||exactObservation.version!=='settlement-observation-v5-strict-kqxs-promotion'){
+    fail('OBSERVATION_VERSION');
+  }
+  if(exactObservation.promotion_ready!==true)fail('OBSERVATION_PROMOTION_NOT_READY:'+JSON.stringify(exactObservation.blockers||[]));
+  if(exactObservation.all_scopes_exact!==true)fail('OBSERVATION_SCOPES_NOT_EXACT');
+  if(exactObservation.kqxs_gate&&exactObservation.kqxs_gate.met!==true)fail('OBSERVATION_KQXS_GATE');
+  if(exactObservation.duration_gate_configured!==true||exactObservation.duration_gate_met!==true){
+    fail('OBSERVATION_DURATION_GATE');
+  }
+  if(Number(exactObservation.counts&&exactObservation.counts.total||0)!==1)fail('OBSERVATION_TOTAL_SCOPE_COUNT');
+  if(Number(exactObservation.counts&&exactObservation.counts.exact||0)!==1)fail('OBSERVATION_EXACT_SCOPE_COUNT');
+  if(Number(exactObservation.coverage&&exactObservation.coverage.expected_scopes||0)!==1){
+    fail('OBSERVATION_EXPECTED_SCOPE_COUNT');
+  }
+  if(Number(exactObservation.coverage&&exactObservation.coverage.missing_scopes&&exactObservation.coverage.missing_scopes.length||0)!==0){
+    fail('OBSERVATION_MISSING_SCOPE');
+  }
+  if(!Array.isArray(exactObservation.blockers)||exactObservation.blockers.length!==0){
+    fail('OBSERVATION_UNEXPECTED_BLOCKERS:'+JSON.stringify(exactObservation.blockers||[]));
+  }
+
+  const durationBlocked=observationApi.buildObservation(exactSettlements,{
+    ...observationOptions,
+    required_observation_days:2
+  });
+  if(durationBlocked.promotion_ready!==false)fail('OBSERVATION_DURATION_UNSAFE_READY');
+  if(durationBlocked.duration_gate_met!==false)fail('OBSERVATION_DURATION_FALSE_GATE');
+  if(!Array.isArray(durationBlocked.blockers)||!durationBlocked.blockers.includes('OBSERVATION_DAYS:1/2')){
+    fail('OBSERVATION_DURATION_BLOCKER_MISSING:'+JSON.stringify(durationBlocked.blockers||[]));
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -741,7 +786,10 @@
     'KQXS_RECOVERY_CANONICAL_TOTALS=PASS',
     'SHADOW_MATCH_EXACT=PASS',
     'SHADOW_EVIDENCE_PERSISTED=PASS',
-    'DAILY_CLOSE_READY_AFTER_EXACT=PASS'
+    'DAILY_CLOSE_READY_AFTER_EXACT=PASS',
+    'OBSERVATION_PROMOTION_READY=PASS',
+    'OBSERVATION_STRICT_KQXS_GATE=PASS',
+    'OBSERVATION_DURATION_FAIL_CLOSED=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);

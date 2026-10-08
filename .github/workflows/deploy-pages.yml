@@ -448,7 +448,10 @@ jobs:
                 && grep -Fq 'KQXS_RECOVERY_CANONICAL_TOTALS=PASS' "$tmp/dom.html" \
                 && grep -Fq 'SHADOW_MATCH_EXACT=PASS' "$tmp/dom.html" \
                 && grep -Fq 'SHADOW_EVIDENCE_PERSISTED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'DAILY_CLOSE_READY_AFTER_EXACT=PASS' "$tmp/dom.html"; then
+                && grep -Fq 'DAILY_CLOSE_READY_AFTER_EXACT=PASS' "$tmp/dom.html" \
+                && grep -Fq 'OBSERVATION_PROMOTION_READY=PASS' "$tmp/dom.html" \
+                && grep -Fq 'OBSERVATION_STRICT_KQXS_GATE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'OBSERVATION_DURATION_FAIL_CLOSED=PASS' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi
