@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.170-golden-decimal-only'));
+  assert.ok(source.includes('v1.0.171-exact-evidence-fail-closed'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -927,4 +927,35 @@ test('golden reference totals enforce identical decimal syntax as shadow compara
     const v=JSON.parse(JSON.stringify(valid));v.expected_reference.totals.final=s;
     assert.equal(normalize(v).expected_reference.totals.final,s,'VALID_ORACLE_REJECTED:'+s);
   }
+});
+
+test('malformed exact HIOSKT or local evidence never falls back to approximate monetary match',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const shadow=ctx.window.KTS_SETTLEMENT_SHADOW;
+  const valid={settlement_result:{
+    total_xac:0,total_qua_co:0,total_payout:0,final_net:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}
+  }};
+  const reference={totals:{xac:0,qua_co:0,payout:0,final:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  assert.equal(shadow.compareSettlement(valid,reference).safe_to_promote,true);
+  const c=x=>JSON.parse(JSON.stringify(x));
+  for(const [kind,alter] of [
+    ['local_invalid',x=>x.local.settlement_result.exact.final_net='not-money'],
+    ['local_overflow',x=>x.local.settlement_result.exact.final_net='0e1001'],
+    ['reference_invalid',x=>x.ref.totals.exact.final_net='not-money'],
+    ['reference_overflow',x=>x.ref.totals.exact.final_net='0e1001'],
+    ['reference_invalid_legacy_local',x=>{delete x.local.settlement_result.exact.final_net;x.ref.totals.exact.final_net='not-money';}]
+  ]){
+    const x={local:c(valid),ref:c(reference)};alter(x);
+    const result=shadow.compareSettlement(x.local,x.ref);
+    assert.equal(result.safe_to_promote,false,'INVALID_EXACT_WAS_PROMOTED:'+kind);
+    assert.equal(result.required_totals_exact,false);
+    assert.equal(result.totals.final_net.status,'NOT_COMPARABLE');
+    assert.equal(result.totals.final_net.reason,'INVALID_EXACT_MONETARY_EVIDENCE');
+  }
+  const legacy=c(valid);delete legacy.settlement_result.exact;
+  const compatible=shadow.compareSettlement(legacy,{totals:{xac:0,qua_co:0,payout:0,final:0}});
+  assert.equal(compatible.safe_to_promote,true,'LEGACY_ABSENT_EXACT_MUST_WORK');
 });
