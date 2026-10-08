@@ -281,7 +281,13 @@
           try { tx.abort(); } catch (_) { /* already aborted */ }
         }
       };
-      await txDone(tx);
+      try {
+        await txDone(tx);
+      } catch(error) {
+        // IDB abort errors are generic. Surface the deterministic, validated
+        // journal-corruption reason instead of losing it behind AbortError.
+        throw prepareError||error;
+      }
       if (!saved) throw prepareError||new Error('QUALIFICATION_HISTORY_APPEND_FAILED');
       return clone(saved);
     } finally { db.close(); }
