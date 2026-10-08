@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.176-regression-final-attribution'));
+  assert.ok(source.includes('v1.0.177-validated-feature-codes'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1092,4 +1092,25 @@ test('golden message breakdown uses actual final runtime rows, never preview cat
   assert.equal(x.message_breakdown[0].start,undefined);
   assert.equal(x.message_breakdown[0].count,undefined);
   assert.deepEqual(copy(x.category_rows),x.message_breakdown.flatMap(y=>copy(y.category_rows)));
+});
+
+test('feature gate fails closed on whitespace padded Ủi and malformed evaluator rows',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-feature-gates.js'),'utf8'),ctx,{filename:'settlement-feature-gates.js'});
+  const gates=ctx.window.KTS_SETTLEMENT_FEATURE_GATES;
+  const outcome=gates.guardEvaluation({category_inputs:[{code:'B',stake:2},{code:' UI ',stake:999}],
+    detail_rows:[{code:' B ',numbers:'11'},{code:' uI ',numbers:'22'}]}, {tinh_ui:true});
+  assert.equal(outcome.category_inputs.length,1);
+  assert.equal(outcome.category_inputs[0].code,'B');
+  assert.equal(outcome.detail_rows.length,1);
+  assert.equal(outcome.detail_rows[0].numbers,'11');
+  for(const row of [null,{},[],{code:''},{code:'   '},{code:1},'B']){
+    assert.throws(()=>gates.guardCategoryRows([row],{}),/SETTLEMENT_CATEGORY_CODE_INVALID/);
+    assert.throws(()=>gates.guardEvaluation({category_inputs:[{code:'B'}],detail_rows:[row]},{}),
+      /SETTLEMENT_DETAIL_CODE_INVALID/);
+  }
+  assert.throws(()=>gates.guardEvaluation({category_inputs:[{code:'B'}],
+    detail_rows:[{code:' MB_XIEN2 '}]},{mb_xien_234:false}),/MB_XIEN_234_NOT_ALLOWED/);
+  assert.equal(gates.guardEvaluation({category_inputs:[{code:'B'}],
+    detail_rows:[{code:'MB_XIEN2'}]},{mb_xien_234:true}).detail_rows.length,1);
 });
