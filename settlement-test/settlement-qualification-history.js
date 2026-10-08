@@ -186,6 +186,20 @@
     if(q.ready_for_production_review){
       if(q.qualification_state!==READY)return {valid:false,reason:'READY_STATE_CONTRADICTION'};
       if(!Array.isArray(q.blockers)||q.blockers.length!==0)return {valid:false,reason:'READY_HAS_BLOCKERS'};
+      // The canonical dashboard computes READY from independent gates.
+      // A missing gate is invalid for canonical snapshots; optional synthetic
+      // legacy fixtures remain supported, but any provided failing gate blocks.
+      const canonical=q.format==='kts-final-qualification-v2-live-parser';
+      for(const [name,field] of [
+        ['observation','promotion_ready'],['kqxs_verification','met'],
+        ['parser_provenance','met'],['parser_backend','met'],
+        ['regression_gate','met'],['candidate_gate','met'],
+        ['feature_safety','met']
+      ]){
+        const gate=q[name];
+        if((canonical||gate!=null)&&(!gate||gate[field]!==true))
+          return {valid:false,reason:'READY_GATE_NOT_MET_'+name.toUpperCase()};
+      }
     }else if(q.qualification_state===READY){
       return {valid:false,reason:'BLOCKED_STATE_CONTRADICTION'};
     }
