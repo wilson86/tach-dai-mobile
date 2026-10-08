@@ -252,8 +252,15 @@
       request.onsuccess=()=>{
         try {
           const existing=request.result;
-          const row=existing&&Array.isArray(existing.events)
-            ? clone(existing) : {key:META_KEY,version:1,events:[]};
+          // A damaged journal must not be silently reset or extended.
+          // Validation happens inside the same IndexedDB readwrite transaction
+          // used for the append, so concurrent writers cannot bypass it.
+          if(existing!=null){
+            if(!Array.isArray(existing.events))throw new Error('QUALIFICATION_HISTORY_APPEND_REJECTED_CORRUPT_ROW');
+            const integrity=validateHistoryEvents(existing.events);
+            if(!integrity.valid)throw new Error('QUALIFICATION_HISTORY_APPEND_REJECTED_CORRUPT_JOURNAL:'+integrity.reason);
+          }
+          const row=existing?clone(existing):{key:META_KEY,version:1,events:[]};
           const event=buildEvidenceEvent(qualificationSnapshot,options,components,fingerprint,row.events);
           row.events.push(event);
           row.updated_at=event.observed_at;
