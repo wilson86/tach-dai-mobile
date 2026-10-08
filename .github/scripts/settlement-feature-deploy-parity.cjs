@@ -5,7 +5,7 @@ const {resolve, join, basename}=require('node:path');
 const root=resolve(__dirname,'../..');
 const feature=join(root,'_feature_authority','app');
 const deploy=join(root,'settlement-test');
-const authority='ce1eed1a20010be1522e136f5a9f649842cbafab';
+const authority='5b0cea71b5545eb8bfd25bbc1043362ac88701dc';
 if(!existsSync(feature))throw new Error('PINNED_FEATURE_CHECKOUT_MISSING');
 const commit=execFileSync('git',['-C',join(root,'_feature_authority'),'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 if(commit!==authority)throw new Error('FEATURE_AUTHORITY_SHA_MISMATCH:'+commit);
@@ -15,7 +15,7 @@ if(source!==target)throw new Error('BUILD_IDENTITY_MANIFEST_MISMATCH');
 const m=source.match(/critical\s*=\s*Object\.freeze\(\{([\s\S]*?)\}\)/);
 if(!m)throw new Error('CRITICAL_MANIFEST_MISSING');
 const records=[...m[1].matchAll(/'(app\/[^']+)':'([0-9a-f]{40})'/g)].map(x=>({path:x[1],sha:x[2]}));
-if(records.length<59)throw new Error('CRITICAL_MANIFEST_TOO_SMALL:'+records.length);
+if(records.length<61)throw new Error('CRITICAL_MANIFEST_TOO_SMALL:'+records.length);
 const hash=path=>execFileSync('git',['hash-object',path],{cwd:root,encoding:'utf8'}).trim();
 const checked=new Set();let mismatches=[];
 for(const {path,sha} of records){
