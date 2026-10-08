@@ -241,12 +241,13 @@ test('Pages deployment cannot start before the shared fail-closed preflight',()=
   const checker=readFileSync(resolve(root,'.github','scripts','settlement-predeploy-integrity.cjs'),'utf8');
   const checkout=workflow.indexOf('uses: actions/checkout@v4');
   const preflight=workflow.indexOf('name: Fail-closed local predeploy qualification');
+  const backend=workflow.indexOf('name: Verify settlement test backend contract');
   const configure=workflow.indexOf('uses: actions/configure-pages@v5');
   const upload=workflow.indexOf('uses: actions/upload-pages-artifact@v3');
   const publish=workflow.indexOf('uses: actions/deploy-pages@v4');
   const postParity=workflow.indexOf('name: Verify public settlement test bytes');
   const postAccept=workflow.indexOf('name: Browser acceptance on canonical test Pages via real CDP');
-  assert.ok(checkout>=0&&checkout<preflight&&preflight<configure&&
+  assert.ok(checkout>=0&&checkout<preflight&&preflight<backend&&backend<configure&&
     configure<upload&&upload<publish&&publish<postParity&&postParity<postAccept,
     'PREDEPLOY_FAIL_CLOSED_ORDER_BROKEN');
   assert.ok(workflow.includes('run: bash .github/scripts/settlement-predeploy-gate.sh'));
@@ -265,4 +266,21 @@ test('Pages deployment cannot start before the shared fail-closed preflight',()=
     'PREDEPLOY_SW_CACHE_ASSET_MISSING',
     'PREDEPLOY_JS_SYNTAX_ERROR'
   ])assert.ok(checker.includes(required),'INTEGRITY_FAIL_CLOSED_MISSING:'+required);
+});
+
+test('backend contract is verified before any public Pages mutation',()=>{
+  const yaml=readFileSync(resolve(root,'.github','workflows','deploy-pages.yml'),'utf8');
+  const step=yaml.indexOf('name: Verify settlement test backend contract');
+  const upload=yaml.indexOf('uses: actions/upload-pages-artifact@v3');
+  const deploy=yaml.indexOf('uses: actions/deploy-pages@v4');
+  const publicParity=yaml.indexOf('name: Verify public settlement test bytes');
+  assert.ok(step>=0&&step<upload&&upload<deploy&&deploy<publicParity,
+    'BACKEND_TEST_POSTDEPLOY_UNSAFE');
+  const block=yaml.slice(step,upload);
+  for(const required of [
+    '/health','/api/settlement/parser-identity','/api/settlement/parse',
+    'BACKEND_CORS_PREFLIGHT_MISMATCH','BUSINESS_DATE_REQUIRED',
+    'BACKEND_KQXS_CORS_PREFLIGHT_MISMATCH','KQXS_REGION_REQUIRED',
+    'SETTLEMENT_TEST_BACKEND_CONTRACT=PASS'
+  ])assert.ok(block.includes(required),'BACKEND_PREDEPLOY_GUARD_MISSING:'+required);
 });
