@@ -208,6 +208,57 @@ async function checkAcceptance(browser,base){
   console.log('CDP_ACCEPTANCE_RESULT_VERIFIED=PASS');
 }
 
+async function checkPagesSmoke(browser,base){
+  assert(base==='https://wilson86.github.io/tach-dai-mobile/settlement-test','PAGES_ORIGIN_NOT_CANONICAL');
+  await navigate(browser,base+'/settlement.html');
+  await waitFor(async()=>{
+    const state=await pageEval(browser,`(()=>{
+      const el=(name)=>document.getElementById(name);
+      const loaded=Boolean(el('kqxsAutoBadge')&&el('checkMessageSyntax')&&
+        el('messageParsePreview')&&window.KTS_SETTLEMENT_STORE&&
+        window.KTS_SETTLEMENT_PARSER_PROVIDER);
+      const endpoints=window.KTS_SETTLEMENT_RUNTIME_ENDPOINTS;
+      const allowed=Boolean(endpoints&&
+        endpoints.parser_endpoint==='https://kts-settlement-api-test.onrender.com/api/settlement/parse'&&
+        endpoints.kqxs_endpoint==='https://kts-settlement-api-test.onrender.com/api/kqxs');
+      const error=String(document.body&&document.body.textContent||'').includes('Khởi tạo lỗi:');
+      return {loaded,allowed,error};
+    })()`);
+    if(state&&state.error)throw Error('BROWSER_RUNTIME_FAILED:SETTLEMENT_RUNTIME_BOOT_ERROR');
+    if(state&&state.loaded&&!state.allowed)throw Error('BROWSER_RUNTIME_FAILED:TEST_ENDPOINT_POLICY_MISMATCH');
+    return state&&state.loaded&&state.allowed?state:null;
+  },65000,'PAGES_RUNTIME_BOOT');
+  console.log('BROWSER_RUNTIME_SMOKE=PASS');
+}
+async function checkPagesOffline(browser,base){
+  assert(base==='https://wilson86.github.io/tach-dai-mobile/settlement-test','PAGES_ORIGIN_NOT_CANONICAL');
+  await checkPagesSmoke(browser,base);
+  await navigate(browser,base+'/sw-diagnostics.html');
+  await waitResult(browser,'SW_DIAGNOSTICS',85000);
+  // No DNS spoofing or origin changes. CDP forces the browser Network
+  // domain offline AFTER the real Pages worker is activated and controls
+  // the app. Cached service worker responses must still boot.
+  await browser.conn.send('Network.enable');
+  await browser.conn.send('Network.emulateNetworkConditions',{
+    offline:true,latency:0,downloadThroughput:0,uploadThroughput:0
+  });
+  console.log('CDP_NETWORK_OFFLINE_ENABLED=PASS');
+  await navigate(browser,base+'/settlement.html');
+  const state=await waitFor(async()=>{
+    const x=await pageEval(browser,`(()=>{
+      const valid=Boolean(document.getElementById('messageText')&&
+        document.getElementById('kqxsAutoBadge')&&
+        document.getElementById('checkMessageSyntax')&&
+        document.getElementById('messageParsePreview')&&window.KTS_SETTLEMENT_STORE);
+      const error=String(document.body&&document.body.textContent||'').includes('Khởi tạo lỗi:');
+      return {valid,error,controlled:Boolean(navigator.serviceWorker&&navigator.serviceWorker.controller)};
+    })()`);
+    if(x&&x.error)throw Error('BROWSER_RUNTIME_FAILED:PAGES_OFFLINE_BOOT_ERROR');
+    return x&&x.valid&&x.controlled?x:null;
+  },45000,'PAGES_OFFLINE_SERVICE_WORKER');
+  assert(state.valid&&state.controlled,'PAGES_OFFLINE_NOT_CONTROLLED');
+  console.log('SETTLEMENT_OFFLINE_SW_SMOKE=PASS');
+}
 async function checkIndexedDb(browser,base){
   await navigate(browser,base+'/qualification-indexeddb-smoke.html');
   await waitResult(browser,'QUALIFICATION_INDEXEDDB_BROWSER');
@@ -285,10 +336,10 @@ async function checkOffline(browser,server,base){
   }
 }
 (async()=>{
-  assert(['indexeddb','offline','offline-cold','acceptance','acceptance-pages'].includes(mode),'INVALID_TEST_MODE');
+  assert(['indexeddb','offline','offline-cold','acceptance','acceptance-pages','smoke-pages','offline-pages'].includes(mode),'INVALID_TEST_MODE');
   // Full API acceptance is intentionally allowed only on the canonical
   // GitHub Pages test origin. Never spoof hostname or enable test API on localhost.
-  const remotePages=mode==='acceptance-pages';
+  const remotePages=['acceptance-pages','smoke-pages','offline-pages'].includes(mode);
   const server=remotePages?null:serve();let browser;
   try{
     if(server)await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -313,6 +364,8 @@ async function checkOffline(browser,server,base){
     console.log('CDP_CHROME_ATTACHED=PASS');
     if(mode==='indexeddb')await checkIndexedDb(browser,base);
     else if(mode==='acceptance'||mode==='acceptance-pages')await checkAcceptance(browser,base);
+    else if(mode==='smoke-pages')await checkPagesSmoke(browser,base);
+    else if(mode==='offline-pages')await checkPagesOffline(browser,base);
     else await checkOffline(browser,server,base);
     console.log('CDP_'+mode.toUpperCase()+'_PASS=YES');
   }catch(e){
