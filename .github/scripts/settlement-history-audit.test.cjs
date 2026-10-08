@@ -277,12 +277,18 @@ test('backend contract is verified before any public Pages mutation',()=>{
   assert.ok(step>=0&&step<upload&&upload<deploy&&deploy<publicParity,
     'BACKEND_TEST_POSTDEPLOY_UNSAFE');
   const block=yaml.slice(step,upload);
+  assert.ok(block.includes('run: bash .github/scripts/settlement-backend-contract.sh'),'BACKEND_RELEASE_SCRIPT_NOT_USED');
+  const script=readFileSync(resolve(root,'.github','scripts','settlement-backend-contract.sh'),'utf8');
+  const audit=readFileSync(resolve(root,'.github','workflows','settlement-backend-contract-audit.yml'),'utf8');
+  assert.ok(audit.includes('run: bash .github/scripts/settlement-backend-contract.sh'),'BACKEND_PR_SCRIPT_NOT_USED');
+  assert.ok(audit.includes('contents: read')&&!audit.includes('actions/deploy-pages@'),'BACKEND_PR_NOT_READ_ONLY');
   for(const required of [
     '/health','/api/settlement/parser-identity','/api/settlement/parse',
     'BACKEND_CORS_PREFLIGHT_MISMATCH','BUSINESS_DATE_REQUIRED',
     'BACKEND_KQXS_CORS_PREFLIGHT_MISMATCH','KQXS_REGION_REQUIRED',
-    'SETTLEMENT_TEST_BACKEND_CONTRACT=PASS'
-  ])assert.ok(block.includes(required),'BACKEND_PREDEPLOY_GUARD_MISSING:'+required);
+    'SETTLEMENT_TEST_BACKEND_CONTRACT=PASS',
+    'REFUSE_NON_TEST_BACKEND','REFUSE_UNTRUSTED_TEST_ORIGIN'
+  ])assert.ok(script.includes(required),'BACKEND_PREDEPLOY_GUARD_MISSING:'+required);
 });
 
 test('every cached runtime JavaScript file is pinned except recursive build identity',()=>{
