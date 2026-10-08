@@ -24,6 +24,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Fail-closed local predeploy qualification
+        shell: bash
+        run: bash .github/scripts/settlement-predeploy-gate.sh
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
