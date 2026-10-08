@@ -378,112 +378,15 @@ jobs:
           exit 1
 
 
-      - name: Browser acceptance settlement iframe and API
+      - name: Browser acceptance on canonical test Pages via real CDP
         shell: bash
-        env:
-          SETTLEMENT_TEST_URL: https://wilson86.github.io/tach-dai-mobile/settlement-test
         run: |
           set -euo pipefail
-          browser=""
-          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
-            if command -v "$candidate" >/dev/null 2>&1; then
-              browser="$(command -v "$candidate")"
-              break
-            fi
-          done
-          if [ -z "$browser" ]; then
-            echo "ACCEPTANCE_NO_CHROME" >&2
-            exit 1
-          fi
-
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-          url="${SETTLEMENT_TEST_URL}/acceptance-smoke.html?sha=${GITHUB_SHA}"
-
-          for attempt in 1 2 3; do
-            echo "Browser acceptance attempt $attempt/3"
-            rm -rf "$tmp/profile" "$tmp/dom.html" "$tmp/chrome.log"
-            if "$browser" \
-              --headless=new \
-              --no-sandbox \
-              --disable-gpu \
-              --disable-dev-shm-usage \
-              --user-data-dir="$tmp/profile" \
-              --virtual-time-budget=15000 \
-              --dump-dom "$url" \
-              >"$tmp/dom.html" 2>"$tmp/chrome.log"; then
-              if grep -Fq 'ACCEPTANCE_SMOKE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'RUNTIME_ENDPOINTS=PASS' "$tmp/dom.html" \
-                && grep -Fq 'BROWSER_CORS_PARSER=PASS code=DAT' "$tmp/dom.html" \
-                && grep -Fq 'UI_MESSAGE_TAB=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_SYNTAX_REVIEW=PASS DAT' "$tmp/dom.html" \
-                && grep -Fq 'UI_PARTNER_CREATE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'INDEXEDDB_PARTNER_PERSISTENCE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_CONFIG_SAVE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'INDEXEDDB_CONFIG_PERSISTENCE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'CONFIG_UNCONFIRMED_GATES_OFF=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_GATE_BROWSER_LOCKED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_GATE_LEGACY_TRUE_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_MESSAGE_SAVE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'INDEXEDDB_MESSAGE_PERSISTENCE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'MESSAGE_WAITING_RESULT_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'BACKUP_EXPORT_BROWSER=PASS' "$tmp/dom.html" \
-                && grep -Fq 'BACKUP_MERGE_IDEMPOTENT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_MESSAGE_CANCEL=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_MESSAGE_RESTORE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'MESSAGE_SCOPE_LIFECYCLE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'UI_REPORT_BLOCKED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'REPORT_ZERO_MONEY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'DAILY_CLOSE_NOT_READY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_VERIFIED_FIXTURE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'SETTLEMENT_CANONICAL_TOTALS=PASS' "$tmp/dom.html" \
-                && grep -Fq 'REPORT_CANONICAL_TOTALS=PASS' "$tmp/dom.html" \
-                && grep -Fq 'SHADOW_UNVERIFIED_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'DAILY_CLOSE_REQUIRES_MATCH_EXACT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_CONFLICT_AUTHORITY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_CONFLICT_SETTLEMENT_BLOCKED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_CONFLICT_ZERO_MONEY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_CONFLICT_RECOVERY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_RECOVERY_AUDIT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'KQXS_RECOVERY_CANONICAL_TOTALS=PASS' "$tmp/dom.html" \
-                && grep -Fq 'SHADOW_MATCH_EXACT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'SHADOW_EVIDENCE_PERSISTED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'DAILY_CLOSE_READY_AFTER_EXACT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'OBSERVATION_PROMOTION_READY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'OBSERVATION_STRICT_KQXS_GATE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'OBSERVATION_DURATION_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'OBSERVATION_REGRESSION_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'OBSERVATION_CANDIDATE_PENDING_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_KQXS_CURRENT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_RESULT_DRIFT_BLOCKED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'BUILD_IDENTITY_RUNTIME_VALID=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_READY_CURRENT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_RESULT_DRIFT_STALE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_REQUALIFY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_NO_AUTHORITY_ESCALATION=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_LIVE_READY=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_INDEXEDDB_APPEND=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_PERSISTED_CURRENT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_CURRENT=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_SEMANTIC_DRIFT_STALE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_BLOCKED_EVENT_APPENDED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_BLOCKED_REVERT_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_RESULT_CORE_RECOVERED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_REQUALIFIED_APPENDED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_REQUALIFIED_CURRENT=PASS' "$tmp/dom.html"; then
-                echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
-                exit 0
-              fi
-              grep -o 'ACCEPTANCE_SMOKE=[^<]*' "$tmp/dom.html" >&2 || true
-            else
-              echo "ACCEPTANCE_CHROME_EXIT_FAIL attempt=$attempt" >&2
-            fi
-            if [ "$attempt" -lt 3 ]; then sleep 3; fi
-          done
-
-          echo "SETTLEMENT_BROWSER_ACCEPTANCE=FAIL sha=${GITHUB_SHA}" >&2
-          tail -n 120 "$tmp/chrome.log" >&2 || true
-          exit 1
+          # Public artifact parity above must complete BEFORE acceptance.
+          # Browser must execute the test on the legitimate GitHub Pages origin:
+          # localhost and origin impersonation are explicitly forbidden.
+          node --experimental-websocket .github/scripts/settlement-cdp-browser.cjs acceptance-pages
+          echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
 
       - name: Verify settlement offline service-worker boot
         shell: bash
