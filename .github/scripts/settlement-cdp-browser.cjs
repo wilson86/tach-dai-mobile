@@ -43,8 +43,8 @@ async function waitFor(fn,timeoutMs,label){
   }
   throw Error('TIMED_OUT_'+label+(last?':'+last.message:''));
 }
-async function launchChrome(){
-  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'kts-cdp-'));
+async function launchChrome(existingProfile=null){
+  const profile=existingProfile||fs.mkdtempSync(path.join(os.tmpdir(),'kts-cdp-'));
   const stderr=[];const binary=browserBinary();
   const proc=spawn(binary,[
     '--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
@@ -74,7 +74,7 @@ async function launchChrome(){
     const detail=stderr.slice(-6).join('').slice(-2200);
     proc.kill('SIGKILL');
     await pause(250);
-    fs.rmSync(profile,{recursive:true,force:true});
+    if(!existingProfile)fs.rmSync(profile,{recursive:true,force:true});
     throw Error('CHROME_START_FAILED:'+error.message+' STDERR='+detail);
   }
 }
@@ -128,13 +128,17 @@ async function waitResult(browser,expected,timeout=90000){
   console.log(expected+'=PASS');
   console.log('RUNTIME_RESULT='+output.text.replace(/\n/g,' | ').slice(0,700));
 }
-async function closeChrome(browser){
+async function closeChrome(browser,preserveProfile=false){
   if(!browser)return;
   try{await Promise.race([browser.conn.send('Browser.close'),pause(1200)])}catch(_){}
   browser.conn.close();
-  browser.proc.kill('SIGTERM');
-  await pause(500);
-  fs.rmSync(browser.profile,{recursive:true,force:true});
+  if(browser.proc.exitCode===null)browser.proc.kill('SIGTERM');
+  await Promise.race([new Promise(resolve=>{
+    if(browser.proc.exitCode!==null)return resolve();
+    browser.proc.once('exit',resolve);
+  }),pause(2500)]);
+  if(browser.proc.exitCode===null)browser.proc.kill('SIGKILL');
+  if(!preserveProfile)fs.rmSync(browser.profile,{recursive:true,force:true});
 }
 async function shutdownServer(server){
   if(!server.listening)return;
@@ -181,9 +185,44 @@ async function checkOffline(browser,server,base){
   },40000,'OFFLINE_REAL_RENDER');
   assert(state.sw,'OFFLINE_PAGE_NOT_SW_CONTROLLED');
   console.log('QUALIFICATION_PR_SERVICE_WORKER_OFFLINE=PASS');
+  if(mode==='offline-cold'){
+    // No origin server, preserve the same Chrome profile / CacheStorage.
+    const profile=browser.profile;
+    await closeChrome(browser,true);
+    let cold=null,last=null;
+    try{
+      for(let n=1;n<=2;n++){
+        try{
+          console.log('COLD_CHROME_START_ATTEMPT='+n);
+          cold=await launchChrome(profile);
+          break;
+        }catch(error){
+          last=error;
+          console.error('COLD_CHROME_START_FAILED='+n+' '+error.message);
+          if(n<2)await pause(1250);
+        }
+      }
+      if(!cold)throw last||Error('COLD_CHROME_UNAVAILABLE');
+      console.log('COLD_CHROME_ATTACHED=PASS');
+      await navigate(cold,base+'/settlement.html');
+      const coldState=await waitFor(async()=>pageEval(cold,`(()=>{
+        const exists=Boolean(document.getElementById('messageText')&&
+          document.getElementById('checkMessageSyntax')&&
+          document.getElementById('messageParsePreview')&&window.KTS_SETTLEMENT_STORE);
+        const failed=String(document.body&&document.body.textContent||'').includes('Khởi tạo lỗi:');
+        return exists&&!failed&&Boolean(navigator.serviceWorker&&navigator.serviceWorker.controller);
+      })()`),45000,'COLD_OFFLINE_RESTART');
+      assert(coldState===true,'COLD_OFFLINE_RESTART_NOT_CONTROLLED');
+      console.log('COLD_OFFLINE_RESTART=PASS');
+    }finally{
+      // Always remove the preserved temporary profile, even on failed startup.
+      if(cold)await closeChrome(cold);
+      else fs.rmSync(profile,{recursive:true,force:true});
+    }
+  }
 }
 (async()=>{
-  assert(['indexeddb','offline'].includes(mode),'INVALID_TEST_MODE');
+  assert(['indexeddb','offline','offline-cold'].includes(mode),'INVALID_TEST_MODE');
   const server=serve();let browser;
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
