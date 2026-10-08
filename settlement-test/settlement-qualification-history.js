@@ -203,15 +203,36 @@
     return row && Array.isArray(row.events) ? row : { key:META_KEY, version:1, events:[] };
   }
   function txDone(tx) { return new Promise((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('QUALIFICATION_HISTORY_TX_FAILED'));tx.onabort=()=>reject(tx.error||new Error('QUALIFICATION_HISTORY_TX_ABORTED'));}); }
-  async function writeRow(row) {
+  // Keep the history read + evidence append + write in one IndexedDB
+  // readwrite transaction. Separate readRow()/writeRow() transactions lose
+  // events if two tabs qualify concurrently with the same original history.
+  async function appendQualificationEvent(qualificationSnapshot, options, components, fingerprint) {
     const {store}=deps();
-    const db = await store.openDb();
+    const db=await store.openDb();
+    let saved=null, prepareError=null;
     try {
       const tx=db.transaction(store.STORES.metadata,'readwrite');
-      tx.objectStore(store.STORES.metadata).put(clone(row));
+      const objectStore=tx.objectStore(store.STORES.metadata);
+      const request=objectStore.get(META_KEY);
+      request.onsuccess=()=>{
+        try {
+          const existing=request.result;
+          const row=existing&&Array.isArray(existing.events)
+            ? clone(existing) : {key:META_KEY,version:1,events:[]};
+          const event=buildEvidenceEvent(qualificationSnapshot,options,components,fingerprint,row.events);
+          row.events.push(event);
+          row.updated_at=event.observed_at;
+          objectStore.put(row);
+          saved=event;
+        } catch (error) {
+          prepareError=error;
+          try { tx.abort(); } catch (_) { /* already aborted */ }
+        }
+      };
       await txDone(tx);
+      if (!saved) throw prepareError||new Error('QUALIFICATION_HISTORY_APPEND_FAILED');
+      return clone(saved);
     } finally { db.close(); }
-    return row;
   }
   function makeId() {
     if (global.crypto && typeof global.crypto.randomUUID==='function') return 'qualification_event_'+global.crypto.randomUUID();
@@ -244,11 +265,7 @@
     if (qualificationSnapshot.ready_for_production_review===true && material.parser_backend.status!=='available') throw new Error('QUALIFICATION_READY_WITHOUT_PARSER_BACKEND_EVIDENCE');
     const components=await componentFingerprints(material);
     const fingerprint=await overallFingerprint(options||{},components);
-    const row=await readRow();
-    const event=buildEvidenceEvent(qualificationSnapshot,options||{},components,fingerprint,row.events);
-    row.events.push(event); row.updated_at=event.observed_at;
-    await writeRow(row);
-    return clone(event);
+    return appendQualificationEvent(qualificationSnapshot,options||{},components,fingerprint);
   }
   async function listEvents() {
     const row=await readRow();
