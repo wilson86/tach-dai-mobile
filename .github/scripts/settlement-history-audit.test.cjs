@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.161-input-revalidation'));
+  assert.ok(sw.includes('v1.0.162-blocked-empty-revalidation'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -685,7 +685,7 @@ test('unsupported-only UI scope stays BLOCKED instead of settling silently as ze
   ctx.window.KTS_SETTLEMENT_STORE={
     STORES:{partners:'partners',results:'results',messages:'messages'},
     get:async(store,id)=>store==='results'?{business_date:'2026-09-22',region:'mn',complete:true}:null,
-    getAll:async()=>[],
+    getAll:async()=>[msg],
     resolveConfigForDate:async()=>({partner_id:'synthetic',tinh_ui:true,mb_xien_234:false}),
     saveSettlement:async row=>{saved.push(row);return row;}
   };
@@ -770,4 +770,43 @@ test('scope commit refuses content mutations even when IDs and timestamps remain
   const clean=await pipeline.settleScope({partner_id:'synthetic',business_date:'2026-09-22',region:'mn'});
   assert.equal(clean.status,'complete_unverified');
   assert.equal(written.length,1);
+});
+
+test('stale empty and blocked scope attempts never overwrite newly arrived bets',async()=>{
+  const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x));
+  let latest=[],saved=[];
+  const config={partner_id:'synthetic',id:'v1',version:1,region_terms:{mn:{total_percent:'95'}}};
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async name=>name==='messages'?copy(latest):[],
+    resolveConfigForDate:async()=>copy(config),
+    saveSettlement:async row=>{saved.push(row);return row;},
+    get:async()=>null
+  };
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('UNEXPECTED_MONEY_CALC')}};
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{throw Error('UNEXPECTED_EVAL')}};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const pipeline=ctx.window.KTS_SETTLEMENT_PIPELINE;
+  const scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const pending={...scope,id:'m1',updated_at:'same',status:'pending_parser',
+    canonical_payload:null,raw_text:'11 b 1n'};
+  latest=[pending];saved=[];
+  let out=await pipeline.settleScope({...scope,messages:[]});
+  assert.equal(out.status,'superseded','STALE_EMPTY_WRITE_NOT_PREVENTED');
+  assert.equal(saved.length,0);
+  latest=[{...pending,id:'m1',status:'parsed_waiting_result',
+    canonical_payload:{region:'mn',legs:[{code:'2CB'}]}}];saved=[];
+  out=await pipeline.settleScope({...scope,messages:[pending]});
+  assert.equal(out.status,'superseded','STALE_BLOCKED_WRITE_NOT_PREVENTED');
+  assert.equal(saved.length,0);
+  latest=[pending];saved=[];
+  out=await pipeline.settleScope({...scope,messages:[pending]});
+  assert.equal(out.status,'blocked');
+  assert.equal(saved.length,1);
+  latest=[];saved=[];
+  out=await pipeline.settleScope({...scope,messages:[]});
+  assert.equal(out.status,'empty');
+  assert.equal(saved.length,1);
 });

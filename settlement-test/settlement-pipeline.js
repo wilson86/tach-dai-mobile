@@ -98,6 +98,9 @@
 
   async function saveEmptyScope(input) {
     const d = deps();
+    // An old empty-scope request must not overwrite a newer active bet.
+    const current = await findScopeMessages(input.partner_id, input.business_date, input.region);
+    if (current.length) return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
     const result = zeroResult(null);
     const saved = await d.store.saveSettlement({
       id: scopeId(input.partner_id, input.business_date, input.region),
@@ -123,6 +126,23 @@
 
   async function saveBlockedScope(input) {
     const d = deps();
+    // Blocking is a write too. Never let an older parser/config/KQXS error
+    // overwrite a freshly corrected scope in another tab.
+    const latest = await findScopeMessages(input.partner_id,input.business_date,input.region);
+    if (messageRevisionSignature(latest)!==messageRevisionSignature(input.messages||[]))
+      return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    if (input.config_snapshot) {
+      let config;
+      try { config=await d.store.resolveConfigForDate(input.partner_id,input.business_date); }
+      catch (_) { config=null; }
+      if (configRevisionSignature(config)!==configRevisionSignature(input.config_snapshot))
+        return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    }
+    if (input.result_snapshot) {
+      const result = await findResult(input.business_date,input.region);
+      if (resultRevisionSignature(result)!==resultRevisionSignature(input.result_snapshot))
+        return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    }
     const result = zeroResult(input.reason);
     const saved = await d.store.saveSettlement({
       id: scopeId(input.partner_id, input.business_date, input.region),
@@ -413,7 +433,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v12-monetary-input-revalidation',
+    version: 'settlement-pipeline-v13-blocked-empty-revalidation',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
