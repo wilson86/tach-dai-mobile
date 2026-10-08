@@ -232,10 +232,19 @@
       invalidated_by_event_id:laterBlocked.id||null
     });
   }
+  // A missing journal is a valid empty history, but a present malformed
+  // metadata row is corruption. Never convert it into "no READY evidence".
+  function validateJournalRow(row) {
+    if(!row||typeof row!=='object'||Array.isArray(row)) return {valid:false,reason:'ROW_NOT_OBJECT'};
+    if(row.key!==META_KEY) return {valid:false,reason:'ROW_KEY_MISMATCH'};
+    if(row.version!==1) return {valid:false,reason:'ROW_VERSION_MISMATCH'};
+    if(!Array.isArray(row.events)) return {valid:false,reason:'ROW_EVENTS_NOT_ARRAY'};
+    return {valid:true,reason:null};
+  }
   async function readRow() {
     const {store}=deps();
-    const row = await store.get(store.STORES.metadata,META_KEY);
-    return row && Array.isArray(row.events) ? row : { key:META_KEY, version:1, events:[] };
+    const row=await store.get(store.STORES.metadata,META_KEY);
+    return row==null?{key:META_KEY,version:1,events:[]}:row;
   }
   function txDone(tx) { return new Promise((resolve,reject)=>{tx.oncomplete=()=>resolve();tx.onerror=()=>reject(tx.error||new Error('QUALIFICATION_HISTORY_TX_FAILED'));tx.onabort=()=>reject(tx.error||new Error('QUALIFICATION_HISTORY_TX_ABORTED'));}); }
   // Keep the history read + evidence append + write in one IndexedDB
@@ -256,7 +265,8 @@
           // Validation happens inside the same IndexedDB readwrite transaction
           // used for the append, so concurrent writers cannot bypass it.
           if(existing!=null){
-            if(!Array.isArray(existing.events))throw new Error('QUALIFICATION_HISTORY_APPEND_REJECTED_CORRUPT_ROW');
+            const rowIntegrity=validateJournalRow(existing);
+            if(!rowIntegrity.valid)throw new Error('QUALIFICATION_HISTORY_APPEND_REJECTED_'+rowIntegrity.reason);
             const integrity=validateHistoryEvents(existing.events);
             if(!integrity.valid)throw new Error('QUALIFICATION_HISTORY_APPEND_REJECTED_CORRUPT_JOURNAL:'+integrity.reason);
           }
@@ -311,12 +321,21 @@
   }
   async function listEvents() {
     const row=await readRow();
+    const integrity=validateJournalRow(row);
+    if(!integrity.valid)throw new Error('QUALIFICATION_HISTORY_INVALID_'+integrity.reason);
     // Persisted array order is the authoritative append order; timestamp and
     // random ID sorting can reorder events created in the same millisecond.
     return row.events.map(clone);
   }
   async function checkLastReadyValidity() {
-    const events=await listEvents();
+    let events;
+    try {
+      events=await listEvents();
+    } catch(error) {
+      const message=String(error&&error.message||error);
+      if(!message.startsWith('QUALIFICATION_HISTORY_INVALID_ROW_'))throw error;
+      return Object.assign({},invalidHistoryVerdict({reason:message.slice('QUALIFICATION_HISTORY_INVALID_'.length),index:-1}),{ready_event:null});
+    }
     const integrity=validateHistoryEvents(events);
     if(!integrity.valid)return Object.assign({},invalidHistoryVerdict(integrity),{ready_event:null});
     const lastReady=[...events].reverse().find(x=>x.ready_for_production_review===true);
