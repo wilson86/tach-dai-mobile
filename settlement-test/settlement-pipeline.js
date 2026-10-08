@@ -7,7 +7,7 @@
     const runtime = global.KTS_SETTLEMENT_RUNTIME;
     const engine = global.KTS_SETTLEMENT_ENGINE;
     const gates = global.KTS_SETTLEMENT_FEATURE_GATES;
-    if (!store || !evaluator || !runtime || !engine || !gates || typeof gates.guardCategoryRows !== 'function' || typeof gates.uiEnabled !== 'function') throw new Error('SETTLEMENT_PIPELINE_DEPENDENCY_MISSING');
+    if (!store || !evaluator || !runtime || !engine || !gates || typeof gates.guardEvaluation !== 'function') throw new Error('SETTLEMENT_PIPELINE_DEPENDENCY_MISSING');
     return { store, evaluator, runtime, engine, gates };
   }
 
@@ -52,12 +52,9 @@
   function guardedMessageEvaluation(evaluated, config, gates) {
     if (!evaluated || !Array.isArray(evaluated.category_inputs) || !Array.isArray(evaluated.detail_rows))
       throw new Error('SETTLEMENT_EVALUATION_INVALID');
-    if (!gates || typeof gates.guardCategoryRows !== 'function' || typeof gates.uiEnabled !== 'function')
+    if (!gates || typeof gates.guardEvaluation !== 'function')
       throw new Error('SETTLEMENT_FEATURE_GATES_NOT_LOADED');
-    const category_inputs = gates.guardCategoryRows(evaluated.category_inputs, config);
-    const uiAllowed = gates.uiEnabled(config);
-    const detail_rows = evaluated.detail_rows.filter(row => uiAllowed || String(row && row.code || '').toUpperCase() !== 'UI');
-    return { category_inputs, detail_rows };
+    return gates.guardEvaluation(evaluated, config);
   }
 
   function zeroResult(reason) {
@@ -387,7 +384,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v9-guarded-row-attribution',
+    version: 'settlement-pipeline-v10-shared-evaluation-guard',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,

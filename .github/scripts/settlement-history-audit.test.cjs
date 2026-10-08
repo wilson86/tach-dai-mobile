@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.157-message-row-attribution'));
+  assert.ok(sw.includes('v1.0.158-regression-detail-parity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -516,7 +516,7 @@ test('golden regression replays through actual production regional runtime and c
   };
   sandboxReplay.window.KTS_SETTLEMENT_EVALUATOR={
     evaluateCanonicalMessage:({canonical_payload})=>({
-      category_inputs:canonical_payload.rows,detail_rows:[]
+      category_inputs:canonical_payload.rows,detail_rows:canonical_payload.detail_rows||[]
     })
   };
   sandboxReplay.window.KTS_SETTLEMENT_SHADOW={compareSettlement:()=>({safe_to_promote:true})};
@@ -612,4 +612,26 @@ test('pipeline guard preserves per-message row attribution after forbidden UI di
   const source=readFileSync(resolve(root,'settlement-test','settlement-pipeline.js'),'utf8');
   assert.ok(source.includes('const guarded = guardedMessageEvaluation(evaluated, config, d.gates)'));
   assert.ok(source.includes("reason:'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH'"));
+});
+
+test('live and regression share feature guards without ghost UI detail payouts',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const gates=ctx.window.KTS_SETTLEMENT_FEATURE_GATES;
+  const live=ctx.window.KTS_SETTLEMENT_PIPELINE.guardedMessageEvaluation;
+  const x={category_inputs:[{code:'2CD',xac:10},{code:'UI',xac:0}],
+    detail_rows:[{code:'2CD',hit_units:1},{code:'UI',hit_units:9}]};
+  const config={tinh_ui:true,mb_xien_234:false};
+  const a=live(x,config,gates),b=gates.guardEvaluation(x,config);
+  assert.equal(JSON.stringify(a),JSON.stringify(b));
+  assert.equal(a.category_inputs.length,1);
+  assert.equal(a.detail_rows.length,1);
+  assert.equal(a.detail_rows[0].code,'2CD');
+  assert.equal(gates.UI_CONFIRMED,false);
+  assert.throws(()=>gates.guardEvaluation({category_inputs:[{code:'MB_XIEN2'}],detail_rows:[]},config),/MB_XIEN_234_NOT_ALLOWED/);
+  assert.throws(()=>gates.guardEvaluation({category_inputs:[{code:'2CB'}]},config),/SETTLEMENT_EVALUATION_INVALID/);
+  const source=readFileSync(resolve(root,'settlement-test','settlement-regression-cases.js'),'utf8');
+  assert.ok(source.includes('d.gates.guardEvaluation(evaluated, c.config_snapshot)'));
+  assert.ok(source.includes('detail_rows: clone(guarded.detail_rows)'));
 });

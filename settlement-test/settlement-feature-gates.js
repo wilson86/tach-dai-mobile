@@ -51,14 +51,30 @@
     return out;
   }
 
+  // Use identical category and detail filtering in live settlement and
+  // golden regression. Invisible/unconfirmed UI money must not survive in
+  // a printable message breakdown after its category has been rejected.
+  function guardEvaluation(evaluated, config) {
+    if (!evaluated || !Array.isArray(evaluated.category_inputs) || !Array.isArray(evaluated.detail_rows)) {
+      throw new Error('SETTLEMENT_EVALUATION_INVALID');
+    }
+    return {
+      category_inputs: guardCategoryRows(evaluated.category_inputs, config),
+      detail_rows: evaluated.detail_rows
+        .filter(row => uiEnabled(config) || String(row && row.code || '').toUpperCase() !== 'UI')
+        .map(row => Object.assign({}, row))
+    };
+  }
+
   global.KTS_SETTLEMENT_FEATURE_GATES = Object.freeze({
-    version: 'feature-gates-v1',
+    version: 'feature-gates-v2-guarded-evaluation',
     FEATURES,
     UI_CONFIRMED,
     isMbXienCode,
     assertCategoryAllowed,
     uiEnabled,
     materializeUiRow,
-    guardCategoryRows
+    guardCategoryRows,
+    guardEvaluation
   });
 })(typeof window !== 'undefined' ? window : globalThis);
