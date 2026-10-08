@@ -101,13 +101,14 @@
         region: c.scope.region
       });
       const guarded = d.gates.guardEvaluation(evaluated, c.config_snapshot);
-      const messageRows = guarded.category_inputs.map(row => d.engine.category(row));
+      const start = categoryInputs.length;
       categoryInputs.push(...guarded.category_inputs);
       detailRows.push(...guarded.detail_rows.map(row => Object.assign({ message_id: String(message.id || '') }, row)));
       messageBreakdown.push({
         message_id: String(message.id || ''),
         raw_text: String(message.raw_text || ''),
-        category_rows: clone(messageRows),
+        start,
+        count: guarded.category_inputs.length,
         detail_rows: clone(guarded.detail_rows)
       });
     }
@@ -120,6 +121,10 @@
     });
     if (!settled || !Array.isArray(settled.rows) || settled.rows.length !== categoryInputs.length)
       throw new Error('REGRESSION_CATEGORY_ROW_COUNT_MISMATCH');
+    // Live pipeline attributes each message using the FINAL configured runtime
+    // rows, never an independent engine.category() preview that may differ.
+    const finalBreakdown = messageBreakdown.map(({ start, count, ...item }) =>
+      Object.assign({}, item, {category_rows:clone(settled.rows.slice(start, start + count))}));
     const settlement = {
       id: c.scope.scope_id,
       partner_id: c.scope.partner_id,
@@ -132,7 +137,7 @@
       result_snapshot: clone(settled),
       category_rows: clone(settled.rows),
       detail_rows: clone(detailRows),
-      message_breakdown: clone(messageBreakdown),
+      message_breakdown: clone(finalBreakdown),
       message_ids: c.messages.filter(m => String(m.status || '').toLowerCase() !== 'cancelled').map(m => String(m.id || '')),
       scope_status: 'complete_unverified'
     };
@@ -239,7 +244,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_CASES = Object.freeze({
-    version: 'settlement-regression-cases-v5-decimal-only-oracle-totals',
+    version: 'settlement-regression-cases-v6-live-row-attribution',
     META_KEY,
     FORMAT,
     BUNDLE_FORMAT,

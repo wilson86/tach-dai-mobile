@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.175-reference-alias-integrity'));
+  assert.ok(source.includes('v1.0.176-regression-final-attribution'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1057,4 +1057,39 @@ test('HIOSKT equivalent aliases may coexist but conflicting totals must never pr
     assert.equal(verdict.invalid_total_alias_evidence,true);
     assert.equal(verdict.status,'INCOMPLETE_REFERENCE');
   }
+});
+
+test('golden message breakdown uses actual final runtime rows, never preview category rows',()=>{
+  const ctx={window:{}};
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  ctx.window.KTS_SETTLEMENT_ENGINE={
+    version:'synthetic-final-row-engine',
+    category:()=>{throw Error('PREVIEW_CATEGORY_MUST_NOT_RUN')},
+    settle:(rows,terms)=>({rows:rows.map((row,i)=>({...row,final_money:10+i,
+      applied_percent:String(terms.total_percent)})),final_net:21})
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={
+    evaluateCanonicalMessage:({canonical_payload})=>({category_inputs:canonical_payload.rows,detail_rows:[]})
+  };
+  ctx.window.KTS_SETTLEMENT_SHADOW={compareSettlement:()=>({safe_to_promote:true})};
+  for(const f of ['settlement-feature-gates.js','settlement-runtime.js','settlement-regression-cases.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'app',f),'utf8'),ctx,{filename:f});
+  const source={scope:{partner_id:'p',business_date:'2026-09-22',region:'mn'},
+    partner_role:'customer',config_snapshot:{partner_id:'p',total_percent:'87'},
+    lottery_result_snapshot:{complete:true},
+    messages:[
+      {id:'a',status:'parsed',canonical_payload:{rows:[{code:'B',numbers:'11'}],legs:[]}},
+      {id:'b',status:'parsed',canonical_payload:{rows:[{code:'B',numbers:'22'}],legs:[]}}
+    ],
+    expected_reference:{totals:{xac:1,qua_co:1,payout:1,final:1}}};
+  const x=ctx.window.KTS_SETTLEMENT_REGRESSION_CASES.replayCase(source).settlement;
+  assert.equal(x.message_breakdown.length,2);
+  assert.equal(x.message_breakdown[0].category_rows[0].final_money,10);
+  assert.equal(x.message_breakdown[1].category_rows[0].final_money,11);
+  assert.equal(x.message_breakdown[0].category_rows[0].applied_percent,'87');
+  assert.equal(x.message_breakdown[0].category_rows[0].numbers,'11');
+  assert.equal(x.message_breakdown[1].category_rows[0].numbers,'22');
+  assert.equal(x.message_breakdown[0].start,undefined);
+  assert.equal(x.message_breakdown[0].count,undefined);
+  assert.deepEqual(copy(x.category_rows),x.message_breakdown.flatMap(y=>copy(y.category_rows)));
 });
