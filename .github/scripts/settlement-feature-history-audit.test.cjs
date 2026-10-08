@@ -919,11 +919,11 @@ test('golden reference totals enforce identical decimal syntax as shadow compara
     messages:[{id:'m1',canonical_payload:{region:'mn',legs:[]}}],
     expected_reference:{totals:{xac:0,qua_co:'0',payout:0,final:'0'}}};
   const normalize=ctx.window.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase;
-  for(const s of ['0x0','0b0','0o0','+0x0','1_000','0,00','.5','-','0e999','-0e999']){
+  for(const s of ['0x0','0b0','0o0','+0x0','1_000','0,00','.5','-','1e999','-1e999']){
     const v=JSON.parse(JSON.stringify(valid));v.expected_reference.totals.final=s;
     assert.throws(()=>normalize(v),/REGRESSION_REFERENCE_REQUIRED:final/,'BAD_ORACLE_ACCEPTED:'+s);
   }
-  for(const s of ['+0','-0','0.','001.0','1e3','-2.5E-3']){
+  for(const s of ['+0','-0','0.','001.0','1e3','-2.5E-3','0e999']){
     const v=JSON.parse(JSON.stringify(valid));v.expected_reference.totals.final=s;
     assert.equal(normalize(v).expected_reference.totals.final,s,'VALID_ORACLE_REJECTED:'+s);
   }
