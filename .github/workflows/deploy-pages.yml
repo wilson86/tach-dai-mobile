@@ -28,72 +28,6 @@ jobs:
         shell: bash
         run: bash .github/scripts/settlement-predeploy-gate.sh
 
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload static site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: .
-
-      - name: Deploy
-        id: deployment
-        uses: actions/deploy-pages@v4
-
-      - name: Verify public settlement test bytes
-        shell: bash
-        env:
-          SETTLEMENT_TEST_URL: https://wilson86.github.io/tach-dai-mobile/settlement-test
-        run: |
-          set -euo pipefail
-          mapfile -t files < <(find settlement-test -maxdepth 1 -type f \( -name '*.js' -o -name '*.html' -o -name '*.json' -o -name '*.webmanifest' \) | sort)
-          if [ "${#files[@]}" -lt 60 ]; then
-            echo "Unexpectedly small settlement-test surface: ${#files[@]} files" >&2
-            exit 1
-          fi
-
-          tmp="$(mktemp -d)"
-          trap 'rm -rf "$tmp"' EXIT
-
-          for attempt in 1 2 3 4 5; do
-            echo "Public Pages parity attempt $attempt/5"
-            rm -rf "$tmp/downloaded"
-            mkdir -p "$tmp/downloaded"
-            failed=0
-
-            for local_path in "${files[@]}"; do
-              name="${local_path#settlement-test/}"
-              public_url="${SETTLEMENT_TEST_URL}/${name}?sha=${GITHUB_SHA}"
-              if ! curl --fail --silent --show-error --location \
-                --connect-timeout 10 --max-time 30 \
-                -H 'Cache-Control: no-cache' \
-                "$public_url" -o "$tmp/downloaded/$name"; then
-                echo "FETCH_FAIL $name" >&2
-                failed=1
-                continue
-              fi
-
-              expected="$(git hash-object "$local_path")"
-              actual="$(git hash-object "$tmp/downloaded/$name")"
-              if [ "$expected" != "$actual" ]; then
-                echo "HASH_MISMATCH $name expected=$expected actual=$actual" >&2
-                failed=1
-              fi
-            done
-
-            if [ "$failed" -eq 0 ]; then
-              echo "PUBLIC_PAGES_PARITY=PASS files=${#files[@]} sha=${GITHUB_SHA}"
-              exit 0
-            fi
-
-            if [ "$attempt" -lt 5 ]; then
-              sleep 3
-            fi
-          done
-
-          echo "PUBLIC_PAGES_PARITY=FAIL sha=${GITHUB_SHA}" >&2
-          exit 1
-
       - name: Verify settlement test backend contract
         shell: bash
         env:
@@ -310,6 +244,72 @@ jobs:
           echo "SETTLEMENT_TEST_CORS_RESTRICTED=PASS"
           echo "SETTLEMENT_TEST_KQXS_PREFLIGHT=PASS origin=${ALLOWED_ORIGIN}"
           echo "SETTLEMENT_TEST_BACKEND_CONTRACT=PASS origin=${ALLOWED_ORIGIN}"
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload static site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Verify public settlement test bytes
+        shell: bash
+        env:
+          SETTLEMENT_TEST_URL: https://wilson86.github.io/tach-dai-mobile/settlement-test
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find settlement-test -maxdepth 1 -type f \( -name '*.js' -o -name '*.html' -o -name '*.json' -o -name '*.webmanifest' \) | sort)
+          if [ "${#files[@]}" -lt 60 ]; then
+            echo "Unexpectedly small settlement-test surface: ${#files[@]} files" >&2
+            exit 1
+          fi
+
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+
+          for attempt in 1 2 3 4 5; do
+            echo "Public Pages parity attempt $attempt/5"
+            rm -rf "$tmp/downloaded"
+            mkdir -p "$tmp/downloaded"
+            failed=0
+
+            for local_path in "${files[@]}"; do
+              name="${local_path#settlement-test/}"
+              public_url="${SETTLEMENT_TEST_URL}/${name}?sha=${GITHUB_SHA}"
+              if ! curl --fail --silent --show-error --location \
+                --connect-timeout 10 --max-time 30 \
+                -H 'Cache-Control: no-cache' \
+                "$public_url" -o "$tmp/downloaded/$name"; then
+                echo "FETCH_FAIL $name" >&2
+                failed=1
+                continue
+              fi
+
+              expected="$(git hash-object "$local_path")"
+              actual="$(git hash-object "$tmp/downloaded/$name")"
+              if [ "$expected" != "$actual" ]; then
+                echo "HASH_MISMATCH $name expected=$expected actual=$actual" >&2
+                failed=1
+              fi
+            done
+
+            if [ "$failed" -eq 0 ]; then
+              echo "PUBLIC_PAGES_PARITY=PASS files=${#files[@]} sha=${GITHUB_SHA}"
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 5 ]; then
+              sleep 3
+            fi
+          done
+
+          echo "PUBLIC_PAGES_PARITY=FAIL sha=${GITHUB_SHA}" >&2
+          exit 1
 
       - name: Browser smoke on canonical Pages via real CDP
         shell: bash
