@@ -628,6 +628,79 @@
   approx(recoveredReport.totals.payout,5,'FIXTURE_RECOVERY_REPORT_PAYOUT');
   approx(recoveredReport.totals.final_net,28.28,'FIXTURE_RECOVERY_REPORT_FINAL_NET');
 
+  const shadowRuntime=w.KTS_SETTLEMENT_SHADOW_RUNTIME;
+  if(!shadowRuntime||typeof shadowRuntime.compareAndSave!=='function')fail('SHADOW_RUNTIME_REQUIRED');
+
+  const exactCategories=Array.isArray(recoveredSaved.category_rows)
+    ? recoveredSaved.category_rows.map(row=>({
+        code:String(row.code||row.category||'').toUpperCase(),
+        xac:Number(row.xac||0),
+        qua_co:Number(row.qua_co||0),
+        hit_units:Number(row.hit_units||0),
+        payout:Number(row.payout||0)
+      }))
+    : [];
+  if(!exactCategories.length)fail('SHADOW_EXACT_CATEGORIES_MISSING');
+
+  const exactShadow=await shadowRuntime.compareAndSave({
+    partner_id:smokePartner.id,
+    business_date:'2026-09-22',
+    region:'mb',
+    trigger:'ACCEPTANCE_MATCH_EXACT',
+    reason:'acceptance exact reference',
+    reference_snapshot:{
+      source:'HIOSKT_MANUAL',
+      note:'acceptance exact reference',
+      totals:{xac:81,qua_co:61.56,payout:5,hoi:0,final:28.28},
+      categories:exactCategories
+    }
+  });
+  if(!exactShadow||!exactShadow.comparison)fail('SHADOW_EXACT_COMPARE_FAILED');
+  if(exactShadow.comparison.status!=='MATCH_EXACT')fail('SHADOW_EXACT_STATUS:'+String(exactShadow.comparison.status||''));
+  if(exactShadow.comparison.safe_to_promote!==true)fail('SHADOW_EXACT_NOT_SAFE_TO_PROMOTE');
+  if(!exactShadow.settlement||exactShadow.settlement.comparison_status!=='MATCH_EXACT'){
+    fail('SHADOW_EXACT_SETTLEMENT_STATUS');
+  }
+  if(!exactShadow.settlement.reference_app_snapshot||exactShadow.settlement.reference_app_snapshot.source!=='HIOSKT_MANUAL'){
+    fail('SHADOW_EXACT_REFERENCE_NOT_PERSISTED');
+  }
+
+  const exactShadowEvents=(await store.getAll(store.STORES.shadowEvents))
+    .filter(e=>e&&e.scope_id===exactShadow.settlement.id);
+  if(!exactShadowEvents.some(e=>e&&e.comparison_status==='MATCH_EXACT')){
+    fail('SHADOW_EXACT_EVIDENCE_MISSING');
+  }
+
+  const exactSettlements=await store.getAll(store.STORES.settlements);
+  const exactMessages=await store.getAll(store.STORES.messages);
+  const exactReport=reportApi.buildDailyPartnerReport({
+    partner:smokePartner,
+    business_date:'2026-09-22',
+    settlements:exactSettlements,
+    messages_by_id:Object.fromEntries(exactMessages.map(m=>[m.id,m]))
+  });
+  if(exactReport.shadow_status!=='MATCH_EXACT')fail('SHADOW_EXACT_REPORT_STATUS:'+String(exactReport.shadow_status||''));
+  if(exactReport.blocked===true)fail('SHADOW_EXACT_REPORT_BLOCKED');
+  if(exactReport.kqxs_verified!==true)fail('SHADOW_EXACT_KQXS_NOT_VERIFIED');
+  approx(exactReport.totals.xac,81,'SHADOW_EXACT_REPORT_XAC');
+  approx(exactReport.totals.qua_co,61.56,'SHADOW_EXACT_REPORT_QUA_CO');
+  approx(exactReport.totals.payout,5,'SHADOW_EXACT_REPORT_PAYOUT');
+  approx(exactReport.totals.final_net,28.28,'SHADOW_EXACT_REPORT_FINAL_NET');
+
+  const exactOps=reportApi.buildDailyOperationsReport({
+    business_date:'2026-09-22',
+    partners:[smokePartner],
+    settlements:exactSettlements,
+    messages:exactMessages
+  });
+  if(exactOps.status!=='MATCH_EXACT')fail('SHADOW_EXACT_DAILY_STATUS:'+String(exactOps.status||''));
+  if(Number(exactOps.counts&&exactOps.counts.exact||0)!==1)fail('SHADOW_EXACT_DAILY_COUNT');
+  const exactReadiness=reportDashboard.buildReadiness(exactOps);
+  if(!exactReadiness||exactReadiness.ready!==true)fail('SHADOW_EXACT_DAILY_CLOSE_NOT_READY');
+  if(Number(exactReadiness.exact||0)!==1||Number(exactReadiness.partners||0)!==1){
+    fail('SHADOW_EXACT_READINESS_COUNTS');
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -665,7 +738,10 @@
     'KQXS_CONFLICT_ZERO_MONEY=PASS',
     'KQXS_CONFLICT_RECOVERY=PASS',
     'KQXS_RECOVERY_AUDIT=PASS',
-    'KQXS_RECOVERY_CANONICAL_TOTALS=PASS'
+    'KQXS_RECOVERY_CANONICAL_TOTALS=PASS',
+    'SHADOW_MATCH_EXACT=PASS',
+    'SHADOW_EVIDENCE_PERSISTED=PASS',
+    'DAILY_CLOSE_READY_AFTER_EXACT=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
