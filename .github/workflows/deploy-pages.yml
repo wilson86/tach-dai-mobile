@@ -414,7 +414,9 @@ jobs:
               >"$tmp/dom.html" 2>"$tmp/chrome.log"; then
               if grep -Fq 'ACCEPTANCE_SMOKE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'RUNTIME_ENDPOINTS=PASS' "$tmp/dom.html" \
-                && grep -Fq 'BROWSER_CORS_PARSER=PASS code=DAT' "$tmp/dom.html"; then
+                && grep -Fq 'BROWSER_CORS_PARSER=PASS code=DAT' "$tmp/dom.html" \
+                && grep -Fq 'UI_MESSAGE_TAB=PASS' "$tmp/dom.html" \
+                && grep -Fq 'UI_SYNTAX_REVIEW=PASS DAT' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi

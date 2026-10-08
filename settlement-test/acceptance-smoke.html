@@ -60,13 +60,48 @@
   const legs=parsedJson&&parsedJson.canonical_payload&&parsedJson.canonical_payload.legs||[];
   if(!legs.length||legs[0].code!=='DAT')fail('PARSER_CANONICAL_DAT');
 
+  const messageTab=d.querySelector('.nav button[data-pane="message"]');
+  const messagePane=d.getElementById('pane-message');
+  const messageDate=d.getElementById('messageDate');
+  const messageRegion=d.getElementById('messageRegion');
+  const messageText=d.getElementById('messageText');
+  const syntaxButton=d.getElementById('checkMessageSyntax');
+  const preview=d.getElementById('messageParsePreview');
+  if(!messageTab||!messagePane||!messageDate||!messageRegion||!messageText||!syntaxButton||!preview){
+    fail('MESSAGE_UI_REQUIRED');
+  }
+
+  messageTab.click();
+  if(!messagePane.classList.contains('active'))fail('MESSAGE_TAB_NOT_ACTIVE');
+  messageDate.value='2026-10-08';
+  messageRegion.value='mb';
+  messageRegion.dispatchEvent(new w.Event('change',{bubbles:true}));
+  messageText.value='92 61 da 1n';
+  messageText.dispatchEvent(new w.Event('input',{bubbles:true}));
+  syntaxButton.click();
+
+  const previewDeadline=Date.now()+12000;
+  while(Date.now()<previewDeadline){
+    const text=String(preview.textContent||'');
+    if(text.includes('Hệ thống đọc:')&&text.includes('92 61')&&text.includes('Đá thẳng'))break;
+    if(preview.classList.contains('err'))fail('SYNTAX_REVIEW_ERROR:'+text);
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  const previewText=String(preview.textContent||'');
+  if(!previewText.includes('Hệ thống đọc:')||!previewText.includes('92 61')||!previewText.includes('Đá thẳng')){
+    fail('SYNTAX_REVIEW_TIMEOUT:'+previewText);
+  }
+  if(!preview.classList.contains('ok'))fail('SYNTAX_REVIEW_NOT_OK');
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
     'RUNTIME_ENDPOINTS=PASS',
     'BROWSER_CORS_HEALTH=PASS',
     'BROWSER_CORS_IDENTITY=PASS',
-    'BROWSER_CORS_PARSER=PASS code=DAT'
+    'BROWSER_CORS_PARSER=PASS code=DAT',
+    'UI_MESSAGE_TAB=PASS',
+    'UI_SYNTAX_REVIEW=PASS DAT'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
