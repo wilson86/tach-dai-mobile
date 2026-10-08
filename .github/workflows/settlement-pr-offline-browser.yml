@@ -64,7 +64,7 @@ jobs:
               tail -n 60 "$tmp/diagnostic.log" >&2
               exit 1
             }
-          if ! grep -Fq 'SW_DIAGNOSTICS=PASS' "$tmp/diagnostic.html"; then
+          if ! grep -Fq '<pre id="result" data-state="pass">' "$tmp/diagnostic.html"; then
             echo "SW_DIAGNOSTIC_FAILED" >&2
             sed -n '/id="result"/,/<\/pre>/p' "$tmp/diagnostic.html" | head -n 20 >&2 || true
             tail -n 25 "$tmp/diagnostic.log" >&2 || true
