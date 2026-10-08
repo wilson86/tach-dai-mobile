@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.152-region-pricing-fingerprint'));
+  assert.ok(source.includes('v1.0.153-partner-role-fingerprint'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -297,4 +297,21 @@ test('canonical history config fingerprint captures partner-specific regional mo
   }
   const changedPartner={...cfg,partner_id:'different-partner'};
   assert.notEqual(await digest(changedPartner),baseline,'PARTNER_ISOLATION_LOST');
+});
+
+test('partner identity and role changes invalidate canonical READY evidence input',async()=>{
+  assert.ok(H.COMPONENTS.includes('partners'),'PARTNER_COMPONENT_REQUIRED');
+  sandbox.window.crypto=require('node:crypto').webcrypto;
+  sandbox.window.TextEncoder=TextEncoder;
+  const p={id:'partner-7',name:'Counterparty',role:'customer',active:true,created_at:'2026-09-22T00:00:00Z',updated_at:'2026-09-22T00:00:00Z'};
+  const digest=async row=>H.sha256Hex(H.semanticPartner(row));
+  const baseline=await digest(p);
+  assert.match(baseline,/^[0-9a-f]{64}$/);
+  assert.equal(await digest({...p,updated_at:'2026-10-09T00:00:00Z'}),baseline);
+  assert.notEqual(await digest({...p,role:'owner'}),baseline,'ROLE_CHANGE_NOT_TRACKED');
+  assert.notEqual(await digest({...p,active:false}),baseline,'PARTNER_INACTIVE_NOT_TRACKED');
+  assert.notEqual(await digest({...p,name:'Changed account'}),baseline,'PARTNER_IDENTITY_NOT_TRACKED');
+  const source=readFileSync(resolve(root,'app','settlement-qualification-history.js'),'utf8');
+  assert.ok(source.includes('d.store.getAll(d.store.STORES.partners)'),'PARTNER_SOURCE_NOT_LOADED');
+  assert.ok(source.includes('partners:sortById(partners)'),'PARTNER_SOURCE_NOT_FINGERPRINTED');
 });
