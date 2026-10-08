@@ -18,32 +18,51 @@
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
   function isCancelled(message) { return String(message && message.status || '').toLowerCase() === 'cancelled'; }
+  // Revision checks must include the actual monetary inputs, not only their
+  // IDs/timestamps. Imports and same-version corrections may keep updated_at
+  // while changing a bet, a regional price, or verified lottery evidence.
   function messageRevisionSignature(messages) {
-    return (Array.isArray(messages) ? messages : []).map(message => [
-      String(message && message.id || ''),
-      String(message && message.updated_at || ''),
-      String(message && message.status || ''),
-      String(message && message.canonical_version || ''),
-      String(message && message.parser_error || '')
-    ].join('|')).sort().join('\n');
+    const rows=(Array.isArray(messages)?messages:[]).map(message=>({
+      id:message&&message.id||null,partner_id:message&&message.partner_id||null,
+      business_date:message&&message.business_date||null,region:message&&message.region||null,
+      updated_at:message&&message.updated_at||null,status:message&&message.status||null,
+      raw_text:message&&message.raw_text||null,canonical_version:message&&message.canonical_version||null,
+      parser_error:message&&message.parser_error||null,
+      canonical_payload:message&&message.canonical_payload||null
+    }));
+    rows.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+    return JSON.stringify(rows);
   }
   function configRevisionSignature(config) {
     if (!config) return '';
-    return [
-      String(config.id || ''),
-      String(config.partner_id || ''),
-      String(config.version == null ? '' : config.version),
-      String(config.effective_from_date || ''),
-      String(config.updated_at || '')
-    ].join('|');
+    return JSON.stringify({
+      id:config.id||null,partner_id:config.partner_id||null,version:config.version||null,
+      effective_from_date:config.effective_from_date||null,updated_at:config.updated_at||null,
+      region_pricing:config.region_pricing||{},region_terms:config.region_terms||{},
+      dat_hit_mode:config.dat_hit_mode||null,dax_hit_mode:config.dax_hit_mode||null,
+      mb_xien_234:config.mb_xien_234===true,tinh_ui:config.tinh_ui===true,
+      total_percent:config.total_percent,refund_percent:config.refund_percent,
+      commission_type:config.commission_type||null
+    });
   }
   function resultRevisionSignature(result) {
     if (!result) return '';
-    if (result.fingerprint) return String(result.fingerprint);
-    return JSON.stringify([
-      result.business_date || '', result.region || '', Boolean(result.complete),
-      result.verification_status || '', result.expected_station_codes || [], result.stations || []
-    ]);
+    return JSON.stringify({
+      fingerprint:result.fingerprint||null,
+      business_date:result.business_date||null,region:result.region||null,
+      status:result.status||null,complete:result.complete===true,
+      coverage_complete:result.coverage_complete===true,
+      verified:result.verified===true,verification_status:result.verification_status||null,
+      verification_sources:result.verification_sources||[],
+      verification_conflicts:result.verification_conflicts||[],
+      expected_station_codes:result.expected_station_codes||[],
+      stations:result.stations||[]
+    });
+  }
+  function partnerRevisionSignature(partner) {
+    return partner?JSON.stringify({
+      id:partner.id||null,name:partner.name||null,role:partner.role||null,active:partner.active!==false
+    }):'';
   }
 
   // Keep each message's category counts aligned with the rows the runtime
@@ -212,9 +231,9 @@
         config_snapshot:config,result_snapshot:resultSnapshot,reason:'NO_PERMITTED_SETTLEMENT_CATEGORY_INPUTS'});
     }
 
-    let settled;
+    let settled, partner;
     try {
-      const partner = await d.store.get(d.store.STORES.partners, partnerId);
+      partner = await d.store.get(d.store.STORES.partners, partnerId);
       if (!partner) throw new Error('PARTNER_NOT_FOUND');
       settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config, region });
     } catch (e) {
@@ -240,7 +259,9 @@
     try { latestConfig = await d.store.resolveConfigForDate(partnerId, businessDate); }
     catch (_) { latestConfig = null; }
     const latestResult = await findResult(businessDate, region);
+    const latestPartner = await d.store.get(d.store.STORES.partners, partnerId);
     if (
+      partnerRevisionSignature(latestPartner) !== partnerRevisionSignature(partner) ||
       messageRevisionSignature(latestMessages) !== messageRevisionSignature(messages) ||
       configRevisionSignature(latestConfig) !== configRevisionSignature(config) ||
       resultRevisionSignature(latestResult) !== resultRevisionSignature(resultSnapshot)
@@ -392,10 +413,11 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v11-block-unpermitted-only-scopes',
+    version: 'settlement-pipeline-v12-monetary-input-revalidation',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
+    messageRevisionSignature,configRevisionSignature,resultRevisionSignature,partnerRevisionSignature,
     findScopeMessages,
     findResult,
     settleScope,
