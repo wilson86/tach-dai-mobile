@@ -118,3 +118,27 @@ test('feature SW rotates the qualification history runtime cache',()=>{
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
+
+test('canonical feature rejects malformed or disconnected qualification journal',()=>{
+  const samples=[
+    {},
+    {...blocked,previous_event_id:'unrelated'},
+    {...blocked,previous_ready_event_id:'unrelated'},
+    {...blocked,id:ready.id},
+    {...blocked,ready_for_production_review:'false'},
+    {...blocked,production_enabled:true},
+    {...blocked,qualification_snapshot:{ready_for_production_review:true}}
+  ];
+  for(const item of samples){
+    const result=verify([ready,item]);
+    assert.equal(result.status,'READY_EVIDENCE_UNVERIFIABLE');
+    assert.equal(result.current,false);
+    assert.ok(result.history_error.startsWith('QUALIFICATION_HISTORY_INVALID_'));
+  }
+});
+test('canonical feature preserves valid journal qualification decisions',()=>{
+  assert.equal(H.validateHistoryEvents([ready,blocked,renewed]).valid,true);
+  assert.equal(verify([ready]).current,true);
+  assert.equal(verify([ready,blocked]).current,false);
+  assert.equal(verify([ready,blocked,renewed],modified,'sha-renewed').current,true);
+});
