@@ -23,8 +23,10 @@
     await limit(new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true})),4000);
   }
   if(!navigator.serviceWorker.controller)fail('SW_NOT_CONTROLLING');
+  output.dataset.state='pass';
   output.textContent='SW_DIAGNOSTICS=PASS\nSW_READY=PASS\nCACHE_SHELL=PASS\nCACHE_HISTORY=PASS\nSW_CONTROLLING=PASS\nCACHED_REQUESTS='+requests.length;
  }catch(error){
+  output.dataset.state='fail';
   output.textContent='SW_DIAGNOSTICS=FAIL '+String(error&&error.message||error);
  }
 })();
