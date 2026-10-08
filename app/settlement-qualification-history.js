@@ -269,6 +269,16 @@
       if(stable(e.blockers)!==stable(e.qualification_snapshot.blockers||[]))return fail('EVENT_SNAPSHOT_BLOCKERS_MISMATCH');
       if(e.partner_id!=null&&typeof e.partner_id!=='string')return fail('EVENT_PARTNER_FILTER_INVALID');
       if(e.regions!=null&&(!Array.isArray(e.regions)||!e.regions.every(x=>typeof x==='string')))return fail('EVENT_REGIONS_FILTER_INVALID');
+      // Only canonical events have a contractual SHA-256 component manifest.
+      // Earlier synthetic/legacy evidence is handled independently above.
+      // A missing component is corruption, never an unchanged zero hash.
+      if(e.qualification_snapshot.format==='kts-final-qualification-v2-live-parser'){
+        if(!SHA256_RE.test(e.input_fingerprint_sha256))return fail('CANONICAL_INPUT_SHA256_INVALID');
+        for(const name of COMPONENTS){
+          if(!SHA256_RE.test(e.component_fingerprints[name]))
+            return fail('CANONICAL_COMPONENT_SHA256_INVALID:'+name);
+        }
+      }
       ids.add(e.id);
       prior=e;
       if(e.ready_for_production_review)priorReady=e;

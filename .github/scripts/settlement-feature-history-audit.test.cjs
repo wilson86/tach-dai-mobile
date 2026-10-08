@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.158-regression-detail-parity'));
+  assert.ok(source.includes('v1.0.159-canonical-history-sha-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -401,9 +401,22 @@ test('golden regression replays through actual production regional runtime and c
   replay(mk('mn',[{code:'B'}],{partner_id:'test-partner',total_percent:'99',refund_percent:'1'}));
   assert.equal(String(calls.at(-1).terms.total_percent),'99','LEGACY_FALLBACK_INCORRECT');
   assert.equal(String(calls.at(-1).terms.refund_percent),'1','LEGACY_REFUND_FALLBACK_INCORRECT');
-  replay(mk('mn',[{code:'B'},{code:'UI'}]));
-  assert.equal(calls.at(-1).rows.length,1,'UNCONFIRMED_UI_NOT_GUARDED');
+  const ghost=mk('mn',[{code:'B'},{code:'UI'}]);
+  ghost.messages[0].canonical_payload.detail_rows=[
+    {code:'B',hit_units:1,numbers:'11'},{code:'UI',hit_units:8,numbers:'12'}
+  ];
+  ghost.messages.push({id:'msg2',status:'parsed',canonical_payload:{
+    rows:[{code:'B',stake:4}],legs:[],detail_rows:[{code:'B',numbers:'22',hit_units:2}]
+  }});
+  const actual=replay(ghost);
+  assert.equal(calls.at(-1).rows.length,2,'UNCONFIRMED_UI_NOT_GUARDED');
   assert.equal(calls.at(-1).rows[0].code,'B');
+  assert.equal(actual.settlement.detail_rows.length,2,'GHOST_UI_DETAIL_PRESENT');
+  assert.equal(actual.settlement.message_breakdown[0].detail_rows.length,1);
+  assert.equal(actual.settlement.message_breakdown[0].category_rows.length,1);
+  assert.equal(actual.settlement.message_breakdown[1].category_rows.length,1);
+  assert.equal(actual.settlement.message_breakdown[1].detail_rows[0].numbers,'22');
+  assert.ok(actual.settlement.detail_rows.every(x=>x.code!=='UI'));
   const unsafe=mk('mb',[{code:'MB_XIEN2'}]);
   unsafe.messages[0].canonical_payload.legs=[{code:'MB_XIEN2'}];
   assert.throws(()=>replay(unsafe),/REGRESSION_FEATURE_GATE_MB_XIEN_CLOSED/);
@@ -486,4 +499,33 @@ test('live and regression share feature guards without ghost UI detail payouts',
   const source=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
   assert.ok(source.includes('d.gates.guardEvaluation(evaluated, c.config_snapshot)'));
   assert.ok(source.includes('detail_rows: clone(guarded.detail_rows)'));
+});
+
+test('canonical journal rejects missing or malformed SHA-256 component entries',()=>{
+  const q={format:'kts-final-qualification-v2-live-parser',
+    qualification_state:'READY_FOR_PRODUCTION_REVIEW',
+    ready_for_production_review:true,blockers:[],production_enabled:false,merge_authorized:false,
+    observation:{promotion_ready:true,counts:{total:1,exact:1,missing_scopes:0},blockers:[]},
+    kqxs_verification:{met:true,total:1,verified:1,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:1,known:1,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:1,matched:1,mismatched:0,unreachable:false},
+    regression_gate:{met:true,total:1,passed:1,failed:0},
+    candidate_gate:{met:true,pending:0},feature_safety:{met:true,unsafe_count:0}
+  };
+  const sha='a'.repeat(64);
+  const components=Object.fromEntries(H.COMPONENTS.map(k=>[k,sha]));
+  const good=H.buildEvidenceEvent(q,opt,components,'b'.repeat(64),[]);
+  assert.equal(H.validateHistoryEvents([good]).valid,true);
+  for(const [alter,reason] of [
+    [e=>e.input_fingerprint_sha256='sha-forged','CANONICAL_INPUT_SHA256_INVALID'],
+    [e=>delete e.component_fingerprints.partners,'CANONICAL_COMPONENT_SHA256_INVALID:partners'],
+    [e=>e.component_fingerprints.regression_cases='0'.repeat(63),'CANONICAL_COMPONENT_SHA256_INVALID:regression_cases']
+  ]){
+    const event=JSON.parse(JSON.stringify(good));alter(event);
+    const integrity=H.validateHistoryEvents([event]);
+    assert.equal(integrity.valid,false);
+    assert.equal(integrity.reason,reason);
+    const verdict=H.classifyHistoryValidity([event],components,'b'.repeat(64),{status:'available'});
+    assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
+  }
 });
