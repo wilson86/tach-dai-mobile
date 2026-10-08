@@ -102,3 +102,19 @@ test('restoring KQXS does not restore historical READY without new qualification
   assert.equal(Q.kqxsVerificationGate({scopes:[scope]},[restored]).met,true);
   assert.equal(verify([ready,blocked]).current,false);
 });
+
+test('test deploy manifest pins exact qualification and service worker Git blobs',()=>{
+  const {execFileSync}=require('node:child_process');
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-build-identity.js'),'utf8'),sandbox,{filename:'settlement-build-identity.js'});
+  const manifest=sandbox.window.KTS_SETTLEMENT_BUILD_IDENTITY;
+  for(const name of ['settlement-qualification-history.js','sw.js']){
+    const current=execFileSync('git',['hash-object','settlement-test/'+name],{cwd:root,encoding:'utf8'}).trim();
+    assert.equal(manifest.critical_git_blobs['app/'+name],current);
+  }
+});
+test('test service worker rotates cache for updated qualification module',()=>{
+  const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
+  assert.ok(sw.includes('v1.0.141-qualification-history-atomic'));
+  assert.ok(sw.includes("'./settlement-qualification-history.js'"));
+  assert.ok(sw.includes("'./settlement-build-identity.js'"));
+});
