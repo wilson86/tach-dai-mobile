@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.144-journal-append-guard'));
+  assert.ok(sw.includes('v1.0.145-index-shell-pin'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -294,12 +294,13 @@ test('every cached runtime JavaScript file is pinned except recursive build iden
   assert.ok(assets,'PREDEPLOY_SW_CORE_NOT_FOUND');
   const names=[...assets[1].matchAll(/'\.\/([^']+\.js)'/g)].map(x=>x[1]);
   assert.equal(names.length,60);
-  assert.equal(Object.keys(pins).length,61);
+  assert.equal(Object.keys(pins).length,62);
   const missing=names.filter(x=>x!=='settlement-build-identity.js'&&!pins['app/'+x]);
   assert.deepEqual(missing,[],'UNPINNED_SETTLEMENT_RUNTIME_JS');
   const integrity=readFileSync(resolve(root,'.github','scripts','settlement-predeploy-integrity.cjs'),'utf8');
   assert.ok(integrity.includes('PREDEPLOY_UNPINNED_CACHED_JS'),'PREDEPLOY_UNPINNED_MODULE_GATE_MISSING');
   assert.ok(integrity.includes('PREDEPLOY_REQUIRED_PIN_MISSING'),'PREDEPLOY_WORKER_SHELL_PIN_GATE_MISSING');
+  assert.ok(pins['app/index.html'],'PWA_ENTRY_HTML_UNPINNED');
   const executable=names.filter(x=>x!=='settlement-build-identity.js');
   assert.equal(executable.length,59,'UNEXPECTED_CACHED_JS_MODULE_COUNT');
 });
