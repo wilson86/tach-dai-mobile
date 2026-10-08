@@ -285,11 +285,16 @@ async function checkOffline(browser,server,base){
   }
 }
 (async()=>{
-  assert(['indexeddb','offline','offline-cold','acceptance'].includes(mode),'INVALID_TEST_MODE');
-  const server=serve();let browser;
+  assert(['indexeddb','offline','offline-cold','acceptance','acceptance-pages'].includes(mode),'INVALID_TEST_MODE');
+  // Full API acceptance is intentionally allowed only on the canonical
+  // GitHub Pages test origin. Never spoof hostname or enable test API on localhost.
+  const remotePages=mode==='acceptance-pages';
+  const server=remotePages?null:serve();let browser;
   try{
-    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-    const base='http://127.0.0.1:'+server.address().port+'/settlement-test';
+    if(server)await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+    const base=remotePages
+      ? 'https://wilson86.github.io/tach-dai-mobile/settlement-test'
+      : 'http://127.0.0.1:'+server.address().port+'/settlement-test';
     // A startup retry is strictly bounded to 2 attempts; Linux CI can
     // transiently fail Chrome DevTools startup under parallel runner load.
     let startupError=null;
@@ -307,7 +312,7 @@ async function checkOffline(browser,server,base){
     if(!browser)throw startupError||Error('CHROME_STARTUP_FAILED');
     console.log('CDP_CHROME_ATTACHED=PASS');
     if(mode==='indexeddb')await checkIndexedDb(browser,base);
-    else if(mode==='acceptance')await checkAcceptance(browser,base);
+    else if(mode==='acceptance'||mode==='acceptance-pages')await checkAcceptance(browser,base);
     else await checkOffline(browser,server,base);
     console.log('CDP_'+mode.toUpperCase()+'_PASS=YES');
   }catch(e){
@@ -316,6 +321,6 @@ async function checkOffline(browser,server,base){
     process.exitCode=1;
   }finally{
     await closeChrome(browser);
-    await shutdownServer(server);
+    if(server)await shutdownServer(server);
   }
 })();
