@@ -107,14 +107,14 @@ test('feature build identity pins history and service worker Git blobs',()=>{
   const {execFileSync}=require('node:child_process');
   vm.runInNewContext(readFileSync(resolve(root,'app','settlement-build-identity.js'),'utf8'),sandbox,{filename:'settlement-build-identity.js'});
   const manifest=sandbox.window.KTS_SETTLEMENT_BUILD_IDENTITY;
-  for(const name of ['settlement-qualification-history.js','settlement-repair-workflow.js','unified-core.js','sw.js']){
+  for(const name of ['index.html','settlement-qualification-history.js','settlement-repair-workflow.js','unified-core.js','sw.js']){
     const expected=execFileSync('git',['hash-object','app/'+name],{cwd:root,encoding:'utf8'}).trim();
     assert.equal(manifest.critical_git_blobs['app/'+name],expected);
   }
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.144-journal-append-guard'));
+  assert.ok(source.includes('v1.0.145-index-shell-pin'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -156,5 +156,5 @@ test('canonical source pins every cached JS asset besides manifest self-referenc
     if(name==='settlement-build-identity.js')continue;
     assert.ok(pins['app/'+name], 'CRITICAL_JS_NOT_PINNED:'+name);
   }
-  assert.equal(Object.keys(pins).length,61);
+  assert.equal(Object.keys(pins).length,62);
 });
