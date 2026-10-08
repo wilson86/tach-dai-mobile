@@ -234,6 +234,66 @@
   const futureResult=await store.get(store.STORES.results,'2099-12-31:mb');
   if(futureResult)fail('FUTURE_KQXS_MUST_NOT_EXIST');
 
+  const refreshHistory=d.getElementById('refreshMessageHistory');
+  const historyStatus=d.getElementById('messageHistoryStatus');
+  const historyHost=d.getElementById('messageHistory');
+  if(!refreshHistory||!historyStatus||!historyHost)fail('MESSAGE_HISTORY_UI_REQUIRED');
+
+  w.confirm=()=>true;
+  refreshHistory.click();
+
+  const historyDeadline=Date.now()+10000;
+  let cancelButton=null;
+  while(Date.now()<historyDeadline){
+    cancelButton=historyHost.querySelector('[data-cancel-message="'+smokeMessage.id+'"]');
+    if(cancelButton)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!cancelButton)fail('MESSAGE_CANCEL_BUTTON_MISSING');
+
+  cancelButton.click();
+  const cancelDeadline=Date.now()+12000;
+  let cancelled=null;
+  while(Date.now()<cancelDeadline){
+    cancelled=await store.get(store.STORES.messages,smokeMessage.id);
+    if(cancelled&&cancelled.status==='cancelled')break;
+    if(historyStatus.classList.contains('err'))fail('MESSAGE_CANCEL_UI_ERROR:'+String(historyStatus.textContent||''));
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!cancelled||cancelled.status!=='cancelled')fail('MESSAGE_CANCEL_NOT_PERSISTED');
+
+  const scopeId='scope:'+smokePartner.id+':2099-12-31:mb';
+  const emptySettlement=await store.get(store.STORES.settlements,scopeId);
+  if(!emptySettlement||emptySettlement.scope_status!=='empty')fail('MESSAGE_CANCEL_SCOPE_NOT_EMPTY');
+
+  let restoreButton=null;
+  const restoreButtonDeadline=Date.now()+10000;
+  while(Date.now()<restoreButtonDeadline){
+    restoreButton=historyHost.querySelector('[data-restore-message="'+smokeMessage.id+'"]');
+    if(restoreButton)break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!restoreButton)fail('MESSAGE_RESTORE_BUTTON_MISSING');
+
+  restoreButton.click();
+  const restoreDeadline=Date.now()+12000;
+  let restored=null;
+  while(Date.now()<restoreDeadline){
+    restored=await store.get(store.STORES.messages,smokeMessage.id);
+    if(restored&&restored.status==='parsed_waiting_result')break;
+    if(historyStatus.classList.contains('err'))fail('MESSAGE_RESTORE_UI_ERROR:'+String(historyStatus.textContent||''));
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!restored||restored.status!=='parsed_waiting_result')fail('MESSAGE_RESTORE_NOT_PERSISTED');
+
+  const blockedSettlement=await store.get(store.STORES.settlements,scopeId);
+  if(!blockedSettlement||blockedSettlement.scope_status!=='blocked')fail('MESSAGE_RESTORE_SCOPE_NOT_BLOCKED');
+  const blockedReasons=Array.isArray(blockedSettlement.blocked_reasons)?blockedSettlement.blocked_reasons.map(String):[];
+  if(!blockedReasons.some(reason=>reason.includes('KQXS_NOT_AVAILABLE')))fail('MESSAGE_RESTORE_BLOCK_REASON_MISSING');
+
+  const restoredCancel=historyHost.querySelector('[data-cancel-message="'+smokeMessage.id+'"]');
+  if(!restoredCancel)fail('MESSAGE_RESTORE_UI_NOT_REFRESHED');
+
   const backup=await store.exportAll();
   if(!backup||backup.format!=='kts-settlement-export'||backup.version!==5)fail('BACKUP_FORMAT_INVALID');
   const backupStores=backup.stores||{};
@@ -274,7 +334,10 @@
     'INDEXEDDB_MESSAGE_PERSISTENCE=PASS',
     'MESSAGE_WAITING_RESULT_FAIL_CLOSED=PASS',
     'BACKUP_EXPORT_BROWSER=PASS',
-    'BACKUP_MERGE_IDEMPOTENT=PASS'
+    'BACKUP_MERGE_IDEMPOTENT=PASS',
+    'UI_MESSAGE_CANCEL=PASS',
+    'UI_MESSAGE_RESTORE=PASS',
+    'MESSAGE_SCOPE_LIFECYCLE=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
