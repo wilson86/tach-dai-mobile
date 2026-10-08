@@ -217,3 +217,19 @@ test('public Pages browser gates use real runtime CDP and no DNS spoofing',()=>{
   assert.ok(script.includes('offline:true,latency:0,downloadThroughput:0,uploadThroughput:0'));
   assert.ok(script.includes("assert(state.valid&&state.controlled,'PAGES_OFFLINE_NOT_CONTROLLED')"));
 });
+
+test('full Pages acceptance CDP contract extracts all 62 output markers',()=>{
+  const cdp=readFileSync(resolve(root,'.github','scripts','settlement-cdp-browser.cjs'),'utf8');
+  const fixture=readFileSync(resolve(root,'settlement-test','acceptance-smoke.html'),'utf8');
+  const contract=fixture.slice(fixture.lastIndexOf('  out.textContent=['));
+  const re=/^\s*'([^']+=PASS(?:[^']*)?)',?\s*$/gm;
+  const markers=[...contract.matchAll(re)].map(x=>x[1]);
+  assert.equal(markers.length,62,'ACCEPTANCE_CONTRACT_COUNT_CHANGED');
+  assert.equal(new Set(markers).size,62,'ACCEPTANCE_MARKERS_DUPLICATED');
+  assert.ok(cdp.includes(String.raw`contract.matchAll(/^\s*'`), 'CDP_MARKER_REGEX_WRONG');
+  assert.ok(cdp.includes(String.raw`split(/\r?\n/)`),'CDP_NEWLINE_SPLITTER_WRONG');
+  for(const marker of ['QUALIFICATION_HISTORY_BLOCKED_REVERT_FAIL_CLOSED=PASS',
+    'UI_GATE_BROWSER_LOCKED=PASS','SHADOW_MATCH_EXACT=PASS']){
+    assert.ok(markers.includes(marker),'MISSING_HARD_GATE_'+marker);
+  }
+});
