@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.166-kqxs-conflict-evidence'));
+  assert.ok(source.includes('v1.0.167-strict-golden-oracle'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -831,4 +831,23 @@ test('contradictory KQXS sources hard-block even when legacy status says verifie
   assert.equal(writes.length,1);
   assert.equal(evaluations,0);
   assert.equal(monetaryRuns,0);
+});
+
+test('golden oracle rejects blank, null, bool or object totals; legitimate zero stays valid',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8'),ctx,{filename:'settlement-regression-cases.js'});
+  const normalize=ctx.window.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase;
+  const base={scope:{partner_id:'synthetic',business_date:'2026-09-22',region:'mn'},
+    partner_role:'customer',config_snapshot:{region_pricing:{}},lottery_result_snapshot:{complete:true},
+    messages:[{id:'m1',canonical_payload:{region:'mn',legs:[]}}],
+    expected_reference:{totals:{xac:0,qua_co:'0',payout:0,final:'-12.25'}}};
+  assert.equal(normalize(base).expected_reference.totals.final,'-12.25');
+  for(const key of ['xac','qua_co','payout','final']){
+    for(const malformed of [null,'','  ',false,true,[],{},'Infinity','NaN']){
+      const v=JSON.parse(JSON.stringify(base));v.expected_reference.totals[key]=malformed;
+      assert.throws(()=>normalize(v),new RegExp('REGRESSION_REFERENCE_REQUIRED:'+key));
+    }
+    const missing=JSON.parse(JSON.stringify(base));delete missing.expected_reference.totals[key];
+    assert.throws(()=>normalize(missing),new RegExp('REGRESSION_REFERENCE_REQUIRED:'+key));
+  }
 });
