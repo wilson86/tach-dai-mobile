@@ -34,7 +34,7 @@ jobs:
           cd "$GITHUB_WORKSPACE"
           python3 -m http.server 8766 --bind 127.0.0.1 >"$tmp/server.log" 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+          trap 'if [[ "${server_pid:-0}" -gt 0 ]]; then kill "$server_pid" 2>/dev/null || true; fi; rm -rf "$tmp"' EXIT
           for i in 1 2 3 4 5; do
             if curl -fsS 'http://127.0.0.1:8766/settlement-test/settlement.html' -o /dev/null; then break; fi
             sleep 1
