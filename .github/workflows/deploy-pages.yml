@@ -463,7 +463,10 @@ jobs:
                 && grep -Fq 'QUALIFICATION_HISTORY_NO_AUTHORITY_ESCALATION=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_LIVE_READY=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_HISTORY_INDEXEDDB_APPEND=PASS' "$tmp/dom.html" \
-                && grep -Fq 'QUALIFICATION_HISTORY_PERSISTED_CURRENT=PASS' "$tmp/dom.html"; then
+                && grep -Fq 'QUALIFICATION_HISTORY_PERSISTED_CURRENT=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_CURRENT=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_HISTORY_SEMANTIC_DRIFT_STALE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_HISTORY_BLOCKED_EVENT_APPENDED=PASS' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi

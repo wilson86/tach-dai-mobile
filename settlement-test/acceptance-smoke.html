@@ -989,6 +989,94 @@
     fail('QUALIFICATION_HISTORY_CURRENT_BACKEND_UNAVAILABLE');
   }
 
+  const qualificationBaseResult=await store.get(store.STORES.results,'2026-09-22:mb');
+  if(!qualificationBaseResult||qualificationBaseResult.verification_status!=='verified'){
+    fail('QUALIFICATION_HISTORY_BASE_RESULT_REQUIRED');
+  }
+  const resultEventsBeforeRefetch=(await store.getAll(store.STORES.resultEvents))
+    .filter(e=>e&&e.result_id==='2026-09-22:mb').length;
+
+  const timestampRefetch=await store.saveResultSnapshot({
+    ...qualificationBaseResult,
+    fetched_at:'2099-01-01T00:00:00.000Z'
+  });
+  if(!timestampRefetch||timestampRefetch.stale_ignored===true)fail('QUALIFICATION_HISTORY_REFETCH_IGNORED');
+  if(timestampRefetch.changed!==false)fail('QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_CHANGED');
+  const resultEventsAfterRefetch=(await store.getAll(store.STORES.resultEvents))
+    .filter(e=>e&&e.result_id==='2026-09-22:mb').length;
+  if(resultEventsAfterRefetch!==resultEventsBeforeRefetch){
+    fail('QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_AUDIT_EVENT');
+  }
+  const validityAfterRefetch=await qualificationHistory.checkLastReadyValidity();
+  if(!validityAfterRefetch||validityAfterRefetch.status!=='READY_EVIDENCE_CURRENT'||validityAfterRefetch.current!==true){
+    fail('QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_STALE:'+String(validityAfterRefetch&&validityAfterRefetch.status||''));
+  }
+
+  const semanticDrift=await store.saveResultSnapshot({
+    ...qualificationBaseResult,
+    fetched_at:'2099-01-02T00:00:00.000Z',
+    verification_reason:'acceptance-history-semantic-drift'
+  });
+  if(!semanticDrift||semanticDrift.changed!==true||semanticDrift.stale_ignored===true){
+    fail('QUALIFICATION_HISTORY_SEMANTIC_DRIFT_NOT_SAVED');
+  }
+  const stalePersistedValidity=await qualificationHistory.checkLastReadyValidity();
+  if(!stalePersistedValidity||stalePersistedValidity.status!=='READY_EVIDENCE_STALE'||stalePersistedValidity.current!==false){
+    fail('QUALIFICATION_HISTORY_SEMANTIC_DRIFT_NOT_STALE:'+String(stalePersistedValidity&&stalePersistedValidity.status||''));
+  }
+  if(!Array.isArray(stalePersistedValidity.changed_components)||
+     !stalePersistedValidity.changed_components.includes('results')){
+    fail('QUALIFICATION_HISTORY_SEMANTIC_DRIFT_COMPONENT');
+  }
+
+  const blockedLiveQualification=await qualificationApi.runQualification({
+    from_date:'2026-09-22',
+    to_date:'2026-09-22',
+    required_observation_days:1,
+    partner_id:smokePartner.id,
+    regions:['mb'],
+    check_parser:true
+  });
+  if(!blockedLiveQualification||blockedLiveQualification.ready_for_production_review!==false){
+    fail('QUALIFICATION_DRIFT_UNSAFE_READY');
+  }
+  if(!Array.isArray(blockedLiveQualification.blockers)||
+     !blockedLiveQualification.blockers.some(x=>String(x).startsWith('KQXS_NOT_FULLY_VERIFIED:'))){
+    fail('QUALIFICATION_DRIFT_BLOCKER_MISSING:'+JSON.stringify(blockedLiveQualification&&blockedLiveQualification.blockers||[]));
+  }
+
+  const persistedBlocked=await qualificationHistory.recordQualification(blockedLiveQualification,{
+    from_date:'2026-09-22',
+    to_date:'2026-09-22',
+    required_observation_days:1,
+    partner_id:smokePartner.id,
+    regions:['mb']
+  });
+  if(!persistedBlocked||persistedBlocked.ready_for_production_review!==false){
+    fail('QUALIFICATION_HISTORY_BLOCKED_EVENT_STATE');
+  }
+  if(persistedBlocked.invalidates_previous_ready!==true){
+    fail('QUALIFICATION_HISTORY_BLOCKED_DID_NOT_INVALIDATE_READY');
+  }
+  if(persistedBlocked.requalifies_after_change!==false){
+    fail('QUALIFICATION_HISTORY_BLOCKED_FALSE_REQUALIFY');
+  }
+  if(!Array.isArray(persistedBlocked.changed_components_from_last_ready)||
+     !persistedBlocked.changed_components_from_last_ready.includes('results')){
+    fail('QUALIFICATION_HISTORY_BLOCKED_RESULTS_COMPONENT');
+  }
+  if(persistedBlocked.production_enabled!==false||persistedBlocked.merge_authorized!==false){
+    fail('QUALIFICATION_HISTORY_BLOCKED_AUTHORITY_ESCALATION');
+  }
+
+  const eventsAfterBlocked=await qualificationHistory.listEvents();
+  if(!Array.isArray(eventsAfterBlocked)||eventsAfterBlocked.length!==2){
+    fail('QUALIFICATION_HISTORY_BLOCKED_APPEND_COUNT:'+String(eventsAfterBlocked&&eventsAfterBlocked.length));
+  }
+  if(eventsAfterBlocked[0].id!==persistedReady.id||eventsAfterBlocked[1].id!==persistedBlocked.id){
+    fail('QUALIFICATION_HISTORY_BLOCKED_APPEND_ORDER');
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -1044,7 +1132,10 @@
     'QUALIFICATION_HISTORY_NO_AUTHORITY_ESCALATION=PASS',
     'QUALIFICATION_LIVE_READY=PASS',
     'QUALIFICATION_HISTORY_INDEXEDDB_APPEND=PASS',
-    'QUALIFICATION_HISTORY_PERSISTED_CURRENT=PASS'
+    'QUALIFICATION_HISTORY_PERSISTED_CURRENT=PASS',
+    'QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_CURRENT=PASS',
+    'QUALIFICATION_HISTORY_SEMANTIC_DRIFT_STALE=PASS',
+    'QUALIFICATION_HISTORY_BLOCKED_EVENT_APPENDED=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
