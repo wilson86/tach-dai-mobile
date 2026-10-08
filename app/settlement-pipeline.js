@@ -145,6 +145,12 @@
           (input.result_snapshot && resultRevisionSignature(result)!==resultRevisionSignature(input.result_snapshot)))
         return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
     }
+    if (input.partner_snapshot || input.expect_partner_missing===true) {
+      const partner=await d.store.get(d.store.STORES.partners,input.partner_id);
+      if ((input.expect_partner_missing===true && partner!=null) ||
+          (input.partner_snapshot && partnerRevisionSignature(partner)!==partnerRevisionSignature(input.partner_snapshot)))
+        return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    }
     const result = zeroResult(input.reason);
     const saved = await d.store.saveSettlement({
       id: scopeId(input.partner_id, input.business_date, input.region),
@@ -261,7 +267,10 @@
       if (!partner) throw new Error('PARTNER_NOT_FOUND');
       settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config, region });
     } catch (e) {
-      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages,
+        config_snapshot: config, result_snapshot: resultSnapshot,
+        partner_snapshot:partner||null,expect_partner_missing:!partner,
+        reason: String(e.message || e) });
     }
 
     // engine.settle preserves row order; count mismatch means attribution
@@ -437,7 +446,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v15-absence-guards',
+    version: 'settlement-pipeline-v16-blocked-partner-revalidation',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
