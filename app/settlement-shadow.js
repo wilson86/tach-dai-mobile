@@ -164,6 +164,8 @@
     const fields=['xac','qua_co','hit_units','payout'];
     for (const row of rows) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+      if (row.exact != null && (typeof row.exact !== 'object' || Array.isArray(row.exact)))
+        return false;
       const code=row.code || row.category;
       if (typeof code !== 'string' || !code.trim()) return false;
       for (const field of fields) {
@@ -225,8 +227,12 @@
   function compareSettlement(localSettlement, referenceSnapshot, options) {
     const local = localSettlement && (localSettlement.settlement_result || localSettlement.result_snapshot || localSettlement) || {};
     const reference = referenceSnapshot && (referenceSnapshot.totals || referenceSnapshot) || {};
-    const localExact = local.exact && typeof local.exact === 'object' ? local.exact : {};
-    const referenceExact = reference.exact && typeof reference.exact === 'object' ? reference.exact : {};
+    // A malformed exact field supplied in imported evidence must never be
+    // treated as "no exact evidence" and silently promote approximate money.
+    const exactShapeValid=value=>value==null||(typeof value==='object'&&!Array.isArray(value));
+    const exactMetadataOkay=exactShapeValid(local.exact)&&exactShapeValid(reference.exact);
+    const localExact = exactMetadataOkay && local.exact ? local.exact : {};
+    const referenceExact = exactMetadataOkay && reference.exact ? reference.exact : {};
     const totals = {};
     for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
       const refValue = pick(reference, aliases);
@@ -262,7 +268,7 @@
     const categoriesExact = categoryEvidenceOkay && !missingReferenceCategory && !emptyReferenceCategory &&
       categories.filter(row=>referenceCategories.some(ref=>codeOf(ref)===row.code))
         .every(row=>row.status==='MATCH_EXACT');
-    if (!categoryEvidenceOkay || !aliasEvidenceOkay || missingReferenceCategory || emptyReferenceCategory)
+    if (!categoryEvidenceOkay || !aliasEvidenceOkay || !exactMetadataOkay || missingReferenceCategory || emptyReferenceCategory)
       status='INCOMPLETE_REFERENCE';
     return {
       status,
@@ -272,9 +278,10 @@
       invalid_category_evidence: !categoryEvidenceOkay || emptyReferenceCategory,
       missing_reference_category: missingReferenceCategory,
       invalid_total_alias_evidence: !aliasEvidenceOkay,
+      invalid_exact_metadata: !exactMetadataOkay,
       required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
-      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact && aliasEvidenceOkay
+      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact && aliasEvidenceOkay && exactMetadataOkay
     };
   }
 
@@ -329,7 +336,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v11-no-epsilon-exact-money',
+    version: 'settlement-shadow-v12-exact-metadata-shape',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
