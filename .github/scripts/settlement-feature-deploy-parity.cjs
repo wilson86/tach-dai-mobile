@@ -5,7 +5,7 @@ const {resolve, join, basename}=require('node:path');
 const root=resolve(__dirname,'../..');
 const feature=join(root,'_feature_authority','app');
 const deploy=join(root,'settlement-test');
-const authority='6afd78e64497477525a0b34ff4c1244c7bb70f03';
+const authority='6570fd8f5335576966d7b1c980f253c649dcda8e';
 if(!existsSync(feature))throw new Error('PINNED_FEATURE_CHECKOUT_MISSING');
 const commit=execFileSync('git',['-C',join(root,'_feature_authority'),'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 if(commit!==authority)throw new Error('FEATURE_AUTHORITY_SHA_MISMATCH:'+commit);
@@ -47,7 +47,9 @@ for(const name of runtime){
 const workerSource=readFileSync(join(deploy,'sw.js'),'utf8');
 if(workerSource!==sw)mismatches.push('sw.js:worker-parity-diff');
 console.log('SETTLEMENT_RUNTIME_FILES_CHECKED='+checked.size);
-console.log('WORKER_CACHE_VERSION_MATCH='+String(workerSource.includes('v1.0.141-qualification-history-atomic')&&workerSource===sw));
+const cacheVersionMatch=workerSource.includes('v1.0.151-history-window-state-consistency')&&workerSource===sw;
+console.log('WORKER_CACHE_VERSION_MATCH='+String(cacheVersionMatch));
+if(!cacheVersionMatch)mismatches.push('sw.js:cache-version-mismatch');
 if(mismatches.length){
   console.error('PARITY_MISMATCH_COUNT='+mismatches.length);
   console.error(mismatches.slice(0,30).join('\n'));
