@@ -12,7 +12,22 @@
   stage='register'; registration=await limit(navigator.serviceWorker.register('./sw.js',{scope:'./'}),18000);
   stage='ready'; await limit(navigator.serviceWorker.ready,18000);
   stage='active';
-  if(!registration.active||registration.active.state!=='activated')fail('SW_NOT_ACTIVE:'+String(registration.active&&registration.active.state));
+  const activeWorker=registration.active;
+  if(!activeWorker)fail('SW_NO_ACTIVE_WORKER');
+  if(activeWorker.state==='activating'){
+    await limit(new Promise((resolve,reject)=>{
+      const onChange=()=>{
+        if(activeWorker.state==='activated'){
+          activeWorker.removeEventListener('statechange',onChange);resolve();
+        }else if(activeWorker.state==='redundant'){
+          activeWorker.removeEventListener('statechange',onChange);reject(new Error('SW_BECAME_REDUNDANT'));
+        }
+      };
+      activeWorker.addEventListener('statechange',onChange);
+      onChange();
+    }),18000);
+  }
+  if(activeWorker.state!=='activated')fail('SW_NOT_ACTIVATED:'+String(activeWorker.state));
   stage='cache'; const keys=await caches.keys();
   const key=keys.find(k=>k.includes('v1.0.141-qualification-history-atomic')&&k.includes('settlement-test'));
   if(!key)fail('EXPECTED_CACHE_ABSENT:'+JSON.stringify(keys));
