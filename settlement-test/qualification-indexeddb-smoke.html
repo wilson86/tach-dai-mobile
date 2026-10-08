@@ -111,6 +111,29 @@
     if(events.some(e=>e.production_enabled!==false||e.merge_authorized!==false)){
       fail('QUALIFICATION_AUTHORITY_ESCALATION');
     }
+    // Synthetic damaged history in the disposable browser profile: the
+    // most recent READY must never be considered current after chain tamper.
+    const row=await store.get(store.STORES.metadata,'qualification_history_v1');
+    if(!row||!Array.isArray(row.events)||row.events.length!==5){
+      fail('CORRUPT_JOURNAL_FIXTURE_MISSING');
+    }
+    row.events[4].previous_event_id='disconnected_parent';
+    const db=await store.openDb();
+    try {
+      const tx=db.transaction(store.STORES.metadata,'readwrite');
+      tx.objectStore(store.STORES.metadata).put(row);
+      await new Promise((resolve,reject)=>{
+        tx.oncomplete=resolve;
+        tx.onerror=()=>reject(tx.error||new Error('CORRUPT_JOURNAL_TX_FAILED'));
+        tx.onabort=()=>reject(tx.error||new Error('CORRUPT_JOURNAL_TX_ABORTED'));
+      });
+    }finally{db.close();}
+    const corrupt=await history.checkLastReadyValidity();
+    if(corrupt.current!==false||
+       corrupt.status!=='READY_EVIDENCE_UNVERIFIABLE'||
+       corrupt.history_error!=='QUALIFICATION_HISTORY_INVALID_BROKEN_EVENT_LINK'){
+      fail('CORRUPT_JOURNAL_READY_NOT_FAIL_CLOSED:'+String(corrupt&&corrupt.status));
+    }
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -119,6 +142,7 @@
       'QUALIFICATION_BLOCKED_REVOKES_READY=PASS',
       'QUALIFICATION_BROWSER_REQUALIFIED_CURRENT=PASS',
       'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS',
+      'QUALIFICATION_CORRUPTED_HISTORY_FAIL_CLOSED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
     ].join('\n');
   }catch(error){
