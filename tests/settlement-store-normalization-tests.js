@@ -102,7 +102,9 @@ const partialCannotVerify = S.normalizeResultSnapshot({
   status: 'partial',
   complete: false,
   verification_status: 'verified',
-  verified: true
+  verified: true,
+  verification_reason: null,
+  verification_conflicts: []
 });
 assert.strictEqual(partialCannotVerify.verified, false);
 assert.strictEqual(partialCannotVerify.verification_status, 'unverified');

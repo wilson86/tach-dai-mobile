@@ -14,7 +14,7 @@ assert.strictEqual(U.validScope({business_date:'bad',region:'mn'}),false);
 for(const needle of ['TỰ CẬP NHẬT','Không cần bấm bắt đầu hay dừng','Xem ngày cũ / kỹ thuật','manager.ensureScope(scope)','KQXS_HTTP_404','Bản thử nghiệm chưa kết nối máy chủ kết quả'])assert(code.includes(needle));
 assert(html.includes('src="./result-simple-ui.js"'));
 assert(sw.includes("'./result-simple-ui.js'"));
-assert(/const CACHE='kts-tach-unified-v1\.0\.\d+/.test(sw),'service worker must expose a versioned cache');
+assert(/const CACHE=\`\$\{CACHE_PREFIX\}v1\.0\.[0-9]+-[^\`]+\`;/.test(sw),'service worker must expose a scoped revisioned cache');
 assert.strictEqual(U.sameScope({business_date:'2026-10-07',region:'mn'},{business_date:'2026-10-07',region:'MN'}),true);
 assert(code.includes("resultDate.dispatchEvent(new global.Event('change'"));
 assert(code.includes("resultRegion.dispatchEvent(new global.Event('change'"));

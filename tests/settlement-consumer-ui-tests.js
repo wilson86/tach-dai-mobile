@@ -45,7 +45,7 @@ assert(code.includes('Tin gốc chưa lưu đang thuộc phạm vi trước đó
 assert(code.includes("'reportOutput'"));
 assert(html.includes('src="./settlement-consumer-ui.js"'));
 assert(sw.includes("'./settlement-consumer-ui.js'"));
-assert(/const CACHE='kts-tach-unified-v1\.0\.\d+/.test(sw),'consumer UI test should require a versioned cache without pinning a stale revision');
+assert(/const CACHE=\`\$\{CACHE_PREFIX\}v1\.0\.[0-9]+-[^\`]+\`;/.test(sw),'consumer UI test should require a scoped revisioned cache without pinning a stale revision');
 assert(source.includes('let reviewEpoch=0'));
 assert(source.includes('const epoch=++reviewEpoch'));
 assert(source.includes('epoch===reviewEpoch'));
