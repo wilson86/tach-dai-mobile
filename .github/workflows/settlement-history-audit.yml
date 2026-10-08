@@ -4,6 +4,9 @@ on:
     paths:
       - "settlement-test/settlement-qualification-history.js"
       - "settlement-test/acceptance-smoke.html"
+      - "settlement-test/settlement-build-identity.js"
+      - "settlement-test/sw.js"
+      - ".github/scripts/settlement-history-audit.test.cjs"
       - ".github/workflows/settlement-history-audit.yml"
   workflow_dispatch:
 
