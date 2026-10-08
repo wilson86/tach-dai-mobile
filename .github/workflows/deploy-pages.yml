@@ -437,7 +437,9 @@ jobs:
                 && grep -Fq 'DAILY_CLOSE_NOT_READY=PASS' "$tmp/dom.html" \
                 && grep -Fq 'KQXS_VERIFIED_FIXTURE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'SETTLEMENT_CANONICAL_TOTALS=PASS' "$tmp/dom.html" \
-                && grep -Fq 'REPORT_CANONICAL_TOTALS=PASS' "$tmp/dom.html"; then
+                && grep -Fq 'REPORT_CANONICAL_TOTALS=PASS' "$tmp/dom.html" \
+                && grep -Fq 'SHADOW_UNVERIFIED_FAIL_CLOSED=PASS' "$tmp/dom.html" \
+                && grep -Fq 'DAILY_CLOSE_REQUIRES_MATCH_EXACT=PASS' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi

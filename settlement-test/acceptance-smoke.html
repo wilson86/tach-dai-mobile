@@ -499,6 +499,26 @@
   approx(fixtureReport.totals.qua_co,61.56,'FIXTURE_REPORT_QUA_CO');
   approx(fixtureReport.totals.payout,5,'FIXTURE_REPORT_PAYOUT');
   approx(fixtureReport.totals.final_net,28.28,'FIXTURE_REPORT_FINAL_NET');
+  if(fixtureReport.shadow_status!=='UNVERIFIED')fail('FIXTURE_SHADOW_STATUS:'+String(fixtureReport.shadow_status||''));
+
+  const fixtureOps=reportApi.buildDailyOperationsReport({
+    business_date:'2026-09-22',
+    partners:[smokePartner],
+    settlements:fixtureSettlements,
+    messages:fixtureMessagesNow
+  });
+  if(fixtureOps.status!=='UNVERIFIED')fail('FIXTURE_DAILY_STATUS:'+String(fixtureOps.status||''));
+  if(Number(fixtureOps.counts&&fixtureOps.counts.partners||0)!==1)fail('FIXTURE_DAILY_PARTNER_COUNT');
+  if(Number(fixtureOps.counts&&fixtureOps.counts.exact||0)!==0)fail('FIXTURE_DAILY_EXACT_MUST_BE_ZERO');
+  if(Number(fixtureOps.counts&&fixtureOps.counts.unverified||0)!==1)fail('FIXTURE_DAILY_UNVERIFIED_COUNT');
+
+  const reportDashboard=w.KTS_SETTLEMENT_REPORT_DASHBOARD;
+  if(!reportDashboard||typeof reportDashboard.buildReadiness!=='function')fail('REPORT_DASHBOARD_API_REQUIRED');
+  const fixtureReadiness=reportDashboard.buildReadiness(fixtureOps);
+  if(!fixtureReadiness||fixtureReadiness.ready!==false)fail('FIXTURE_DAILY_CLOSE_UNSAFE_READY');
+  if(Number(fixtureReadiness.exact||0)!==0||Number(fixtureReadiness.partners||0)!==1){
+    fail('FIXTURE_DAILY_CLOSE_COUNTS');
+  }
 
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
@@ -529,7 +549,9 @@
     'DAILY_CLOSE_NOT_READY=PASS',
     'KQXS_VERIFIED_FIXTURE=PASS',
     'SETTLEMENT_CANONICAL_TOTALS=PASS',
-    'REPORT_CANONICAL_TOTALS=PASS'
+    'REPORT_CANONICAL_TOTALS=PASS',
+    'SHADOW_UNVERIFIED_FAIL_CLOSED=PASS',
+    'DAILY_CLOSE_REQUIRES_MATCH_EXACT=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
