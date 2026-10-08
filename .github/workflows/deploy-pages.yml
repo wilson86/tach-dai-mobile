@@ -429,7 +429,10 @@ jobs:
                 && grep -Fq 'BACKUP_MERGE_IDEMPOTENT=PASS' "$tmp/dom.html" \
                 && grep -Fq 'UI_MESSAGE_CANCEL=PASS' "$tmp/dom.html" \
                 && grep -Fq 'UI_MESSAGE_RESTORE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'MESSAGE_SCOPE_LIFECYCLE=PASS' "$tmp/dom.html"; then
+                && grep -Fq 'MESSAGE_SCOPE_LIFECYCLE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'UI_REPORT_BLOCKED=PASS' "$tmp/dom.html" \
+                && grep -Fq 'REPORT_ZERO_MONEY=PASS' "$tmp/dom.html" \
+                && grep -Fq 'DAILY_CLOSE_NOT_READY=PASS' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi

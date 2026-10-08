@@ -294,6 +294,59 @@
   const restoredCancel=historyHost.querySelector('[data-cancel-message="'+smokeMessage.id+'"]');
   if(!restoredCancel)fail('MESSAGE_RESTORE_UI_NOT_REFRESHED');
 
+  const reportTab=d.querySelector('.nav button[data-pane="report"]');
+  const reportPane=d.getElementById('pane-report');
+  const reportDate=d.getElementById('reportDate');
+  const reportPartner=d.getElementById('reportPartner');
+  const loadReport=d.getElementById('loadReport');
+  const reportOutput=d.getElementById('reportOutput');
+  const dailyOpsStatus=d.getElementById('dailyOpsStatus');
+  const dailyCloseReadiness=d.getElementById('dailyCloseReadiness');
+  if(!reportTab||!reportPane||!reportDate||!reportPartner||!loadReport||!reportOutput||!dailyOpsStatus||!dailyCloseReadiness){
+    fail('REPORT_UI_REQUIRED');
+  }
+
+  reportTab.click();
+  if(!reportPane.classList.contains('active'))fail('REPORT_TAB_NOT_ACTIVE');
+  reportDate.value='2099-12-31';
+  reportPartner.value=smokePartner.id;
+  reportDate.dispatchEvent(new w.Event('change',{bubbles:true}));
+  loadReport.click();
+
+  const reportDeadline=Date.now()+12000;
+  while(Date.now()<reportDeadline){
+    const text=String(reportOutput.textContent||'');
+    const dayText=String(dailyOpsStatus.textContent||'');
+    if(text.includes('CI Smoke Partner')&&text.includes('Không dùng tổng tiền này để chốt')&&dayText.includes('CÓ PHẠM VI CHƯA TÍNH'))break;
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+
+  const reportText=String(reportOutput.textContent||'');
+  const dayStatusText=String(dailyOpsStatus.textContent||'');
+  const readinessText=String(dailyCloseReadiness.textContent||'');
+  if(!reportText.includes('CI Smoke Partner'))fail('REPORT_PARTNER_MISSING:'+reportText);
+  if(!reportText.includes('Không dùng tổng tiền này để chốt'))fail('REPORT_BLOCKED_WARNING_MISSING:'+reportText);
+  if(!dayStatusText.includes('CÓ PHẠM VI CHƯA TÍNH'))fail('REPORT_DAY_BLOCKED_MISSING:'+dayStatusText);
+  if(!readinessText.includes('TRẠNG THÁI CHỐT NGÀY: CHƯA ĐỦ'))fail('REPORT_CLOSE_GATE_NOT_BLOCKED:'+readinessText);
+
+  const reportApi=w.KTS_SETTLEMENT_REPORT;
+  if(!reportApi||typeof reportApi.buildDailyPartnerReport!=='function')fail('REPORT_API_REQUIRED');
+  const settlementsForReport=await store.getAll(store.STORES.settlements);
+  const messagesForReport=await store.getAll(store.STORES.messages);
+  const messageMap=Object.fromEntries(messagesForReport.map(m=>[m.id,m]));
+  const reportModel=reportApi.buildDailyPartnerReport({
+    partner:smokePartner,
+    business_date:'2099-12-31',
+    settlements:settlementsForReport,
+    messages_by_id:messageMap
+  });
+  if(reportModel.blocked!==true)fail('REPORT_MODEL_NOT_BLOCKED');
+  if(!Array.isArray(reportModel.blocked_scopes)||reportModel.blocked_scopes.length!==1)fail('REPORT_BLOCKED_SCOPE_COUNT');
+  const totals=reportModel.totals||{};
+  for(const field of ['xac','qua_co','payout','refund_amount','final_net']){
+    if(Number(totals[field]||0)!==0)fail('REPORT_NONZERO_'+field.toUpperCase());
+  }
+
   const backup=await store.exportAll();
   if(!backup||backup.format!=='kts-settlement-export'||backup.version!==5)fail('BACKUP_FORMAT_INVALID');
   const backupStores=backup.stores||{};
@@ -337,7 +390,10 @@
     'BACKUP_MERGE_IDEMPOTENT=PASS',
     'UI_MESSAGE_CANCEL=PASS',
     'UI_MESSAGE_RESTORE=PASS',
-    'MESSAGE_SCOPE_LIFECYCLE=PASS'
+    'MESSAGE_SCOPE_LIFECYCLE=PASS',
+    'UI_REPORT_BLOCKED=PASS',
+    'REPORT_ZERO_MONEY=PASS',
+    'DAILY_CLOSE_NOT_READY=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
