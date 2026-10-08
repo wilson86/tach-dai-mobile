@@ -219,7 +219,86 @@ jobs:
             exit 1
           fi
 
+          curl "${curl_common[@]}" \
+            -D "$tmp/parse-mn.headers" \
+            -H "Origin: ${ALLOWED_ORIGIN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"region":"mn","business_date":"2026-10-04","raw_text":"tg 75 b 1n"}' \
+            "${SETTLEMENT_API_BASE}/api/settlement/parse" \
+            -o "$tmp/parse-mn.json"
+
+          python3 - "$tmp/parse-mn.json" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          canonical=p.get('canonical_payload') or {}
+          assert canonical.get('region')=='mn', p
+          legs=canonical.get('legs') or []
+          assert legs, p
+          assert list(legs[0].get('station_codes') or [])==['tg'], p
+          PY
+
+          status="$(curl --silent --show-error \
+            --connect-timeout 10 --max-time 40 \
+            -o "$tmp/parse-mn-missing-date.json" -D "$tmp/parse-mn-missing-date.headers" -w '%{http_code}' \
+            -H "Origin: ${ALLOWED_ORIGIN}" \
+            -H 'Content-Type: application/json' \
+            --data '{"region":"mn","raw_text":"tg 75 b 1n"}' \
+            "${SETTLEMENT_API_BASE}/api/settlement/parse")"
+          if [ "$status" != "400" ]; then
+            echo "BACKEND_MN_MISSING_DATE_STATUS=$status" >&2
+            exit 1
+          fi
+          python3 - "$tmp/parse-mn-missing-date.json" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('error')=='BUSINESS_DATE_REQUIRED', p
+          PY
+
+          status="$(curl --silent --show-error \
+            --connect-timeout 10 --max-time 40 \
+            -o "$tmp/kqxs-invalid-date.json" -w '%{http_code}' \
+            -H "Origin: ${ALLOWED_ORIGIN}" \
+            "${SETTLEMENT_API_BASE}/api/kqxs?date=nope&region=mb")"
+          if [ "$status" != "400" ]; then
+            echo "BACKEND_KQXS_INVALID_DATE_STATUS=$status" >&2
+            exit 1
+          fi
+          python3 - "$tmp/kqxs-invalid-date.json" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('error')=='KQXS_DATE_REQUIRED', p
+          PY
+
+          status="$(curl --silent --show-error \
+            --connect-timeout 10 --max-time 40 \
+            -o "$tmp/kqxs-invalid-region.json" -w '%{http_code}' \
+            -H "Origin: ${ALLOWED_ORIGIN}" \
+            "${SETTLEMENT_API_BASE}/api/kqxs?date=2026-09-22&region=xx")"
+          if [ "$status" != "400" ]; then
+            echo "BACKEND_KQXS_INVALID_REGION_STATUS=$status" >&2
+            exit 1
+          fi
+          python3 - "$tmp/kqxs-invalid-region.json" <<'PY'
+          import json, sys
+          p=json.load(open(sys.argv[1],encoding='utf-8'))
+          assert p.get('error')=='KQXS_REGION_REQUIRED', p
+          PY
+
+          curl --silent --show-error \
+            --connect-timeout 10 --max-time 40 \
+            -D "$tmp/wrong-origin.headers" \
+            -H 'Origin: https://example.invalid' \
+            "${SETTLEMENT_API_BASE}/health" \
+            -o /dev/null
+          if awk 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin:/{found=1}END{exit found?0:1}' "$tmp/wrong-origin.headers"; then
+            echo "BACKEND_CORS_OVERBROAD" >&2
+            exit 1
+          fi
+
           echo "SETTLEMENT_TEST_PARSER_POST=PASS code=DAT"
+          echo "SETTLEMENT_TEST_MN_PARSER=PASS station=tg"
+          echo "SETTLEMENT_TEST_FAIL_CLOSED=PASS parser_date+kqxs_scope"
+          echo "SETTLEMENT_TEST_CORS_RESTRICTED=PASS"
           echo "SETTLEMENT_TEST_KQXS_PREFLIGHT=PASS origin=${ALLOWED_ORIGIN}"
           echo "SETTLEMENT_TEST_BACKEND_CONTRACT=PASS origin=${ALLOWED_ORIGIN}"
 
