@@ -23,7 +23,9 @@
       // Treating an absent/unreviewed HIOSKT total as a verified 0 could
       // silently create a false-positive golden regression oracle.
       const numeric=(typeof raw==='number' && Number.isFinite(raw)) ||
-        (typeof raw==='string' && raw.trim()!=='' && Number.isFinite(Number(raw)));
+        (typeof raw==='string' &&
+          /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(raw.trim()) &&
+          Number.isFinite(Number(raw)));
       if (!numeric) throw new Error('REGRESSION_REFERENCE_REQUIRED:' + key);
     }
   }
@@ -237,7 +239,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_CASES = Object.freeze({
-    version: 'settlement-regression-cases-v4-strict-oracle-totals',
+    version: 'settlement-regression-cases-v5-decimal-only-oracle-totals',
     META_KEY,
     FORMAT,
     BUNDLE_FORMAT,
