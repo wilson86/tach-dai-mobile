@@ -111,6 +111,17 @@
           reason: 'INVALID_EXACT_MONETARY_EVIDENCE' };
       }
     }
+    if (hasLocalExact || hasReferenceExact) {
+      // Exact and displayed amounts are two representations of ONE monetary
+      // observation. If the exact decimal is inconsistent with its displayed
+      // figure at the display precision, matching the other side's exact
+      // string must not override the visible contradiction.
+      const shownLocal=roundDisplay(local,digits),shownRef=roundDisplay(reference,digits);
+      if (hasLocalExact && roundDisplay(Number(localCanonical),digits)!==shownLocal)
+        return {status:'NOT_COMPARABLE',local,reference,delta,reason:'LOCAL_EXACT_DISPLAY_CONTRADICTION'};
+      if (hasReferenceExact && roundDisplay(Number(referenceCanonical),digits)!==shownRef)
+        return {status:'NOT_COMPARABLE',local,reference,delta,reason:'REFERENCE_EXACT_DISPLAY_CONTRADICTION'};
+    }
     if (hasLocalExact) {
       if (localCanonical === referenceCanonical) return { status: 'MATCH_EXACT', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
       if (roundDisplay(local, digits) === roundDisplay(reference, digits)) return { status: 'MATCH_DISPLAY', local, reference, delta, local_exact: localCanonical, reference_exact: referenceCanonical };
@@ -274,7 +285,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v7-category-money-evidence-fail-closed',
+    version: 'settlement-shadow-v8-exact-display-integrity',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,

@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.173-shadow-input-validation'));
+  assert.ok(sw.includes('v1.0.174-exact-display-integrity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1159,4 +1159,27 @@ test('HIOSKT manual reference entry rejects coercive zero and preserves decimal 
   const zero=normalize({totals:{xac:'0e999',qua_co:'0',payout:0,final:'-0'}});
   assert.equal(zero.totals.xac,'0e999');
   assert.equal(cmp({settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}},zero).safe_to_promote,true);
+});
+
+test('matching exact strings cannot conceal contradictory displayed HIOSKT or local totals',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const sh=ctx.window.KTS_SETTLEMENT_SHADOW;
+  const result={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  const reference={totals:{xac:0,qua_co:0,payout:0,final:0,exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  assert.equal(sh.compareSettlement(result,reference).safe_to_promote,true);
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  const a=copy(reference);a.totals.exact.final_net='100';
+  let compared=sh.compareSettlement(result,a);
+  assert.equal(compared.safe_to_promote,false);
+  assert.equal(compared.totals.final_net.reason,'REFERENCE_EXACT_DISPLAY_CONTRADICTION');
+  const b=copy(result);b.settlement_result.exact.final_net='100';
+  compared=sh.compareSettlement(b,reference);
+  assert.equal(compared.safe_to_promote,false);
+  assert.equal(compared.totals.final_net.reason,'LOCAL_EXACT_DISPLAY_CONTRADICTION');
+  // Not every difference in decimal digits is a contradiction: an exact
+  // amount legitimately displayed rounded to one decimal stays acceptable.
+  const rounded=sh.compareNumber(0.1,0.1,{display_digits:1},'0.14','0.14');
+  assert.equal(rounded.status,'MATCH_EXACT');
 });
