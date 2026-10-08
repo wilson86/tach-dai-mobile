@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Settlement Service Worker Diagnostic</title></head><body>
+<pre id="result">SW_DIAGNOSTICS=PENDING</pre>
+<script>
+(async()=>{
+ const output=document.getElementById('result');
+ const fail=(s)=>{throw new Error(s)};
+ const limit=(promise,ms)=>Promise.race([promise,new Promise((_,reject)=>setTimeout(()=>reject(new Error('SW_TIMEOUT_'+ms)),ms))]);
+ try{
+  if(!isSecureContext)fail('INSECURE_ORIGIN');
+  if(!('serviceWorker' in navigator)||!('caches' in window))fail('SW_OR_CACHE_API_MISSING');
+  const registration=await limit(navigator.serviceWorker.register('./sw.js',{scope:'./'}),18000);
+  await limit(navigator.serviceWorker.ready,18000);
+  if(!registration.active||registration.active.state!=='activated')fail('SW_NOT_ACTIVE:'+String(registration.active&&registration.active.state));
+  const keys=await caches.keys();
+  const key=keys.find(k=>k.includes('v1.0.141-qualification-history-atomic')&&k.includes('settlement-test'));
+  if(!key)fail('EXPECTED_CACHE_ABSENT:'+JSON.stringify(keys));
+  const cache=await caches.open(key), requests=await cache.keys();
+  const shell=await cache.match(new URL('./settlement.html',location.href).href);
+  const history=await cache.match(new URL('./settlement-qualification-history.js',location.href).href);
+  if(!shell||!shell.ok)fail('OFFLINE_SHELL_NOT_CACHED:'+requests.length);
+  if(!history||!history.ok)fail('OFFLINE_HISTORY_NOT_CACHED:'+requests.length);
+  if(!navigator.serviceWorker.controller) {
+    await limit(new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true})),4000);
+  }
+  if(!navigator.serviceWorker.controller)fail('SW_NOT_CONTROLLING');
+  output.textContent='SW_DIAGNOSTICS=PASS\nSW_READY=PASS\nCACHE_SHELL=PASS\nCACHE_HISTORY=PASS\nSW_CONTROLLING=PASS\nCACHED_REQUESTS='+requests.length;
+ }catch(error){
+  output.textContent='SW_DIAGNOSTICS=FAIL '+String(error&&error.message||error);
+ }
+})();
+</script></body></html>
