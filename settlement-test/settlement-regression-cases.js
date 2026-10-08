@@ -62,8 +62,9 @@
     const engine = global.KTS_SETTLEMENT_ENGINE;
     const evaluator = global.KTS_SETTLEMENT_EVALUATOR;
     const shadow = global.KTS_SETTLEMENT_SHADOW;
-    if (!engine || !evaluator || !shadow) throw new Error('REGRESSION_RUNTIME_DEPENDENCY_MISSING');
-    return { engine, evaluator, shadow };
+    const runtime = global.KTS_SETTLEMENT_RUNTIME;
+    if (!engine || !evaluator || !shadow || !runtime || typeof runtime.settleWithConfig !== 'function') throw new Error('REGRESSION_RUNTIME_DEPENDENCY_MISSING');
+    return { engine, evaluator, shadow, runtime };
   }
 
   function ensureFeatureGates(message, config) {
@@ -101,10 +102,11 @@
       });
     }
     if (!categoryInputs.length) throw new Error('REGRESSION_NO_ACTIVE_CATEGORY_INPUTS');
-    const settled = d.engine.settle(categoryInputs, {
-      partner_role: c.partner_role,
-      total_percent: c.config_snapshot.total_percent == null ? 100 : c.config_snapshot.total_percent,
-      refund_percent: c.config_snapshot.refund_percent == null ? 0 : c.config_snapshot.refund_percent
+    // Regression MUST take the identical runtime path as live settlement.
+    // Direct engine.settle() silently ignored per-region partner terms and
+    // skipped the common feature guard, risking a false golden PASS.
+    const settled = d.runtime.settleWithConfig(categoryInputs, {
+      partner_role: c.partner_role, config_snapshot: c.config_snapshot, region: c.scope.region
     });
     const settlement = {
       id: c.scope.scope_id,
@@ -225,7 +227,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_CASES = Object.freeze({
-    version: 'settlement-regression-cases-v1',
+    version: 'settlement-regression-cases-v2-runtime-parity',
     META_KEY,
     FORMAT,
     BUNDLE_FORMAT,

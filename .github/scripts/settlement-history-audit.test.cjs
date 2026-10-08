@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.154-gate-evidence-consistency'));
+  assert.ok(sw.includes('v1.0.155-regression-runtime-parity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -501,4 +501,60 @@ test('canonical READY numeric evidence cannot contradict green gate flags',()=>{
   }
   const absent=JSON.parse(JSON.stringify(q));delete absent.parser_backend.matched;
   assert.equal(H.validateSnapshotDecision(absent).reason,'READY_GATE_EVIDENCE_CONTRADICTION_PARSER_BACKEND');
+});
+
+test('golden regression replays through actual production regional runtime and closed UI gate',()=>{
+  const sandboxReplay={window:{}};
+  const calls=[];
+  sandboxReplay.window.KTS_SETTLEMENT_ENGINE={
+    version:'synthetic-engine',
+    category:row=>row,
+    settle:(rows,terms)=>{
+      calls.push({rows:JSON.parse(JSON.stringify(rows)),terms:{...terms}});
+      return {rows,observed_total:String(terms.total_percent),observed_refund:String(terms.refund_percent)};
+    }
+  };
+  sandboxReplay.window.KTS_SETTLEMENT_EVALUATOR={
+    evaluateCanonicalMessage:({canonical_payload})=>({
+      category_inputs:canonical_payload.rows,detail_rows:[]
+    })
+  };
+  sandboxReplay.window.KTS_SETTLEMENT_SHADOW={compareSettlement:()=>({safe_to_promote:true})};
+  for(const name of ['settlement-feature-gates.js','settlement-runtime.js','settlement-regression-cases.js']){
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),sandboxReplay,{filename:name});
+  }
+  const replay=sandboxReplay.window.KTS_SETTLEMENT_REGRESSION_CASES.replayCase;
+  const baseConfig={partner_id:'test-partner',total_percent:'100',refund_percent:'0',
+    region_terms:{
+      mn:{total_percent:'87',refund_percent:'2'},
+      mt:{total_percent:'93',refund_percent:'4'},
+      mb:{total_percent:'95',refund_percent:'6'}
+    },mb_xien_234:false,tinh_ui:true};
+  const mk=(region,rows,config=baseConfig)=>({
+    scope:{partner_id:'test-partner',business_date:'2026-09-22',region},
+    partner_role:'customer',config_snapshot:config,
+    lottery_result_snapshot:{complete:true},messages:[
+      {id:'msg1',status:'parsed',canonical_payload:{rows,legs:[]}}
+    ],expected_reference:{totals:{xac:1,qua_co:1,payout:1,final:1}}
+  });
+  for(const [region,total,refund] of [['mn','87','2'],['mt','93','4'],['mb','95','6']]){
+    const result=replay(mk(region,[{code:'B',stake:10}]));
+    assert.equal(result.pass,true);
+    const latest=calls.at(-1);
+    assert.equal(String(latest.terms.total_percent),total,'WRONG_REGIONAL_TOTAL:'+region);
+    assert.equal(String(latest.terms.refund_percent),refund,'WRONG_REGIONAL_REFUND:'+region);
+    assert.equal(latest.terms.partner_role,'customer');
+    assert.equal(latest.rows.length,1);
+  }
+  replay(mk('mn',[{code:'B'}],{partner_id:'test-partner',total_percent:'99',refund_percent:'1'}));
+  assert.equal(String(calls.at(-1).terms.total_percent),'99','LEGACY_FALLBACK_INCORRECT');
+  assert.equal(String(calls.at(-1).terms.refund_percent),'1','LEGACY_REFUND_FALLBACK_INCORRECT');
+  replay(mk('mn',[{code:'B'},{code:'UI'}]));
+  assert.equal(calls.at(-1).rows.length,1,'UNCONFIRMED_UI_NOT_GUARDED');
+  assert.equal(calls.at(-1).rows[0].code,'B');
+  const unsafe=mk('mb',[{code:'MB_XIEN2'}]);
+  unsafe.messages[0].canonical_payload.legs=[{code:'MB_XIEN2'}];
+  assert.throws(()=>replay(unsafe),/REGRESSION_FEATURE_GATE_MB_XIEN_CLOSED/);
+  const runtime=sandboxReplay.window.KTS_SETTLEMENT_RUNTIME;
+  assert.equal(runtime.version,'settlement-runtime-v2-region-terms');
 });
