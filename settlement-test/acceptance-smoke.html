@@ -1012,13 +1012,24 @@
     fail('QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_STALE:'+String(validityAfterRefetch&&validityAfterRefetch.status||''));
   }
 
+  // Change an actual drawn prize, not only result metadata: READY must become stale.
+  const driftStations=JSON.parse(JSON.stringify(qualificationBaseResult.stations));
+  const driftPrizes=driftStations[0]&&driftStations[0].prizes;
+  if(!driftPrizes||!Array.isArray(driftPrizes.G7)||!driftPrizes.G7.includes('92')){
+    fail('QUALIFICATION_HISTORY_SEMANTIC_DRIFT_FIXTURE_MISSING');
+  }
+  driftPrizes.G7=driftPrizes.G7.map(value=>value==='92'?'93':value);
   const semanticDrift=await store.saveResultSnapshot({
     ...qualificationBaseResult,
+    stations:driftStations,
     fetched_at:'2099-01-02T00:00:00.000Z',
     verification_reason:'acceptance-history-semantic-drift'
   });
   if(!semanticDrift||semanticDrift.changed!==true||semanticDrift.stale_ignored===true){
     fail('QUALIFICATION_HISTORY_SEMANTIC_DRIFT_NOT_SAVED');
+  }
+  if(semanticDrift.snapshot.fingerprint===qualificationBaseResult.fingerprint){
+    fail('QUALIFICATION_HISTORY_SEMANTIC_PRIZE_FINGERPRINT_UNCHANGED');
   }
   const stalePersistedValidity=await qualificationHistory.checkLastReadyValidity();
   if(!stalePersistedValidity||stalePersistedValidity.status!=='READY_EVIDENCE_STALE'||stalePersistedValidity.current!==false){
