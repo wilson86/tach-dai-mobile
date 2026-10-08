@@ -139,6 +139,26 @@
     return out;
   }
 
+  // Category rows are optional, but an explicitly provided malformed money
+  // field is not. Previously rowsByCode silently turned false/null/blank into
+  // zero, which allowed a false exact shadow pass when the totals matched.
+  function categoryEvidenceValid(rows) {
+    if (!Array.isArray(rows)) return true;
+    const fields=['xac','qua_co','hit_units','payout'];
+    for (const row of rows) {
+      if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+      for (const field of fields) {
+        if (Object.prototype.hasOwnProperty.call(row,field) && numeric(row[field])===null)
+          return false;
+        if (row.exact && Object.prototype.hasOwnProperty.call(row.exact,field)) {
+          try { decimalCanonical(row.exact[field]); }
+          catch (_) { return false; }
+        }
+      }
+    }
+    return true;
+  }
+
   function compareCategories(localRows, referenceRows, options) {
     const local = rowsByCode(localRows);
     const reference = rowsByCode(referenceRows);
@@ -178,7 +198,9 @@
 
     const localRows = localSettlement && Array.isArray(localSettlement.category_rows) ? localSettlement.category_rows : local.rows;
     const referenceRows = referenceSnapshot && (referenceSnapshot.categories || referenceSnapshot.category_rows);
-    const categories = Array.isArray(referenceRows) ? compareCategories(localRows, referenceRows, options) : [];
+    const categoryEvidenceOkay=categoryEvidenceValid(localRows)&&categoryEvidenceValid(referenceRows);
+    const categories = Array.isArray(referenceRows) && categoryEvidenceOkay ?
+      compareCategories(localRows, referenceRows, options) : [];
     const statuses = [...Object.values(totals).map(x => x.status), ...categories.map(x => x.status)].filter(x => x !== 'NOT_COMPARABLE');
     let status = 'INCOMPLETE_REFERENCE';
     if (statuses.length) {
@@ -187,12 +209,14 @@
       else status = 'MATCH_EXACT';
     }
     const requiredTotalsExact = REQUIRED_PROMOTION_TOTALS.every(field => totals[field] && totals[field].status === 'MATCH_EXACT');
-    const categoriesExact = categories.every(row => row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE');
+    const categoriesExact = categoryEvidenceOkay && categories.every(row => row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE');
+    if (!categoryEvidenceOkay) status='INCOMPLETE_REFERENCE';
     return {
       status,
       totals,
       categories,
       compared_fields: statuses.length,
+      invalid_category_evidence: !categoryEvidenceOkay,
       required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
       safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact
@@ -250,7 +274,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v6-invalid-exact-fail-closed',
+    version: 'settlement-shadow-v7-category-money-evidence-fail-closed',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
