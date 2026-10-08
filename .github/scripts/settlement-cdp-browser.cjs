@@ -6,6 +6,42 @@ const http=require('node:http'),{spawn,spawnSync}=require('node:child_process');
 const root=path.resolve(__dirname,'../..');
 const mode=process.argv[2]||'indexeddb';
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+const profileDeleteRetryCodes=new Set(['ENOTEMPTY','EBUSY','EPERM','EACCES']);
+async function removeDisposableProfile(profile){
+  // This path is created by mkdtemp or reused from that exact test run.
+  // Do not remove arbitrary browser profiles.
+  if(!path.basename(profile).startsWith('kts-cdp-'))throw Error('REFUSE_NON_TEST_PROFILE_DELETE');
+  for(let n=1;n<=8;n++){
+    try{
+      await fs.promises.rm(profile,{recursive:true,force:true,maxRetries:4,retryDelay:150});
+      return;
+    }catch(error){
+      if(!profileDeleteRetryCodes.has(error.code)||n===8)throw error;
+      await pause(n*250);
+    }
+  }
+}
+function signalChromeGroup(proc,signal){
+  if(!proc||!proc.pid)return;
+  try{process.kill(-proc.pid,signal);}catch(e){
+    if(e.code!=='ESRCH')throw e;
+  }
+}
+async function stopChromeProcessGroup(proc){
+  if(!proc)return;
+  const childExited=new Promise(resolve=>{
+    if(proc.exitCode!==null||proc.signalCode!==null)return resolve();
+    proc.once('exit',resolve);
+  });
+  // Chromium helpers share a detached process group; killing only the top
+  // process leaves writers alive and can cause ENOTEMPTY on profile removal.
+  signalChromeGroup(proc,'SIGTERM');
+  await Promise.race([childExited,pause(1500)]);
+  signalChromeGroup(proc,'SIGKILL');
+  await Promise.race([childExited,pause(1500)]);
+}
+
 const assert=(ok,message)=>{if(!ok)throw Error(message)};
 function browserBinary(){
   for(const name of ['google-chrome','google-chrome-stable','chromium','chromium-browser']){
@@ -54,7 +90,7 @@ async function launchChrome(existingProfile=null){
     '--no-first-run','--no-default-browser-check','--disable-background-networking',
     '--remote-debugging-port=0','--remote-allow-origins=*',
     '--user-data-dir='+profile,'about:blank'
-  ],{stdio:['ignore','ignore','pipe']});
+  ],{stdio:['ignore','ignore','pipe'],detached:true});
   proc.stderr.on('data',chunk=>{stderr.push(String(chunk));if(stderr.length>40)stderr.shift()});
   try {
   const port=await waitFor(()=>{
@@ -75,9 +111,8 @@ async function launchChrome(existingProfile=null){
   return {profile,proc,conn,stderr};
   } catch(error) {
     const detail=stderr.slice(-6).join('').slice(-2200);
-    proc.kill('SIGKILL');
-    await pause(250);
-    if(!existingProfile)fs.rmSync(profile,{recursive:true,force:true,maxRetries:18,retryDelay:200});
+    await stopChromeProcessGroup(proc);
+    if(!existingProfile)await removeDisposableProfile(profile);
     throw Error('CHROME_START_FAILED:'+error.message+' STDERR='+detail);
   }
 }
@@ -135,13 +170,8 @@ async function closeChrome(browser,preserveProfile=false){
   if(!browser)return;
   try{await Promise.race([browser.conn.send('Browser.close'),pause(1200)])}catch(_){}
   browser.conn.close();
-  if(browser.proc.exitCode===null)browser.proc.kill('SIGTERM');
-  await Promise.race([new Promise(resolve=>{
-    if(browser.proc.exitCode!==null)return resolve();
-    browser.proc.once('exit',resolve);
-  }),pause(2500)]);
-  if(browser.proc.exitCode===null)browser.proc.kill('SIGKILL');
-  if(!preserveProfile)fs.rmSync(browser.profile,{recursive:true,force:true,maxRetries:20,retryDelay:250});
+  await stopChromeProcessGroup(browser.proc);
+  if(!preserveProfile)await removeDisposableProfile(browser.profile);
 }
 async function shutdownServer(server){
   if(!server.listening)return;
@@ -220,7 +250,7 @@ async function checkOffline(browser,server,base){
     }finally{
       // Always remove the preserved temporary profile, even on failed startup.
       if(cold)await closeChrome(cold);
-      else fs.rmSync(profile,{recursive:true,force:true,maxRetries:20,retryDelay:250});
+      else await removeDisposableProfile(profile);
     }
   }
 }
