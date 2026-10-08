@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.177-validated-feature-codes'));
+  assert.ok(source.includes('v1.0.178-shadow-category-coverage'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1113,4 +1113,28 @@ test('feature gate fails closed on whitespace padded Ủi and malformed evaluato
     detail_rows:[{code:' MB_XIEN2 '}]},{mb_xien_234:false}),/MB_XIEN_234_NOT_ALLOWED/);
   assert.equal(gates.guardEvaluation({category_inputs:[{code:'B'}],
     detail_rows:[{code:'MB_XIEN2'}]},{mb_xien_234:true}).detail_rows.length,1);
+});
+
+test('shadow cannot promote omitted, empty, or ungrounded HIOSKT category claims',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:0,qua_co:0,hit_units:0,payout:0}]};
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  const good=compare(local,{totals,categories:[{code:' B ',xac:0,payout:0}]});
+  assert.equal(good.safe_to_promote,true,'TRIMMED_CATEGORY_MATCH_SHOULD_PASS');
+  for(const [label,categories] of [
+    ['no_code',[{xac:0}]],
+    ['blank_code',[{code:'   ',xac:0}]],
+    ['reference_without_amount',[{code:'B'}]],
+    ['reference_missing_locally',[{code:'DD',xac:0,payout:0}]]
+  ]){
+    const result=compare(local,{totals,categories});
+    assert.equal(result.safe_to_promote,false,'UNSUPPORTED_CATEGORY_PROMOTED:'+label);
+    assert.equal(result.status,'INCOMPLETE_REFERENCE','UNSUPPORTED_CATEGORY_STATUS:'+label);
+  }
+  const extraLocal={...local,category_rows:[...local.category_rows,{code:'DD',xac:0}]};
+  assert.equal(compare(extraLocal,{totals,categories:[{code:'B',xac:0}]}).safe_to_promote,true,
+    'PARTIAL_BUT_VALID_CATEGORY_REFERENCE_SHOULD_REMAIN_COMPATIBLE');
 });
