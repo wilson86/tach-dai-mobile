@@ -177,6 +177,20 @@
   // The local IndexedDB journal is not a trusted input. Broken ancestry,
   // missing/malformed records or authority escalation must never resurrect
   // an earlier READY merely because its component fingerprint still matches.
+  // READY must agree with the dashboard's decision; a forged TRUE flag must
+  // not override BLOCKED status, unexplained blockers or authority safety.
+  function validateSnapshotDecision(q) {
+    if(!q||typeof q!=='object'||Array.isArray(q))return {valid:false,reason:'SNAPSHOT_NOT_OBJECT'};
+    if(typeof q.ready_for_production_review!=='boolean')return {valid:false,reason:'SNAPSHOT_READY_NOT_BOOLEAN'};
+    if(q.production_enabled===true||q.merge_authorized===true)return {valid:false,reason:'SNAPSHOT_AUTHORITY_ESCALATION'};
+    if(q.ready_for_production_review){
+      if(q.qualification_state!==READY)return {valid:false,reason:'READY_STATE_CONTRADICTION'};
+      if(!Array.isArray(q.blockers)||q.blockers.length!==0)return {valid:false,reason:'READY_HAS_BLOCKERS'};
+    }else if(q.qualification_state===READY){
+      return {valid:false,reason:'BLOCKED_STATE_CONTRADICTION'};
+    }
+    return {valid:true,reason:null};
+  }
   function validateHistoryEvents(events) {
     if (!Array.isArray(events)) return {valid:false,reason:'EVENTS_NOT_ARRAY'};
     const ids=new Set();
@@ -195,6 +209,9 @@
       if(!e.component_fingerprints||typeof e.component_fingerprints!=='object'||Array.isArray(e.component_fingerprints))return fail('MISSING_COMPONENTS');
       if(!e.qualification_snapshot||typeof e.qualification_snapshot!=='object'||Array.isArray(e.qualification_snapshot))return fail('MISSING_QUALIFICATION_SNAPSHOT');
       if(Boolean(e.qualification_snapshot.ready_for_production_review===true)!==e.ready_for_production_review)return fail('SNAPSHOT_READY_MISMATCH');
+      const decision=validateSnapshotDecision(e.qualification_snapshot);
+      if(!decision.valid)return fail(decision.reason);
+      if(e.ready_for_production_review&&e.qualification_state!==READY)return fail('EVENT_READY_STATE_CONTRADICTION');
       ids.add(e.id);
       prior=e;
       if(e.ready_for_production_review)priorReady=e;
@@ -319,6 +336,8 @@
   }
   async function recordQualification(qualificationSnapshot, options) {
     if (!qualificationSnapshot || typeof qualificationSnapshot!=='object') throw new Error('QUALIFICATION_SNAPSHOT_REQUIRED');
+    const decision=validateSnapshotDecision(qualificationSnapshot);
+    if(!decision.valid)throw new Error('QUALIFICATION_DECISION_INVALID_'+decision.reason);
     const material=await collectMaterial(qualificationSnapshot,options||{},{probe_parser_backend:false});
     if (qualificationSnapshot.ready_for_production_review===true && material.parser_backend.status!=='available') throw new Error('QUALIFICATION_READY_WITHOUT_PARSER_BACKEND_EVIDENCE');
     const components=await componentFingerprints(material);
@@ -372,7 +391,7 @@
     version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
     validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
     parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
-    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,validateJournalRow,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,validateSnapshotDecision,validateJournalRow,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
