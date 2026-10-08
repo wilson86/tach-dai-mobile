@@ -198,3 +198,14 @@ test('READY decision must not override BLOCKED state or monetary blockers',()=>{
     assert.equal(verdict.history_error,'QUALIFICATION_HISTORY_INVALID_'+reason);
   }
 });
+
+test('UI must not describe mutable evidence as immutable or misattribute history failure',()=>{
+  const script=readFileSync(resolve(root,'app','settlement-qualification-history.js'),'utf8');
+  assert.ok(!script.includes('evidence bất biến'),'MUTABLE_IDB_MISLABELED_IMMUTABLE');
+  assert.ok(script.includes('IndexedDB trên thiết bị vẫn có thể bị sửa hoặc xóa'),
+    'LOCAL_JOURNAL_MUTABILITY_WARNING_MISSING');
+  assert.ok(script.includes('const integrity=validateHistoryEvents(events);if(!integrity.valid)'),
+    'CORRUPTED_READY_RENDER_NOT_BLOCKED');
+  assert.ok(script.includes("v.history_error||v.parser_backend_error"),
+    'INVALID_HISTORY_ERROR_MISATTRIBUTED_TO_PARSER');
+});
