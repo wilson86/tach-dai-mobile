@@ -134,6 +134,21 @@
        corrupt.history_error!=='QUALIFICATION_HISTORY_INVALID_BROKEN_EVENT_LINK'){
       fail('CORRUPT_JOURNAL_READY_NOT_FAIL_CLOSED:'+String(corrupt&&corrupt.status));
     }
+    let rejectedAppend=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(blocked,options);
+    }catch(error){
+      rejectedAppend=true;
+    }
+    if(!rejectedAppend)fail('CORRUPT_JOURNAL_APPEND_WAS_NOT_REJECTED');
+    const after=await history.listEvents();
+    if(after.length!==5||after[4].previous_event_id!=='disconnected_parent'){
+      fail('CORRUPT_JOURNAL_WAS_OVERWRITTEN_OR_APPENDED');
+    }
+    const afterVerdict=await history.checkLastReadyValidity();
+    if(afterVerdict.status!=='READY_EVIDENCE_UNVERIFIABLE'||afterVerdict.current!==false){
+      fail('CORRUPT_JOURNAL_CHANGED_VERDICT_AFTER_FAILED_APPEND');
+    }
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -143,6 +158,7 @@
       'QUALIFICATION_BROWSER_REQUALIFIED_CURRENT=PASS',
       'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS',
       'QUALIFICATION_CORRUPTED_HISTORY_FAIL_CLOSED=PASS',
+      'QUALIFICATION_CORRUPTED_HISTORY_APPEND_REFUSED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
     ].join('\n');
   }catch(error){
