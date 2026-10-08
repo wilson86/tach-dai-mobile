@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.153-partner-role-fingerprint'));
+  assert.ok(source.includes('v1.0.154-gate-evidence-consistency'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -216,9 +216,13 @@ test('canonical READY refuses any unmet observation, KQXS, parser or regression 
     qualification_state:'READY_FOR_PRODUCTION_REVIEW',
     ready_for_production_review:true,
     blockers:[],production_enabled:false,merge_authorized:false,
-    observation:{promotion_ready:true},kqxs_verification:{met:true},
-    parser_provenance:{met:true},parser_backend:{met:true},
-    regression_gate:{met:true},candidate_gate:{met:true},feature_safety:{met:true}
+    observation:{promotion_ready:true,counts:{total:1,exact:1,missing_scopes:0},blockers:[]},
+    kqxs_verification:{met:true,total:1,verified:1,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:1,known:1,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:1,matched:1,mismatched:0,unreachable:false},
+    regression_gate:{met:true,total:1,passed:1,failed:0},
+    candidate_gate:{met:true,pending:0},
+    feature_safety:{met:true,unsafe_count:0}
   };
   assert.equal(H.validateSnapshotDecision(all).valid,true);
   for(const key of ['observation','kqxs_verification','parser_provenance',
@@ -314,4 +318,39 @@ test('partner identity and role changes invalidate canonical READY evidence inpu
   const source=readFileSync(resolve(root,'app','settlement-qualification-history.js'),'utf8');
   assert.ok(source.includes('d.store.getAll(d.store.STORES.partners)'),'PARTNER_SOURCE_NOT_LOADED');
   assert.ok(source.includes('partners:sortById(partners)'),'PARTNER_SOURCE_NOT_FINGERPRINTED');
+});
+
+test('canonical READY numeric evidence cannot contradict green gate flags',()=>{
+  const q={
+    format:'kts-final-qualification-v2-live-parser',
+    qualification_state:'READY_FOR_PRODUCTION_REVIEW',ready_for_production_review:true,
+    blockers:[],production_enabled:false,merge_authorized:false,
+    observation:{promotion_ready:true,counts:{total:2,exact:2,missing_scopes:0},blockers:[]},
+    kqxs_verification:{met:true,total:2,verified:2,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:2,known:2,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:2,matched:2,mismatched:0,unreachable:false},
+    regression_gate:{met:true,total:4,passed:4,failed:0},
+    candidate_gate:{met:true,pending:0},feature_safety:{met:true,unsafe_count:0}
+  };
+  assert.equal(H.validateSnapshotDecision(q).valid,true);
+  const cases=[
+    ['observation',x=>x.observation.counts.exact=1],
+    ['kqxs_verification',x=>x.kqxs_verification.unverified=1],
+    ['parser_provenance',x=>x.parser_provenance.parser_errors=1],
+    ['parser_backend',x=>x.parser_backend.mismatched=1],
+    ['regression_gate',x=>x.regression_gate.failed=1],
+    ['candidate_gate',x=>x.candidate_gate.pending=1],
+    ['feature_safety',x=>x.feature_safety.unsafe_count=1]
+  ];
+  for(const [name,alter] of cases){
+    const broken=JSON.parse(JSON.stringify(q));alter(broken);
+    const reason='READY_GATE_EVIDENCE_CONTRADICTION_'+name.toUpperCase();
+    assert.equal(H.validateSnapshotDecision(broken).reason,reason);
+    const item=H.buildEvidenceEvent(broken,opt,original,'sha-forged',[]);
+    const verdict=H.classifyHistoryValidity([item],original,'sha-forged',{status:'available'});
+    assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
+    assert.equal(verdict.history_error,'QUALIFICATION_HISTORY_INVALID_'+reason);
+  }
+  const absent=JSON.parse(JSON.stringify(q));delete absent.parser_backend.matched;
+  assert.equal(H.validateSnapshotDecision(absent).reason,'READY_GATE_EVIDENCE_CONTRADICTION_PARSER_BACKEND');
 });

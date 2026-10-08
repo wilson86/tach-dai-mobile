@@ -217,6 +217,29 @@
         if((canonical||gate!=null)&&(!gate||gate[field]!==true))
           return {valid:false,reason:'READY_GATE_NOT_MET_'+name.toUpperCase()};
       }
+      // Even a gate claiming "met:true" may contradict its own concrete
+      // counters in mutable IndexedDB. Canonical READY requires the same
+      // numeric invariants that make the dashboard gates true.
+      if(canonical){
+        const o=q.observation||{}, oc=o.counts||{};
+        const kv=q.kqxs_verification||{}, pp=q.parser_provenance||{};
+        const pb=q.parser_backend||{}, rg=q.regression_gate||{};
+        const cg=q.candidate_gate||{}, fs=q.feature_safety||{};
+        const pos=n=>Number.isInteger(n)&&n>0;
+        const zero=n=>Number.isInteger(n)&&n===0;
+        const exact=(total,good)=>pos(total)&&Number.isInteger(good)&&good===total;
+        for(const [name,valid] of [
+          ['observation',exact(oc.total,oc.exact)&&zero(oc.missing_scopes)&&(!Array.isArray(o.blockers)||o.blockers.length===0)],
+          ['kqxs_verification',exact(kv.total,kv.verified)&&zero(kv.conflict)&&zero(kv.unverified)],
+          ['parser_provenance',exact(pp.total,pp.known)&&zero(pp.unknown)&&zero(pp.invalid)&&zero(pp.parser_errors)&&zero(pp.missing_canonical)],
+          ['parser_backend',exact(pb.total,pb.matched)&&zero(pb.mismatched)&&pb.unreachable===false],
+          ['regression_gate',pos(rg.total)&&zero(rg.failed)],
+          ['candidate_gate',zero(cg.pending)],
+          ['feature_safety',zero(fs.unsafe_count)]
+        ]){
+          if(!valid)return {valid:false,reason:'READY_GATE_EVIDENCE_CONTRADICTION_'+name.toUpperCase()};
+        }
+      }
     }else if(q.qualification_state===READY){
       return {valid:false,reason:'BLOCKED_STATE_CONTRADICTION'};
     }
