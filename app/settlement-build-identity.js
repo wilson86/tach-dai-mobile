@@ -1,6 +1,7 @@
 (function(global){
   'use strict';
   const critical=Object.freeze({
+    'app/unified-core.js':'469d53f80cafc78b5616388363e8a4ee905b14d9',
     'app/settlement.html':'8b19d44f11f9a0b30b17c6b3e05bfcf61bd8b8fa',
     'app/settlement-store.js':'ef3a5b2af35d35579c13ec27dbbbe8b7b03af290',
     'app/settlement-engine.js':'93471a5e809746a91a847b0e64b2bff09cdc0a37',
@@ -25,6 +26,7 @@
     'app/settlement-observation.js':'44f9fe2aa4335088f1e862d0391c85a75a8477b4',
     'app/settlement-regression-cases.js':'0529fc97fb2cd3ca45c370ce3252e03c5516a940',
     'app/settlement-parser-replay.js':'46f804323d4d6b3c6ad82d689421d6fdd33c3f3f',
+    'app/settlement-repair-workflow.js':'890b2159ab005375c8718861276c50159938be91',
     'app/settlement-repair-readiness.js':'34d92a558f3a94fbac6fff08aaa8a57462e16542',
     'app/settlement-qualification-dashboard.js':'2b0e0039922cc0de1d8acf002045e1ca0b39b72b',
     'app/settlement-qualification-history.js':'99307d2a1c39e8372c4904958d34fe7ea4028e72',
