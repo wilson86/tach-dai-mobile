@@ -422,6 +422,8 @@ jobs:
                 && grep -Fq 'UI_CONFIG_SAVE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'INDEXEDDB_CONFIG_PERSISTENCE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'CONFIG_UNCONFIRMED_GATES_OFF=PASS' "$tmp/dom.html" \
+                && grep -Fq 'UI_GATE_BROWSER_LOCKED=PASS' "$tmp/dom.html" \
+                && grep -Fq 'UI_GATE_LEGACY_TRUE_FAIL_CLOSED=PASS' "$tmp/dom.html" \
                 && grep -Fq 'UI_MESSAGE_SAVE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'INDEXEDDB_MESSAGE_PERSISTENCE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'MESSAGE_WAITING_RESULT_FAIL_CLOSED=PASS' "$tmp/dom.html" \

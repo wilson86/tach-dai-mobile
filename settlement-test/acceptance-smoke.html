@@ -154,6 +154,24 @@
 
   if(allowMbXien.checked)fail('MB_XIEN_GATE_DEFAULT_ON');
   if(allowUi.checked)fail('UI_GATE_DEFAULT_ON');
+  if(!allowUi.disabled)fail('UI_GATE_NOT_LOCKED');
+  allowUi.click();
+  if(allowUi.checked)fail('UI_GATE_CLICK_UNLOCKED');
+
+  const featureGates=w.KTS_SETTLEMENT_FEATURE_GATES;
+  if(!featureGates)fail('FEATURE_GATES_REQUIRED');
+  if(featureGates.UI_CONFIRMED!==false)fail('UI_GATE_AUTHORITY_NOT_LOCKED');
+  if(featureGates.uiEnabled({tinh_ui:true})!==false)fail('UI_GATE_LEGACY_FLAG_UNLOCKED');
+  if(featureGates.materializeUiRow({code:'UI',hit_units:4,payout:40},{tinh_ui:true})!==null){
+    fail('UI_GATE_LEGACY_ROW_MATERIALIZED');
+  }
+  const guardedLegacy=featureGates.guardCategoryRows([
+    {code:'2CB',xac:18},
+    {code:'UI',hit_units:4,payout:40}
+  ],{tinh_ui:true,mb_xien_234:false});
+  if(!Array.isArray(guardedLegacy)||guardedLegacy.length!==1||guardedLegacy[0].code!=='2CB'){
+    fail('UI_GATE_LEGACY_ROWS_NOT_FILTERED');
+  }
 
   for(const input of d.querySelectorAll('[data-price-region]'))input.value='0';
   const setValue=(id,value)=>{
@@ -383,6 +401,8 @@
     'UI_CONFIG_SAVE=PASS',
     'INDEXEDDB_CONFIG_PERSISTENCE=PASS',
     'CONFIG_UNCONFIRMED_GATES_OFF=PASS',
+    'UI_GATE_BROWSER_LOCKED=PASS',
+    'UI_GATE_LEGACY_TRUE_FAIL_CLOSED=PASS',
     'UI_MESSAGE_SAVE=PASS',
     'INDEXEDDB_MESSAGE_PERSISTENCE=PASS',
     'MESSAGE_WAITING_RESULT_FAIL_CLOSED=PASS',
