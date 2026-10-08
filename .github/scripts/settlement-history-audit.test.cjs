@@ -180,12 +180,12 @@ test('valid blocked event still invalidates READY without overblocking',()=>{
 test('Pages acceptance checks executed CDP state rather than source-text grep',()=>{
   const workflow=readFileSync(resolve(root,'.github','workflows','deploy-pages.yml'),'utf8');
   const cdp=readFileSync(resolve(root,'.github','scripts','settlement-cdp-browser.cjs'),'utf8');
-  const section=workflow.match(/- name: Browser acceptance on canonical test Pages via real CDP([\s\S]*?)- name: Verify settlement offline service-worker boot/);
+  const section=workflow.match(/- name: Browser acceptance on canonical test Pages via real CDP([\s\S]*?)- name: Verify Pages service worker while Chrome network is offline/);
   assert.ok(section,'CDP_PAGES_ACCEPTANCE_GATE_MISSING');
   assert.ok(section[1].includes('settlement-cdp-browser.cjs acceptance-pages'));
   assert.ok(!section[1].includes('--dump-dom'));
   assert.ok(!section[1].includes('grep -Fq'));
-  assert.ok(cdp.includes("const remotePages=mode==='acceptance-pages'"));
+  assert.ok(cdp.includes("const remotePages=['acceptance-pages','smoke-pages','offline-pages'].includes(mode)"));
   assert.ok(cdp.includes("'https://wilson86.github.io/tach-dai-mobile/settlement-test'"));
   assert.ok(cdp.includes("if(mode==='acceptance'||mode==='acceptance-pages')await checkAcceptance"));
   assert.ok(cdp.includes("if(state.state==='fail')throw Error('BROWSER_RUNTIME_FAILED:'"));
