@@ -107,7 +107,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
   const {execFileSync}=require('node:child_process');
   vm.runInNewContext(readFileSync(resolve(root,'app','settlement-build-identity.js'),'utf8'),sandbox,{filename:'settlement-build-identity.js'});
   const manifest=sandbox.window.KTS_SETTLEMENT_BUILD_IDENTITY;
-  for(const name of ['settlement-qualification-history.js','sw.js']){
+  for(const name of ['settlement-qualification-history.js','settlement-repair-workflow.js','unified-core.js','sw.js']){
     const expected=execFileSync('git',['hash-object','app/'+name],{cwd:root,encoding:'utf8'}).trim();
     assert.equal(manifest.critical_git_blobs['app/'+name],expected);
   }
@@ -141,4 +141,20 @@ test('canonical feature preserves valid journal qualification decisions',()=>{
   assert.equal(verify([ready]).current,true);
   assert.equal(verify([ready,blocked]).current,false);
   assert.equal(verify([ready,blocked,renewed],modified,'sha-renewed').current,true);
+});
+
+test('canonical source pins every cached JS asset besides manifest self-reference',()=>{
+  const sw=readFileSync(resolve(root,'app','sw.js'),'utf8');
+  const source=readFileSync(resolve(root,'app','settlement-build-identity.js'),'utf8');
+  vm.runInNewContext(source,sandbox,{filename:'settlement-build-identity.js'});
+  const pins=sandbox.window.KTS_SETTLEMENT_BUILD_IDENTITY.critical_git_blobs;
+  const core=sw.match(/const CORE=\[([\s\S]*?)\];/);
+  assert.ok(core);
+  const js=[...core[1].matchAll(/'\.\/([^']+\.js)'/g)].map(x=>x[1]);
+  assert.equal(js.length,60);
+  for(const name of js){
+    if(name==='settlement-build-identity.js')continue;
+    assert.ok(pins['app/'+name], 'CRITICAL_JS_NOT_PINNED:'+name);
+  }
+  assert.equal(Object.keys(pins).length,61);
 });
