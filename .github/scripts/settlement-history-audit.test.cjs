@@ -118,3 +118,27 @@ test('test service worker rotates cache for updated qualification module',()=>{
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
+
+test('test API auto-configuration is restricted to canonical Pages path and host',()=>{
+  const html=readFileSync(resolve(root,'settlement-test','settlement.html'),'utf8');
+  const script=html.match(/<script>\s*([\s\S]*?)\s*<\/script>/);
+  assert.ok(script&&script[1],'TEST_ENDPOINT_INLINE_SCRIPT_NOT_FOUND');
+  function endpoints(url){
+    const origin=new URL(url);
+    const ctx={window:{location:{hostname:origin.hostname,pathname:origin.pathname}}};
+    vm.runInNewContext(script[1],ctx,{filename:'settlement-inline-origin-guard'});
+    return ctx.window.KTS_SETTLEMENT_RUNTIME_ENDPOINTS;
+  }
+  const allowed=endpoints('https://wilson86.github.io/tach-dai-mobile/settlement-test/settlement.html');
+  assert.ok(allowed,'TRUSTED_TEST_ORIGIN_NOT_CONFIGURED');
+  assert.equal(allowed.parser_endpoint,'https://kts-settlement-api-test.onrender.com/api/settlement/parse');
+  assert.equal(allowed.kqxs_endpoint,'https://kts-settlement-api-test.onrender.com/api/kqxs');
+  for(const origin of [
+    'http://127.0.0.1:8765/settlement-test/settlement.html',
+    'http://localhost:8765/tach-dai-mobile/settlement-test/settlement.html',
+    'https://wilson86.github.io/tach-dai-mobile/app/settlement.html',
+    'https://wilson86.github.io/tach-dai-mobile/settlement-testing/settlement.html',
+    'https://wilson86.github.io.evil.example/tach-dai-mobile/settlement-test/settlement.html',
+    'https://example.org/tach-dai-mobile/settlement-test/settlement.html'
+  ])assert.equal(endpoints(origin),undefined,'TEST_API_LEAKED_TO_UNTRUSTED_ORIGIN:'+origin);
+});
