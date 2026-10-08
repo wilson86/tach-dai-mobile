@@ -3,10 +3,11 @@ on:
   pull_request:
     paths:
       - "settlement-test/sw.js"
-      - "settlement-test/sw-diagnostics.html"
       - "settlement-test/settlement.html"
       - "settlement-test/settlement-build-identity.js"
       - "settlement-test/settlement-qualification-history.js"
+      - "settlement-test/sw-diagnostics.html"
+      - ".github/scripts/settlement-cdp-browser.cjs"
       - ".github/workflows/settlement-pr-offline-browser.yml"
   workflow_dispatch:
 
@@ -16,102 +17,13 @@ permissions:
 jobs:
   offline:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 7
     steps:
-      - uses: actions/checkout@v4
-      - name: Cache test-runtime assets and load the app after the server is offline
+      - name: Checkout isolated PR candidate
+        uses: actions/checkout@v4
+      - name: Verify SW cache inventory, activation and offline navigation using CDP
         shell: bash
         run: |
           set -euo pipefail
-          browser=""
-          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
-            if command -v "$candidate" >/dev/null 2>&1; then
-              browser="$(command -v "$candidate")"
-              break
-            fi
-          done
-          if [ -z "$browser" ]; then echo "CHROMIUM_UNAVAILABLE" >&2; exit 1; fi
-          node - <<'NODE'
-          const fs=require('node:fs'), path=require('node:path');
-          const script=fs.readFileSync('settlement-test/sw.js','utf8');
-          const core=script.match(/const CORE=\[([\s\S]*?)\];/);
-          if(!core)throw new Error('SW_CORE_LIST_MISSING');
-          const names=[...core[1].matchAll(/'((?:\.\.?)\/[^']+)'/g)].map(x=>x[1]);
-          const missing=names.filter(file=>!fs.existsSync(path.resolve('settlement-test',file)));
-          console.log('SW_CORE_FILE_COUNT='+names.length);
-          console.log('SW_CORE_MISSING='+missing.length);
-          if(missing.length)throw new Error('SW_CORE_MISSING_RESOURCES:'+missing.join(','));
-          NODE
-          tmp="$(mktemp -d)"
-          cd "$GITHUB_WORKSPACE"
-          python3 -m http.server 8766 --bind 127.0.0.1 >"$tmp/server.log" 2>&1 &
-          server_pid=$!
-          trap 'if [[ "${server_pid:-0}" -gt 0 ]]; then kill "$server_pid" 2>/dev/null || true; fi; rm -rf "$tmp"' EXIT
-          for i in 1 2 3 4 5; do
-            if curl -fsS 'http://127.0.0.1:8766/settlement-test/settlement.html' -o /dev/null; then break; fi
-            sleep 1
-          done
-          curl -fsS 'http://127.0.0.1:8766/settlement-test/settlement.html' -o /dev/null
-          url='http://127.0.0.1:8766/settlement-test/settlement.html'
-          for attempt in 1 2; do
-            echo "Warm service worker attempt $attempt/2"
-            timeout 75s "$browser" --headless=new --no-sandbox --disable-gpu \
-              --disable-dev-shm-usage --user-data-dir="$tmp/profile" \
-              --virtual-time-budget=9000 --dump-dom "$url" \
-              >"$tmp/warm-$attempt.html" 2>"$tmp/warm-$attempt.log"
-          done
-          for marker in 'id="messageText"' 'id="kqxsAutoBadge"' 'id="checkMessageSyntax"' 'id="messageParsePreview"'; do
-            if ! grep -Fq "$marker" "$tmp/warm-2.html"; then
-              echo "WARM_BROWSER_MISSING_DOM $marker" >&2
-              exit 1
-            fi
-          done
-          echo 'WARMUP_SETTLEMENT_DOM=PASS'
-          diagnostic='http://127.0.0.1:8766/settlement-test/sw-diagnostics.html'
-          timeout 75s "$browser" --headless=new --no-sandbox --disable-gpu \
-            --disable-dev-shm-usage --user-data-dir="$tmp/profile" \
-            --virtual-time-budget=25000 --dump-dom "$diagnostic" \
-            >"$tmp/diagnostic.html" 2>"$tmp/diagnostic.log" || {
-              echo "SW_DIAGNOSTIC_CHROME_FAILED" >&2
-              tail -n 60 "$tmp/diagnostic.log" >&2
-              exit 1
-            }
-          if ! grep -Fq '<pre id="result" data-state="pass">' "$tmp/diagnostic.html"; then
-            echo "SW_DIAGNOSTIC_FAILED" >&2
-            sed -n '/id="result"/,/<\/pre>/p' "$tmp/diagnostic.html" | head -n 20 >&2 || true
-            tail -n 25 "$tmp/diagnostic.log" >&2 || true
-            exit 1
-          fi
-          echo "SW_DIAGNOSTICS=PASS"
-          # Shut down only the disposable localhost server; preserve the Chrome
-          # profile and its browser-managed SW/CacheStorage for the offline load.
-          kill "$server_pid"
-          wait "$server_pid" 2>/dev/null || true
-          server_pid=0
-          if curl --connect-timeout 1 --max-time 2 -fsS "$url" -o /dev/null 2>/dev/null; then
-            echo "OFFLINE_SERVER_STILL_REACHABLE" >&2
-            exit 1
-          fi
-          echo 'LOCALHOST_SERVER_OFFLINE=PASS'
-          timeout 75s "$browser" --headless=new --no-sandbox --disable-gpu \
-            --disable-dev-shm-usage --user-data-dir="$tmp/profile" \
-            --virtual-time-budget=9000 --dump-dom "$url" \
-            >"$tmp/offline.html" 2>"$tmp/offline.log" || {
-              tail -n 80 "$tmp/offline.log" >&2
-              exit 1
-            }
-          for marker in 'id="messageText"' 'id="kqxsAutoBadge"' 'id="checkMessageSyntax"' 'id="messageParsePreview"'; do
-            if ! grep -Fq "$marker" "$tmp/offline.html"; then
-              echo "OFFLINE_BROWSER_MISSING_DOM $marker" >&2
-              grep -o '<title>[^<]*' "$tmp/offline.html" >&2 || true
-              head -c 700 "$tmp/offline.html" >&2 || true
-              echo >&2
-              tail -n 25 "$tmp/offline.log" >&2 || true
-              exit 1
-            fi
-          done
-          if grep -Fq 'Khởi tạo lỗi:' "$tmp/offline.html"; then
-            echo "OFFLINE_BROWSER_RUNTIME_BOOT_ERROR" >&2
-            exit 1
-          fi
-          echo 'QUALIFICATION_PR_SERVICE_WORKER_OFFLINE=PASS'
+          node --version
+          node --experimental-websocket .github/scripts/settlement-cdp-browser.cjs offline
