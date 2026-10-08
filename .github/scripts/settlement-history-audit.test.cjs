@@ -142,3 +142,37 @@ test('test API auto-configuration is restricted to canonical Pages path and host
     'https://example.org/tach-dai-mobile/settlement-test/settlement.html'
   ])assert.equal(endpoints(origin),undefined,'TEST_API_LEAKED_TO_UNTRUSTED_ORIGIN:'+origin);
 });
+
+test('malformed later journal record never resurrects READY',()=>{
+  const cases=[
+    {},
+    {id:'legacy-unknown',ready_for_production_review:'false',previous_event_id:ready.id},
+    {...blocked,previous_event_id:'deleted-event'},
+    {...blocked,previous_ready_event_id:'deleted-ready'},
+    {...blocked,production_enabled:true},
+    {...blocked,merge_authorized:true},
+    {...blocked,qualification_snapshot:{ready_for_production_review:true}}
+  ];
+  for(const item of cases){
+    const v=verify([ready,item]);
+    assert.equal(v.status,'READY_EVIDENCE_UNVERIFIABLE');
+    assert.equal(v.current,false);
+    assert.ok(v.history_error&&v.history_error.startsWith('QUALIFICATION_HISTORY_INVALID_'));
+    assert.ok(v.changed_components.includes('qualification_history'));
+  }
+});
+test('duplicate event identities and disconnected ancestry fail closed',()=>{
+  const duplicate={...blocked,id:ready.id};
+  const misplaced={...blocked,previous_event_id:'unknown'};
+  for(const row of [[ready,duplicate],[ready,misplaced]]){
+    const v=verify(row);
+    assert.equal(v.current,false);
+    assert.equal(v.status,'READY_EVIDENCE_UNVERIFIABLE');
+  }
+});
+test('valid blocked event still invalidates READY without overblocking',()=>{
+  const v=verify([ready,blocked]);
+  assert.equal(v.status,'READY_EVIDENCE_STALE');
+  assert.equal(v.current,false);
+  assert.equal(H.validateHistoryEvents([ready,blocked,renewed]).valid,true);
+});
