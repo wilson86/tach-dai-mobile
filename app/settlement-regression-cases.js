@@ -63,8 +63,10 @@
     const evaluator = global.KTS_SETTLEMENT_EVALUATOR;
     const shadow = global.KTS_SETTLEMENT_SHADOW;
     const runtime = global.KTS_SETTLEMENT_RUNTIME;
-    if (!engine || !evaluator || !shadow || !runtime || typeof runtime.settleWithConfig !== 'function') throw new Error('REGRESSION_RUNTIME_DEPENDENCY_MISSING');
-    return { engine, evaluator, shadow, runtime };
+    const gates = global.KTS_SETTLEMENT_FEATURE_GATES;
+    if (!engine || !evaluator || !shadow || !runtime || typeof runtime.settleWithConfig !== 'function' ||
+        !gates || typeof gates.guardEvaluation !== 'function') throw new Error('REGRESSION_RUNTIME_DEPENDENCY_MISSING');
+    return { engine, evaluator, shadow, runtime, gates };
   }
 
   function ensureFeatureGates(message, config) {
@@ -91,14 +93,15 @@
         result_snapshot: c.lottery_result_snapshot,
         region: c.scope.region
       });
-      const messageRows = evaluated.category_inputs.map(row => d.engine.category(row));
-      categoryInputs.push(...evaluated.category_inputs);
-      detailRows.push(...evaluated.detail_rows.map(row => Object.assign({ message_id: String(message.id || '') }, row)));
+      const guarded = d.gates.guardEvaluation(evaluated, c.config_snapshot);
+      const messageRows = guarded.category_inputs.map(row => d.engine.category(row));
+      categoryInputs.push(...guarded.category_inputs);
+      detailRows.push(...guarded.detail_rows.map(row => Object.assign({ message_id: String(message.id || '') }, row)));
       messageBreakdown.push({
         message_id: String(message.id || ''),
         raw_text: String(message.raw_text || ''),
         category_rows: clone(messageRows),
-        detail_rows: clone(evaluated.detail_rows)
+        detail_rows: clone(guarded.detail_rows)
       });
     }
     if (!categoryInputs.length) throw new Error('REGRESSION_NO_ACTIVE_CATEGORY_INPUTS');
@@ -108,6 +111,8 @@
     const settled = d.runtime.settleWithConfig(categoryInputs, {
       partner_role: c.partner_role, config_snapshot: c.config_snapshot, region: c.scope.region
     });
+    if (!settled || !Array.isArray(settled.rows) || settled.rows.length !== categoryInputs.length)
+      throw new Error('REGRESSION_CATEGORY_ROW_COUNT_MISMATCH');
     const settlement = {
       id: c.scope.scope_id,
       partner_id: c.scope.partner_id,
@@ -227,7 +232,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_CASES = Object.freeze({
-    version: 'settlement-regression-cases-v2-runtime-parity',
+    version: 'settlement-regression-cases-v3-shared-evaluation-guard',
     META_KEY,
     FORMAT,
     BUNDLE_FORMAT,
