@@ -33,11 +33,11 @@ assert.strictEqual(x2.qua_co, 56);
 assert.strictEqual(x2.payout, 1000);
 
 assert.strictEqual(R.uiPayoutRowWithConfig(4, 10, baseConfig), null);
-const ui = R.uiPayoutRowWithConfig(4, 10, Object.assign({}, baseConfig, { tinh_ui: true }));
-assert.strictEqual(ui.code, 'UI');
-assert.strictEqual(ui.xac, 0);
-assert.strictEqual(ui.hit_units, 4);
-assert.strictEqual(ui.win_rate, 10);
+assert.strictEqual(
+  R.uiPayoutRowWithConfig(4, 10, Object.assign({}, baseConfig, { tinh_ui: true })),
+  null,
+  'legacy/config true must not unlock unconfirmed UI'
+);
 
 const settledNoUi = R.settleWithConfig([
   { code: '2CB', xac: 18, commission_value: 0.76, commission_type: 'ratio', hit_units: 0, win_rate: 75 },
@@ -46,12 +46,12 @@ const settledNoUi = R.settleWithConfig([
 assert.strictEqual(settledNoUi.total_payout, 0);
 assert.strictEqual(settledNoUi.final_net, 13.68);
 
-const settledUi = R.settleWithConfig([
+const settledLegacyUi = R.settleWithConfig([
   { code: '2CB', xac: 18, commission_value: 0.76, commission_type: 'ratio', hit_units: 0, win_rate: 75 },
   { code: 'UI', xac: 0, commission_value: 0, commission_type: 'ratio', hit_units: 4, win_rate: 10 }
 ], { partner_role: 'customer', config_snapshot: Object.assign({}, baseConfig, { tinh_ui: true }) });
-assert.strictEqual(settledUi.total_payout, 40);
-assert(Math.abs(settledUi.final_net - (-26.32)) < 1e-9);
+assert.strictEqual(settledLegacyUi.total_payout, 0, 'legacy/config true must keep UI payout fail-closed');
+assert.strictEqual(settledLegacyUi.final_net, 13.68);
 
 const row = [{ code:'2CB', xac:18, commission_value:0.76, commission_type:'ratio', hit_units:0, win_rate:75 }];
 const mnRegional = R.settleWithConfig(row,{partner_role:'customer',config_snapshot:regionalConfig,region:'mn'});
