@@ -5,7 +5,7 @@ const {resolve, join, basename}=require('node:path');
 const root=resolve(__dirname,'../..');
 const feature=join(root,'_feature_authority','app');
 const deploy=join(root,'settlement-test');
-const authority='16c7e93c6d7d07eee9c12c4d80deac68c2ac69d6';
+const authority='6afd78e64497477525a0b34ff4c1244c7bb70f03';
 if(!existsSync(feature))throw new Error('PINNED_FEATURE_CHECKOUT_MISSING');
 const commit=execFileSync('git',['-C',join(root,'_feature_authority'),'rev-parse','HEAD'],{encoding:'utf8'}).trim();
 if(commit!==authority)throw new Error('FEATURE_AUTHORITY_SHA_MISMATCH:'+commit);
