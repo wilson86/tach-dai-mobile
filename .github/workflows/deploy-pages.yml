@@ -89,3 +89,73 @@ jobs:
 
           echo "PUBLIC_PAGES_PARITY=FAIL sha=${GITHUB_SHA}" >&2
           exit 1
+
+      - name: Browser smoke settlement runtime
+        shell: bash
+        env:
+          SETTLEMENT_TEST_URL: https://wilson86.github.io/tach-dai-mobile/settlement-test
+        run: |
+          set -euo pipefail
+
+          browser=""
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              browser="$(command -v "$candidate")"
+              break
+            fi
+          done
+          if [ -z "$browser" ]; then
+            echo "BROWSER_SMOKE_NO_CHROME" >&2
+            exit 1
+          fi
+
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          url="${SETTLEMENT_TEST_URL}/settlement.html?sha=${GITHUB_SHA}"
+
+          for attempt in 1 2 3; do
+            echo "Browser smoke attempt $attempt/3 using $browser"
+            rm -rf "$tmp/profile" "$tmp/dom.html" "$tmp/chrome.log"
+
+            if "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --user-data-dir="$tmp/profile" \
+              --virtual-time-budget=8000 \
+              --dump-dom "$url" \
+              >"$tmp/dom.html" 2>"$tmp/chrome.log"; then
+
+              failed=0
+              for needle in \
+                'id="kqxsAutoBadge"' \
+                'id="checkMessageSyntax"' \
+                'id="messageParsePreview"'; do
+                if ! grep -Fq "$needle" "$tmp/dom.html"; then
+                  echo "BROWSER_SMOKE_MISSING_DOM $needle" >&2
+                  failed=1
+                fi
+              done
+
+              if grep -Fq 'Khởi tạo lỗi:' "$tmp/dom.html"; then
+                echo "BROWSER_SMOKE_BOOT_ERROR" >&2
+                failed=1
+              fi
+
+              if [ "$failed" -eq 0 ]; then
+                echo "BROWSER_RUNTIME_SMOKE=PASS sha=${GITHUB_SHA}"
+                exit 0
+              fi
+            else
+              echo "BROWSER_SMOKE_CHROME_EXIT_FAIL attempt=$attempt" >&2
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              sleep 3
+            fi
+          done
+
+          echo "BROWSER_RUNTIME_SMOKE=FAIL sha=${GITHUB_SHA}" >&2
+          tail -n 120 "$tmp/chrome.log" >&2 || true
+          exit 1
