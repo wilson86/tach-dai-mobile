@@ -304,3 +304,21 @@ test('every cached runtime JavaScript file is pinned except recursive build iden
   const executable=names.filter(x=>x!=='settlement-build-identity.js');
   assert.equal(executable.length,59,'UNEXPECTED_CACHED_JS_MODULE_COUNT');
 });
+
+test('corrupt metadata is not confused with a fresh empty journal',()=>{
+  const valid={key:H.META_KEY,version:1,events:[]};
+  assert.equal(H.validateJournalRow(valid).valid,true);
+  const invalid=[
+    [null,'ROW_NOT_OBJECT'],
+    [[], 'ROW_NOT_OBJECT'],
+    [{...valid,key:'wrong'},'ROW_KEY_MISMATCH'],
+    [{...valid,version:9},'ROW_VERSION_MISMATCH'],
+    [{...valid,events:'damaged'},'ROW_EVENTS_NOT_ARRAY'],
+    [{...valid,events:{}},'ROW_EVENTS_NOT_ARRAY']
+  ];
+  for(const [row,reason] of invalid){
+    const result=H.validateJournalRow(row);
+    assert.equal(result.valid,false);
+    assert.equal(result.reason,reason);
+  }
+});
