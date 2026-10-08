@@ -453,7 +453,10 @@ jobs:
                 && grep -Fq 'OBSERVATION_STRICT_KQXS_GATE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'OBSERVATION_DURATION_FAIL_CLOSED=PASS' "$tmp/dom.html" \
                 && grep -Fq 'OBSERVATION_REGRESSION_FAIL_CLOSED=PASS' "$tmp/dom.html" \
-                && grep -Fq 'OBSERVATION_CANDIDATE_PENDING_FAIL_CLOSED=PASS' "$tmp/dom.html"; then
+                && grep -Fq 'OBSERVATION_CANDIDATE_PENDING_FAIL_CLOSED=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_KQXS_CURRENT=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_RESULT_DRIFT_BLOCKED=PASS' "$tmp/dom.html" \
+                && grep -Fq 'BUILD_IDENTITY_RUNTIME_VALID=PASS' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi

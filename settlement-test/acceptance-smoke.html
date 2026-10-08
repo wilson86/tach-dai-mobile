@@ -772,6 +772,49 @@
     fail('OBSERVATION_CANDIDATE_BLOCKER_MISSING:'+JSON.stringify(candidateBlocked.blockers||[]));
   }
 
+  const qualificationApi=w.KTS_SETTLEMENT_QUALIFICATION;
+  if(!qualificationApi||typeof qualificationApi.kqxsVerificationGate!=='function'){
+    fail('QUALIFICATION_API_REQUIRED');
+  }
+  const currentResults=await store.getAll(store.STORES.results);
+  const currentKqxsGate=qualificationApi.kqxsVerificationGate(exactObservation,currentResults);
+  if(!currentKqxsGate||currentKqxsGate.met!==true)fail('QUALIFICATION_KQXS_GATE_NOT_MET');
+  if(Number(currentKqxsGate.verified||0)!==1||Number(currentKqxsGate.unverified||0)!==0||Number(currentKqxsGate.conflict||0)!==0){
+    fail('QUALIFICATION_KQXS_GATE_COUNTS');
+  }
+
+  const driftObservation=JSON.parse(JSON.stringify(exactObservation));
+  if(!Array.isArray(driftObservation.scopes)||driftObservation.scopes.length!==1)fail('QUALIFICATION_DRIFT_SCOPE_REQUIRED');
+  driftObservation.scopes[0].result_fingerprint='acceptance-drift-fingerprint';
+  const driftGate=qualificationApi.kqxsVerificationGate(driftObservation,currentResults);
+  if(!driftGate||driftGate.met!==false)fail('QUALIFICATION_RESULT_DRIFT_UNSAFE_MET');
+  if(!Array.isArray(driftGate.bad_scopes)||driftGate.bad_scopes.length!==1){
+    fail('QUALIFICATION_RESULT_DRIFT_BAD_SCOPE_COUNT');
+  }
+  if(driftGate.bad_scopes[0].reason!=='KQXS_SETTLEMENT_RESULT_DRIFT'){
+    fail('QUALIFICATION_RESULT_DRIFT_REASON:'+String(driftGate.bad_scopes[0].reason||''));
+  }
+
+  const qualificationHistory=w.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
+  if(!qualificationHistory||typeof qualificationHistory.validateBuildIdentity!=='function'){
+    fail('QUALIFICATION_HISTORY_API_REQUIRED');
+  }
+  const buildIdentity=qualificationHistory.validateBuildIdentity(w.KTS_SETTLEMENT_BUILD_IDENTITY);
+  if(!buildIdentity||buildIdentity.version!=='settlement-build-identity-v1')fail('BUILD_IDENTITY_VERSION');
+  if(buildIdentity.algorithm!=='git-blob-sha1')fail('BUILD_IDENTITY_ALGORITHM');
+  const criticalEntries=Object.entries(buildIdentity.critical_git_blobs||{});
+  if(criticalEntries.length<15)fail('BUILD_IDENTITY_INCOMPLETE:'+criticalEntries.length);
+  for(const [path,hash] of criticalEntries){
+    if(!/^app\/.+\.(?:js|html)$/.test(String(path))||!/^[0-9a-f]{40}$/.test(String(hash||''))){
+      fail('BUILD_IDENTITY_ENTRY_INVALID:'+String(path));
+    }
+  }
+  const runtimeSignature=qualificationHistory.runtimeSignature();
+  if(!runtimeSignature||!runtimeSignature.build_identity)fail('BUILD_IDENTITY_RUNTIME_SIGNATURE_MISSING');
+  if(JSON.stringify(runtimeSignature.build_identity)!==JSON.stringify(buildIdentity)){
+    fail('BUILD_IDENTITY_RUNTIME_SIGNATURE_DRIFT');
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -817,7 +860,10 @@
     'OBSERVATION_STRICT_KQXS_GATE=PASS',
     'OBSERVATION_DURATION_FAIL_CLOSED=PASS',
     'OBSERVATION_REGRESSION_FAIL_CLOSED=PASS',
-    'OBSERVATION_CANDIDATE_PENDING_FAIL_CLOSED=PASS'
+    'OBSERVATION_CANDIDATE_PENDING_FAIL_CLOSED=PASS',
+    'QUALIFICATION_KQXS_CURRENT=PASS',
+    'QUALIFICATION_RESULT_DRIFT_BLOCKED=PASS',
+    'BUILD_IDENTITY_RUNTIME_VALID=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
