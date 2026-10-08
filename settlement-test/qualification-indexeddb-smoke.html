@@ -88,6 +88,8 @@
       [{...ready,qualification_state:'BLOCKED_SHADOW_QUALIFICATION'},'READY_STATE_CONTRADICTION'],
       [{...ready,blockers:['UNEXPLAINED_MONETARY_MISMATCH']},'READY_HAS_BLOCKERS'],
       [{...ready,merge_authorized:true},'SNAPSHOT_AUTHORITY_ESCALATION'],
+      [{...ready,regression_gate:{met:false}},'READY_GATE_NOT_MET_REGRESSION_GATE'],
+      [{...ready,kqxs_verification:{met:false}},'READY_GATE_NOT_MET_KQXS_VERIFICATION'],
       [{...ready,ready_for_production_review:false},'BLOCKED_STATE_CONTRADICTION']
     ]){
       let rejected=false;
