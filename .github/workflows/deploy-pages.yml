@@ -418,7 +418,10 @@ jobs:
                 && grep -Fq 'UI_MESSAGE_TAB=PASS' "$tmp/dom.html" \
                 && grep -Fq 'UI_SYNTAX_REVIEW=PASS DAT' "$tmp/dom.html" \
                 && grep -Fq 'UI_PARTNER_CREATE=PASS' "$tmp/dom.html" \
-                && grep -Fq 'INDEXEDDB_PARTNER_PERSISTENCE=PASS' "$tmp/dom.html"; then
+                && grep -Fq 'INDEXEDDB_PARTNER_PERSISTENCE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'UI_CONFIG_SAVE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'INDEXEDDB_CONFIG_PERSISTENCE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'CONFIG_UNCONFIRMED_GATES_OFF=PASS' "$tmp/dom.html"; then
                 echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
                 exit 0
               fi

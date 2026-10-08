@@ -135,6 +135,62 @@
   if(smokePartner.active===false)fail('PARTNER_INDEXEDDB_INACTIVE');
   if(smokePartner.role!=='customer')fail('PARTNER_INDEXEDDB_ROLE_MISMATCH');
 
+  const configTab=d.querySelector('.nav button[data-pane="config"]');
+  const configPane=d.getElementById('pane-config');
+  const effectiveDate=d.getElementById('effectiveDate');
+  const allowMbXien=d.getElementById('allowMbXien');
+  const allowUi=d.getElementById('allowUi');
+  const saveConfig=d.getElementById('saveConfig');
+  const configStatus=d.getElementById('configStatus');
+  if(!configTab||!configPane||!effectiveDate||!allowMbXien||!allowUi||!saveConfig||!configStatus){
+    fail('CONFIG_UI_REQUIRED');
+  }
+
+  configTab.click();
+  if(!configPane.classList.contains('active'))fail('CONFIG_TAB_NOT_ACTIVE');
+  effectiveDate.value='2026-10-08';
+  effectiveDate.dispatchEvent(new w.Event('change',{bubbles:true}));
+  await new Promise(resolve=>setTimeout(resolve,100));
+
+  if(allowMbXien.checked)fail('MB_XIEN_GATE_DEFAULT_ON');
+  if(allowUi.checked)fail('UI_GATE_DEFAULT_ON');
+
+  for(const input of d.querySelectorAll('[data-price-region]'))input.value='0';
+  const setValue=(id,value)=>{
+    const el=d.getElementById(id);
+    if(!el)fail('CONFIG_FIELD_MISSING:'+id);
+    el.value=value;
+  };
+  setValue('commissionType','ratio');
+  setValue('mnTotalPercent','100');
+  setValue('mnRefundPercent','0');
+  setValue('mtTotalPercent','100');
+  setValue('mtRefundPercent','0');
+  setValue('mbTotalPercent','100');
+  setValue('mbRefundPercent','0');
+
+  saveConfig.click();
+  const configDeadline=Date.now()+12000;
+  while(Date.now()<configDeadline){
+    const text=String(configStatus.textContent||'');
+    if(text.includes('Đã lưu v'))break;
+    if(configStatus.classList.contains('err'))fail('CONFIG_SAVE_ERROR:'+text);
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!String(configStatus.textContent||'').includes('Đã lưu v')){
+    fail('CONFIG_SAVE_TIMEOUT:'+String(configStatus.textContent||''));
+  }
+
+  const savedConfig=await store.resolveConfigForDate(smokePartner.id,'2026-10-08');
+  if(!savedConfig)fail('CONFIG_INDEXEDDB_MISSING');
+  if(savedConfig.mb_xien_234!==false)fail('CONFIG_MB_XIEN_GATE_CHANGED');
+  if(savedConfig.tinh_ui!==false)fail('CONFIG_UI_GATE_CHANGED');
+  for(const region of ['mn','mt','mb']){
+    const terms=savedConfig.region_terms&&savedConfig.region_terms[region]||{};
+    if(String(terms.total_percent)!=='100')fail('CONFIG_TOTAL_PERCENT_'+region.toUpperCase());
+    if(String(terms.refund_percent)!=='0')fail('CONFIG_REFUND_PERCENT_'+region.toUpperCase());
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -145,7 +201,10 @@
     'UI_MESSAGE_TAB=PASS',
     'UI_SYNTAX_REVIEW=PASS DAT',
     'UI_PARTNER_CREATE=PASS',
-    'INDEXEDDB_PARTNER_PERSISTENCE=PASS'
+    'INDEXEDDB_PARTNER_PERSISTENCE=PASS',
+    'UI_CONFIG_SAVE=PASS',
+    'INDEXEDDB_CONFIG_PERSISTENCE=PASS',
+    'CONFIG_UNCONFIRMED_GATES_OFF=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
