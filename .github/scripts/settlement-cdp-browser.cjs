@@ -198,10 +198,10 @@ async function checkAcceptance(browser,base){
   const end=fixture.lastIndexOf('  out.textContent=[');
   assert(end>=0,'ACCEPTANCE_RESULT_CONTRACT_MISSING');
   const contract=fixture.slice(end);
-  const markers=[...contract.matchAll(/^\\s*'([^']+=PASS(?:[^']*)?)',?\\s*$/gm)].map(m=>m[1]);
+  const markers=[...contract.matchAll(/^\s*'([^']+=PASS(?:[^']*)?)',?\s*$/gm)].map(m=>m[1]);
   assert(markers.length>=62,'ACCEPTANCE_RESULT_CONTRACT_SHRANK:'+markers.length);
   assert(new Set(markers).size===markers.length,'ACCEPTANCE_DUPLICATED_MARKERS');
-  const observed=result.text.split(/\\r?\\n/);
+  const observed=result.text.split(/\r?\n/);
   for(const marker of markers){
     assert(observed.includes(marker),'ACCEPTANCE_MARKER_MISSING:'+marker);
   }
