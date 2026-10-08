@@ -129,7 +129,7 @@ function fixture() {
   assert(source.includes("global.addEventListener('kts:settlement-message-saved'"));
   assert(!source.includes("save.addEventListener('click'"), 'KQXS polling must not start on raw save click');
   const parserErrorPos=uiSource.indexOf("if (outcome.status === 'parser_error')");
-  const acceptedEventPos=uiSource.indexOf("new global.CustomEvent('kts:settlement-message-saved'");
+  const acceptedEventPos=uiSource.indexOf("emitSettlementEvent('kts:settlement-message-saved'");
   assert(parserErrorPos>=0 && acceptedEventPos>parserErrorPos, 'accepted-message event must be after parser-error fail-closed branch');
   assert(uiSource.includes("Missing config / parser errors never create a background polling job."));
   assert(source.includes('resumePendingScopes'));
