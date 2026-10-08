@@ -225,7 +225,11 @@
         config_snapshot: config, result_snapshot: resultSnapshot, reason: 'KQXS_SCOPE_MISMATCH'
       });
     }
-    if (String(resultSnapshot.verification_status || '').toLowerCase() === 'conflict') {
+    // Imported/restored IndexedDB may contain contradictory KQXS metadata.
+    // A nonempty conflict list is authoritative even if a stale status says
+    // "verified". Never evaluate monetary rows against contradictory sources.
+    if (String(resultSnapshot.verification_status || '').toLowerCase() === 'conflict' ||
+        (Array.isArray(resultSnapshot.verification_conflicts) && resultSnapshot.verification_conflicts.length > 0)) {
       return saveBlockedScope({
         partner_id: partnerId, business_date: businessDate, region, messages,
         config_snapshot: config, result_snapshot: resultSnapshot, reason: 'KQXS_SOURCE_CONFLICT'
@@ -446,7 +450,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v16-blocked-partner-revalidation',
+    version: 'settlement-pipeline-v17-kqxs-conflict-evidence',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
