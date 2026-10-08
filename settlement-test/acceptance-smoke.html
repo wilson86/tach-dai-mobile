@@ -234,6 +234,28 @@
   const futureResult=await store.get(store.STORES.results,'2099-12-31:mb');
   if(futureResult)fail('FUTURE_KQXS_MUST_NOT_EXIST');
 
+  const backup=await store.exportAll();
+  if(!backup||backup.format!=='kts-settlement-export'||backup.version!==5)fail('BACKUP_FORMAT_INVALID');
+  const backupStores=backup.stores||{};
+  const backupPartners=backupStores[store.STORES.partners]||[];
+  const backupConfigs=backupStores[store.STORES.configs]||[];
+  const backupMessages=backupStores[store.STORES.messages]||[];
+  if(!backupPartners.some(p=>p&&p.id===smokePartner.id&&p.name==='CI Smoke Partner'))fail('BACKUP_PARTNER_MISSING');
+  if(!backupConfigs.some(c=>c&&c.partner_id===smokePartner.id&&c.effective_from_date==='2026-10-08'))fail('BACKUP_CONFIG_MISSING');
+  if(!backupMessages.some(m=>m&&m.id===smokeMessage.id&&m.raw_text==='92 61 da 1n'))fail('BACKUP_MESSAGE_MISSING');
+
+  const beforeCounts={};
+  for(const name of Object.values(store.STORES))beforeCounts[name]=(await store.getAll(name)).length;
+  const imported=await store.importAll(backup,{replace:false});
+  if(!imported||imported.valid!==true||imported.replace!==false)fail('BACKUP_MERGE_VALIDATION');
+  for(const name of Object.values(store.STORES)){
+    if(Number(imported.inserted_counts&&imported.inserted_counts[name]||0)!==0){
+      fail('BACKUP_MERGE_INSERTED_EXISTING:'+name);
+    }
+    const after=(await store.getAll(name)).length;
+    if(after!==beforeCounts[name])fail('BACKUP_MERGE_COUNT_CHANGED:'+name+':'+beforeCounts[name]+'->'+after);
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -250,7 +272,9 @@
     'CONFIG_UNCONFIRMED_GATES_OFF=PASS',
     'UI_MESSAGE_SAVE=PASS',
     'INDEXEDDB_MESSAGE_PERSISTENCE=PASS',
-    'MESSAGE_WAITING_RESULT_FAIL_CLOSED=PASS'
+    'MESSAGE_WAITING_RESULT_FAIL_CLOSED=PASS',
+    'BACKUP_EXPORT_BROWSER=PASS',
+    'BACKUP_MERGE_IDEMPOTENT=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
