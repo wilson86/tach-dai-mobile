@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.159-canonical-history-sha-guard'));
+  assert.ok(sw.includes('v1.0.160-no-permitted-categories'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -676,4 +676,39 @@ test('canonical journal rejects missing or malformed SHA-256 component entries',
     const verdict=H.classifyHistoryValidity([event],components,'b'.repeat(64),{status:'available'});
     assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
   }
+});
+
+test('unsupported-only UI scope stays BLOCKED instead of settling silently as zero',async()=>{
+  const ctx={window:{}};
+  let settlementCalls=0;
+  const saved=[];
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{partners:'partners',results:'results',messages:'messages'},
+    get:async(store,id)=>store==='results'?{business_date:'2026-09-22',region:'mn',complete:true}:null,
+    getAll:async()=>[],
+    resolveConfigForDate:async()=>({partner_id:'synthetic',tinh_ui:true,mb_xien_234:false}),
+    saveSettlement:async row=>{saved.push(row);return row;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={
+    evaluateCanonicalMessage:()=>({category_inputs:[{code:'UI',xac:0}],
+      detail_rows:[{code:'UI',numbers:'23',hit_units:1}]})
+  };
+  ctx.window.KTS_SETTLEMENT_RUNTIME={
+    settleWithConfig:()=>{settlementCalls++;throw new Error('SHOULD_NOT_INVOKE_RUNTIME_FOR_EMPTY_GUARDED_ROWS');}
+  };
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic-engine'};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const msg={id:'msg1',partner_id:'synthetic',business_date:'2026-09-22',region:'mn',
+    status:'parsed',canonical_payload:{legs:[{code:'UI'}]}};
+  const actual=await ctx.window.KTS_SETTLEMENT_PIPELINE.settleScope({
+    partner_id:'synthetic',business_date:'2026-09-22',region:'mn',messages:[msg]
+  });
+  assert.equal(actual.status,'blocked');
+  assert.equal(actual.reason,'NO_PERMITTED_SETTLEMENT_CATEGORY_INPUTS');
+  assert.equal(actual.settlement.scope_status,'blocked');
+  assert.deepEqual(JSON.parse(JSON.stringify(actual.settlement.blocked_reasons)),['NO_PERMITTED_SETTLEMENT_CATEGORY_INPUTS']);
+  assert.equal(saved.length,1);
+  assert.equal(settlementCalls,0);
+  assert.equal(actual.settlement.category_rows.length,0);
 });

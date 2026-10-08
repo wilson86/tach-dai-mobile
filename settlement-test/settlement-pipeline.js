@@ -204,6 +204,14 @@
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
     }
 
+    // Regression already refuses an empty active category set. The live
+    // pipeline must also block rather than marking unsupported-only bets as
+    // complete with zero money after the unconfirmed UI row was discarded.
+    if (!categoryInputs.length) {
+      return saveBlockedScope({partner_id:partnerId,business_date:businessDate,region,messages,
+        config_snapshot:config,result_snapshot:resultSnapshot,reason:'NO_PERMITTED_SETTLEMENT_CATEGORY_INPUTS'});
+    }
+
     let settled;
     try {
       const partner = await d.store.get(d.store.STORES.partners, partnerId);
@@ -384,7 +392,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v10-shared-evaluation-guard',
+    version: 'settlement-pipeline-v11-block-unpermitted-only-scopes',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
