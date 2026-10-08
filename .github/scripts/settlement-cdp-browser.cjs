@@ -179,6 +179,35 @@ async function shutdownServer(server){
   server.closeAllConnections();
   await completed;
 }
+async function checkAcceptance(browser,base){
+  await navigate(browser,base+'/acceptance-smoke.html');
+  const result=await waitFor(async()=>{
+    const state=await pageEval(browser,`(()=>{
+      const node=document.getElementById('result'),text=String(node&&node.textContent||'');
+      if(text.startsWith('ACCEPTANCE_SMOKE=FAIL'))return {state:'fail',text};
+      if(text.startsWith('ACCEPTANCE_SMOKE=PASS'))return {state:'pass',text};
+      return {state:'pending',text};
+    })()`);
+    if(state.state==='fail')throw Error('BROWSER_RUNTIME_FAILED:'+state.text);
+    return state.state==='pass'?state:null;
+  },145000,'ACCEPTANCE_RUNTIME');
+  for(const marker of [
+    'ACCEPTANCE_SMOKE=PASS',
+    'BROWSER_CORS_PARSER=PASS code=DAT',
+    'UI_GATE_BROWSER_LOCKED=PASS',
+    'CONFIG_UNCONFIRMED_GATES_OFF=PASS',
+    'KQXS_VERIFIED_FIXTURE=PASS',
+    'SETTLEMENT_CANONICAL_TOTALS=PASS',
+    'SHADOW_MATCH_EXACT=PASS',
+    'QUALIFICATION_HISTORY_BLOCKED_REVERT_FAIL_CLOSED=PASS',
+    'QUALIFICATION_HISTORY_REQUALIFIED_CURRENT=PASS',
+    'QUALIFICATION_HISTORY_NO_AUTHORITY_ESCALATION=PASS'
+  ])assert(result.text.includes(marker),'ACCEPTANCE_MARKER_MISSING:'+marker);
+  console.log('ACCEPTANCE_SMOKE=PASS');
+  console.log('ACCEPTANCE_CHECK_COUNT='+result.text.split('\\n').filter(x=>x.includes('=PASS')).length);
+  console.log('CDP_ACCEPTANCE_RESULT_VERIFIED=PASS');
+}
+
 async function checkIndexedDb(browser,base){
   await navigate(browser,base+'/qualification-indexeddb-smoke.html');
   await waitResult(browser,'QUALIFICATION_INDEXEDDB_BROWSER');
@@ -255,7 +284,7 @@ async function checkOffline(browser,server,base){
   }
 }
 (async()=>{
-  assert(['indexeddb','offline','offline-cold'].includes(mode),'INVALID_TEST_MODE');
+  assert(['indexeddb','offline','offline-cold','acceptance'].includes(mode),'INVALID_TEST_MODE');
   const server=serve();let browser;
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -277,6 +306,7 @@ async function checkOffline(browser,server,base){
     if(!browser)throw startupError||Error('CHROME_STARTUP_FAILED');
     console.log('CDP_CHROME_ATTACHED=PASS');
     if(mode==='indexeddb')await checkIndexedDb(browser,base);
+    else if(mode==='acceptance')await checkAcceptance(browser,base);
     else await checkOffline(browser,server,base);
     console.log('CDP_'+mode.toUpperCase()+'_PASS=YES');
   }catch(e){
