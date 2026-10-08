@@ -366,7 +366,7 @@
     version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
     validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
     parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
-    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,validateJournalRow,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
