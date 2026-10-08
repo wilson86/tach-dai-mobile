@@ -193,3 +193,27 @@ test('Pages acceptance checks executed CDP state rather than source-text grep',(
   const browser=workflow.indexOf('- name: Browser acceptance on canonical test Pages via real CDP');
   assert.ok(parity>=0&&browser>parity,'BROWSER_ACCEPTANCE_BEFORE_ARTIFACT_PARITY');
 });
+
+test('public Pages browser gates use real runtime CDP and no DNS spoofing',()=>{
+  const workflow=readFileSync(resolve(root,'.github','workflows','deploy-pages.yml'),'utf8');
+  const script=readFileSync(resolve(root,'.github','scripts','settlement-cdp-browser.cjs'),'utf8');
+  const steps=[
+    '- name: Verify public settlement test bytes',
+    '- name: Browser smoke on canonical Pages via real CDP',
+    '- name: Browser acceptance on canonical test Pages via real CDP',
+    '- name: Verify Pages service worker while Chrome network is offline'
+  ];
+  const indices=steps.map(s=>workflow.indexOf(s));
+  assert.ok(indices.every(x=>x>=0),'PAGES_GATE_MISSING');
+  assert.ok(indices.every((x,i)=>i===0||indices[i-1]<x),'PAGES_GATE_ORDER_INVALID');
+  for(const mode of ['smoke-pages','acceptance-pages','offline-pages']){
+    assert.ok(workflow.includes('settlement-cdp-browser.cjs '+mode),'PAGES_CDP_MODE_MISSING:'+mode);
+  }
+  assert.ok(!workflow.includes('--dump-dom'),'LEGACY_DUMP_DOM_FORBIDDEN');
+  assert.ok(!workflow.includes('--host-resolver-rules'),'DNS_ORIGIN_SPOOFING_FORBIDDEN');
+  assert.ok(!workflow.includes('grep -Fq \'ACCEPTANCE_SMOKE=PASS\''),'STATIC_PASS_GREP_FORBIDDEN');
+  assert.ok(script.includes("'https://wilson86.github.io/tach-dai-mobile/settlement-test'"));
+  assert.ok(script.includes("'Network.emulateNetworkConditions'"));
+  assert.ok(script.includes('offline:true,latency:0,downloadThroughput:0,uploadThroughput:0'));
+  assert.ok(script.includes("assert(state.valid&&state.controlled,'PAGES_OFFLINE_NOT_CONTROLLED')"));
+});
