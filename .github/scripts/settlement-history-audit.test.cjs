@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.167-strict-golden-oracle'));
+  assert.ok(sw.includes('v1.0.168-ready-numeric-parity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -573,8 +573,13 @@ test('golden regression replays through actual production regional runtime and c
 });
 
 test('READY requires every pinned golden case to pass, not merely zero failures',()=>{
-  const gates={observation:{promotion_ready:true,blockers:[]},kqxs:{met:true},parser_provenance:{met:true},
-    parser_backend:{met:true},candidates:{pending:0},feature_safety:{met:true}};
+  const gates={
+    observation:{promotion_ready:true,blockers:[],counts:{total:1,exact:1,missing_scopes:0}},
+    kqxs:{met:true,total:1,verified:1,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:1,known:1,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:1,matched:1,mismatched:0,unreachable:false},
+    candidates:{pending:0},feature_safety:{met:true,unsafe_count:0}
+  };
   const incomplete=Q.combineQualification({...gates,regression:{total:3,passed:2,failed:0}});
   assert.equal(incomplete.qualification_state,'BLOCKED_SHADOW_QUALIFICATION');
   assert.equal(incomplete.ready_for_production_review,false);
@@ -997,5 +1002,38 @@ test('golden oracle rejects blank, null, bool or object totals; legitimate zero 
     }
     const missing=JSON.parse(JSON.stringify(base));delete missing.expected_reference.totals[key];
     assert.throws(()=>normalize(missing),new RegExp('REGRESSION_REFERENCE_REQUIRED:'+key));
+  }
+});
+
+test('dashboard READY is impossible when flags contradict counters or blockers',()=>{
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  const good={
+    observation:{promotion_ready:true,counts:{total:2,exact:2,missing_scopes:0},blockers:[]},
+    kqxs:{met:true,total:2,verified:2,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:2,known:2,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:2,matched:2,mismatched:0,unreachable:false},
+    regression:{total:3,passed:3,failed:0},candidates:{pending:0},
+    feature_safety:{met:true,unsafe_count:0}
+  };
+  const valid=Q.combineQualification(good);
+  assert.equal(valid.ready_for_production_review,true);
+  assert.equal(H.validateSnapshotDecision(valid).valid,true);
+  const cases=[
+    ['observation',x=>x.observation.counts.exact=1,'READY_GATE_EVIDENCE_CONTRADICTION_OBSERVATION'],
+    ['observation-blocker',x=>x.observation.blockers.push('UNEXPLAINED_MONEY_MISMATCH'),'UNEXPLAINED_MONEY_MISMATCH'],
+    ['kqxs',x=>x.kqxs.unverified=1,'READY_GATE_EVIDENCE_CONTRADICTION_KQXS_VERIFICATION'],
+    ['parser',x=>x.parser_provenance.known=1,'READY_GATE_EVIDENCE_CONTRADICTION_PARSER_PROVENANCE'],
+    ['backend',x=>x.parser_backend.mismatched=1,'READY_GATE_EVIDENCE_CONTRADICTION_PARSER_BACKEND'],
+    ['regression',x=>x.regression.passed=2,'READY_GATE_EVIDENCE_CONTRADICTION_REGRESSION_GATE'],
+    ['candidate',x=>x.candidates.pending=-1,'READY_GATE_EVIDENCE_CONTRADICTION_CANDIDATE_GATE'],
+    ['feature',x=>x.feature_safety.unsafe_count=1,'READY_GATE_EVIDENCE_CONTRADICTION_FEATURE_SAFETY']
+  ];
+  for(const [label,mutate,reason] of cases){
+    const input=copy(good);mutate(input);
+    const q=Q.combineQualification(input);
+    assert.equal(q.ready_for_production_review,false,'UNSAFE_READY:'+label);
+    assert.equal(q.qualification_state,'BLOCKED_SHADOW_QUALIFICATION');
+    assert.ok(q.blockers.includes(reason),'MISSING_BLOCKER:'+label);
+    assert.equal(q.production_enabled,false);assert.equal(q.merge_authorized,false);
   }
 });
