@@ -1,0 +1,68 @@
+name: Settlement IndexedDB browser safety
+on:
+  pull_request:
+    paths:
+      - "settlement-test/qualification-indexeddb-smoke.html"
+      - "settlement-test/settlement-qualification-history.js"
+      - "settlement-test/settlement-store.js"
+      - ".github/workflows/settlement-indexeddb-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout isolated PR
+        uses: actions/checkout@v4
+      - name: Real Chrome IndexedDB concurrency smoke (offline synthetic fixtures)
+        shell: bash
+        run: |
+          set -euo pipefail
+          browser=""
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              browser="$(command -v "$candidate")"
+              break
+            fi
+          done
+          if [[ -z "$browser" ]]; then
+            echo "CHROMIUM_UNAVAILABLE" >&2
+            exit 1
+          fi
+          tmp="$(mktemp -d)"
+          cd "$GITHUB_WORKSPACE"
+          python3 -m http.server 8765 --bind 127.0.0.1 >"$tmp/server.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -rf "$tmp"' EXIT
+          for i in 1 2 3 4 5; do
+            if curl -fsS http://127.0.0.1:8765/settlement-test/qualification-indexeddb-smoke.html -o /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8765/settlement-test/qualification-indexeddb-smoke.html -o /dev/null
+          url="http://127.0.0.1:8765/settlement-test/qualification-indexeddb-smoke.html"
+          for attempt in 1 2; do
+            echo "IndexedDB browser attempt $attempt/2"
+            rm -rf "$tmp/profile" "$tmp/dom.html" "$tmp/chrome.log"
+            if timeout 90s "$browser" --headless --no-sandbox --disable-gpu \
+               --disable-dev-shm-usage --disable-background-networking \
+               --user-data-dir="$tmp/profile" --virtual-time-budget=30000 \
+               --dump-dom "$url" >"$tmp/dom.html" 2>"$tmp/chrome.log"; then
+              if grep -Fq 'QUALIFICATION_INDEXEDDB_BROWSER=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_CROSS_IFRAME_CONCURRENT_APPEND=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_EVENT_CHAIN_DURABLE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_BLOCKED_REVOKES_READY=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_BROWSER_REQUALIFIED_CURRENT=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS' "$tmp/dom.html"; then
+                  echo "QUALIFICATION_REAL_INDEXEDDB_BROWSER=PASS"
+                  exit 0
+              fi
+            fi
+            grep -o 'QUALIFICATION_INDEXEDDB_BROWSER=[^<]*' "$tmp/dom.html" >&2 || true
+            tail -n 25 "$tmp/chrome.log" >&2 || true
+          done
+          echo "QUALIFICATION_REAL_INDEXEDDB_BROWSER=FAIL" >&2
+          exit 1
