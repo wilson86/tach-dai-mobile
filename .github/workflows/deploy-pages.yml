@@ -290,8 +290,13 @@ jobs:
             -H 'Origin: https://example.invalid' \
             "${SETTLEMENT_API_BASE}/health" \
             -o /dev/null
-          if awk 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin:/{found=1}END{exit found?0:1}' "$tmp/wrong-origin.headers"; then
-            echo "BACKEND_CORS_OVERBROAD" >&2
+          wrong_cors="$(awk 'BEGIN{IGNORECASE=1}/^Access-Control-Allow-Origin:/{sub(/^[^:]+:[[:space:]]*/,"");gsub("\r","");print;exit}' "$tmp/wrong-origin.headers")"
+          if [ "$wrong_cors" = "https://example.invalid" ] || [ "$wrong_cors" = "*" ]; then
+            echo "BACKEND_CORS_OVERBROAD actual=$wrong_cors" >&2
+            exit 1
+          fi
+          if [ -n "$wrong_cors" ] && [ "$wrong_cors" != "$ALLOWED_ORIGIN" ]; then
+            echo "BACKEND_CORS_UNEXPECTED_VALUE actual=$wrong_cors" >&2
             exit 1
           fi
 
