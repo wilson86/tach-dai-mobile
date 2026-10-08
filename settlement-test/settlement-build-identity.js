@@ -1,6 +1,7 @@
 (function(global){
   'use strict';
   const critical=Object.freeze({
+    'app/index.html':'68ac5874e65920df92171e6951efa8baea6d34da',
     'app/unified-core.js':'469d53f80cafc78b5616388363e8a4ee905b14d9',
     'app/settlement.html':'8b19d44f11f9a0b30b17c6b3e05bfcf61bd8b8fa',
     'app/settlement-store.js':'ef3a5b2af35d35579c13ec27dbbbe8b7b03af290',
