@@ -1,0 +1,27 @@
+name: Settlement feature-deploy source parity
+on:
+  pull_request:
+    paths:
+      - "settlement-test/**"
+      - ".github/scripts/settlement-feature-deploy-parity.cjs"
+      - ".github/workflows/settlement-feature-deploy-parity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout deploy candidate
+        uses: actions/checkout@v4
+      - name: Checkout pinned feature audit candidate
+        uses: actions/checkout@v4
+        with:
+          ref: c77a273d97976231350021add79164c909562d2b
+          path: _feature_authority
+          persist-credentials: false
+      - name: Compare critical identity and settlement runtime blobs
+        run: node .github/scripts/settlement-feature-deploy-parity.cjs
