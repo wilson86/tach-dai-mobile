@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.164-absence-guards'));
+  assert.ok(sw.includes('v1.0.165-blocked-partner-revalidation'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -914,4 +914,38 @@ test('missing config or KQXS race must not save stale BLOCKED money',async()=>{
   assert.equal(x.status,'blocked');
   assert.equal(writes.length,1);
   assert.equal(x.reason,'KQXS_NOT_AVAILABLE');
+});
+
+test('failed monetary runtime cannot write stale BLOCKED after partner role is corrected',async()=>{
+  const ctx={window:{}},copy=v=>JSON.parse(JSON.stringify(v));
+  const scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const msg={...scope,id:'m1',status:'parsed_waiting_result',canonical_payload:{region:'mn',legs:[{code:'2CB'}]}};
+  const cfg={partner_id:'synthetic',version:1},kqxs={business_date:scope.business_date,region:'mn',complete:true};
+  let partner={id:'synthetic',name:'owner',role:'bad_role',active:true},writes=[],changeAfterRead=false,reads=0;
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[copy(msg)],
+    resolveConfigForDate:async()=>copy(cfg),
+    get:async(name)=>{if(name==='results')return copy(kqxs);
+      if(name==='partners'){reads++;const seen=copy(partner);
+        if(changeAfterRead&&reads===1)partner.role='owner';
+        return seen;}return null;},
+    saveSettlement:async row=>{writes.push(row);return row;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({category_inputs:[{code:'2CB'}],detail_rows:[]})};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('INVALID_PARTNER_ROLE')}};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  for(const f of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',f),'utf8'),ctx,{filename:f});
+  const p=ctx.window.KTS_SETTLEMENT_PIPELINE;
+  changeAfterRead=true;reads=0;writes=[];
+  let result=await p.settleScope(scope);
+  assert.equal(result.status,'superseded');
+  assert.equal(writes.length,0,'STALE_BLOCKED_WRITTEN_AFTER_PARTNER_CHANGE');
+  partner={id:'synthetic',name:'owner',role:'bad_role',active:true};
+  changeAfterRead=false;reads=0;writes=[];
+  result=await p.settleScope(scope);
+  assert.equal(result.status,'blocked');
+  assert.equal(writes.length,1,'SAME_PARTNER_ERROR_SHOULD_BLOCK');
+  assert.equal(result.reason,'INVALID_PARTNER_ROLE');
 });
