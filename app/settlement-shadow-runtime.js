@@ -125,11 +125,16 @@
     const reference = normalizeReference(input.reference_snapshot || {});
     const comparison = d.shadow.compareSettlement(settlement, reference, input.options || {});
     const savedReference = Object.assign({}, reference, { comparison: clone(comparison) });
-    const saved = await d.store.saveSettlement(Object.assign({}, settlement, {
-      reference_app_snapshot: savedReference,
-      comparison_status: comparison.status,
-      created_at: settlement.created_at
-    }));
+    if(typeof d.store.saveSettlementIfUnchanged!=='function')
+      throw new Error('SHADOW_ATOMIC_SETTLEMENT_STORE_REQUIRED');
+    const committed=await d.store.saveSettlementIfUnchanged(Object.assign({},settlement,{
+      reference_app_snapshot:savedReference,
+      comparison_status:comparison.status,
+      created_at:settlement.created_at
+    }),settlement);
+    if(!committed || committed.superseded || !committed.saved)
+      throw new Error('SHADOW_SCOPE_CHANGED_DURING_COMPARISON');
+    const saved=committed.saved;
     const evidence = await saveEvidence(d.store, saved, reference, comparison, input || {});
     return { settlement: saved, reference: savedReference, comparison, evidence };
   }
@@ -226,7 +231,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v6-strict-reference-input',
+    version: 'settlement-shadow-runtime-v7-atomic-scope-CAS',
     scopeId,
     normalizeReference,
     localEvidence,

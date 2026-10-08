@@ -482,7 +482,7 @@
     return v;
   }
 
-  async function saveSettlement(input) {
+  function normalizeSettlement(input) {
     if (!input.partner_id || !validDateOnly(input.business_date)) throw new Error('SETTLEMENT_SCOPE_REQUIRED');
     assertConfigPartner(input.config_snapshot || null, input.partner_id);
     const now = nowIso();
@@ -508,8 +508,41 @@
       created_at: input.created_at || now,
       updated_at: now
     };
-    await put(STORES.settlements, v);
     return v;
+  }
+
+  async function saveSettlement(input) {
+    const v=normalizeSettlement(input);
+    await put(STORES.settlements,v);
+    return v;
+  }
+
+  // Atomic compare-and-set: ensures stale HIOSKT shadow updates from another
+  // tab cannot overwrite a newer settlement/recalculation. Both validation
+  // of expected snapshot and the write run in one serialized IDB transaction.
+  async function saveSettlementIfUnchanged(input,expectedSnapshot) {
+    const v=normalizeSettlement(input);
+    if(!expectedSnapshot || String(expectedSnapshot.id||'')!==String(v.id))
+      throw new Error('SETTLEMENT_CAS_EXPECTED_SCOPE_REQUIRED');
+    const db=await openDb();
+    try {
+      const tx=db.transaction(STORES.settlements,'readwrite');
+      const bucket=tx.objectStore(STORES.settlements);
+      let outcome=null;
+      const req=bucket.get(v.id);
+      req.onsuccess=()=>{
+        const previous=req.result||null;
+        if(!previous||stableStringify(previous)!==stableStringify(expectedSnapshot)){
+          outcome={saved:null,superseded:true};
+          return;
+        }
+        bucket.put(clone(v));
+        outcome={saved:v,superseded:false};
+      };
+      await txDone(tx);
+      if(!outcome)throw new Error('SETTLEMENT_CAS_FAILED');
+      return outcome;
+    } finally {db.close();}
   }
 
   function resultSnapshotIsOlder(candidate, previous) {
@@ -822,7 +855,7 @@
   global.KTS_SETTLEMENT_STORE = Object.freeze({
     DB_NAME, DB_VERSION, STORES, openDb,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
-    saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
+    saveMessage, saveSettlement, saveSettlementIfUnchanged, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
     normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, nextConfigVersionFromRows, validateImportPayload, resultSnapshotIsOlder, stableStringify
   });

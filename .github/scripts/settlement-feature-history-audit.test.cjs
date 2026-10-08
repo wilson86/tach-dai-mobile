@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.179-no-epsilon-exact'));
+  assert.ok(source.includes('v1.0.180-shadow-atomic-CAS'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1157,4 +1157,82 @@ test('tiny money differences and reference-only exact evidence cannot be promote
   assert.equal(s.compareNumber(0,0.000000001,{tolerance:1}).status,'MATCH_DISPLAY');
   assert.equal(s.compareNumber(0.1,0.1).status,'MATCH_EXACT');
   assert.equal(s.compareNumber('0.10','0.1000').status,'MATCH_EXACT');
+});
+
+test('HIOSKT compare requires an atomic settlement CAS and never writes stale shadow evidence',async()=>{
+  const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x));
+  for(const f of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'app',f),'utf8'),ctx,{filename:f});
+  const original={id:'scope:p:2026-09-22:mn',partner_id:'p',business_date:'2026-09-22',region:'mn',
+    scope_status:'complete_unverified',created_at:'2026-09-22T09:00:00Z',
+    settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},comparison_status:'unverified'};
+  let current=copy(original),writes=0,receipts=0,changeBeforeCommit=false;
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{settlements:'settlements',messages:'messages',partners:'partners'},
+    get:async()=>copy(current),
+    saveSettlement:async()=>{throw Error('UNSAFE_BLIND_SETTLEMENT_WRITE')},
+    saveSettlementIfUnchanged:async(v,expected)=>{
+      if(changeBeforeCommit)current={...current,settlement_result:{...current.settlement_result,final_net:100}};
+      if(JSON.stringify(current)!==JSON.stringify(expected))return {saved:null,superseded:true};
+      writes++;current=copy(v);return {saved:copy(v),superseded:false};
+    },
+    saveShadowEvent:async receipt=>{receipts++;return receipt;}
+  };
+  const sr=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME;
+  const request={partner_id:'p',business_date:'2026-09-22',region:'mn',
+    reference_snapshot:{totals:{xac:0,qua_co:0,payout:0,final:0}}};
+  changeBeforeCommit=true;
+  await assert.rejects(()=>sr.compareAndSave(request),/SHADOW_SCOPE_CHANGED_DURING_COMPARISON/);
+  assert.equal(writes,0);assert.equal(receipts,0);
+  assert.equal(current.settlement_result.final_net,100);
+  changeBeforeCommit=false;current=copy(original);
+  const ok=await sr.compareAndSave(request);
+  assert.equal(ok.comparison.safe_to_promote,true);
+  assert.equal(writes,1);assert.equal(receipts,1);
+});
+test('settlement store CAS serializes snapshot check and write in a readwrite transaction',async()=>{
+  const clone=x=>JSON.parse(JSON.stringify(x));
+  let state=null,writes=0,transactionTypes=[];
+  const fakeDb={
+    close:()=>{},
+    transaction:(name,mode)=>{
+      transactionTypes.push([name,mode]);
+      const tx={oncomplete:null,onerror:null,onabort:null};
+      tx.objectStore=()=>({
+        get:id=>{
+          const req={result:null,onsuccess:null,onerror:null};
+          Promise.resolve().then(()=>{
+            req.result=clone(state);req.onsuccess();
+            Promise.resolve().then(()=>tx.oncomplete());
+          });
+          return req;
+        },
+        put:v=>{writes++;state=clone(v);}
+      });
+      return tx;
+    }
+  };
+  const ctx={window:{indexedDB:{open:()=>{
+    const req={onsuccess:null,onerror:null,onupgradeneeded:null,result:null};
+    Promise.resolve().then(()=>{req.result=fakeDb;req.onsuccess();});
+    return req;
+  }}}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),ctx,
+    {filename:'settlement-store.js'});
+  const s=ctx.window.KTS_SETTLEMENT_STORE;
+  const base={id:'scope:p:2026-09-22:mn',partner_id:'p',business_date:'2026-09-22',region:'mn',
+    created_at:'2026-09-22T09:00:00Z',updated_at:'2026-09-22T09:00:00Z',
+    scope_status:'complete_unverified',comparison_status:'unverified',settlement_result:{final_net:10}};
+  state=clone(base);
+  let out=await s.saveSettlementIfUnchanged({...base,comparison_status:'MATCH_EXACT'},clone(base));
+  assert.equal(out.superseded,false);
+  assert.equal(state.comparison_status,'MATCH_EXACT');
+  assert.equal(writes,1);
+  const saved=clone(state);
+  state=clone({...saved,settlement_result:{final_net:20}});
+  out=await s.saveSettlementIfUnchanged({...saved,comparison_status:'MATCH_DISPLAY_ONLY'},saved);
+  assert.equal(out.superseded,true);
+  assert.equal(state.settlement_result.final_net,20);
+  assert.equal(writes,1);
+  assert.ok(transactionTypes.every(([store,mode])=>store==='settlements'&&mode==='readwrite'));
 });
