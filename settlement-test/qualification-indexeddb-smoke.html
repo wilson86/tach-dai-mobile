@@ -84,6 +84,22 @@
       ready_for_production_review:true,production_enabled:false,merge_authorized:false,
       parser_backend:{met:true,live_identity:identity},blockers:[]
     };
+    for(const [invalid,reason] of [
+      [{...ready,qualification_state:'BLOCKED_SHADOW_QUALIFICATION'},'READY_STATE_CONTRADICTION'],
+      [{...ready,blockers:['UNEXPLAINED_MONETARY_MISMATCH']},'READY_HAS_BLOCKERS'],
+      [{...ready,merge_authorized:true},'SNAPSHOT_AUTHORITY_ESCALATION'],
+      [{...ready,ready_for_production_review:false},'BLOCKED_STATE_CONTRADICTION']
+    ]){
+      let rejected=false;
+      try{
+        await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(invalid,options);
+      } catch(error) {
+        rejected=String(error&&error.message||error).includes('QUALIFICATION_DECISION_INVALID_'+reason);
+      }
+      if(!rejected)fail('CONTRADICTORY_READY_NOT_REFUSED:'+reason);
+      const untouched=await history.listEvents();
+      if(untouched.length!==2)fail('CONTRADICTORY_READY_APPENDED:'+reason);
+    }
     const readySaved=await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY
       .recordQualification(ready,options);
     const current=await history.checkLastReadyValidity();
@@ -203,6 +219,7 @@
       'QUALIFICATION_EVENT_CHAIN_DURABLE=PASS',
       'QUALIFICATION_BLOCKED_REVOKES_READY=PASS',
       'QUALIFICATION_BROWSER_REQUALIFIED_CURRENT=PASS',
+      'QUALIFICATION_CONTRADICTORY_READY_REFUSED=PASS',
       'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS',
       'QUALIFICATION_CORRUPTED_HISTORY_FAIL_CLOSED=PASS',
       'QUALIFICATION_CORRUPTED_HISTORY_APPEND_REFUSED=PASS',
