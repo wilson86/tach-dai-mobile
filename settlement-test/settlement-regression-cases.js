@@ -18,8 +18,13 @@
   function requiredReference(reference) {
     const totals = reference && reference.totals || {};
     for (const key of ['xac', 'qua_co', 'payout', 'final']) {
-      const n = Number(totals[key]);
-      if (!Number.isFinite(n)) throw new Error('REGRESSION_REFERENCE_REQUIRED:' + key);
+      const raw=totals[key];
+      // Number(null), Number('') and Number(false) are all zero in JS.
+      // Treating an absent/unreviewed HIOSKT total as a verified 0 could
+      // silently create a false-positive golden regression oracle.
+      const numeric=(typeof raw==='number' && Number.isFinite(raw)) ||
+        (typeof raw==='string' && raw.trim()!=='' && Number.isFinite(Number(raw)));
+      if (!numeric) throw new Error('REGRESSION_REFERENCE_REQUIRED:' + key);
     }
   }
   function normalizeCase(input) {
@@ -232,7 +237,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_CASES = Object.freeze({
-    version: 'settlement-regression-cases-v3-shared-evaluation-guard',
+    version: 'settlement-regression-cases-v4-strict-oracle-totals',
     META_KEY,
     FORMAT,
     BUNDLE_FORMAT,
