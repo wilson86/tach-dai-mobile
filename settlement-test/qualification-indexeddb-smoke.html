@@ -134,13 +134,16 @@
        corrupt.history_error!=='QUALIFICATION_HISTORY_INVALID_BROKEN_EVENT_LINK'){
       fail('CORRUPT_JOURNAL_READY_NOT_FAIL_CLOSED:'+String(corrupt&&corrupt.status));
     }
-    let rejectedAppend=false;
+    let rejectedAppend=false,appendError='';
     try{
       await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(blocked,options);
     }catch(error){
       rejectedAppend=true;
+      appendError=String(error&&error.message||error);
     }
     if(!rejectedAppend)fail('CORRUPT_JOURNAL_APPEND_WAS_NOT_REJECTED');
+    if(!appendError.includes('QUALIFICATION_HISTORY_APPEND_REJECTED_CORRUPT_JOURNAL:BROKEN_EVENT_LINK'))
+      fail('CORRUPT_JOURNAL_REJECTION_REASON_LOST:'+appendError);
     const after=await history.listEvents();
     if(after.length!==5||after[4].previous_event_id!=='disconnected_parent'){
       fail('CORRUPT_JOURNAL_WAS_OVERWRITTEN_OR_APPENDED');
@@ -176,11 +179,17 @@
          verdict.history_error!==expected){
         fail('CORRUPT_METADATA_MISCLASSIFIED:'+String(verdict&&verdict.history_error));
       }
-      let rejected=false;
+      let rejected=false,rejectionMessage='';
       try{
         await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(blocked,options);
-      }catch(error){rejected=true}
+      }catch(error){
+        rejected=true;
+        rejectionMessage=String(error&&error.message||error);
+      }
       if(!rejected)fail('CORRUPT_METADATA_APPEND_ACCEPTED:'+expected);
+      const exactReason=expected.replace('QUALIFICATION_HISTORY_INVALID_','QUALIFICATION_HISTORY_APPEND_REJECTED_');
+      if(!rejectionMessage.includes(exactReason))
+        fail('CORRUPT_METADATA_REJECTION_REASON_LOST:'+rejectionMessage);
       const stored=await store.get(store.STORES.metadata,'qualification_history_v1');
       if(expected.endsWith('VERSION_MISMATCH')&&stored.events.length!==5)
         fail('CORRUPT_VERSION_APPENDED_HISTORY');
@@ -199,6 +208,7 @@
       'QUALIFICATION_CORRUPTED_HISTORY_APPEND_REFUSED=PASS',
       'QUALIFICATION_CORRUPT_METADATA_UNVERIFIABLE=PASS',
       'QUALIFICATION_CORRUPT_METADATA_APPEND_REFUSED=PASS',
+      'QUALIFICATION_APPEND_DIAGNOSTIC_PRESERVED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
     ].join('\n');
   }catch(error){
