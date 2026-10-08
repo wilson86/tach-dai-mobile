@@ -136,7 +136,7 @@
   function rowsByCode(rows) {
     const out = {};
     for (const row of (Array.isArray(rows) ? rows : [])) {
-      const code = String(row.code || row.category || '').toUpperCase();
+      const code = String(row.code || row.category || '').trim().toUpperCase();
       if (!code) continue;
       if (!out[code]) out[code] = { code, xac: 0, qua_co: 0, hit_units: 0, payout: 0, exact: { xac:'0', qua_co:'0', hit_units:'0', payout:'0' } };
       for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
@@ -158,6 +158,8 @@
     const fields=['xac','qua_co','hit_units','payout'];
     for (const row of rows) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) return false;
+      const code=row.code || row.category;
+      if (typeof code !== 'string' || !code.trim()) return false;
       for (const field of fields) {
         if (Object.prototype.hasOwnProperty.call(row,field) && numeric(row[field])===null)
           return false;
@@ -231,6 +233,16 @@
     const referenceRows = referenceSnapshot && (referenceSnapshot.categories || referenceSnapshot.category_rows);
     const categoryEvidenceOkay=categoryEvidenceValid(localRows)&&categoryEvidenceValid(referenceRows);
     const aliasEvidenceOkay=referenceAliasesValid(reference);
+    // An explicitly supplied HIOSKT category without any monetary fields
+    // proves nothing. A referenced category absent from local results cannot
+    // become an exact match merely because all supplied stakes are zero.
+    const referenceCategories=Array.isArray(referenceRows)?referenceRows:[];
+    const codeOf=row=>String(row && (row.code || row.category) || '').trim().toUpperCase();
+    const localCodes=new Set((Array.isArray(localRows)?localRows:[]).map(codeOf));
+    const missingReferenceCategory=referenceCategories.some(row=>!localCodes.has(codeOf(row)));
+    const emptyReferenceCategory=referenceCategories.some(row=>
+      !['xac','qua_co','hit_units','payout'].some(key=>
+        Object.prototype.hasOwnProperty.call(row,key)));
     const categories = Array.isArray(referenceRows) && categoryEvidenceOkay ?
       compareCategories(localRows, referenceRows, options) : [];
     const statuses = [...Object.values(totals).map(x => x.status), ...categories.map(x => x.status)].filter(x => x !== 'NOT_COMPARABLE');
@@ -241,14 +253,18 @@
       else status = 'MATCH_EXACT';
     }
     const requiredTotalsExact = REQUIRED_PROMOTION_TOTALS.every(field => totals[field] && totals[field].status === 'MATCH_EXACT');
-    const categoriesExact = categoryEvidenceOkay && categories.every(row => row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE');
-    if (!categoryEvidenceOkay || !aliasEvidenceOkay) status='INCOMPLETE_REFERENCE';
+    const categoriesExact = categoryEvidenceOkay && !missingReferenceCategory && !emptyReferenceCategory &&
+      categories.filter(row=>referenceCategories.some(ref=>codeOf(ref)===row.code))
+        .every(row=>row.status==='MATCH_EXACT');
+    if (!categoryEvidenceOkay || !aliasEvidenceOkay || missingReferenceCategory || emptyReferenceCategory)
+      status='INCOMPLETE_REFERENCE';
     return {
       status,
       totals,
       categories,
       compared_fields: statuses.length,
-      invalid_category_evidence: !categoryEvidenceOkay,
+      invalid_category_evidence: !categoryEvidenceOkay || emptyReferenceCategory,
+      missing_reference_category: missingReferenceCategory,
       invalid_total_alias_evidence: !aliasEvidenceOkay,
       required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
@@ -307,7 +323,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v9-reference-alias-integrity',
+    version: 'settlement-shadow-v10-category-coverage-evidence',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
