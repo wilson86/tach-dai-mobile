@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.163-parser-error-hard-block'));
+  assert.ok(sw.includes('v1.0.164-absence-guards'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -873,4 +873,45 @@ test('blocked KQXS conflict cannot overwrite newer verified source',async()=>{
   assert.equal(result.reason,'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT');
   assert.equal(reads,2);
   assert.equal(writes,0,'STALE_CONFLICT_MUST_NOT_OVERWRITE_UPDATED_SCOPE');
+});
+
+test('missing config or KQXS race must not save stale BLOCKED money',async()=>{
+  const ctx={window:{}},scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const msg={...scope,id:'m1',status:'parsed_waiting_result',canonical_payload:{region:'mn',legs:[{code:'2CB'}]}};
+  const cfg={id:'cfg',partner_id:'synthetic',version:1};
+  const result={business_date:'2026-09-22',region:'mn',complete:true};
+  let configAvailable=false,kqxsAvailable=false,changes=[],writes=[];
+  const st=ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[msg],
+    resolveConfigForDate:async()=>{const now=configAvailable;if(!now){configAvailable=changes.includes('config');throw Error('NO_CONFIG_FOR_BUSINESS_DATE')}return cfg;},
+    get:async(name)=>{if(name!=='results')return null;
+      if(!kqxsAvailable){kqxsAvailable=changes.includes('kqxs');return null;}
+      return result;},
+    saveSettlement:async row=>{writes.push(row);return row;}
+  };
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'fake'};
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({category_inputs:[{code:'2CB'}],detail_rows:[]})};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('UNEXPECTED_CALC')}};
+  for(const f of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',f),'utf8'),ctx,{filename:f});
+  const pipeline=ctx.window.KTS_SETTLEMENT_PIPELINE;
+  configAvailable=false;kqxsAvailable=false;changes=['config'];writes=[];
+  let x=await pipeline.settleScope(scope);
+  assert.equal(x.status,'superseded','CONFIG_RECOVERED_DURING_BLOCK');
+  assert.equal(writes.length,0);
+  configAvailable=true;kqxsAvailable=false;changes=['kqxs'];writes=[];
+  x=await pipeline.settleScope(scope);
+  assert.equal(x.status,'superseded','RESULT_RECOVERED_DURING_BLOCK');
+  assert.equal(writes.length,0);
+  configAvailable=false;kqxsAvailable=false;changes=[];writes=[];
+  x=await pipeline.settleScope(scope);
+  assert.equal(x.status,'blocked');
+  assert.equal(writes.length,1);
+  assert.equal(x.reason,'NO_CONFIG_FOR_BUSINESS_DATE');
+  configAvailable=true;kqxsAvailable=false;changes=[];writes=[];
+  x=await pipeline.settleScope(scope);
+  assert.equal(x.status,'blocked');
+  assert.equal(writes.length,1);
+  assert.equal(x.reason,'KQXS_NOT_AVAILABLE');
 });

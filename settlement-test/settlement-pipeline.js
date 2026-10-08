@@ -131,16 +131,18 @@
     const latest = await findScopeMessages(input.partner_id,input.business_date,input.region);
     if (messageRevisionSignature(latest)!==messageRevisionSignature(input.messages||[]))
       return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
-    if (input.config_snapshot) {
+    if (input.config_snapshot || input.expect_config_unavailable===true) {
       let config;
       try { config=await d.store.resolveConfigForDate(input.partner_id,input.business_date); }
       catch (_) { config=null; }
-      if (configRevisionSignature(config)!==configRevisionSignature(input.config_snapshot))
+      if ((input.expect_config_unavailable===true && config!==null) ||
+          (input.config_snapshot && configRevisionSignature(config)!==configRevisionSignature(input.config_snapshot)))
         return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
     }
-    if (input.result_snapshot) {
+    if (input.result_snapshot || input.expect_result_missing===true) {
       const result = await findResult(input.business_date,input.region);
-      if (resultRevisionSignature(result)!==resultRevisionSignature(input.result_snapshot))
+      if ((input.expect_result_missing===true && result!==null) ||
+          (input.result_snapshot && resultRevisionSignature(result)!==resultRevisionSignature(input.result_snapshot)))
         return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
     }
     const result = zeroResult(input.reason);
@@ -191,7 +193,7 @@
 
     let config;
     try { config = await d.store.resolveConfigForDate(partnerId, businessDate); }
-    catch (e) { return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: String(e.message || e) }); }
+    catch (e) { return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, expect_config_unavailable:true, reason: String(e.message || e) }); }
     if (!config || String(config.partner_id || '') !== String(partnerId)) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: 'CONFIG_PARTNER_MISMATCH' });
     }
@@ -207,7 +209,7 @@
     // event metadata, but monetary settlement always rereads the persisted scope.
     const resultSnapshot = await findResult(businessDate, region);
     if (!resultSnapshot) {
-      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: 'KQXS_NOT_AVAILABLE' });
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, expect_result_missing:true, reason: 'KQXS_NOT_AVAILABLE' });
     }
     const resultDate = String(resultSnapshot.business_date || '').slice(0, 10);
     const resultRegion = String(resultSnapshot.region || '').toLowerCase();
@@ -435,7 +437,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v14-parser-error-hard-block',
+    version: 'settlement-pipeline-v15-absence-guards',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
