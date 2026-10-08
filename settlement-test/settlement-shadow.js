@@ -11,8 +11,14 @@
   const REQUIRED_PROMOTION_TOTALS = Object.freeze(['total_xac', 'total_qua_co', 'total_payout', 'final_net']);
 
   function numeric(value) {
-    if (value == null || value === '') return null;
-    const n = Number(value);
+    // Number('   '), Number(false), Number([]), and Number('0x10')
+    // produce ordinary numbers in JS. A missing/nondecimal HIOSKT oracle
+    // must NEVER be interpreted as a real zero or exact monetary match.
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string') return null;
+    const text=value.trim();
+    if (!/^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(text)) return null;
+    const n=Number(text);
     return Number.isFinite(n) ? n : null;
   }
 
@@ -236,7 +242,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v4-exact-decimal',
+    version: 'settlement-shadow-v5-typed-reference-decimal',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
