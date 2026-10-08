@@ -1239,7 +1239,7 @@ test('golden message breakdown uses actual final runtime rows, never preview cat
   assert.equal(x.message_breakdown[1].category_rows[0].numbers,'22');
   assert.equal(x.message_breakdown[0].start,undefined);
   assert.equal(x.message_breakdown[0].count,undefined);
-  assert.deepEqual(copy(x.category_rows),x.message_breakdown.flatMap(y=>copy(y.category_rows)));
+  assert.deepEqual(copy(x.category_rows),copy(x.message_breakdown.flatMap(y=>y.category_rows)));
 });
 
 test('feature gate fails closed on whitespace padded Ủi and malformed evaluator rows',()=>{
