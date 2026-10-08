@@ -376,3 +376,108 @@ jobs:
           echo "BROWSER_RUNTIME_SMOKE=FAIL sha=${GITHUB_SHA}" >&2
           tail -n 120 "$tmp/chrome.log" >&2 || true
           exit 1
+
+
+      - name: Verify settlement offline service-worker boot
+        shell: bash
+        env:
+          SETTLEMENT_TEST_URL: https://wilson86.github.io/tach-dai-mobile/settlement-test
+        run: |
+          set -euo pipefail
+
+          browser=""
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              browser="$(command -v "$candidate")"
+              break
+            fi
+          done
+          if [ -z "$browser" ]; then
+            echo "OFFLINE_SMOKE_NO_CHROME" >&2
+            exit 1
+          fi
+
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          profile="$tmp/profile"
+          url="${SETTLEMENT_TEST_URL}/settlement.html?offline-smoke=${GITHUB_SHA}"
+
+          echo "Offline smoke warm-up 1/2"
+          "$browser" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --user-data-dir="$profile" \
+            --virtual-time-budget=10000 \
+            --dump-dom "$url" \
+            >"$tmp/warm1.html" 2>"$tmp/warm1.log"
+
+          echo "Offline smoke warm-up 2/2"
+          "$browser" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --disable-dev-shm-usage \
+            --user-data-dir="$profile" \
+            --virtual-time-budget=8000 \
+            --dump-dom "$url" \
+            >"$tmp/warm2.html" 2>"$tmp/warm2.log"
+
+          for needle in \
+            'id="kqxsAutoBadge"' \
+            'id="checkMessageSyntax"' \
+            'id="messageParsePreview"'; do
+            if ! grep -Fq "$needle" "$tmp/warm2.html"; then
+              echo "OFFLINE_SMOKE_WARMUP_MISSING_DOM $needle" >&2
+              exit 1
+            fi
+          done
+
+          for attempt in 1 2 3; do
+            echo "Offline service-worker attempt $attempt/3"
+            rm -f "$tmp/offline.html" "$tmp/offline.log"
+
+            if "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --user-data-dir="$profile" \
+              --host-resolver-rules="MAP wilson86.github.io 127.0.0.1" \
+              --virtual-time-budget=8000 \
+              --dump-dom "$url" \
+              >"$tmp/offline.html" 2>"$tmp/offline.log"; then
+
+              failed=0
+              for needle in \
+                'id="kqxsAutoBadge"' \
+                'id="checkMessageSyntax"' \
+                'id="messageParsePreview"'; do
+                if ! grep -Fq "$needle" "$tmp/offline.html"; then
+                  echo "OFFLINE_SMOKE_MISSING_DOM $needle" >&2
+                  failed=1
+                fi
+              done
+
+              if grep -Fq 'Khởi tạo lỗi:' "$tmp/offline.html"; then
+                echo "OFFLINE_SMOKE_BOOT_ERROR" >&2
+                failed=1
+              fi
+
+              if [ "$failed" -eq 0 ]; then
+                echo "SETTLEMENT_OFFLINE_SW_SMOKE=PASS sha=${GITHUB_SHA}"
+                exit 0
+              fi
+            else
+              echo "OFFLINE_SMOKE_CHROME_EXIT_FAIL attempt=$attempt" >&2
+            fi
+
+            if [ "$attempt" -lt 3 ]; then
+              sleep 2
+            fi
+          done
+
+          echo "SETTLEMENT_OFFLINE_SW_SMOKE=FAIL sha=${GITHUB_SHA}" >&2
+          tail -n 120 "$tmp/offline.log" >&2 || true
+          exit 1
