@@ -45,6 +45,9 @@ async function waitFor(fn,timeoutMs,label){
 }
 async function launchChrome(existingProfile=null){
   const profile=existingProfile||fs.mkdtempSync(path.join(os.tmpdir(),'kts-cdp-'));
+  // Chrome leaves its debugger port file in persistent profiles after exit.
+  // Remove it before a cold restart, otherwise we may poll the dead old port.
+  if(existingProfile)fs.rmSync(path.join(profile,'DevToolsActivePort'),{force:true});
   const stderr=[];const binary=browserBinary();
   const proc=spawn(binary,[
     '--headless=new','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',
@@ -74,7 +77,7 @@ async function launchChrome(existingProfile=null){
     const detail=stderr.slice(-6).join('').slice(-2200);
     proc.kill('SIGKILL');
     await pause(250);
-    if(!existingProfile)fs.rmSync(profile,{recursive:true,force:true});
+    if(!existingProfile)fs.rmSync(profile,{recursive:true,force:true,maxRetries:18,retryDelay:200});
     throw Error('CHROME_START_FAILED:'+error.message+' STDERR='+detail);
   }
 }
@@ -138,7 +141,7 @@ async function closeChrome(browser,preserveProfile=false){
     browser.proc.once('exit',resolve);
   }),pause(2500)]);
   if(browser.proc.exitCode===null)browser.proc.kill('SIGKILL');
-  if(!preserveProfile)fs.rmSync(browser.profile,{recursive:true,force:true});
+  if(!preserveProfile)fs.rmSync(browser.profile,{recursive:true,force:true,maxRetries:20,retryDelay:250});
 }
 async function shutdownServer(server){
   if(!server.listening)return;
@@ -217,7 +220,7 @@ async function checkOffline(browser,server,base){
     }finally{
       // Always remove the preserved temporary profile, even on failed startup.
       if(cold)await closeChrome(cold);
-      else fs.rmSync(profile,{recursive:true,force:true});
+      else fs.rmSync(profile,{recursive:true,force:true,maxRetries:20,retryDelay:250});
     }
   }
 }
