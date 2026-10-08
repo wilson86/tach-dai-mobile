@@ -215,7 +215,28 @@
       else blockers.add(`PARSER_BACKEND_IDENTITY_MISMATCH:${Number(parserBackend.matched||0)}/${Number(parserBackend.total||0)}`);
     }
     if (!features.met) blockers.add(`UNVERIFIED_UI_FEATURE_ACTIVE:${Number(features.unsafe_count||0)}`);
-    const ready = observation.promotion_ready === true && regressionExact && candidates.pending === 0 && kqxs.met === true && provenance.met === true && parserBackend.met === true && features.met === true;
+    // Mirror the canonical journal evidence invariants before displaying
+    // READY. Green boolean flags cannot override missing/contradictory counts.
+    const pos=n=>Number.isInteger(n)&&n>0;
+    const zero=n=>Number.isInteger(n)&&n===0;
+    const exact=(total,good)=>pos(total)&&Number.isInteger(good)&&good===total;
+    const oc=observation.counts||{};
+    const checks=[
+      ['observation',exact(oc.total,oc.exact)&&zero(oc.missing_scopes)&&(!Array.isArray(observation.blockers)||observation.blockers.length===0)],
+      ['kqxs_verification',exact(kqxs.total,kqxs.verified)&&zero(kqxs.conflict)&&zero(kqxs.unverified)],
+      ['parser_provenance',exact(provenance.total,provenance.known)&&zero(provenance.unknown)&&zero(provenance.invalid)&&zero(provenance.parser_errors)&&zero(provenance.missing_canonical)],
+      ['parser_backend',exact(parserBackend.total,parserBackend.matched)&&zero(parserBackend.mismatched)&&parserBackend.unreachable===false],
+      ['regression_gate',regressionExact],
+      ['candidate_gate',zero(candidates.pending)],
+      ['feature_safety',zero(features.unsafe_count)]
+    ];
+    for(const [name,valid] of checks){
+      if(!valid) blockers.add('READY_GATE_EVIDENCE_CONTRADICTION_'+name.toUpperCase());
+    }
+    const ready=observation.promotion_ready===true && regressionExact &&
+      candidates.pending===0 && kqxs.met===true && provenance.met===true &&
+      parserBackend.met===true && features.met===true && blockers.size===0 &&
+      checks.every(([,valid])=>valid);
     return {
       format:'kts-final-qualification-v2-live-parser',
       generated_at:new Date().toISOString(),
