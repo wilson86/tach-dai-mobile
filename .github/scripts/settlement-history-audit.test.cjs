@@ -361,3 +361,30 @@ test('UI must not describe mutable evidence as immutable or misattribute history
   assert.ok(script.includes("v.history_error||v.parser_backend_error"),
     'INVALID_HISTORY_ERROR_MISATTRIBUTED_TO_PARSER');
 });
+
+test('canonical READY refuses any unmet observation, KQXS, parser or regression gate',()=>{
+  const all={
+    format:'kts-final-qualification-v2-live-parser',
+    qualification_state:'READY_FOR_PRODUCTION_REVIEW',
+    ready_for_production_review:true,
+    blockers:[],production_enabled:false,merge_authorized:false,
+    observation:{promotion_ready:true},kqxs_verification:{met:true},
+    parser_provenance:{met:true},parser_backend:{met:true},
+    regression_gate:{met:true},candidate_gate:{met:true},feature_safety:{met:true}
+  };
+  assert.equal(H.validateSnapshotDecision(all).valid,true);
+  for(const key of ['observation','kqxs_verification','parser_provenance',
+    'parser_backend','regression_gate','candidate_gate','feature_safety']){
+    const changed={...all,[key]:{...(all[key])}};
+    changed[key][key==='observation'?'promotion_ready':'met']=false;
+    const reason='READY_GATE_NOT_MET_'+key.toUpperCase();
+    assert.equal(H.validateSnapshotDecision(changed).reason,reason);
+    const event=H.buildEvidenceEvent(changed,opt,original,'sha-original',[]);
+    const verdict=H.classifyHistoryValidity([event],original,'sha-original',{status:'available'});
+    assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
+    assert.equal(verdict.history_error,'QUALIFICATION_HISTORY_INVALID_'+reason);
+    const omitted={...all};
+    delete omitted[key];
+    assert.equal(H.validateSnapshotDecision(omitted).reason,reason);
+  }
+});
