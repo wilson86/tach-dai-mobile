@@ -256,7 +256,10 @@
       expected_station_codes: expectedStationCodes,
       stations
     };
-    // Fingerprint is store-owned integrity metadata. Never trust a caller-supplied\n    // fingerprint, otherwise changed KQXS could be persisted with changed=false and\n    // skip downstream recalculation/audit. Import compatibility is validated separately.\n    const fingerprint = stableStringify(core);
+    // Fingerprint is store-owned integrity metadata. Never trust a caller-supplied
+    // fingerprint, otherwise changed KQXS could be persisted with changed=false and
+    // skip downstream recalculation/audit. Import compatibility is validated separately.
+    const fingerprint = stableStringify(core);
     return {
       id: input.id || `${businessDate}:${region}`,
       business_date: businessDate,
