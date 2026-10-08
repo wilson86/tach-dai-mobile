@@ -176,3 +176,25 @@ test('corrupt metadata is not confused with a fresh empty journal',()=>{
     assert.equal(result.reason,reason);
   }
 });
+
+test('READY decision must not override BLOCKED state or monetary blockers',()=>{
+  const valid={qualification_state:'READY_FOR_PRODUCTION_REVIEW',
+    ready_for_production_review:true,blockers:[],production_enabled:false,merge_authorized:false};
+  assert.equal(H.validateSnapshotDecision(valid).valid,true);
+  const invalid=[
+    [{...valid,qualification_state:'BLOCKED_SHADOW_QUALIFICATION'},'READY_STATE_CONTRADICTION'],
+    [{...valid,blockers:['UNEXPLAINED_MONETARY_MISMATCH']},'READY_HAS_BLOCKERS'],
+    [{...valid,blockers:'NOT_ARRAY'},'READY_HAS_BLOCKERS'],
+    [{...valid,production_enabled:true},'SNAPSHOT_AUTHORITY_ESCALATION'],
+    [{...valid,merge_authorized:true},'SNAPSHOT_AUTHORITY_ESCALATION'],
+    [{...valid,ready_for_production_review:false},'BLOCKED_STATE_CONTRADICTION']
+  ];
+  for(const [snapshot,reason] of invalid){
+    assert.equal(H.validateSnapshotDecision(snapshot).reason,reason);
+    const tampered=H.buildEvidenceEvent(snapshot,opt,original,'sha-original',[]);
+    const verdict=H.classifyHistoryValidity([tampered],original,'sha-original',{status:'available'});
+    assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
+    assert.equal(verdict.current,false);
+    assert.equal(verdict.history_error,'QUALIFICATION_HISTORY_INVALID_'+reason);
+  }
+});
