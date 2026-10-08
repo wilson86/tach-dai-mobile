@@ -20,7 +20,7 @@ jobs:
       - name: Checkout pinned feature audit candidate
         uses: actions/checkout@v4
         with:
-          ref: 16c7e93c6d7d07eee9c12c4d80deac68c2ac69d6
+          ref: 6afd78e64497477525a0b34ff4c1244c7bb70f03
           path: _feature_authority
           persist-credentials: false
       - name: Compare critical identity and settlement runtime blobs
