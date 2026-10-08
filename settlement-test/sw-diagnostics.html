@@ -29,7 +29,7 @@
   }
   if(activeWorker.state!=='activated')fail('SW_NOT_ACTIVATED:'+String(activeWorker.state));
   stage='cache'; const keys=await caches.keys();
-  const key=keys.find(k=>k.includes('v1.0.179-no-epsilon-exact')&&k.includes('settlement-test'));
+  const key=keys.find(k=>k.includes('v1.0.180-shadow-atomic-CAS')&&k.includes('settlement-test'));
   if(!key)fail('EXPECTED_CACHE_ABSENT:'+JSON.stringify(keys));
   const cache=await caches.open(key), requests=await cache.keys();
   const shell=await cache.match(new URL('./settlement.html',location.href).href);
