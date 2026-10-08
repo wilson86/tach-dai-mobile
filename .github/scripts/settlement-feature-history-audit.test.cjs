@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.174-exact-display-integrity'));
+  assert.ok(source.includes('v1.0.175-reference-alias-integrity'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1034,4 +1034,27 @@ test('matching exact strings cannot conceal contradictory displayed HIOSKT or lo
   // amount legitimately displayed rounded to one decimal stays acceptable.
   const rounded=sh.compareNumber(0.1,0.1,{display_digits:1},'0.14','0.14');
   assert.equal(rounded.status,'MATCH_EXACT');
+});
+
+test('HIOSKT equivalent aliases may coexist but conflicting totals must never promote',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}};
+  const base={totals:{xac:0,qua_co:0,payout:0,final:0,total_xac:'0.00',total_qua_co:'0e0',total_payout:'0.0',final_net:'0'}};
+  assert.equal(compare(local,base).safe_to_promote,true);
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  for(const [label,edit] of [
+    ['xac_conflict',x=>x.totals.total_xac=100],
+    ['payout_conflict',x=>x.totals.total_payout='-10'],
+    ['final_conflict',x=>x.totals.final_net='1'],
+    ['nonnumeric_alias',x=>x.totals.total_xac='INVALID'],
+    ['precision_alias',x=>{x.totals.final='9007199254740993';x.totals.final_net='9007199254740992';}]
+  ]){
+    const ref=copy(base);edit(ref);
+    const verdict=compare(local,ref);
+    assert.equal(verdict.safe_to_promote,false,'CONFLICTING_ALIAS_PROMOTED:'+label);
+    assert.equal(verdict.invalid_total_alias_evidence,true);
+    assert.equal(verdict.status,'INCOMPLETE_REFERENCE');
+  }
 });

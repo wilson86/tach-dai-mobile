@@ -194,6 +194,26 @@
     });
   }
 
+  function referenceAliasesValid(reference) {
+    // Imported shadow evidence may contain canonical and shorthand HIOSKT
+    // fields at once. Ignoring a conflicting alias can select a false zero
+    // and classify a monetary mismatch as an exact pass.
+    for (const aliases of Object.values(FIELD_ALIASES)) {
+      let expected=null;
+      for (const alias of aliases) {
+        if (!reference || !Object.prototype.hasOwnProperty.call(reference,alias)) continue;
+        const raw=reference[alias];
+        if (raw==null || raw==='') continue;
+        if (numeric(raw)===null) return false;
+        let canonical;
+        try { canonical=decimalCanonical(raw); } catch (_) { return false; }
+        if (expected!==null && expected!==canonical) return false;
+        expected=canonical;
+      }
+    }
+    return true;
+  }
+
   function compareSettlement(localSettlement, referenceSnapshot, options) {
     const local = localSettlement && (localSettlement.settlement_result || localSettlement.result_snapshot || localSettlement) || {};
     const reference = referenceSnapshot && (referenceSnapshot.totals || referenceSnapshot) || {};
@@ -210,6 +230,7 @@
     const localRows = localSettlement && Array.isArray(localSettlement.category_rows) ? localSettlement.category_rows : local.rows;
     const referenceRows = referenceSnapshot && (referenceSnapshot.categories || referenceSnapshot.category_rows);
     const categoryEvidenceOkay=categoryEvidenceValid(localRows)&&categoryEvidenceValid(referenceRows);
+    const aliasEvidenceOkay=referenceAliasesValid(reference);
     const categories = Array.isArray(referenceRows) && categoryEvidenceOkay ?
       compareCategories(localRows, referenceRows, options) : [];
     const statuses = [...Object.values(totals).map(x => x.status), ...categories.map(x => x.status)].filter(x => x !== 'NOT_COMPARABLE');
@@ -221,16 +242,17 @@
     }
     const requiredTotalsExact = REQUIRED_PROMOTION_TOTALS.every(field => totals[field] && totals[field].status === 'MATCH_EXACT');
     const categoriesExact = categoryEvidenceOkay && categories.every(row => row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE');
-    if (!categoryEvidenceOkay) status='INCOMPLETE_REFERENCE';
+    if (!categoryEvidenceOkay || !aliasEvidenceOkay) status='INCOMPLETE_REFERENCE';
     return {
       status,
       totals,
       categories,
       compared_fields: statuses.length,
       invalid_category_evidence: !categoryEvidenceOkay,
+      invalid_total_alias_evidence: !aliasEvidenceOkay,
       required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
-      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact
+      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact && aliasEvidenceOkay
     };
   }
 
@@ -285,7 +307,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v8-exact-display-integrity',
+    version: 'settlement-shadow-v9-reference-alias-integrity',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
