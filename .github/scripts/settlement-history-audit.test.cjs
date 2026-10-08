@@ -284,3 +284,22 @@ test('backend contract is verified before any public Pages mutation',()=>{
     'SETTLEMENT_TEST_BACKEND_CONTRACT=PASS'
   ])assert.ok(block.includes(required),'BACKEND_PREDEPLOY_GUARD_MISSING:'+required);
 });
+
+test('every cached runtime JavaScript file is pinned except recursive build identity',()=>{
+  const source=readFileSync(resolve(root,'settlement-test','settlement-build-identity.js'),'utf8');
+  const cache=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
+  vm.runInNewContext(source,sandbox,{filename:'settlement-build-identity.js'});
+  const pins=sandbox.window.KTS_SETTLEMENT_BUILD_IDENTITY.critical_git_blobs;
+  const assets=cache.match(/const CORE=\[([\s\S]*?)\];/);
+  assert.ok(assets,'PREDEPLOY_SW_CORE_NOT_FOUND');
+  const names=[...assets[1].matchAll(/'\.\/([^']+\.js)'/g)].map(x=>x[1]);
+  assert.equal(names.length,60);
+  assert.equal(Object.keys(pins).length,61);
+  const missing=names.filter(x=>x!=='settlement-build-identity.js'&&!pins['app/'+x]);
+  assert.deepEqual(missing,[],'UNPINNED_SETTLEMENT_RUNTIME_JS');
+  const integrity=readFileSync(resolve(root,'.github','scripts','settlement-predeploy-integrity.cjs'),'utf8');
+  assert.ok(integrity.includes('PREDEPLOY_UNPINNED_CACHED_JS'),'PREDEPLOY_UNPINNED_MODULE_GATE_MISSING');
+  assert.ok(integrity.includes('PREDEPLOY_REQUIRED_PIN_MISSING'),'PREDEPLOY_WORKER_SHELL_PIN_GATE_MISSING');
+  const executable=names.filter(x=>x!=='settlement-build-identity.js');
+  assert.equal(executable.length,59,'UNEXPECTED_CACHED_JS_MODULE_COUNT');
+});
