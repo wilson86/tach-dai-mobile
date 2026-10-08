@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.160-no-permitted-categories'));
+  assert.ok(source.includes('v1.0.161-input-revalidation'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -563,4 +563,63 @@ test('unsupported-only UI scope stays BLOCKED instead of settling silently as ze
   assert.equal(saved.length,1);
   assert.equal(settlementCalls,0);
   assert.equal(actual.settlement.category_rows.length,0);
+});
+
+test('scope commit refuses content mutations even when IDs and timestamps remain unchanged',async()=>{
+  const ctx={window:{}};
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  const baseMessage={id:'msg1',partner_id:'synthetic',business_date:'2026-09-22',region:'mn',
+    status:'parsed_waiting_result',updated_at:'unchanged',raw_text:'11 b 1n',
+    canonical_version:'v1',canonical_payload:{region:'mn',legs:[{code:'2CB',values:['11'],stake:1}]}};
+  const baseConfig={id:'cfg1',partner_id:'synthetic',version:1,effective_from_date:'2026-09-01',
+    updated_at:'unchanged',region_pricing:{mn:{'2CB':{commission:0.75,win:80}}},
+    region_terms:{mn:{total_percent:'95',refund_percent:'3'}},total_percent:'100',
+    refund_percent:'0',commission_type:'ratio'};
+  const baseResult={business_date:'2026-09-22',region:'mn',fingerprint:'same-canonical-fingerprint',
+    complete:true,coverage_complete:true,verified:true,verification_status:'verified',
+    verification_sources:['sourceA','sourceB'],verification_conflicts:[],
+    expected_station_codes:['tp'],stations:[{code:'tp',prizes:{DB:['11111']}}]};
+  const baselinePartner={id:'synthetic',role:'customer',name:'Test partner',active:true};
+  let storeState,changes=[],written=[];
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async name=>name==='messages'?copy(storeState.messages):[],
+    get:async(name)=>copy(name==='results'?storeState.result:storeState.partner),
+    resolveConfigForDate:async()=>copy(storeState.config),
+    saveSettlement:async settlement=>{written.push(settlement);return settlement;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({
+    category_inputs:[{code:'2CB',xac:1,commission_value:0.75,commission_type:'ratio',
+      hit_units:0,win_rate:80}],detail_rows:[{code:'2CB',numbers:'11'}]
+  })};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:rows=>{
+    for(const change of changes)change(storeState);
+    return {rows:copy(rows),final_net:1};
+  }};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic-engine'};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'app',name),'utf8'),ctx,{filename:name});
+  const pipeline=ctx.window.KTS_SETTLEMENT_PIPELINE;
+  const scenarios=[
+    ['canonical-change',s=>s.messages[0].canonical_payload.legs[0].values[0]='22'],
+    ['price-change-same-version',s=>s.config.region_pricing.mn['2CB'].win=100],
+    ['regional-percent-change',s=>s.config.region_terms.mn.total_percent='85'],
+    ['verified-result-status-change',s=>s.result.verification_status='conflict'],
+    ['verified-result-prize-change',s=>s.result.stations[0].prizes.DB[0]='22222'],
+    ['partner-role-change',s=>s.partner.role='owner']
+  ];
+  for(const [name,change] of scenarios){
+    storeState={messages:[copy(baseMessage)],config:copy(baseConfig),
+      result:copy(baseResult),partner:copy(baselinePartner)};
+    written=[];changes=[change];
+    const outcome=await pipeline.settleScope({partner_id:'synthetic',business_date:'2026-09-22',region:'mn'});
+    assert.equal(outcome.status,'superseded','UNSAFE_STALE_SETTLEMENT:'+name);
+    assert.equal(written.length,0,'STALE_MONEY_WRITTEN:'+name);
+  }
+  storeState={messages:[copy(baseMessage)],config:copy(baseConfig),
+    result:copy(baseResult),partner:copy(baselinePartner)};
+  changes=[];written=[];
+  const clean=await pipeline.settleScope({partner_id:'synthetic',business_date:'2026-09-22',region:'mn'});
+  assert.equal(clean.status,'complete_unverified');
+  assert.equal(written.length,1);
 });
