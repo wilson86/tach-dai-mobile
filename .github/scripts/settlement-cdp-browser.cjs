@@ -50,6 +50,7 @@ async function launchChrome(){
     '--user-data-dir='+profile,'about:blank'
   ],{stdio:['ignore','ignore','pipe']});
   proc.stderr.on('data',chunk=>{stderr.push(String(chunk));if(stderr.length>40)stderr.shift()});
+  try {
   const port=await waitFor(()=>{
     if(proc.exitCode!==null)throw Error('CHROME_EXITED:'+proc.exitCode);
     const active=path.join(profile,'DevToolsActivePort');
@@ -66,6 +67,13 @@ async function launchChrome(){
   await conn.send('Page.enable');
   await conn.send('Runtime.enable');
   return {profile,proc,conn,stderr};
+  } catch(error) {
+    const detail=stderr.slice(-6).join('').slice(-2200);
+    proc.kill('SIGKILL');
+    await pause(250);
+    fs.rmSync(profile,{recursive:true,force:true});
+    throw Error('CHROME_START_FAILED:'+error.message+' STDERR='+detail);
+  }
 }
 async function connect(url){
   assert(typeof WebSocket==='function','NODE_WEBSOCKET_UNAVAILABLE');
@@ -150,13 +158,6 @@ async function checkOffline(browser,server,base){
   console.log('WARMUP_SETTLEMENT_RUNTIME=PASS');
   await navigate(browser,base+'/sw-diagnostics.html');
   await waitResult(browser,'SW_DIAGNOSTICS',85000);
-  const preflight=await pageEval(browser,`(async()=>{
-    const r=await navigator.serviceWorker.ready;
-    const keys=await caches.keys();
-    return {active:r.active&&r.active.state,controlled:Boolean(navigator.serviceWorker.controller),keys}
-  })()`);
-  // Runtime.evaluate uses awaitPromise=false, so rely on the completed
-  // diagnostic's own real DOM assertions for CacheStorage and control.
   console.log('SW_DIAGNOSTIC_RUNTIME_COMPLETED=PASS');
   await shutdownServer(server);
   let unavailable=false;
@@ -184,7 +185,21 @@ async function checkOffline(browser,server,base){
   try{
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const base='http://127.0.0.1:'+server.address().port+'/settlement-test';
-    browser=await launchChrome();
+    // A startup retry is strictly bounded to 2 attempts; Linux CI can
+    // transiently fail Chrome DevTools startup under parallel runner load.
+    let startupError=null;
+    for(let attempt=1;attempt<=2;attempt++){
+      try{
+        console.log('CHROME_START_ATTEMPT='+attempt);
+        browser=await launchChrome();
+        break;
+      }catch(error){
+        startupError=error;
+        console.error('CHROME_START_ATTEMPT_FAILED='+attempt+' '+error.message);
+        if(attempt<2)await pause(1250);
+      }
+    }
+    if(!browser)throw startupError||Error('CHROME_STARTUP_FAILED');
     console.log('CDP_CHROME_ATTACHED=PASS');
     if(mode==='indexeddb')await checkIndexedDb(browser,base);
     else await checkOffline(browser,server,base);
