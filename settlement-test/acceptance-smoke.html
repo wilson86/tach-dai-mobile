@@ -387,6 +387,119 @@
     if(after!==beforeCounts[name])fail('BACKUP_MERGE_COUNT_CHANGED:'+name+':'+beforeCounts[name]+'->'+after);
   }
 
+  const fixturePrice=()=>({commission:'0.76',win:'1'});
+  const fixtureConfig=await store.saveConfig({
+    partner_id:smokePartner.id,
+    effective_from_date:'2026-01-01',
+    commission_type:'ratio',
+    total_percent:'100',
+    refund_percent:'0',
+    mb_xien_234:false,
+    tinh_ui:false,
+    region_terms:{
+      mn:{total_percent:'100',refund_percent:'0',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'},
+      mt:{total_percent:'100',refund_percent:'0',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'},
+      mb:{total_percent:'50',refund_percent:'0'}
+    },
+    region_pricing:{mb:{
+      '2CB':fixturePrice(),'2CD':fixturePrice(),'2CB8':fixturePrice(),DAT:fixturePrice(),
+      '3CB':fixturePrice(),'3CB7':fixturePrice(),'3CDD':fixturePrice(),'4C':fixturePrice(),
+      MB_XIEN2:{commission:'56',win:'1000'},UI:{commission:'0',win:'10'}
+    }}
+  });
+  if(!fixtureConfig||fixtureConfig.effective_from_date!=='2026-01-01')fail('FIXTURE_CONFIG_SAVE_FAILED');
+  if(fixtureConfig.tinh_ui!==false)fail('FIXTURE_UI_GATE_CHANGED');
+
+  const pipeline=w.KTS_SETTLEMENT_PIPELINE;
+  const parserProvider=w.KTS_SETTLEMENT_PARSER_PROVIDER;
+  if(!pipeline||!parserProvider)fail('FIXTURE_PIPELINE_REQUIRED');
+
+  const fixtureMessage1=await pipeline.parseAndSaveMessage({
+    partner_id:smokePartner.id,
+    business_date:'2026-09-22',
+    region:'mb',
+    raw_text:'92 b 1n',
+    parser_provider:parserProvider
+  });
+  const fixtureMessage2=await pipeline.parseAndSaveMessage({
+    partner_id:smokePartner.id,
+    business_date:'2026-09-22',
+    region:'mb',
+    raw_text:'92 61 da 1n',
+    parser_provider:parserProvider
+  });
+  if(fixtureMessage1.status!=='parsed_waiting_result'||fixtureMessage2.status!=='parsed_waiting_result'){
+    fail('FIXTURE_MESSAGES_NOT_WAITING_RESULT');
+  }
+  const fixtureLeg1=fixtureMessage1.message&&fixtureMessage1.message.canonical_payload&&fixtureMessage1.message.canonical_payload.legs||[];
+  const fixtureLeg2=fixtureMessage2.message&&fixtureMessage2.message.canonical_payload&&fixtureMessage2.message.canonical_payload.legs||[];
+  if(!fixtureLeg1.length||fixtureLeg1[0].code!=='2CB')fail('FIXTURE_2CB_CANONICAL');
+  if(!fixtureLeg2.length||fixtureLeg2[0].code!=='DAT')fail('FIXTURE_DAT_CANONICAL');
+
+  const fixtureResult={
+    business_date:'2026-09-22',
+    region:'mb',
+    status:'complete',
+    complete:true,
+    expected_station_codes:['mb'],
+    verification_status:'verified',
+    verified:true,
+    verification_sources:['primary','secondary'],
+    stations:[{code:'mb',name:'Miền Bắc',prizes:{
+      DB:['31922'],
+      G1:['12361'],
+      G2:['10001','20002'],
+      G3:['30003','40004','50005','60006','70007','80008'],
+      G4:['90009','11110','22211','33312'],
+      G5:['44592','55514','66615','77716','88817','99918'],
+      G6:['192','319','561'],
+      G7:['92','20','30','40']
+    }}]
+  };
+  const savedFixtureResult=await store.saveResultSnapshot(fixtureResult);
+  if(!savedFixtureResult||!savedFixtureResult.snapshot)fail('FIXTURE_RESULT_SAVE_FAILED');
+  if(savedFixtureResult.snapshot.complete!==true)fail('FIXTURE_RESULT_NOT_COMPLETE');
+  if(savedFixtureResult.snapshot.verified!==true||savedFixtureResult.snapshot.verification_status!=='verified'){
+    fail('FIXTURE_RESULT_NOT_VERIFIED');
+  }
+
+  const fixtureSettlement=await pipeline.settleScope({
+    partner_id:smokePartner.id,
+    business_date:'2026-09-22',
+    region:'mb'
+  });
+  if(!fixtureSettlement||fixtureSettlement.status!=='complete_unverified')fail('FIXTURE_SETTLEMENT_STATUS');
+  const fixtureTotals=fixtureSettlement.settlement&&fixtureSettlement.settlement.result_snapshot||{};
+  const approx=(actual,expected,label)=>{
+    if(Math.abs(Number(actual)-Number(expected))>1e-9)fail(label+':'+String(actual)+'!='+String(expected));
+  };
+  approx(fixtureTotals.total_xac,81,'FIXTURE_TOTAL_XAC');
+  approx(fixtureTotals.total_qua_co,61.56,'FIXTURE_TOTAL_QUA_CO');
+  approx(fixtureTotals.total_payout,5,'FIXTURE_TOTAL_PAYOUT');
+  approx(fixtureTotals.final_net,28.28,'FIXTURE_FINAL_NET');
+
+  const fixtureMessagesNow=await store.getAll(store.STORES.messages);
+  const fixtureSavedMessages=fixtureMessagesNow.filter(m=>
+    m&&m.partner_id===smokePartner.id&&m.business_date==='2026-09-22'&&String(m.region||'').toLowerCase()==='mb'
+  );
+  if(fixtureSavedMessages.length!==2)fail('FIXTURE_MESSAGE_COUNT:'+fixtureSavedMessages.length);
+  if(fixtureSavedMessages.some(m=>m.status!=='settled_unverified'))fail('FIXTURE_MESSAGE_STATUS_AFTER_SETTLEMENT');
+
+  const fixtureSettlements=await store.getAll(store.STORES.settlements);
+  const fixtureMessageMap=Object.fromEntries(fixtureMessagesNow.map(m=>[m.id,m]));
+  const fixtureReport=reportApi.buildDailyPartnerReport({
+    partner:smokePartner,
+    business_date:'2026-09-22',
+    settlements:fixtureSettlements,
+    messages_by_id:fixtureMessageMap
+  });
+  if(fixtureReport.blocked===true)fail('FIXTURE_REPORT_BLOCKED');
+  if(fixtureReport.kqxs_verified!==true)fail('FIXTURE_REPORT_KQXS_NOT_VERIFIED');
+  approx(fixtureReport.totals.xac,81,'FIXTURE_REPORT_XAC');
+  approx(fixtureReport.totals.qua_co,61.56,'FIXTURE_REPORT_QUA_CO');
+  approx(fixtureReport.totals.payout,5,'FIXTURE_REPORT_PAYOUT');
+  approx(fixtureReport.totals.final_net,28.28,'FIXTURE_REPORT_FINAL_NET');
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -413,7 +526,10 @@
     'MESSAGE_SCOPE_LIFECYCLE=PASS',
     'UI_REPORT_BLOCKED=PASS',
     'REPORT_ZERO_MONEY=PASS',
-    'DAILY_CLOSE_NOT_READY=PASS'
+    'DAILY_CLOSE_NOT_READY=PASS',
+    'KQXS_VERIFIED_FIXTURE=PASS',
+    'SETTLEMENT_CANONICAL_TOTALS=PASS',
+    'REPORT_CANONICAL_TOTALS=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
