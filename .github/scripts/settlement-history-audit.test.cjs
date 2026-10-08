@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.165-blocked-partner-revalidation'));
+  assert.ok(sw.includes('v1.0.166-kqxs-conflict-evidence'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -948,4 +948,35 @@ test('failed monetary runtime cannot write stale BLOCKED after partner role is c
   assert.equal(result.status,'blocked');
   assert.equal(writes.length,1,'SAME_PARTNER_ERROR_SHOULD_BLOCK');
   assert.equal(result.reason,'INVALID_PARTNER_ROLE');
+});
+
+test('contradictory KQXS sources hard-block even when legacy status says verified',async()=>{
+  const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x)),scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const msg={...scope,id:'m1',status:'parsed_waiting_result',canonical_payload:{region:'mn',legs:[{code:'2CB'}]}};
+  let evaluations=0,monetaryRuns=0,writes=[],snapshot={business_date:'2026-09-22',region:'mn',
+    complete:true,verified:true,verification_status:'verified',
+    verification_conflicts:['DIFFERING_PROVIDER_PRIZE'],stations:[{code:'tp',prizes:{DB:['11111']}}]};
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[copy(msg)],
+    resolveConfigForDate:async()=>({partner_id:'synthetic',id:'v1',version:1}),
+    get:async(name)=>name==='results'?copy(snapshot):null,
+    saveSettlement:async row=>{writes.push(row);return row;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{
+    evaluations++;throw Error('MUST_NOT_EVALUATE_CONFLICTED_RESULTS');
+  }};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{
+    monetaryRuns++;throw Error('MUST_NOT_RUN_MONEY_ON_CONFLICT');
+  }};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  for(const f of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',f),'utf8'),ctx,{filename:f});
+  const x=await ctx.window.KTS_SETTLEMENT_PIPELINE.settleScope(scope);
+  assert.equal(x.status,'blocked');
+  assert.equal(x.reason,'KQXS_SOURCE_CONFLICT');
+  assert.equal(x.settlement.scope_status,'blocked');
+  assert.equal(writes.length,1);
+  assert.equal(evaluations,0);
+  assert.equal(monetaryRuns,0);
 });
