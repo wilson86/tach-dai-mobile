@@ -290,7 +290,7 @@
   }
 
   global.KTS_SETTLEMENT_OBSERVATION = Object.freeze({
-    version: 'settlement-observation-v4-candidate-review-gate',
+    version: 'settlement-observation-v5-strict-kqxs-promotion',
     STATUS,
     comparisonStatus,
     scopeKey,
