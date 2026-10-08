@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.180-shadow-atomic-CAS'));
+  assert.ok(sw.includes('v1.0.181-exact-metadata-shape'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1383,4 +1383,39 @@ test('settlement store CAS serializes snapshot check and write in a readwrite tr
   assert.equal(state.settlement_result.final_net,20);
   assert.equal(writes,1);
   assert.ok(transactionTypes.every(([store,mode])=>store==='settlements'&&mode==='readwrite'));
+});
+
+test('malformed exact metadata shapes cannot hide missing monetary evidence',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:0,payout:0}]};
+  const ref={totals:{xac:0,qua_co:0,payout:0,final:0},categories:[{code:'B',xac:0,payout:0}]};
+  const clone=x=>JSON.parse(JSON.stringify(x));
+  assert.equal(compare(local,ref).safe_to_promote,true);
+  for(const [name,modify] of [
+    ['local_exact_text',x=>x.local.settlement_result.exact='invalid'],
+    ['local_exact_array',x=>x.local.settlement_result.exact=['0']],
+    ['reference_exact_text',x=>x.ref.totals.exact='invalid'],
+    ['reference_exact_array',x=>x.ref.totals.exact=['0']]
+  ]){
+    const x={local:clone(local),ref:clone(ref)};modify(x);
+    const verdict=compare(x.local,x.ref);
+    assert.equal(verdict.safe_to_promote,false,'INVALID_TOTAL_EXACT_METADATA_PROMOTED:'+name);
+    assert.equal(verdict.invalid_exact_metadata,true);
+    assert.equal(verdict.status,'INCOMPLETE_REFERENCE');
+  }
+  for(const [name,modify] of [
+    ['local_category_exact',x=>x.local.category_rows[0].exact='bad'],
+    ['local_category_array',x=>x.local.category_rows[0].exact=[]],
+    ['reference_category_exact',x=>x.ref.categories[0].exact='bad'],
+    ['reference_category_array',x=>x.ref.categories[0].exact=[]]
+  ]){
+    const x={local:clone(local),ref:clone(ref)};modify(x);
+    const verdict=compare(x.local,x.ref);
+    assert.equal(verdict.safe_to_promote,false,'INVALID_CATEGORY_EXACT_METADATA_PROMOTED:'+name);
+    assert.equal(verdict.invalid_category_evidence,true);
+    assert.equal(verdict.status,'INCOMPLETE_REFERENCE');
+  }
 });
