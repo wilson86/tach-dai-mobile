@@ -746,6 +746,32 @@
     fail('OBSERVATION_DURATION_BLOCKER_MISSING:'+JSON.stringify(durationBlocked.blockers||[]));
   }
 
+  const regressionBlocked=observationApi.buildObservation(exactSettlements,{
+    ...observationOptions,
+    regression_summary:{total:1,passed:0,failed:1},
+    candidate_summary:{pending:0,promoted:1,dismissed:0}
+  });
+  if(regressionBlocked.promotion_ready!==false)fail('OBSERVATION_REGRESSION_UNSAFE_READY');
+  if(!regressionBlocked.regression_gate||regressionBlocked.regression_gate.met!==false){
+    fail('OBSERVATION_REGRESSION_GATE_NOT_BLOCKED');
+  }
+  if(!Array.isArray(regressionBlocked.blockers)||!regressionBlocked.blockers.includes('REGRESSION_FAILED:1/1')){
+    fail('OBSERVATION_REGRESSION_BLOCKER_MISSING:'+JSON.stringify(regressionBlocked.blockers||[]));
+  }
+
+  const candidateBlocked=observationApi.buildObservation(exactSettlements,{
+    ...observationOptions,
+    regression_summary:{total:1,passed:1,failed:0},
+    candidate_summary:{pending:1,promoted:0,dismissed:0}
+  });
+  if(candidateBlocked.promotion_ready!==false)fail('OBSERVATION_CANDIDATE_UNSAFE_READY');
+  if(!candidateBlocked.candidate_gate||candidateBlocked.candidate_gate.met!==false){
+    fail('OBSERVATION_CANDIDATE_GATE_NOT_BLOCKED');
+  }
+  if(!Array.isArray(candidateBlocked.blockers)||!candidateBlocked.blockers.includes('REGRESSION_CANDIDATE_PENDING:1')){
+    fail('OBSERVATION_CANDIDATE_BLOCKER_MISSING:'+JSON.stringify(candidateBlocked.blockers||[]));
+  }
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -789,7 +815,9 @@
     'DAILY_CLOSE_READY_AFTER_EXACT=PASS',
     'OBSERVATION_PROMOTION_READY=PASS',
     'OBSERVATION_STRICT_KQXS_GATE=PASS',
-    'OBSERVATION_DURATION_FAIL_CLOSED=PASS'
+    'OBSERVATION_DURATION_FAIL_CLOSED=PASS',
+    'OBSERVATION_REGRESSION_FAIL_CLOSED=PASS',
+    'OBSERVATION_CANDIDATE_PENDING_FAIL_CLOSED=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
