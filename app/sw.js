@@ -2,7 +2,7 @@
 // Scope-safe service worker for both /app/ and isolated /settlement-test/ deployments.
 const CACHE_SCOPE=new URL(self.registration.scope).pathname.replace(/[^a-z0-9]+/gi,'-').replace(/^-+|-+$/g,'')||'root';
 const CACHE_PREFIX=`kts-tach-unified-${CACHE_SCOPE}-`;
-const CACHE=`${CACHE_PREFIX}v1.0.140-lock-unconfirmed-ui`;
+const CACHE=`${CACHE_PREFIX}v1.0.141-qualification-history-atomic`;
 const CORE=[
   './','./index.html','./unified-core.js','./manifest.webmanifest','./version.json',
   './settlement.html','./settlement-store.js','./settlement-engine.js','./settlement-mb-rules.js',
