@@ -103,10 +103,18 @@ test('restoring KQXS does not restore historical READY without new qualification
   assert.equal(verify([ready,blocked]).current,false);
 });
 
-test('feature build identity pin matches actual canonical history Git blob',()=>{
+test('feature build identity pins history and service worker Git blobs',()=>{
   const {execFileSync}=require('node:child_process');
   vm.runInNewContext(readFileSync(resolve(root,'app','settlement-build-identity.js'),'utf8'),sandbox,{filename:'settlement-build-identity.js'});
   const manifest=sandbox.window.KTS_SETTLEMENT_BUILD_IDENTITY;
-  const expected=execFileSync('git',['hash-object','app/settlement-qualification-history.js'],{cwd:root,encoding:'utf8'}).trim();
-  assert.equal(manifest.critical_git_blobs['app/settlement-qualification-history.js'],expected);
+  for(const name of ['settlement-qualification-history.js','sw.js']){
+    const expected=execFileSync('git',['hash-object','app/'+name],{cwd:root,encoding:'utf8'}).trim();
+    assert.equal(manifest.critical_git_blobs['app/'+name],expected);
+  }
+});
+test('feature SW rotates the qualification history runtime cache',()=>{
+  const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
+  assert.ok(source.includes('v1.0.141-qualification-history-atomic'));
+  assert.ok(source.includes("'./settlement-qualification-history.js'"));
+  assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
