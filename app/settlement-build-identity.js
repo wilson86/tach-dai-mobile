@@ -27,7 +27,7 @@
     'app/settlement-parser-replay.js':'46f804323d4d6b3c6ad82d689421d6fdd33c3f3f',
     'app/settlement-repair-readiness.js':'34d92a558f3a94fbac6fff08aaa8a57462e16542',
     'app/settlement-qualification-dashboard.js':'2b0e0039922cc0de1d8acf002045e1ca0b39b72b',
-    'app/settlement-qualification-history.js':'3958dcf4f2883a9dac62d7df541e448f75fb4369',
+    'app/settlement-qualification-history.js':'d870200f59dd089a71339989dbfee23688d6a944',
     'app/settlement-qualification-history-bridge.js':'a3f2bcff748d53896612933ea066f2ed67d32fde',
     'app/settlement-preproduction-package.js':'8206331fd8e552214d3a33076ed4a33fe7556958',
     'app/settlement-preproduction-review.js':'c1ca3becb7168b025b0b6e1310918b6eb156db58',
