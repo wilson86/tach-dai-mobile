@@ -233,3 +233,36 @@ test('full Pages acceptance CDP contract extracts all 62 output markers',()=>{
     assert.ok(markers.includes(marker),'MISSING_HARD_GATE_'+marker);
   }
 });
+
+test('Pages deployment cannot start before the shared fail-closed preflight',()=>{
+  const workflow=readFileSync(resolve(root,'.github','workflows','deploy-pages.yml'),'utf8');
+  const audit=readFileSync(resolve(root,'.github','workflows','settlement-predeploy-audit.yml'),'utf8');
+  const gate=readFileSync(resolve(root,'.github','scripts','settlement-predeploy-gate.sh'),'utf8');
+  const checker=readFileSync(resolve(root,'.github','scripts','settlement-predeploy-integrity.cjs'),'utf8');
+  const checkout=workflow.indexOf('uses: actions/checkout@v4');
+  const preflight=workflow.indexOf('name: Fail-closed local predeploy qualification');
+  const configure=workflow.indexOf('uses: actions/configure-pages@v5');
+  const upload=workflow.indexOf('uses: actions/upload-pages-artifact@v3');
+  const publish=workflow.indexOf('uses: actions/deploy-pages@v4');
+  const postParity=workflow.indexOf('name: Verify public settlement test bytes');
+  const postAccept=workflow.indexOf('name: Browser acceptance on canonical test Pages via real CDP');
+  assert.ok(checkout>=0&&checkout<preflight&&preflight<configure&&
+    configure<upload&&upload<publish&&publish<postParity&&postParity<postAccept,
+    'PREDEPLOY_FAIL_CLOSED_ORDER_BROKEN');
+  assert.ok(workflow.includes('run: bash .github/scripts/settlement-predeploy-gate.sh'));
+  assert.ok(audit.includes('run: bash .github/scripts/settlement-predeploy-gate.sh'));
+  assert.ok(!audit.includes('actions/deploy-pages@'),'PR_AUDIT_MUST_NEVER_DEPLOY');
+  assert.ok(!workflow.includes('continue-on-error: true'),'RELEASE_GATE_MUST_NOT_IGNORE_FAILURE');
+  assert.ok(gate.includes('set -euo pipefail'));
+  for(const required of [
+    'settlement-predeploy-integrity.cjs',
+    'node --test .github/scripts/settlement-history-audit.test.cjs',
+    'settlement-cdp-browser.cjs indexeddb',
+    'settlement-cdp-browser.cjs offline-cold'
+  ])assert.ok(gate.includes(required),'PREDEPLOY_CHECK_MISSING:'+required);
+  for(const required of [
+    'PREDEPLOY_CRITICAL_BLOB_MISMATCH',
+    'PREDEPLOY_SW_CACHE_ASSET_MISSING',
+    'PREDEPLOY_JS_SYNTAX_ERROR'
+  ])assert.ok(checker.includes(required),'INTEGRITY_FAIL_CLOSED_MISSING:'+required);
+});
