@@ -93,6 +93,48 @@
   }
   if(!preview.classList.contains('ok'))fail('SYNTAX_REVIEW_NOT_OK');
 
+  const partnerTab=d.querySelector('.nav button[data-pane="partner"]');
+  const partnerPane=d.getElementById('pane-partner');
+  const partnerName=d.getElementById('partnerName');
+  const partnerRole=d.getElementById('partnerRole');
+  const addPartner=d.getElementById('addPartner');
+  const partnerStatus=d.getElementById('partnerStatus');
+  const partnerSelect=d.getElementById('partnerSelect');
+  if(!partnerTab||!partnerPane||!partnerName||!partnerRole||!addPartner||!partnerStatus||!partnerSelect){
+    fail('PARTNER_UI_REQUIRED');
+  }
+
+  partnerTab.click();
+  if(!partnerPane.classList.contains('active'))fail('PARTNER_TAB_NOT_ACTIVE');
+  partnerName.value='CI Smoke Partner';
+  partnerRole.value='customer';
+  addPartner.click();
+
+  const partnerDeadline=Date.now()+12000;
+  while(Date.now()<partnerDeadline){
+    const text=String(partnerStatus.textContent||'');
+    if(text.includes('Đã lưu CI Smoke Partner.'))break;
+    if(partnerStatus.classList.contains('err'))fail('PARTNER_SAVE_ERROR:'+text);
+    await new Promise(resolve=>setTimeout(resolve,100));
+  }
+  if(!String(partnerStatus.textContent||'').includes('Đã lưu CI Smoke Partner.')){
+    fail('PARTNER_SAVE_TIMEOUT:'+String(partnerStatus.textContent||''));
+  }
+
+  const selectedText=partnerSelect.options&&partnerSelect.selectedIndex>=0
+    ?String(partnerSelect.options[partnerSelect.selectedIndex].textContent||''):'';
+  if(!selectedText.includes('CI Smoke Partner'))fail('PARTNER_UI_SELECTION_MISMATCH:'+selectedText);
+
+  const store=w.KTS_SETTLEMENT_STORE;
+  if(!store||typeof store.getAll!=='function'||!store.STORES||!store.STORES.partners){
+    fail('SETTLEMENT_STORE_REQUIRED');
+  }
+  const savedPartners=await store.getAll(store.STORES.partners);
+  const smokePartner=(savedPartners||[]).find(p=>p&&p.name==='CI Smoke Partner');
+  if(!smokePartner)fail('PARTNER_INDEXEDDB_MISSING');
+  if(smokePartner.active===false)fail('PARTNER_INDEXEDDB_INACTIVE');
+  if(smokePartner.role!=='customer')fail('PARTNER_INDEXEDDB_ROLE_MISMATCH');
+
   out.textContent=[
     'ACCEPTANCE_SMOKE=PASS',
     'IFRAME_RUNTIME=PASS',
@@ -101,7 +143,9 @@
     'BROWSER_CORS_IDENTITY=PASS',
     'BROWSER_CORS_PARSER=PASS code=DAT',
     'UI_MESSAGE_TAB=PASS',
-    'UI_SYNTAX_REVIEW=PASS DAT'
+    'UI_SYNTAX_REVIEW=PASS DAT',
+    'UI_PARTNER_CREATE=PASS',
+    'INDEXEDDB_PARTNER_PERSISTENCE=PASS'
   ].join('\n');
 })().catch(error=>{
   document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
