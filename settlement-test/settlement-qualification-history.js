@@ -4,7 +4,7 @@
   const META_KEY = 'qualification_history_v1';
   const FORMAT = 'kts-qualification-evidence-v1';
   const READY = 'READY_FOR_PRODUCTION_REVIEW';
-  const COMPONENTS = Object.freeze(['runtime','parser_backend','messages','settlements','results','configs','regression_cases','candidates','qualification']);
+  const COMPONENTS = Object.freeze(['runtime','parser_backend','partners','messages','settlements','results','configs','regression_cases','candidates','qualification']);
   const GIT_BLOB_RE = /^[0-9a-f]{40}$/i;
   const SHA256_RE = /^[0-9a-f]{64}$/i;
 
@@ -44,6 +44,11 @@
     const bytes = new global.TextEncoder().encode(typeof value === 'string' ? value : stable(value));
     const digest = await global.crypto.subtle.digest('SHA-256', bytes);
     return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2,'0')).join('');
+  }
+  // Role and active status affect settlement calculation and reporting. A
+  // scoped partner change must invalidate any previous READY fingerprint.
+  function semanticPartner(p) {
+    return {id:p.id,name:p.name,role:p.role,active:p.active!==false};
   }
   function semanticMessage(m) {
     return { id:m.id, partner_id:m.partner_id, business_date:m.business_date, region:m.region, status:m.status, raw_text:m.raw_text, canonical_payload:clone(m.canonical_payload||null), canonical_version:m.canonical_version||null, parser_error:m.parser_error||null, config_snapshot:clone(m.config_snapshot||null) };
@@ -131,10 +136,10 @@
   }
   async function collectMaterial(qualificationSnapshot, options, materialOptions) {
     const d = deps();
-    const [messagesAll, settlementsAll, resultsAll, configsAll, pinned, candidateRows] = await Promise.all([
+    const [messagesAll, settlementsAll, resultsAll, configsAll, partnersAll, pinned, candidateRows] = await Promise.all([
       d.store.getAll(d.store.STORES.messages), d.store.getAll(d.store.STORES.settlements),
       d.store.getAll(d.store.STORES.results), d.store.getAll(d.store.STORES.configs),
-      d.regression.listPinnedCases(), d.candidates.listCandidates()
+      d.store.getAll(d.store.STORES.partners), d.regression.listPinnedCases(), d.candidates.listCandidates()
     ]);
     const activeMessages = messagesAll.filter(m=>d.qualification.messageInWindow(m,options)).map(semanticMessage);
     const scopeSet = new Set((qualificationSnapshot&&qualificationSnapshot.observation&&qualificationSnapshot.observation.scopes||[]).map(scopeKey));
@@ -142,12 +147,14 @@
     const dateRegions = new Set(activeMessages.map(m=>`${m.business_date}:${String(m.region||'').toLowerCase()}`));
     const results = resultsAll.filter(r=>dateRegions.has(`${r.business_date}:${String(r.region||'').toLowerCase()}`)).map(semanticResult);
     const configs = relevantConfigs(configsAll,activeMessages,options).map(semanticConfig);
+    const partnerIds = new Set([...activeMessages,...settlements].map(x=>String(x.partner_id||'')).filter(Boolean));
+    const partners = partnersAll.filter(p=>partnerIds.has(String(p.id||''))).map(semanticPartner);
     const parserBackend = materialOptions&&materialOptions.probe_parser_backend
       ? await currentParserBackendMaterial(d.parserProvider)
       : parserBackendFromQualification(qualificationSnapshot);
     return {
       runtime:runtimeSignature(), parser_backend:parserBackend,
-      messages:sortById(activeMessages), settlements:sortById(settlements), results:sortById(results), configs:sortById(configs),
+      partners:sortById(partners), messages:sortById(activeMessages), settlements:sortById(settlements), results:sortById(results), configs:sortById(configs),
       regression_cases:sortById((pinned||[]).map(clone)), candidates:sortById((candidateRows||[]).map(c=>({ id:c.id, source_event_id:c.source_event_id, state:c.state, confirmation_note:c.confirmation_note||'', dismiss_reason:c.dismiss_reason||'', case:clone(c.case) }))),
       qualification:qualificationCore(qualificationSnapshot)
     };
@@ -417,7 +424,7 @@
 
   global.KTS_SETTLEMENT_QUALIFICATION_HISTORY=Object.freeze({
     version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
-    validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
+    validateBuildIdentity,sha256Hex,semanticPartner,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
     parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
     collectMaterial,componentFingerprints,qualificationOptionsFromEvent,overallFingerprint,changedComponents,classifyReadyValidity,validateSnapshotDecision,validateJournalRow,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
