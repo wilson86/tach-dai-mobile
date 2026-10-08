@@ -43,6 +43,7 @@ assert.strictEqual(R.stationComplete('mb', { prizes: mbPrizes() }), true);
 {
   const s = R.normalizeSnapshot({
     business_date: '2026-09-22', region: 'mn', source: 'fixture',
+    expected_station_codes: ['bli'],
     stations: [{ code: 'bli', name: 'Bạc Liêu', prizes: mnPrizes() }]
   });
   assert.strictEqual(s.complete, true);
