@@ -1,0 +1,21 @@
+name: Settlement canonical feature history safety
+on:
+  pull_request:
+    paths:
+      - "app/settlement-qualification-history.js"
+      - "app/settlement-build-identity.js"
+      - ".github/scripts/settlement-feature-history-audit.test.cjs"
+      - ".github/workflows/settlement-feature-history-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  history:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Canonical runtime history regression
+        run: node --test .github/scripts/settlement-feature-history-audit.test.cjs
