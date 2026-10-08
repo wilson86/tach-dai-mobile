@@ -157,6 +157,16 @@
     for (const name of COMPONENTS) out[name] = await sha256Hex(material[name]);
     return out;
   }
+  // Persist the full qualification window: partner and region filters also
+  // contribute to the original SHA-256 input fingerprint. Older events without
+  // these optional fields safely decode as unscoped; scoped older events stay
+  // STALE rather than being declared CURRENT under a different filter.
+  function qualificationOptionsFromEvent(e) {
+    return {from_date:String(e&&e.from_date||''),to_date:String(e&&e.to_date||''),
+      required_observation_days:String(e&&e.required_observation_days||''),
+      partner_id:String(e&&e.partner_id||''),
+      regions:Array.isArray(e&&e.regions)?e.regions.slice():[]};
+  }
   async function overallFingerprint(options, components) {
     return sha256Hex({ format:'kts-qualification-input-v2-live-parser', options:{ from_date:String(options&&options.from_date||''), to_date:String(options&&options.to_date||''), required_observation_days:String(options&&options.required_observation_days||''), partner_id:String(options&&options.partner_id||''), regions:Array.isArray(options&&options.regions)?options.regions.slice().sort():[] }, components });
   }
@@ -225,7 +235,10 @@
       if(Boolean(e.qualification_snapshot.ready_for_production_review===true)!==e.ready_for_production_review)return fail('SNAPSHOT_READY_MISMATCH');
       const decision=validateSnapshotDecision(e.qualification_snapshot);
       if(!decision.valid)return fail(decision.reason);
-      if(e.ready_for_production_review&&e.qualification_state!==READY)return fail('EVENT_READY_STATE_CONTRADICTION');
+      if(e.qualification_state!==e.qualification_snapshot.qualification_state)return fail('EVENT_SNAPSHOT_STATE_MISMATCH');
+      if(stable(e.blockers)!==stable(e.qualification_snapshot.blockers||[]))return fail('EVENT_SNAPSHOT_BLOCKERS_MISMATCH');
+      if(e.partner_id!=null&&typeof e.partner_id!=='string')return fail('EVENT_PARTNER_FILTER_INVALID');
+      if(e.regions!=null&&(!Array.isArray(e.regions)||!e.regions.every(x=>typeof x==='string')))return fail('EVENT_REGIONS_FILTER_INVALID');
       ids.add(e.id);
       prior=e;
       if(e.ready_for_production_review)priorReady=e;
@@ -338,6 +351,7 @@
     return {
       format:FORMAT, id:makeId(), observed_at:new Date().toISOString(),
       from_date:String(options&&options.from_date||''), to_date:String(options&&options.to_date||''), required_observation_days:String(options&&options.required_observation_days||''),
+      partner_id:String(options&&options.partner_id||''), regions:Array.isArray(options&&options.regions)?options.regions.slice():[],
       qualification_state:String(qualificationSnapshot&&qualificationSnapshot.qualification_state||'BLOCKED_SHADOW_QUALIFICATION'), ready_for_production_review:ready,
       input_fingerprint_sha256:fingerprint, component_fingerprints:clone(components),
       previous_event_id:previous&&previous.id||null, previous_ready_event_id:lastReady&&lastReady.id||null,
@@ -379,7 +393,7 @@
     if(!integrity.valid)return Object.assign({},invalidHistoryVerdict(integrity),{ready_event:null});
     const lastReady=[...events].reverse().find(x=>x.ready_for_production_review===true);
     if (!lastReady) return { status:'NO_READY_EVIDENCE', current:false, changed_components:[], ready_event:null };
-    const options={from_date:lastReady.from_date,to_date:lastReady.to_date,required_observation_days:lastReady.required_observation_days};
+    const options=qualificationOptionsFromEvent(lastReady);
     const material=await collectMaterial(lastReady.qualification_snapshot,options,{probe_parser_backend:true});
     const components=await componentFingerprints(material);
     const fingerprint=await overallFingerprint(options,components);
@@ -405,7 +419,7 @@
     version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
     validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
     parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
-    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,validateSnapshotDecision,validateJournalRow,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+    collectMaterial,componentFingerprints,qualificationOptionsFromEvent,overallFingerprint,changedComponents,classifyReadyValidity,validateSnapshotDecision,validateJournalRow,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
