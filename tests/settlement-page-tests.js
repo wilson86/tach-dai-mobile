@@ -32,9 +32,10 @@ const index = fs.readFileSync(path.join(app, 'index.html'), 'utf8');
 const sw = fs.readFileSync(path.join(app, 'sw.js'), 'utf8');
 
 assert(page.includes('id="allowMbXien" type="checkbox"'));
-assert(page.includes('id="allowUi" type="checkbox"'));
+assert(page.includes('id="allowUi" type="checkbox" disabled'));
 assert(!page.includes('id="allowMbXien" type="checkbox" checked'));
 assert(!page.includes('id="allowUi" type="checkbox" checked'));
+assert(page.includes('Đang khóa · chờ xác nhận cách tính trước khi mở.'));
 assert(page.includes('Áp dụng từ ngày'));
 assert(page.includes('Ngày trước ngày hiệu lực tiếp tục dùng phiên bản cũ') || ui.includes('Ngày trước giữ rule cũ'));
 assert(page.includes('Lưu + tính'));

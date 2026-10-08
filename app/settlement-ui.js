@@ -109,7 +109,12 @@
 
   function refreshGateVisuals() {
     const xienOn = $('allowMbXien').checked;
-    const uiOn = $('allowUi').checked;
+    const uiToggle = $('allowUi');
+    // Ủi is not yet operator-confirmed. Keep the editor visibly locked and
+    // force false even when an older/imported config contains tinh_ui=true.
+    uiToggle.checked = false;
+    uiToggle.disabled = true;
+    const uiOn = false;
     applyGateState('[data-gate="xien"]', xienOn);
     applyGateState('[data-gate="ui"]', uiOn);
   }

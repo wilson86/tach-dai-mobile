@@ -5,6 +5,10 @@
     MB_XIEN_234: 'mb_xien_234',
     TINH_UI: 'tinh_ui'
   });
+  // Safety authority: Ủi remains locked until the operator explicitly confirms
+  // the business rule in a future qualified release. Persisted/imported flags
+  // cannot bypass this domain-level gate.
+  const UI_CONFIRMED = false;
 
   function flag(config, name) {
     return Boolean(config && config[name] === true);
@@ -23,7 +27,7 @@
   }
 
   function uiEnabled(config) {
-    return flag(config, FEATURES.TINH_UI);
+    return UI_CONFIRMED && flag(config, FEATURES.TINH_UI);
   }
 
   function materializeUiRow(row, config) {
@@ -50,6 +54,7 @@
   global.KTS_SETTLEMENT_FEATURE_GATES = Object.freeze({
     version: 'feature-gates-v1',
     FEATURES,
+    UI_CONFIRMED,
     isMbXienCode,
     assertCategoryAllowed,
     uiEnabled,
