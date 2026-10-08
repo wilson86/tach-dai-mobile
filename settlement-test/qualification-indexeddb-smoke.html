@@ -149,6 +149,44 @@
     if(afterVerdict.status!=='READY_EVIDENCE_UNVERIFIABLE'||afterVerdict.current!==false){
       fail('CORRUPT_JOURNAL_CHANGED_VERDICT_AFTER_FAILED_APPEND');
     }
+    // Metadata-level corruption was previously hidden by readRow(): a
+    // present row with a non-array events field looked like new empty history.
+    // Exercise malformed version and events separately in real IndexedDB.
+    async function overwriteJournalRow(mutator){
+      const current=await store.get(store.STORES.metadata,'qualification_history_v1');
+      mutator(current);
+      const db=await store.openDb();
+      try{
+        const tx=db.transaction(store.STORES.metadata,'readwrite');
+        tx.objectStore(store.STORES.metadata).put(current);
+        await new Promise((resolve,reject)=>{
+          tx.oncomplete=resolve;
+          tx.onerror=()=>reject(tx.error||new Error('ROW_CORRUPTION_WRITE_FAILED'));
+          tx.onabort=()=>reject(tx.error||new Error('ROW_CORRUPTION_WRITE_ABORTED'));
+        });
+      } finally { db.close(); }
+    }
+    for(const [change,expected] of [
+      [r=>{r.version=999},'QUALIFICATION_HISTORY_INVALID_ROW_VERSION_MISMATCH'],
+      [r=>{r.version=1;r.events='damaged-events-field'},'QUALIFICATION_HISTORY_INVALID_ROW_EVENTS_NOT_ARRAY']
+    ]){
+      await overwriteJournalRow(change);
+      const verdict=await history.checkLastReadyValidity();
+      if(verdict.status!=='READY_EVIDENCE_UNVERIFIABLE'||verdict.current!==false||
+         verdict.history_error!==expected){
+        fail('CORRUPT_METADATA_MISCLASSIFIED:'+String(verdict&&verdict.history_error));
+      }
+      let rejected=false;
+      try{
+        await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(blocked,options);
+      }catch(error){rejected=true}
+      if(!rejected)fail('CORRUPT_METADATA_APPEND_ACCEPTED:'+expected);
+      const stored=await store.get(store.STORES.metadata,'qualification_history_v1');
+      if(expected.endsWith('VERSION_MISMATCH')&&stored.events.length!==5)
+        fail('CORRUPT_VERSION_APPENDED_HISTORY');
+      if(expected.endsWith('EVENTS_NOT_ARRAY')&&stored.events!=='damaged-events-field')
+        fail('CORRUPT_EVENTS_WERE_RESET');
+    }
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -159,6 +197,8 @@
       'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS',
       'QUALIFICATION_CORRUPTED_HISTORY_FAIL_CLOSED=PASS',
       'QUALIFICATION_CORRUPTED_HISTORY_APPEND_REFUSED=PASS',
+      'QUALIFICATION_CORRUPT_METADATA_UNVERIFIABLE=PASS',
+      'QUALIFICATION_CORRUPT_METADATA_APPEND_REFUSED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
     ].join('\n');
   }catch(error){
