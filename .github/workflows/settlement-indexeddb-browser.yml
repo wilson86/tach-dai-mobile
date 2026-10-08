@@ -51,7 +51,7 @@ jobs:
                --disable-dev-shm-usage --disable-background-networking \
                --user-data-dir="$tmp/profile" --virtual-time-budget=30000 \
                --dump-dom "$url" >"$tmp/dom.html" 2>"$tmp/chrome.log"; then
-              if grep -Fq 'QUALIFICATION_INDEXEDDB_BROWSER=PASS' "$tmp/dom.html" \
+              if grep -Fq '<pre id="result" data-state="pass">' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_CROSS_IFRAME_CONCURRENT_APPEND=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_EVENT_CHAIN_DURABLE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_BLOCKED_REVOKES_READY=PASS' "$tmp/dom.html" \
