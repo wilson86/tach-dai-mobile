@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.169-typed-hioskt-reference'));
+  assert.ok(sw.includes('v1.0.170-golden-decimal-only'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1056,4 +1056,23 @@ test('shadow HIOSKT cannot promote blank or typed nondecimal reference values',(
   }
   const tiny=compare(local,{totals:{xac:' 0.000 ',qua_co:'0e0',payout:0,final:'0'}});
   assert.equal(tiny.safe_to_promote,true,'VALID_DECIMAL_SYNTAX_REJECTED');
+});
+
+test('golden reference totals enforce identical decimal syntax as shadow comparator',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-shadow.js','settlement-regression-cases.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const valid={scope:{partner_id:'p',business_date:'2026-09-22',region:'mn'},
+    partner_role:'owner',config_snapshot:{},lottery_result_snapshot:{complete:true},
+    messages:[{id:'m1',canonical_payload:{region:'mn',legs:[]}}],
+    expected_reference:{totals:{xac:0,qua_co:'0',payout:0,final:'0'}}};
+  const normalize=ctx.window.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase;
+  for(const s of ['0x0','0b0','0o0','+0x0','1_000','0,00','.5','-','0e999','-0e999']){
+    const v=JSON.parse(JSON.stringify(valid));v.expected_reference.totals.final=s;
+    assert.throws(()=>normalize(v),/REGRESSION_REFERENCE_REQUIRED:final/,'BAD_ORACLE_ACCEPTED:'+s);
+  }
+  for(const s of ['+0','-0','0.','001.0','1e3','-2.5E-3']){
+    const v=JSON.parse(JSON.stringify(valid));v.expected_reference.totals.final=s;
+    assert.equal(normalize(v).expected_reference.totals.final,s,'VALID_ORACLE_REJECTED:'+s);
+  }
 });
