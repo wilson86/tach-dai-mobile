@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.150-ready-gate-consistency'));
+  assert.ok(source.includes('v1.0.151-history-window-state-consistency'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -234,5 +234,30 @@ test('canonical READY refuses any unmet observation, KQXS, parser or regression 
     const omitted={...all};
     delete omitted[key];
     assert.equal(H.validateSnapshotDecision(omitted).reason,reason);
+  }
+});
+
+test('history retains partner and region filters in READY fingerprint reconstruction',()=>{
+  const selected={...opt,partner_id:'partner-7',regions:['mb','mn']};
+  const scoped=H.buildEvidenceEvent(ready.qualification_snapshot,selected,original,'sha-scoped',[]);
+  assert.equal(scoped.partner_id,'partner-7');
+  assert.equal(JSON.stringify(Array.from(scoped.regions)),JSON.stringify(['mb','mn']));
+  const restored=H.qualificationOptionsFromEvent(scoped);
+  assert.equal(restored.partner_id,selected.partner_id);
+  assert.equal(JSON.stringify(Array.from(restored.regions)),JSON.stringify(selected.regions));
+  const legacy=H.qualificationOptionsFromEvent(ready);
+  assert.equal(legacy.partner_id,'');
+  assert.equal(legacy.regions.length,0);
+});
+test('history rejects inconsistent event state, blocker list and damaged filters',()=>{
+  for(const [patch,reason] of [
+    [{qualification_state:'READY_FOR_PRODUCTION_REVIEW'},'EVENT_SNAPSHOT_STATE_MISMATCH'],
+    [{blockers:['UNEXPLAINED_MONETARY_MISMATCH']},'EVENT_SNAPSHOT_BLOCKERS_MISMATCH'],
+    [{partner_id:7},'EVENT_PARTNER_FILTER_INVALID'],
+    [{regions:'mb'},'EVENT_REGIONS_FILTER_INVALID']
+  ]){
+    const verdict=verify([{...blocked,previous_event_id:null,previous_ready_event_id:null,...patch}],original,'sha-original');
+    assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
+    assert.equal(verdict.history_error,'QUALIFICATION_HISTORY_INVALID_'+reason);
   }
 });
