@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.168-ready-numeric-parity'));
+  assert.ok(source.includes('v1.0.169-typed-hioskt-reference'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -888,4 +888,24 @@ test('dashboard READY is impossible when flags contradict counters or blockers',
     assert.ok(q.blockers.includes(reason),'MISSING_BLOCKER:'+label);
     assert.equal(q.production_enabled,false);assert.equal(q.merge_authorized,false);
   }
+});
+
+test('shadow HIOSKT cannot promote blank or typed nondecimal reference values',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  const good={totals:{xac:0,qua_co:'0',payout:'0',final:'0'}};
+  assert.equal(compare(local,good).safe_to_promote,true,'VALID_DECIMAL_ZERO_MUST_WORK');
+  for(const key of ['xac','qua_co','payout','final']){
+    for(const bad of [' ', '\t', false, true, [], {}, '0x0', '0b0', 'NaN', 'Infinity']){
+      const ref=JSON.parse(JSON.stringify(good));ref.totals[key]=bad;
+      const result=compare(local,ref);
+      assert.equal(result.safe_to_promote,false,'INVALID_REFERENCE_PROMOTED:'+key+':'+String(bad));
+      assert.equal(result.required_totals_exact,false);
+    }
+  }
+  const tiny=compare(local,{totals:{xac:' 0.000 ',qua_co:'0e0',payout:0,final:'0'}});
+  assert.equal(tiny.safe_to_promote,true,'VALID_DECIMAL_SYNTAX_REJECTED');
 });
