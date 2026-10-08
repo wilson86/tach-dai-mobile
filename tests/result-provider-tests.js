@@ -91,6 +91,6 @@ assert.throws(() => P.normalizeProviderPayload({
 assert.throws(() => P.normalizeProviderPayload({
   business_date:'2026-10-05', expected_station_codes:['bt'], stations:[{code:'bt'}]
 }, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_SCOPE_REQUIRED:REGION/);
-assert(source.includes('async function fetchWithTimeout('));
-assert(source.includes("30000, 'KQXS_REQUEST_TIMEOUT'"));
+assert(code.includes('async function fetchWithTimeout('));
+assert(code.includes("30000, 'KQXS_REQUEST_TIMEOUT'"));
 console.log('result-provider-tests: PASS');
