@@ -196,7 +196,9 @@
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: 'CONFIG_PARTNER_MISMATCH' });
     }
 
-    const pending = messages.filter(m => !m.canonical_payload || String(m.status || '').startsWith('pending') || String(m.status || '').startsWith('parser_error'));
+    // A parser_error cannot be waived by a stale canonical payload or a
+    // manually changed status. Never calculate money from failed provenance.
+    const pending = messages.filter(m => Boolean(m.parser_error) || !m.canonical_payload || String(m.status || '').startsWith('pending') || String(m.status || '').startsWith('parser_error'));
     if (pending.length) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: `PENDING_PARSER:${pending.map(m => m.id).join(',')}` });
     }
@@ -433,7 +435,7 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v13-blocked-empty-revalidation',
+    version: 'settlement-pipeline-v14-parser-error-hard-block',
     scopeId,
     isCancelled,
     guardedMessageEvaluation,
