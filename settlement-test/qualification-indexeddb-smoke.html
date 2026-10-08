@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Settlement qualification multi-tab IndexedDB smoke</title></head>
+<body>
+<pre id="result">QUALIFICATION_INDEXEDDB_BROWSER=PENDING</pre>
+<script src="./settlement-store.js"></script>
+<script src="./settlement-build-identity.js"></script>
+<script>
+(function(global){
+  const hash='a'.repeat(64);
+  const identity={
+    api_version:'offline-synthetic-test',identity_contract:'kts-parser-identity-v1',
+    identities:{
+      mb:{parser_version:'synthetic',identity_sha256:hash},
+      mn_mt:{parser_version:'synthetic',identity_sha256:hash}
+    }
+  };
+  global.KTS_SETTLEMENT_QUALIFICATION={
+    version:'synthetic-qualification-dependency',messageInWindow:()=>false
+  };
+  global.KTS_SETTLEMENT_REGRESSION_CASES={
+    version:'synthetic-regression-dependency',listPinnedCases:async()=>[]
+  };
+  global.KTS_SETTLEMENT_REGRESSION_CANDIDATES={
+    listCandidates:async()=>[]
+  };
+  global.KTS_SETTLEMENT_PARSER_PROVIDER={
+    version:'synthetic-parser-provider',fetchIdentity:async()=>identity
+  };
+  global.KTS_QUALIFICATION_BROWSER_TEST_IDENTITY=identity;
+})(window);
+</script>
+<script src="./settlement-qualification-history.js"></script>
+<script>
+(async()=>{
+  const query=new URLSearchParams(location.search);
+  if(query.has('worker'))return;
+  const out=document.getElementById('result');
+  const fail=message=>{throw new Error(message);};
+  const store=window.KTS_SETTLEMENT_STORE;
+  const history=window.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
+  const workerFrames=[];
+  try{
+    if(!window.isSecureContext)fail('BROWSER_NOT_SECURE_CONTEXT');
+    if(!store||!history||!window.crypto||!crypto.subtle)fail('BROWSER_APIS_MISSING');
+    // A fresh, disposable Chromium profile is required by the CI workflow.
+    const meta=await store.get(store.STORES.metadata,'qualification_history_v1');
+    if(meta&&Array.isArray(meta.events)&&meta.events.length)fail('PROFILE_NOT_ISOLATED');
+    for(let i=0;i<2;i++){
+      const frame=document.createElement('iframe');
+      frame.style.display='none';
+      const loaded=new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('WORKER_IFRAME_TIMEOUT_'+i)),12000);
+        frame.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});
+      });
+      frame.src='./qualification-indexeddb-smoke.html?worker=1&slot='+i;
+      document.body.appendChild(frame);
+      workerFrames.push({frame,loaded});
+    }
+    await Promise.all(workerFrames.map(x=>x.loaded));
+    const workers=workerFrames.map(x=>x.frame.contentWindow);
+    if(workers.some(w=>!w||!w.KTS_SETTLEMENT_QUALIFICATION_HISTORY)){
+      fail('WORKER_HISTORY_API_MISSING');
+    }
+    const options={from_date:'2026-09-22',to_date:'2026-09-22',required_observation_days:1};
+    const blocked={qualification_state:'BLOCKED_SHADOW_QUALIFICATION',
+      ready_for_production_review:false,blockers:['ACCEPTANCE_SYNTHETIC_BLOCKED'],
+      production_enabled:false,merge_authorized:false};
+    // Two real browsing contexts use separate IndexedDB connections.
+    const first=await Promise.all(workers.map(w=>w.KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(blocked,options)));
+    if(first.length!==2||first[0].id===first[1].id)fail('CONCURRENT_EVENT_IDS_COLLIDED');
+    const persisted=await history.listEvents();
+    if(persisted.length!==2)fail('CONCURRENT_INDEXEDDB_LOST_EVENT:'+persisted.length);
+    if(persisted[1].previous_event_id!==persisted[0].id){
+      fail('CONCURRENT_INDEXEDDB_EVENT_CHAIN_BROKEN');
+    }
+    if(!first.every(e=>persisted.some(p=>p.id===e.id))){
+      fail('CONCURRENT_INDEXEDDB_EVENT_NOT_DURABLE');
+    }
+    const identity=window.KTS_QUALIFICATION_BROWSER_TEST_IDENTITY;
+    const ready={
+      qualification_state:'READY_FOR_PRODUCTION_REVIEW',
+      ready_for_production_review:true,production_enabled:false,merge_authorized:false,
+      parser_backend:{met:true,live_identity:identity},blockers:[]
+    };
+    const readySaved=await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(ready,options);
+    const current=await history.checkLastReadyValidity();
+    if(current.status!=='READY_EVIDENCE_CURRENT'||current.current!==true){
+      fail('READY_CURRENT_AFTER_QUALIFICATION:'+current.status);
+    }
+    const blockedSaved=await workers[1].KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(blocked,options);
+    const revoked=await history.checkLastReadyValidity();
+    if(revoked.status!=='READY_EVIDENCE_STALE'||revoked.current!==false||
+       revoked.invalidated_by_event_id!==blockedSaved.id){
+      fail('BLOCKED_DID_NOT_REVOKE_READY:'+revoked.status);
+    }
+    const requalified=await workers[1].KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(ready,options);
+    const refreshed=await history.checkLastReadyValidity();
+    if(refreshed.status!=='READY_EVIDENCE_CURRENT'||refreshed.current!==true||
+       refreshed.ready_event.id!==requalified.id){
+      fail('REQUALIFIED_READY_NOT_CURRENT:'+refreshed.status);
+    }
+    const events=await history.listEvents();
+    if(events.length!==5||events[2].id!==readySaved.id||events[4].id!==requalified.id){
+      fail('INDEXEDDB_APPEND_SEQUENCE_UNEXPECTED:'+events.length);
+    }
+    if(events.some(e=>e.production_enabled!==false||e.merge_authorized!==false)){
+      fail('QUALIFICATION_AUTHORITY_ESCALATION');
+    }
+    out.textContent=[
+      'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
+      'QUALIFICATION_CROSS_IFRAME_CONCURRENT_APPEND=PASS',
+      'QUALIFICATION_EVENT_CHAIN_DURABLE=PASS',
+      'QUALIFICATION_BLOCKED_REVOKES_READY=PASS',
+      'QUALIFICATION_BROWSER_REQUALIFIED_CURRENT=PASS',
+      'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS',
+      'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
+    ].join('\n');
+  }catch(error){
+    out.textContent='QUALIFICATION_INDEXEDDB_BROWSER=FAIL '+String(error&&error.stack||error);
+  }
+})();
+</script>
+</body>
+</html>
