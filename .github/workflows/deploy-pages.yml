@@ -467,6 +467,7 @@ jobs:
                 && grep -Fq 'QUALIFICATION_HISTORY_TIMESTAMP_REFETCH_CURRENT=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_HISTORY_SEMANTIC_DRIFT_STALE=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_HISTORY_BLOCKED_EVENT_APPENDED=PASS' "$tmp/dom.html" \
+                && grep -Fq 'QUALIFICATION_HISTORY_BLOCKED_REVERT_FAIL_CLOSED=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_HISTORY_RESULT_CORE_RECOVERED=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_HISTORY_REQUALIFIED_APPENDED=PASS' "$tmp/dom.html" \
                 && grep -Fq 'QUALIFICATION_HISTORY_REQUALIFIED_CURRENT=PASS' "$tmp/dom.html"; then
