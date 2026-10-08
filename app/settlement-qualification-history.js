@@ -174,6 +174,29 @@
     const current=String(fingerprint)===String(lastReady.input_fingerprint_sha256||'');
     return {status:current?'READY_EVIDENCE_CURRENT':'READY_EVIDENCE_STALE',current,changed_components:changed,parser_backend_error:null};
   }
+  // Evidence is a state-machine timeline, not merely a matching content hash.
+  // Any later BLOCKED qualification supersedes the preceding READY, even when
+  // the source bytes subsequently revert to their original fingerprint.
+  function classifyHistoryValidity(events, components, fingerprint, parserBackend) {
+    const rows=Array.isArray(events)?events:[];
+    let lastReadyIndex=-1;
+    for(let i=rows.length-1;i>=0;i--){
+      if(rows[i]&&rows[i].ready_for_production_review===true){lastReadyIndex=i;break;}
+    }
+    if(lastReadyIndex<0)return classifyReadyValidity(null,components,fingerprint,parserBackend);
+    const verdict=classifyReadyValidity(rows[lastReadyIndex],components,fingerprint,parserBackend);
+    const laterBlocked=rows.slice(lastReadyIndex+1).reverse()
+      .find(event=>event&&event.ready_for_production_review===false);
+    if(!laterBlocked)return verdict;
+    return Object.assign({},verdict,{
+      status:verdict.status==='READY_EVIDENCE_UNVERIFIABLE'
+        ? verdict.status : 'READY_EVIDENCE_STALE',
+      current:false,
+      changed_components:[...new Set([...(verdict.changed_components||[]),'qualification_history'])],
+      invalidated_by_blocked_qualification:true,
+      invalidated_by_event_id:laterBlocked.id||null
+    });
+  }
   async function readRow() {
     const {store}=deps();
     const row = await store.get(store.STORES.metadata,META_KEY);
@@ -229,7 +252,9 @@
   }
   async function listEvents() {
     const row=await readRow();
-    return row.events.map(clone).sort((a,b)=>String(a.observed_at||'').localeCompare(String(b.observed_at||''))||String(a.id||'').localeCompare(String(b.id||'')));
+    // Persisted array order is the authoritative append order; timestamp and
+    // random ID sorting can reorder events created in the same millisecond.
+    return row.events.map(clone);
   }
   async function checkLastReadyValidity() {
     const events=await listEvents();
@@ -239,7 +264,7 @@
     const material=await collectMaterial(lastReady.qualification_snapshot,options,{probe_parser_backend:true});
     const components=await componentFingerprints(material);
     const fingerprint=await overallFingerprint(options,components);
-    const verdict=classifyReadyValidity(lastReady,components,fingerprint,material.parser_backend);
+    const verdict=classifyHistoryValidity(events,components,fingerprint,material.parser_backend);
     return Object.assign({},verdict,{ready_event:clone(lastReady),current_fingerprint_sha256:fingerprint,current_parser_backend:clone(material.parser_backend)});
   }
 
@@ -261,7 +286,7 @@
     version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
     validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
     parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
-    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
