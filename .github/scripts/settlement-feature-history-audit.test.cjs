@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.151-history-window-state-consistency'));
+  assert.ok(source.includes('v1.0.152-region-pricing-fingerprint'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -260,4 +260,41 @@ test('history rejects inconsistent event state, blocker list and damaged filters
     assert.equal(verdict.status,'READY_EVIDENCE_UNVERIFIABLE');
     assert.equal(verdict.history_error,'QUALIFICATION_HISTORY_INVALID_'+reason);
   }
+});
+
+test('canonical history config fingerprint captures partner-specific regional monetary terms',async()=>{
+  sandbox.window.crypto=require('node:crypto').webcrypto;
+  sandbox.window.TextEncoder=TextEncoder;
+  const cfg={id:'partner-7:v1',partner_id:'partner-7',version:1,
+    effective_from_date:'2026-09-22',region_pricing:{},total_percent:'100',
+    refund_percent:'0',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair',
+    commission_type:'ratio',mb_xien_234:false,tinh_ui:false,
+    region_terms:{
+      mn:{total_percent:'95',refund_percent:'3',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'},
+      mt:{total_percent:'97',refund_percent:'1',dat_hit_mode:'ky_ruoi',dax_hit_mode:'multi_pair'},
+      mb:{total_percent:'90',refund_percent:'2',dat_hit_mode:'multi_pair'}
+    },created_at:'2026-09-22T00:00:00Z',updated_at:'2026-09-22T00:00:00Z'};
+  const digest=async row=>H.sha256Hex(H.semanticConfig(row));
+  const baseline=await digest(cfg);
+  assert.match(baseline,/^[0-9a-f]{64}$/);
+  const timestamp={...cfg,updated_at:'2026-10-09T00:00:00Z'};
+  assert.equal(await digest(timestamp),baseline,'AUDIT_TIMESTAMP_MUST_NOT_CHANGE_CONFIG_FINGERPRINT');
+  for(const region of ['mn','mt','mb']){
+    for(const field of ['total_percent','refund_percent']){
+      const changed=JSON.parse(JSON.stringify(cfg));
+      changed.region_terms[region][field]='77';
+      assert.notEqual(await digest(changed),baseline,
+        'CONFIG_MONETARY_REGION_TERM_NOT_TRACKED:'+region+':'+field);
+    }
+  }
+  for(const region of ['mn','mt']){
+    for(const field of ['dat_hit_mode','dax_hit_mode']){
+      const changed=JSON.parse(JSON.stringify(cfg));
+      changed.region_terms[region][field]='one_time';
+      assert.notEqual(await digest(changed),baseline,
+        'CONFIG_HIT_MODE_REGION_TERM_NOT_TRACKED:'+region+':'+field);
+    }
+  }
+  const changedPartner={...cfg,partner_id:'different-partner'};
+  assert.notEqual(await digest(changedPartner),baseline,'PARTNER_ISOLATION_LOST');
 });

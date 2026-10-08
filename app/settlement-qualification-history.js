@@ -55,7 +55,7 @@
     return { id:r.id, business_date:r.business_date, region:r.region, source:r.source, status:r.status, complete:r.complete, coverage_complete:r.coverage_complete, verified:r.verified, verification_status:r.verification_status, verification_sources:clone(r.verification_sources||[]), verification_reason:r.verification_reason||null, verification_conflicts:clone(r.verification_conflicts||[]), expected_station_codes:clone(r.expected_station_codes||[]), stations:clone(r.stations||[]), fingerprint:r.fingerprint||null, provider_revision:r.provider_revision||null };
   }
   function semanticConfig(c) {
-    return { id:c.id, partner_id:c.partner_id, version:c.version, effective_from_date:c.effective_from_date, region_pricing:clone(c.region_pricing||{}), dat_hit_mode:c.dat_hit_mode, dax_hit_mode:c.dax_hit_mode, mb_xien_234:Boolean(c.mb_xien_234), tinh_ui:Boolean(c.tinh_ui), total_percent:String(c.total_percent==null?'100':c.total_percent), refund_percent:String(c.refund_percent==null?'0':c.refund_percent), commission_type:c.commission_type };
+    return { id:c.id, partner_id:c.partner_id, version:c.version, effective_from_date:c.effective_from_date, region_pricing:clone(c.region_pricing||{}), region_terms:clone(c.region_terms||{}), dat_hit_mode:c.dat_hit_mode, dax_hit_mode:c.dax_hit_mode, mb_xien_234:Boolean(c.mb_xien_234), tinh_ui:Boolean(c.tinh_ui), total_percent:String(c.total_percent==null?'100':c.total_percent), refund_percent:String(c.refund_percent==null?'0':c.refund_percent), commission_type:c.commission_type };
   }
   function semanticParserBackendIdentity(value) {
     const input = value && value.identities ? value : null;
