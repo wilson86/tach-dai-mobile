@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.171-exact-evidence-fail-closed'));
+  assert.ok(sw.includes('v1.0.172-category-reference-fail-closed'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1106,4 +1106,33 @@ test('malformed exact HIOSKT or local evidence never falls back to approximate m
   const legacy=c(valid);delete legacy.settlement_result.exact;
   const compatible=shadow.compareSettlement(legacy,{totals:{xac:0,qua_co:0,payout:0,final:0}});
   assert.equal(compatible.safe_to_promote,true,'LEGACY_ABSENT_EXACT_MUST_WORK');
+});
+
+test('malformed category money cannot be promoted as a shadow exact match',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:0,qua_co:0,hit_units:0,payout:0}]};
+  const reference={totals:{xac:0,qua_co:0,payout:0,final:0},
+    categories:[{code:'B',xac:0,qua_co:0,hit_units:0,payout:0}]};
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  assert.equal(compare(local,reference).safe_to_promote,true);
+  const invalid=[
+    ['blank_reference',x=>x.reference.categories[0].payout=' '],
+    ['boolean_reference',x=>x.reference.categories[0].xac=false],
+    ['null_reference',x=>x.reference.categories[0].qua_co=null],
+    ['array_reference',x=>x.reference.categories[0].hit_units=[]],
+    ['invalid_reference_exact',x=>x.reference.categories[0].exact={payout:'garbage'}],
+    ['invalid_local',x=>x.local.category_rows[0].xac=false],
+    ['invalid_local_exact',x=>x.local.category_rows[0].exact={payout:'garbage'}]
+  ];
+  for(const [label,mutate] of invalid){
+    const x={local:copy(local),reference:copy(reference)};mutate(x);
+    const result=compare(x.local,x.reference);
+    assert.equal(result.safe_to_promote,false,'INVALID_CATEGORY_PROMOTED:'+label);
+    assert.equal(result.invalid_category_evidence,true);
+    assert.equal(result.exact,false);
+    assert.equal(result.status,'INCOMPLETE_REFERENCE');
+  }
 });
