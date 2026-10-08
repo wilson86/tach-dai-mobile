@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.172-category-reference-fail-closed'));
+  assert.ok(sw.includes('v1.0.173-shadow-input-validation'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1135,4 +1135,28 @@ test('malformed category money cannot be promoted as a shadow exact match',()=>{
     assert.equal(result.exact,false);
     assert.equal(result.status,'INCOMPLETE_REFERENCE');
   }
+});
+
+test('HIOSKT manual reference entry rejects coercive zero and preserves decimal precision',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const normalize=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME.normalizeReference;
+  const cmp=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const valid={totals:{xac:'9007199254740993',qua_co:'0',payout:0,final:'9007199254740993'},
+    categories:[{code:'B',xac:'0.00',payout:'10.123456789012345678'}]};
+  const result=normalize(valid);
+  assert.equal(result.totals.xac,'9007199254740993','EXACT_AMOUNT_WAS_ROUNDED');
+  assert.equal(result.totals.final,'9007199254740993');
+  assert.equal(result.categories[0].payout,'10.123456789012345678');
+  for(const bad of [false,true,[],{},' ','0x0','0b0','0o0','Infinity','1e999']){
+    const a={totals:{xac:bad,qua_co:0,payout:0,final:0}};
+    assert.throws(()=>normalize(a),/HIOSKT_REFERENCE_INVALID:xac/);
+    const b={totals:{xac:0,qua_co:0,payout:0,final:0},
+      categories:[{code:'B',payout:bad}]};
+    assert.throws(()=>normalize(b),/HIOSKT_CATEGORY_INVALID:payout/);
+  }
+  const zero=normalize({totals:{xac:'0e999',qua_co:'0',payout:0,final:'-0'}});
+  assert.equal(zero.totals.xac,'0e999');
+  assert.equal(cmp({settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}},zero).safe_to_promote,true);
 });

@@ -13,6 +13,16 @@
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
 
+  function strictMoney(value, label) {
+    if (typeof value !== 'string' && typeof value !== 'number') throw new Error(label);
+    const s = String(value).trim();
+    if (!/^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(s) || !Number.isFinite(Number(s)))
+      throw new Error(label);
+    // Preserve decimal text instead of truncating 64-bit precision when
+    // importing reference amounts from HIOSKT into shadow exact comparison.
+    return typeof value === 'string' ? s : value;
+  }
+
   function normalizeReference(input) {
     const ref = input && typeof input === 'object' ? clone(input) : {};
     const totals = ref.totals && typeof ref.totals === 'object' ? ref.totals : {};
@@ -20,9 +30,7 @@
     for (const key of ['xac', 'qua_co', 'payout', 'hoi', 'final']) {
       const value = totals[key] != null ? totals[key] : ref[key];
       if (value == null || value === '') continue;
-      const n = Number(value);
-      if (!Number.isFinite(n)) throw new Error('HIOSKT_REFERENCE_INVALID:' + key);
-      normalized.totals[key] = n;
+      normalized.totals[key] = strictMoney(value,'HIOSKT_REFERENCE_INVALID:' + key);
     }
     if (Array.isArray(ref.categories)) {
       normalized.categories = ref.categories.map(row => {
@@ -30,9 +38,7 @@
         const out = { code: String(row.code).toUpperCase() };
         for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
           if (row[field] == null || row[field] === '') continue;
-          const n = Number(row[field]);
-          if (!Number.isFinite(n)) throw new Error('HIOSKT_CATEGORY_INVALID:' + field);
-          out[field] = n;
+          out[field] = strictMoney(row[field],'HIOSKT_CATEGORY_INVALID:' + field);
         }
         return out;
       });
@@ -220,7 +226,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v5-replay-role',
+    version: 'settlement-shadow-runtime-v6-strict-reference-input',
     scopeId,
     normalizeReference,
     localEvidence,
