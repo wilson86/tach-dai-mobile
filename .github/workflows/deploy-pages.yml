@@ -378,6 +378,57 @@ jobs:
           exit 1
 
 
+      - name: Browser acceptance settlement iframe and API
+        shell: bash
+        env:
+          SETTLEMENT_TEST_URL: https://wilson86.github.io/tach-dai-mobile/settlement-test
+        run: |
+          set -euo pipefail
+          browser=""
+          for candidate in google-chrome google-chrome-stable chromium chromium-browser; do
+            if command -v "$candidate" >/dev/null 2>&1; then
+              browser="$(command -v "$candidate")"
+              break
+            fi
+          done
+          if [ -z "$browser" ]; then
+            echo "ACCEPTANCE_NO_CHROME" >&2
+            exit 1
+          fi
+
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          url="${SETTLEMENT_TEST_URL}/acceptance-smoke.html?sha=${GITHUB_SHA}"
+
+          for attempt in 1 2 3; do
+            echo "Browser acceptance attempt $attempt/3"
+            rm -rf "$tmp/profile" "$tmp/dom.html" "$tmp/chrome.log"
+            if "$browser" \
+              --headless=new \
+              --no-sandbox \
+              --disable-gpu \
+              --disable-dev-shm-usage \
+              --user-data-dir="$tmp/profile" \
+              --virtual-time-budget=15000 \
+              --dump-dom "$url" \
+              >"$tmp/dom.html" 2>"$tmp/chrome.log"; then
+              if grep -Fq 'ACCEPTANCE_SMOKE=PASS' "$tmp/dom.html" \
+                && grep -Fq 'RUNTIME_ENDPOINTS=PASS' "$tmp/dom.html" \
+                && grep -Fq 'BROWSER_CORS_PARSER=PASS code=DAT' "$tmp/dom.html"; then
+                echo "SETTLEMENT_BROWSER_ACCEPTANCE=PASS sha=${GITHUB_SHA}"
+                exit 0
+              fi
+              grep -o 'ACCEPTANCE_SMOKE=[^<]*' "$tmp/dom.html" >&2 || true
+            else
+              echo "ACCEPTANCE_CHROME_EXIT_FAIL attempt=$attempt" >&2
+            fi
+            if [ "$attempt" -lt 3 ]; then sleep 3; fi
+          done
+
+          echo "SETTLEMENT_BROWSER_ACCEPTANCE=FAIL sha=${GITHUB_SHA}" >&2
+          tail -n 120 "$tmp/chrome.log" >&2 || true
+          exit 1
+
       - name: Verify settlement offline service-worker boot
         shell: bash
         env:

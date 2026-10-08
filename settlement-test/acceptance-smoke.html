@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="robots" content="noindex,nofollow">
+<title>KTS Settlement Acceptance Smoke</title>
+<style>body{font-family:system-ui,sans-serif;margin:12px}#app{width:100%;height:720px;border:1px solid #ccc}#result{white-space:pre-wrap;font:13px/1.45 ui-monospace,monospace}</style>
+</head>
+<body>
+<pre id="result">ACCEPTANCE_SMOKE=PENDING</pre>
+<iframe id="app" src="./settlement.html?acceptance-smoke=1"></iframe>
+<script>
+(async()=>{
+  const out=document.getElementById('result');
+  const frame=document.getElementById('app');
+  const fail=(m)=>{throw new Error(m);};
+  await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(new Error('IFRAME_LOAD_TIMEOUT')),15000);
+    frame.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});
+  });
+
+  const w=frame.contentWindow;
+  const d=frame.contentDocument;
+  if(!w||!d)fail('IFRAME_ACCESS_FAILED');
+  if(d.body && d.body.textContent.includes('Khởi tạo lỗi:'))fail('SETTLEMENT_BOOT_ERROR');
+
+  const cfg=w.KTS_SETTLEMENT_RUNTIME_ENDPOINTS||{};
+  const api='https://kts-settlement-api-test.onrender.com';
+  const expectedParser=api+'/api/settlement/parse';
+  const expectedKqxs=api+'/api/kqxs';
+  if(cfg.parser_endpoint!==expectedParser)fail('PARSER_ENDPOINT_CONFIG_MISMATCH:'+String(cfg.parser_endpoint||''));
+  if(cfg.kqxs_endpoint!==expectedKqxs)fail('KQXS_ENDPOINT_CONFIG_MISMATCH:'+String(cfg.kqxs_endpoint||''));
+
+  const parserInput=d.getElementById('parserEndpoint');
+  const resultInput=d.getElementById('resultEndpoint');
+  if(!parserInput||parserInput.value!==expectedParser)fail('PARSER_ENDPOINT_UI_MISMATCH');
+  if(!resultInput||resultInput.value!==expectedKqxs)fail('KQXS_ENDPOINT_UI_MISMATCH');
+  for(const id of ['kqxsAutoBadge','checkMessageSyntax','messageParsePreview']){
+    if(!d.getElementById(id))fail('MISSING_DYNAMIC_DOM:'+id);
+  }
+
+  const health=await fetch(api+'/health',{cache:'no-store'});
+  if(!health.ok)fail('HEALTH_HTTP_'+health.status);
+  const healthJson=await health.json();
+  if(healthJson.ok!==true||healthJson.service!=='kts-settlement-api')fail('HEALTH_CONTRACT');
+
+  const identity=await fetch(api+'/api/settlement/parser-identity',{cache:'no-store'});
+  if(!identity.ok)fail('IDENTITY_HTTP_'+identity.status);
+  const identityJson=await identity.json();
+  if(identityJson.ok!==true||identityJson.identity_contract!=='kts-parser-identity-v1')fail('IDENTITY_CONTRACT');
+
+  const parsed=await fetch(expectedParser,{
+    method:'POST',
+    cache:'no-store',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({region:'mb',raw_text:'92 61 da 1n'})
+  });
+  if(!parsed.ok)fail('PARSER_HTTP_'+parsed.status);
+  const parsedJson=await parsed.json();
+  const legs=parsedJson&&parsedJson.canonical_payload&&parsedJson.canonical_payload.legs||[];
+  if(!legs.length||legs[0].code!=='DAT')fail('PARSER_CANONICAL_DAT');
+
+  out.textContent=[
+    'ACCEPTANCE_SMOKE=PASS',
+    'IFRAME_RUNTIME=PASS',
+    'RUNTIME_ENDPOINTS=PASS',
+    'BROWSER_CORS_HEALTH=PASS',
+    'BROWSER_CORS_IDENTITY=PASS',
+    'BROWSER_CORS_PARSER=PASS code=DAT'
+  ].join('\n');
+})().catch(error=>{
+  document.getElementById('result').textContent='ACCEPTANCE_SMOKE=FAIL '+String(error&&error.message||error);
+});
+</script>
+</body>
+</html>
