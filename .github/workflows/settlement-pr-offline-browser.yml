@@ -55,6 +55,22 @@ jobs:
             fi
           done
           echo 'WARMUP_SETTLEMENT_DOM=PASS'
+          diagnostic='http://127.0.0.1:8766/settlement-test/sw-diagnostics.html'
+          timeout 75s "$browser" --headless=new --no-sandbox --disable-gpu \
+            --disable-dev-shm-usage --user-data-dir="$tmp/profile" \
+            --virtual-time-budget=25000 --dump-dom "$diagnostic" \
+            >"$tmp/diagnostic.html" 2>"$tmp/diagnostic.log" || {
+              echo "SW_DIAGNOSTIC_CHROME_FAILED" >&2
+              tail -n 60 "$tmp/diagnostic.log" >&2
+              exit 1
+            }
+          if ! grep -Fq 'SW_DIAGNOSTICS=PASS' "$tmp/diagnostic.html"; then
+            echo "SW_DIAGNOSTIC_FAILED" >&2
+            sed -n '/id="result"/,/<\/pre>/p' "$tmp/diagnostic.html" | head -n 20 >&2 || true
+            tail -n 25 "$tmp/diagnostic.log" >&2 || true
+            exit 1
+          fi
+          echo "SW_DIAGNOSTICS=PASS"
           # Shut down only the disposable localhost server; preserve the Chrome
           # profile and its browser-managed SW/CacheStorage for the offline load.
           kill "$server_pid"
@@ -76,6 +92,9 @@ jobs:
             if ! grep -Fq "$marker" "$tmp/offline.html"; then
               echo "OFFLINE_BROWSER_MISSING_DOM $marker" >&2
               grep -o '<title>[^<]*' "$tmp/offline.html" >&2 || true
+              head -c 700 "$tmp/offline.html" >&2 || true
+              echo >&2
+              tail -n 25 "$tmp/offline.log" >&2 || true
               exit 1
             fi
           done
