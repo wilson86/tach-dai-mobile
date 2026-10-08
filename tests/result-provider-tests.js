@@ -22,6 +22,8 @@ const sandbox = {
       ok: true,
       status: 200,
       json: async () => ({
+        business_date: '2026-10-05',
+        region: 'mn',
         source: 'fixture',
         expected_station_codes: ['bt', 'vt', 'bli'],
         verified: false,
@@ -82,7 +84,7 @@ assert.throws(() => P.normalizeProviderPayload({
   assert.strictEqual(requested.options.cache, 'no-store');
   assert.strictEqual(requested.options.credentials, 'omit');
   assert(!JSON.stringify(requested.options).toLowerCase().includes('api-key'));
-  
+  console.log('result-provider-tests: PASS');
 })().catch(err => { console.error(err); process.exit(1); });
 
 assert.throws(() => P.normalizeProviderPayload({
@@ -93,4 +95,3 @@ assert.throws(() => P.normalizeProviderPayload({
 }, {business_date:'2026-10-05',region:'mn'}), /KQXS_PROVIDER_SCOPE_REQUIRED:REGION/);
 assert(code.includes('async function fetchWithTimeout('));
 assert(code.includes("30000, 'KQXS_REQUEST_TIMEOUT'"));
-console.log('result-provider-tests: PASS');
