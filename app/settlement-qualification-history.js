@@ -174,11 +174,46 @@
     const current=String(fingerprint)===String(lastReady.input_fingerprint_sha256||'');
     return {status:current?'READY_EVIDENCE_CURRENT':'READY_EVIDENCE_STALE',current,changed_components:changed,parser_backend_error:null};
   }
+  // The local IndexedDB journal is not a trusted input. Broken ancestry,
+  // missing/malformed records or authority escalation must never resurrect
+  // an earlier READY merely because its component fingerprint still matches.
+  function validateHistoryEvents(events) {
+    if (!Array.isArray(events)) return {valid:false,reason:'EVENTS_NOT_ARRAY'};
+    const ids=new Set();
+    let prior=null,priorReady=null;
+    for(let i=0;i<events.length;i++){
+      const e=events[i];
+      const fail=reason=>({valid:false,reason,index:i});
+      if(!e||typeof e!=='object'||Array.isArray(e))return fail('MALFORMED_EVENT');
+      if(e.format!==FORMAT)return fail('INVALID_FORMAT');
+      if(typeof e.id!=='string'||!e.id||ids.has(e.id))return fail('INVALID_OR_DUPLICATE_ID');
+      if(e.previous_event_id!==(prior?prior.id:null))return fail('BROKEN_EVENT_LINK');
+      if(e.previous_ready_event_id!==(priorReady?priorReady.id:null))return fail('BROKEN_READY_LINK');
+      if(typeof e.ready_for_production_review!=='boolean')return fail('INVALID_READY_FLAG');
+      if(e.production_enabled!==false||e.merge_authorized!==false)return fail('AUTHORITY_ESCALATION');
+      if(typeof e.input_fingerprint_sha256!=='string'||!e.input_fingerprint_sha256)return fail('MISSING_FINGERPRINT');
+      if(!e.component_fingerprints||typeof e.component_fingerprints!=='object'||Array.isArray(e.component_fingerprints))return fail('MISSING_COMPONENTS');
+      if(!e.qualification_snapshot||typeof e.qualification_snapshot!=='object'||Array.isArray(e.qualification_snapshot))return fail('MISSING_QUALIFICATION_SNAPSHOT');
+      if(Boolean(e.qualification_snapshot.ready_for_production_review===true)!==e.ready_for_production_review)return fail('SNAPSHOT_READY_MISMATCH');
+      ids.add(e.id);
+      prior=e;
+      if(e.ready_for_production_review)priorReady=e;
+    }
+    return {valid:true,reason:null,index:-1};
+  }
+  function invalidHistoryVerdict(integrity) {
+    return {status:'READY_EVIDENCE_UNVERIFIABLE',current:false,
+      changed_components:['qualification_history'],parser_backend_error:null,
+      history_error:'QUALIFICATION_HISTORY_INVALID_'+integrity.reason,
+      history_error_index:integrity.index};
+  }
   // Evidence is a state-machine timeline, not merely a matching content hash.
   // Any later BLOCKED qualification supersedes the preceding READY, even when
   // the source bytes subsequently revert to their original fingerprint.
   function classifyHistoryValidity(events, components, fingerprint, parserBackend) {
-    const rows=Array.isArray(events)?events:[];
+    const integrity=validateHistoryEvents(events);
+    if(!integrity.valid)return invalidHistoryVerdict(integrity);
+    const rows=events;
     let lastReadyIndex=-1;
     for(let i=rows.length-1;i>=0;i--){
       if(rows[i]&&rows[i].ready_for_production_review===true){lastReadyIndex=i;break;}
@@ -275,6 +310,8 @@
   }
   async function checkLastReadyValidity() {
     const events=await listEvents();
+    const integrity=validateHistoryEvents(events);
+    if(!integrity.valid)return Object.assign({},invalidHistoryVerdict(integrity),{ready_event:null});
     const lastReady=[...events].reverse().find(x=>x.ready_for_production_review===true);
     if (!lastReady) return { status:'NO_READY_EVIDENCE', current:false, changed_components:[], ready_event:null };
     const options={from_date:lastReady.from_date,to_date:lastReady.to_date,required_observation_days:lastReady.required_observation_days};
@@ -303,7 +340,7 @@
     version:'settlement-qualification-history-v3-live-parser-validity',META_KEY,FORMAT,COMPONENTS,
     validateBuildIdentity,sha256Hex,semanticMessage,semanticSettlement,semanticResult,semanticConfig,semanticParserBackendIdentity,
     parserBackendFromQualification,currentParserBackendMaterial,qualificationCore,runtimeSignature,relevantConfigs,
-    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
+    collectMaterial,componentFingerprints,overallFingerprint,changedComponents,classifyReadyValidity,validateHistoryEvents,classifyHistoryValidity,buildEvidenceEvent,recordQualification,listEvents,checkLastReadyValidity
   });
   if(global.document&&global.document.readyState==='loading')global.document.addEventListener('DOMContentLoaded',installUi,{once:true});
   else if(global.document)installUi();
