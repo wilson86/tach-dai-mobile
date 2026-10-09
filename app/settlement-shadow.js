@@ -166,7 +166,7 @@
   // field is not. Previously rowsByCode silently turned false/null/blank into
   // zero, which allowed a false exact shadow pass when the totals matched.
   function categoryEvidenceValid(rows, options) {
-    const digits = Number(options && options.display_digits == null ? 1 : options.display_digits);
+    const digits = Number(!options || options.display_digits == null ? 1 : options.display_digits);
     if (!Array.isArray(rows)) return true;
     const fields=['xac','qua_co','hit_units','payout'];
     for (const row of rows) {

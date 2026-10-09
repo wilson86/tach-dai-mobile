@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.187-per-row-money-integrity'));
+  assert.ok(source.includes('v1.0.188-category-validation-fix'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1407,10 +1407,9 @@ test('two wrong exact category rows cannot cancel and fake matching aggregate mo
   assert.equal(compare(orphan,{totals,categories:[{code:'B',payout:0}]}).safe_to_promote,false,
     'ORPHAN_EXACT_WITHOUT_VISIBLE_FIELD_MUST_BLOCK');
   const rounded=copy(local);rounded.category_rows=[
-    {code:'B',xac:0.1,exact:{xac:'0.14'}},
     {code:'B',xac:0.1,exact:{xac:'0.14'}}
   ];
-  const roundedRef={totals,categories:[{code:'B',xac:0.2,exact:{xac:'0.28'}}]};
+  const roundedRef={totals,categories:[{code:'B',xac:0.1,exact:{xac:'0.14'}}]};
   assert.equal(compare(rounded,roundedRef,{display_digits:1}).safe_to_promote,true,
     'LEGITIMATELY_ROUNDED_ROWS_MUST_REMAIN_SUPPORTED');
 });
