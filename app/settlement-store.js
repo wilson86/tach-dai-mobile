@@ -553,15 +553,16 @@
   async function saveSettlementIfScopeUnchanged(input, expected) {
     const v=normalizeSettlement(input);
     const scope=`scope:${v.partner_id}:${v.business_date}:${String(v.region||'').toLowerCase()}`;
+    const monetary=['complete_unverified','provisional'].includes(v.scope_status);
     if (v.id!==scope || !['mn','mt','mb'].includes(String(v.region||'')) ||
-        !['complete_unverified','provisional'].includes(v.scope_status))
+        !(monetary || ['blocked','empty'].includes(v.scope_status)))
       throw new Error('SETTLEMENT_ATOMIC_SCOPE_INVALID');
     if (!expected || !Array.isArray(expected.messages) ||
         !Object.prototype.hasOwnProperty.call(expected,'config') ||
         !Object.prototype.hasOwnProperty.call(expected,'result') ||
         !Object.prototype.hasOwnProperty.call(expected,'partner') ||
         !Object.prototype.hasOwnProperty.call(expected,'settlement') ||
-        !expected.config || !expected.result || !expected.partner)
+        (monetary && (!expected.config || !expected.result || !expected.partner)))
       throw new Error('SETTLEMENT_ATOMIC_EVIDENCE_REQUIRED');
     const db=await openDb();
     try {
@@ -606,6 +607,13 @@
           }
           // Keep each message's settled status and monetary result in the
           // same atomic transaction; never mutate a newer edited bet afterward.
+          // EMPTY/BLOCKED must never rewrite message statuses; their scope
+          // record still requires atomic input and prior-settlement validation.
+          if(!monetary) {
+            settlementBucket.put(clone(v));
+            outcome={saved:v,superseded:false};
+            return;
+          }
           // Verify every message's config BEFORE issuing any writes.
           const messageConfigs=liveMessages.map(message=>
             message.config_snapshot||liveConfig);

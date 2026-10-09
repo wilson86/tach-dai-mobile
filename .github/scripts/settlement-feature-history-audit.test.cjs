@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.202-scope-prevalidate-all'));
+  assert.ok(source.includes('v1.0.203-all-scope-atomic'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -544,7 +544,8 @@ test('unsupported-only UI scope stays BLOCKED instead of settling silently as ze
     get:async(store,id)=>store==='results'?{business_date:'2026-09-22',region:'mn',complete:true}:null,
     getAll:async()=>[msg],
     resolveConfigForDate:async()=>({partner_id:'synthetic',tinh_ui:true,mb_xien_234:false}),
-    saveSettlement:async row=>{saved.push(row);return row;}
+    saveSettlement:async row=>{saved.push(row);return row;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={
     evaluateCanonicalMessage:()=>({category_inputs:[{code:'UI',xac:0}],
@@ -646,6 +647,7 @@ test('stale empty and blocked scope attempts never overwrite newly arrived bets'
     getAll:async name=>name==='messages'?copy(latest):[],
     resolveConfigForDate:async()=>copy(config),
     saveSettlement:async row=>{saved.push(row);return row;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
     get:async()=>null
   };
   ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
@@ -688,6 +690,7 @@ test('parser error cannot be bypassed by stale canonical content and successful 
     getAll:async()=>[clone(message)],
     resolveConfigForDate:async()=>clone(config),
     saveSettlement:async s=>{writes++;return s;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
     get:async()=>null
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{
@@ -726,7 +729,8 @@ test('blocked KQXS conflict cannot overwrite newer verified source',async()=>{
         verification_status:reads===1?'conflict':'verified',
         verification_conflicts:reads===1?['SOURCE_DIFF']:[]});
     },
-    saveSettlement:async s=>{writes++;return s;}
+    saveSettlement:async s=>{writes++;return s;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{throw Error('UNEXPECTED_EVALUATION')}};
   ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('UNEXPECTED_SETTLE')}};
@@ -753,7 +757,8 @@ test('missing config or KQXS race must not save stale BLOCKED money',async()=>{
     get:async(name)=>{if(name!=='results')return null;
       if(!kqxsAvailable){kqxsAvailable=changes.includes('kqxs');return null;}
       return result;},
-    saveSettlement:async row=>{writes.push(row);return row;}
+    saveSettlement:async row=>{writes.push(row);return row;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_ENGINE={version:'fake'};
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({category_inputs:[{code:'2CB'}],detail_rows:[]})};
@@ -795,7 +800,8 @@ test('failed monetary runtime cannot write stale BLOCKED after partner role is c
       if(name==='partners'){reads++;const seen=copy(partner);
         if(changeAfterRead&&reads===1)partner.role='owner';
         return seen;}return null;},
-    saveSettlement:async row=>{writes.push(row);return row;}
+    saveSettlement:async row=>{writes.push(row);return row;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({category_inputs:[{code:'2CB'}],detail_rows:[]})};
   ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('INVALID_PARTNER_ROLE')}};
@@ -826,7 +832,8 @@ test('contradictory KQXS sources hard-block even when legacy status says verifie
     getAll:async()=>[copy(msg)],
     resolveConfigForDate:async()=>({partner_id:'synthetic',id:'v1',version:1}),
     get:async(name)=>name==='results'?copy(snapshot):null,
-    saveSettlement:async row=>{writes.push(row);return row;}
+    saveSettlement:async row=>{writes.push(row);return row;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{
     evaluations++;throw Error('MUST_NOT_EVALUATE_CONFLICTED_RESULTS');
@@ -1249,6 +1256,9 @@ test('monetary settlement requires atomic multi-store commit rather than blind p
   const pipeline=readFileSync(resolve(root,'app','settlement-pipeline.js'),'utf8');
   const store=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
   assert.ok(pipeline.includes('saveSettlementIfScopeUnchanged({'));
+  assert.equal(pipeline.split('saveSettlementIfScopeUnchanged({').length-1,3);
+  assert.ok(!pipeline.includes('d.store.saveSettlement({'));
+  assert.ok(store.includes("['blocked','empty']"));
   assert.ok(pipeline.includes('settlement:previousSettlement'));
   assert.ok(pipeline.includes('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED'));
   assert.ok(!pipeline.includes('for (const message of latestMessages)'));
@@ -1313,7 +1323,8 @@ test('wrong-partner config corrected before BLOCKED save supersedes stale decisi
       if(row.config_snapshot && row.config_snapshot.partner_id!==row.partner_id)
         throw Error('CONFIG_PARTNER_MISMATCH');
       writes.push(row);return row;
-    }
+    },
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{throw Error('SHOULD_NOT_EVALUATE')}};
   ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('SHOULD_NOT_CALCULATE')}};
@@ -1346,7 +1357,8 @@ test('invalid runtime row count cannot save stale BLOCKED after partner role cor
     getAll:async()=>[copy(msg)],
     resolveConfigForDate:async()=>copy(config),
     get:async name=>name==='results'?copy(result):name==='partners'?copy(partner):null,
-    saveSettlement:async row=>{writes.push(row);return row;}
+    saveSettlement:async row=>{writes.push(row);return row;},
+    saveSettlementIfScopeUnchanged:async row=>({saved:await ctx.window.KTS_SETTLEMENT_STORE.saveSettlement(row),superseded:false}),
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({category_inputs:[{code:'2CB'}],detail_rows:[]})};
   ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{
