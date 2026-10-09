@@ -187,7 +187,7 @@
     const golden=Array.isArray(goldenCases)?goldenCases:[];
     const counts={pending:0,promoted:0,dismissed:0,invalid:0,
       promoted_linked:0,promoted_missing:0,promoted_conflicting:0,
-      promoted_duplicate:0};
+      promoted_duplicate:0,duplicate_candidate_ids:0,duplicate_golden_links:0};
     const byId=new Map();
     for(const item of golden) {
       const id=item&&typeof item.id==='string'?item.id:'';
@@ -196,7 +196,11 @@
       all.push(item);
       byId.set(id,all);
     }
+    const candidateIds=new Set(),goldenLinks=new Set();
     for(const item of list) {
+      const candidateId=item&&typeof item.id==='string'?item.id:'';
+      if(!candidateId||candidateIds.has(candidateId))counts.duplicate_candidate_ids++;
+      else candidateIds.add(candidateId);
       const state=String(item&&item.state||'').toLowerCase();
       if(state==='pending')counts.pending++;
       else if(state==='dismissed')counts.dismissed++;
@@ -204,6 +208,10 @@
         counts.promoted++;
         const caseInput=item&&item.case;
         const id=caseInput&&typeof caseInput.id==='string'?caseInput.id:'';
+        if(id) {
+          if(goldenLinks.has(id))counts.duplicate_golden_links++;
+          else goldenLinks.add(id);
+        }
         const matches=id?byId.get(id)||[]:[];
         if(!matches.length)counts.promoted_missing++;
         else if(matches.length!==1)counts.promoted_duplicate++;
@@ -233,7 +241,8 @@
     const promoted=candidates.promoted==null?0:candidates.promoted;
     const linked=candidates.promoted_linked==null?0:candidates.promoted_linked;
     const linkIssues=[candidates.promoted_missing,candidates.promoted_conflicting,
-      candidates.promoted_duplicate,candidates.invalid];
+      candidates.promoted_duplicate,candidates.invalid,
+      candidates.duplicate_candidate_ids,candidates.duplicate_golden_links];
     const linkedCandidateProof=Number.isInteger(promoted)&&promoted>=0&&
       Number.isInteger(linked)&&linked===promoted&&
       linkIssues.every(n=>n==null||n===0)&&

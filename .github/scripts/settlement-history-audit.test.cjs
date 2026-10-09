@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.209-promoted-golden-delete-guard'));
+  assert.ok(sw.includes('v1.0.210-duplicate-evidence-failclosed'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1961,4 +1961,40 @@ test('deletion of golden backing PROMOTED HIOSKT is forbidden inside atomic cand
   assert.ok(golden.includes('mutateMetadataRowsAtomically([META_KEY,candidateKey]'));
   assert.ok(golden.includes('REGRESSION_CANDIDATE_METADATA_CORRUPTED'));
   assert.ok(golden.includes('REGRESSION_GOLDEN_DELETE_LINK_GUARD_UNAVAILABLE'));
+});
+
+test('duplicate HIOSKT candidate IDs or two PROMOTED rows claiming one golden block READY',()=>{
+  const golden={id:'regression:one',pinned_at:'2026-09-22T00:00:00Z',
+    expected_reference:{totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}}};
+  const a={id:'candidate:a',state:'promoted',case:JSON.parse(JSON.stringify(golden))};
+  const b={id:'candidate:b',state:'promoted',case:JSON.parse(JSON.stringify(golden))};
+  const sameId=Q.candidateSummary([a,{...b,id:'candidate:a'}],[golden]);
+  assert.equal(sameId.duplicate_candidate_ids,1);
+  assert.equal(sameId.duplicate_golden_links,1);
+  const alias=Q.candidateSummary([a,b],[golden]);
+  assert.equal(alias.duplicate_candidate_ids,0);
+  assert.equal(alias.duplicate_golden_links,1);
+  const clean=Q.candidateSummary([a],[golden]);
+  const gates={
+    observation:{promotion_ready:true,blockers:[],counts:{total:1,exact:1,missing_scopes:0}},
+    kqxs:{met:true,total:1,verified:1,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:1,known:1,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:1,matched:1,mismatched:0,unreachable:false},
+    regression:{total:1,passed:1,failed:0},
+    feature_safety:{met:true,unsafe_count:0}
+  };
+  assert.equal(Q.combineQualification({...gates,candidates:clean}).ready_for_production_review,true);
+  for(const summary of [sameId,alias]){
+    const q=Q.combineQualification({...gates,candidates:summary});
+    assert.equal(q.ready_for_production_review,false);
+    assert.equal(q.candidate_gate.met,false);
+    assert.ok(q.blockers.includes('PROMOTED_GOLDEN_EVIDENCE_UNLINKED'));
+  }
+  const tampered=Q.combineQualification({...gates,candidates:clean});
+  tampered.candidate_gate.duplicate_candidate_ids=1;
+  assert.equal(H.validateSnapshotDecision(tampered).reason,
+    'READY_GATE_EVIDENCE_CONTRADICTION_CANDIDATE_GATE');
+  const candidateSrc=readFileSync(resolve(root,'settlement-test','settlement-regression-candidates.js'),'utf8');
+  assert.ok(candidateSrc.includes('REGRESSION_CANDIDATE_DUPLICATE_ID'));
+  assert.ok(candidateSrc.includes('events.has(normalized.source_event_id)'));
 });

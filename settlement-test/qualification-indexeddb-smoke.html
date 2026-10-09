@@ -565,6 +565,23 @@
     if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
        .some(c=>c.id==='synthetic-golden-2'))
       fail('UNLINKED_GOLDEN_DELETE_BLOCKED');
+    // A corrupted import can contain the same candidate event twice.
+    // Reading its metadata must fail closed instead of counting duplicate
+    // human confirmations as two independent HIOSKT proofs.
+    const cleanCandidateRow=await store.get(store.STORES.metadata,candidateKey);
+    const duplicateCandidateRow={...cleanCandidateRow,
+      candidates:cleanCandidateRow.candidates.concat([
+        JSON.parse(JSON.stringify(cleanCandidateRow.candidates[0]))])};
+    await putSynthetic(store.STORES.metadata,duplicateCandidateRow);
+    let duplicateReadRejected=false;
+    try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
+    catch(error){duplicateReadRejected=String(error&&error.message||error)
+      .includes('REGRESSION_CANDIDATE_DUPLICATE_ID');}
+    if(!duplicateReadRejected)
+      fail('DUPLICATE_HIOSKT_CANDIDATE_METADATA_NOT_REJECTED');
+    await putSynthetic(store.STORES.metadata,cleanCandidateRow);
+    if((await candApi.listCandidates()).length!==cleanCandidateRow.candidates.length)
+      fail('DUPLICATE_CANDIDATE_RECOVERY_NOT_REPRODUCIBLE');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -594,6 +611,7 @@
        'CANDIDATE_SAME_EVENT_ID_IMMUTABLE=PASS',
        'GOLDEN_SOURCE_ID_IMMUTABLE=PASS',
        'PROMOTED_LINKED_GOLDEN_DELETE_REFUSED=PASS',
+       'DUPLICATE_HIOSKT_CANDIDATE_REJECTED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
