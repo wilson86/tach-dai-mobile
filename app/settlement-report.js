@@ -146,7 +146,9 @@
       // An empty scope means every message in that scope was cancelled/removed from calculation.
       // Keep the durable settlement for audit, but do not let it create a ghost partner/region
       // in money reports or end-of-day close gates.
-      if (settlementScopeStatus === 'empty') continue;
+      // Only canonical lowercase EMPTY may be skipped. A corrupted
+      // "Empty" label must not hide an active scope from close controls.
+      if (settlement.scope_status === 'empty') continue;
       partnerSettlements.push(settlement);
 
       const region = String(settlement.region || 'unknown').toLowerCase();
@@ -163,8 +165,9 @@
       // Treat legacy/corrupted labels case-insensitively and fail closed
       // on unknown/missing states. A raw "BLOCKED" label must never turn
       // into a seemingly valid or exact end-of-day money report.
-      const knownStatus=['blocked','provisional','complete_unverified']
-        .includes(settlementScopeStatus);
+      const knownStatus=settlement.scope_status===settlementScopeStatus &&
+        ['blocked','provisional','complete_unverified']
+          .includes(settlementScopeStatus);
       const scopeStatus=knownStatus?settlementScopeStatus:'blocked';
       regionReport.scope_statuses.push(scopeStatus);
       regionReport.kqxs_statuses.push(kqxsVerificationStatus(settlement));
