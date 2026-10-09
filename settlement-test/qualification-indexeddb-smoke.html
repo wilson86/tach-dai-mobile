@@ -523,6 +523,24 @@
     if(repeated.state!=='dismissed'||(await candApi.listCandidates())
        .filter(c=>c.id===captured[0].id).length!==1)
       fail('CANDIDATE_DISMISSED_EVENT_RESURRECTED');
+
+    // A stable shadow event ID must not silently mask a different HIOSKT
+    // reference amount, even if the original was dismissed.
+    const tamperedSameId={...mismatchEvent,
+      reference_snapshot:{totals:{final:'999'}}};
+    const candidatesBeforeCollision=await candApi.listCandidates();
+    let rejectedChangedEvidence=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.captureEvidence(
+        tamperedSameId,{note:'tampered independent oracle amount'});
+    }catch(e){
+      rejectedChangedEvidence=String(e&&e.message||e)
+        .includes('REGRESSION_CANDIDATE_EVENT_ID_CONFLICT');
+    }
+    const candidatesAfterCollision=await candApi.listCandidates();
+    if(!rejectedChangedEvidence||
+       JSON.stringify(candidatesBeforeCollision)!==JSON.stringify(candidatesAfterCollision))
+      fail('CANDIDATE_SAME_ID_DIFFERENT_MONEY_WAS_SILENTLY_DEDUPED');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -549,6 +567,7 @@
        'CANDIDATE_CORRUPT_METADATA_FAIL_CLOSED=PASS',
        'CANDIDATE_CROSS_TAB_CAPTURE_DEDUPE=PASS',
        'CANDIDATE_DISMISSED_CAPTURE_NO_RESURRECTION=PASS',
+       'CANDIDATE_SAME_EVENT_ID_IMMUTABLE=PASS',
        'GOLDEN_SOURCE_ID_IMMUTABLE=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

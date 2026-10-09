@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.206-immutable-golden-capture-dedupe'));
+  assert.ok(sw.includes('v1.0.207-event-identity-immutable'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1898,4 +1898,13 @@ test('immutable golden case identity refuses silent replacement of confirmed HIO
   assert.ok(src.includes('REGRESSION_GOLDEN_ID_CONFLICT'));
   assert.ok(src.includes('const prior=cases.find(item=>caseId(item)===c.id)'));
   assert.ok(src.includes('delete stable.pinned_at'));
+});
+
+test('HIOSKT source event IDs cannot hide changed canonical money after duplicate capture',()=>{
+  const src=readFileSync(resolve(root,'settlement-test','settlement-regression-candidates.js'),'utf8');
+  assert.ok(src.includes('REGRESSION_CANDIDATE_EVENT_ID_CONFLICT'));
+  assert.ok(src.includes('delete immutableCase.pinned_at'));
+  assert.ok(src.includes('delete immutableCase.note'));
+  assert.ok(src.includes('reference_final:c.reference_final'));
+  assert.ok(src.includes('mutateMetadataAtomically(META_KEY,row=>'));
 });

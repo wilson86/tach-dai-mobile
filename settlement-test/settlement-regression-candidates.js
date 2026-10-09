@@ -103,8 +103,33 @@
     await atomicStore().mutateMetadataAtomically(META_KEY,row=>{
       const cases=candidateRows(row);
       const existing=cases.find(c=>String(c.id)===candidate.id);
-      captured=existing?normalizeCandidate(existing):candidate;
-      if(existing)return row;
+      if(existing){
+        const persisted=normalizeCandidate(existing);
+        // Event IDs are durable evidence identities. A second observation
+        // with the same ID but changed HIOSKT/KTS money or canonical replay
+        // must be flagged as a collision, never swallowed as a duplicate.
+        const evidenceShape=c=>{
+          const immutableCase=clone(c.case);
+          // Generated timestamps and operator notes do not change the
+          // underlying canonical replay or independent monetary evidence.
+          delete immutableCase.pinned_at;
+          delete immutableCase.note;
+          return {
+            source_event_id:c.source_event_id,
+            case:immutableCase,
+            source_comparison_status:c.source_comparison_status,
+            local_final:c.local_final,
+            reference_final:c.reference_final,
+            final_delta:c.final_delta
+          };
+        };
+        if(JSON.stringify(evidenceShape(persisted))!==
+           JSON.stringify(evidenceShape(candidate)))
+          throw new Error('REGRESSION_CANDIDATE_EVENT_ID_CONFLICT');
+        captured=persisted;
+        return row;
+      }
+      captured=candidate;
       const next=cases.concat([candidate]);
       return {key:META_KEY,version:1,updated_at:nowIso(),candidates:next};
     });
