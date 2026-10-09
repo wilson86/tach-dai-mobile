@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.218-backup-commit-state-notice'));
+  assert.ok(source.includes('v1.0.219-backup-evidence-tx-cas'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1901,4 +1901,17 @@ test('backup UI must never call a committed import failed when only recalc faile
  assert.ok(source.includes('ĐÃ GỘP dữ liệu backup'));
  assert.ok(source.includes('IMPORT_PROTECTED_EVIDENCE_COLLISION:'));
  assert.ok(source.includes('Không có dữ liệu nào bị ghi đè'));
+});
+
+test('import rechecks protected HIOSKT evidence within the SAME write transaction',()=>{
+ const s=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+ const importBody=s.slice(s.indexOf('  async function importAll('),s.indexOf('  global.KTS_SETTLEMENT_STORE'));
+ assert.ok(importBody.includes("const tx = db.transaction(names, 'readwrite')"));
+ assert.ok(importBody.includes("const req=metadata.get(key)"));
+ assert.ok(importBody.includes("IMPORT_PROTECTED_EVIDENCE_CHANGED_DURING_IMPORT:"));
+ assert.ok(importBody.includes("if(stableStringify(current)!==stableStringify(previous))"));
+ assert.ok(importBody.includes('try{tx.abort();}'));
+ assert.ok(importBody.includes('throw evidenceRace||error'));
+ assert.ok(importBody.indexOf('const req=metadata.get(key)')<
+   importBody.indexOf('for (const name of names) {'));
 });

@@ -1141,6 +1141,35 @@
       const names = Object.values(STORES);
       const tx = db.transaction(names, 'readwrite');
       const keyForStore = name => name === STORES.metadata ? 'key' : 'id';
+      // Cross-tab protection must be checked INSIDE the write transaction.
+      // The earlier preflight alone cannot prove that an operator's HIOSKT
+      // candidate, pinned golden or READY journal remained unchanged while
+      // another browser tab was writing to the same IndexedDB database.
+      let evidenceRace=null;
+      if (!replace) {
+        const protectedKeys=[
+          'qualification_history_v1',
+          'shadow_regression_cases_v1',
+          'shadow_regression_candidates_v1'
+        ];
+        const readSnapshot=new Map((existing[STORES.metadata]||[])
+          .map(row=>[String(row&&row.key||''),row]));
+        const metadata=tx.objectStore(STORES.metadata);
+        for(const key of protectedKeys){
+          const req=metadata.get(key);
+          req.onsuccess=()=>{
+            try{
+              const previous=readSnapshot.get(key)||null;
+              const current=req.result||null;
+              if(stableStringify(current)!==stableStringify(previous))
+                throw new Error('IMPORT_PROTECTED_EVIDENCE_CHANGED_DURING_IMPORT:'+key);
+            }catch(error){
+              evidenceRace=error;
+              try{tx.abort();}catch(_){/* already aborted */ }
+            }
+          };
+        }
+      }
       for (const name of names) {
         const store = tx.objectStore(name);
         if (replace) {
@@ -1161,7 +1190,7 @@
           store.add(value);
         }
       }
-      await txDone(tx);
+      try {await txDone(tx);}catch(error){throw evidenceRace||error;}
     } finally { db.close(); }
     return validation;
   }
