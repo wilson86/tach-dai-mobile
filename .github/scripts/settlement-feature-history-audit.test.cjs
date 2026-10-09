@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.216-protected-backup-import'));
+  assert.ok(source.includes('v1.0.217-golden-source-atomic'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1883,4 +1883,12 @@ test('private HIOSKT golden and qualification evidence backup has strict import 
  assert.throws(()=>store.validateImportPayload(input([{
    key:'qualification_history_v1',version:1,events:[{id:'synthetic-forged'}]}]),{},{}),
    /IMPORT_QUALIFICATION_EVIDENCE_INVALID/);
+});
+
+test('direct golden pin refuses claiming a second ID for the same Shadow event',()=>{
+ const src=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
+ const pin=src.slice(src.indexOf('  async function pinCase('),src.indexOf('  async function removePinnedCase('));
+ assert.ok(pin.includes('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT'));
+ assert.ok(pin.includes('item.source_event_id'));
+ assert.ok(pin.includes("mutateMetadataAtomically(META_KEY,row=>"));
 });
