@@ -263,7 +263,17 @@
 
     const localRows = localSettlement && Array.isArray(localSettlement.category_rows) ? localSettlement.category_rows : local.rows;
     const referenceRows = referenceSnapshot && (referenceSnapshot.categories || referenceSnapshot.category_rows);
-    const categoryEvidenceOkay=categoryEvidenceValid(localRows,options)&&categoryEvidenceValid(referenceRows,options);
+    // Explicit category containers are monetary evidence. A malformed object,
+    // null or scalar must not be silently treated as 'no categories'.
+    const malformedCategoryContainer=(source,keys)=>
+      source && typeof source==='object' && keys.some(key=>
+        Object.prototype.hasOwnProperty.call(source,key) && !Array.isArray(source[key]));
+    const invalidCategoryContainer=Boolean(
+      malformedCategoryContainer(localSettlement,['category_rows']) ||
+      malformedCategoryContainer(local,['rows']) ||
+      malformedCategoryContainer(referenceSnapshot,['categories','category_rows']));
+    const categoryEvidenceOkay=!invalidCategoryContainer &&
+      categoryEvidenceValid(localRows,options)&&categoryEvidenceValid(referenceRows,options);
     const aliasEvidenceOkay=referenceAliasesValid(reference);
     // An explicitly supplied HIOSKT category without any monetary fields
     // proves nothing. A referenced category absent from local results cannot
@@ -361,7 +371,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v15-per-row-exact-consistency',
+    version: 'settlement-shadow-v16-category-container-shape',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,

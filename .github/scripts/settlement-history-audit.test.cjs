@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.188-category-validation-fix'));
+  assert.ok(sw.includes('v1.0.189-category-container-shape'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1560,4 +1560,29 @@ test('two wrong exact category rows cannot cancel and fake matching aggregate mo
   const roundedRef={totals,categories:[{code:'B',xac:0.1,exact:{xac:'0.14'}}]};
   assert.equal(compare(rounded,roundedRef,{display_digits:1}).safe_to_promote,true,
     'LEGITIMATELY_ROUNDED_ROWS_MUST_REMAIN_SUPPORTED');
+});
+
+test('malformed category container never masquerades as absent HIOSKT evidence',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const normalize=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME.normalizeReference;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}};
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  assert.equal(compare(local,{totals}).safe_to_promote,true);
+  for(const invalid of [{B:{xac:1}},null,0,'invalid',true]){
+    const reference={totals,categories:invalid};
+    const verdict=compare(local,reference);
+    assert.equal(verdict.status,'INCOMPLETE_REFERENCE');
+    assert.equal(verdict.invalid_category_evidence,true);
+    assert.equal(verdict.safe_to_promote,false);
+    assert.throws(()=>normalize(reference),/HIOSKT_CATEGORIES_INVALID/);
+    const corrupted={...local,category_rows:invalid};
+    const localVerdict=compare(corrupted,{totals});
+    assert.equal(localVerdict.invalid_category_evidence,true);
+    assert.equal(localVerdict.safe_to_promote,false);
+  }
+  assert.equal(compare(local,{totals,categories:[]}).safe_to_promote,true);
+  assert.equal(normalize({totals,categories:[]}).categories.length,0);
 });
