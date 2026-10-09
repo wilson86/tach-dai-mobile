@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.183-blocked-config-scope'));
+  assert.ok(sw.includes('v1.0.184-blocked-partner-revision'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1455,4 +1455,38 @@ test('wrong-partner config corrected before BLOCKED save supersedes stale decisi
   assert.equal(outcome.reason,'CONFIG_PARTNER_MISMATCH');
   assert.equal(writes.length,1);
   assert.equal(writes[0].config_snapshot,null,'FOREIGN_CONFIG_MUST_NOT_BE_PERSISTED');
+});
+
+test('invalid runtime row count cannot save stale BLOCKED after partner role correction',async()=>{
+  const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x));
+  const scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const msg={...scope,id:'m1',status:'parsed',canonical_payload:{region:'mn',legs:[{code:'2CB'}]}};
+  const config={id:'cfg',partner_id:'synthetic',version:1};
+  const result={business_date:'2026-09-22',region:'mn',complete:true};
+  let partner={id:'synthetic',name:'User',role:'customer',active:true},correct=false,writes=[];
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[copy(msg)],
+    resolveConfigForDate:async()=>copy(config),
+    get:async name=>name==='results'?copy(result):name==='partners'?copy(partner):null,
+    saveSettlement:async row=>{writes.push(row);return row;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({category_inputs:[{code:'2CB'}],detail_rows:[]})};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{
+    if(correct)partner.role='owner';
+    return {rows:[]};
+  }};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const settle=ctx.window.KTS_SETTLEMENT_PIPELINE.settleScope;
+  correct=true;writes=[];partner.role='customer';
+  let x=await settle(scope);
+  assert.equal(x.status,'superseded');
+  assert.equal(writes.length,0);
+  correct=false;writes=[];partner.role='customer';
+  x=await settle(scope);
+  assert.equal(x.status,'blocked');
+  assert.equal(x.reason,'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH');
+  assert.equal(writes.length,1);
 });
