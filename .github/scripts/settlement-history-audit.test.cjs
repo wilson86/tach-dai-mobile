@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.218-backup-commit-state-notice'));
+  assert.ok(sw.includes('v1.0.219-backup-evidence-tx-cas'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2097,4 +2097,15 @@ test('backup UI must disclose when an import committed before recalc failure',()
  assert.ok(src.includes('if(backupCommitted)'));
  assert.ok(src.includes('ĐÃ GỘP dữ liệu backup'));
  assert.ok(src.includes('IMPORT_PROTECTED_EVIDENCE_COLLISION:'));
+});
+
+test('backup import checks protected evidence within its own readwrite transaction',()=>{
+ const src=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
+ const body=src.slice(src.indexOf('  async function importAll('),src.indexOf('  global.KTS_SETTLEMENT_STORE'));
+ assert.ok(body.includes("const tx = db.transaction(names, 'readwrite')"));
+ assert.ok(body.includes("const req=metadata.get(key)"));
+ assert.ok(body.includes('IMPORT_PROTECTED_EVIDENCE_CHANGED_DURING_IMPORT:'));
+ assert.ok(body.includes('if(stableStringify(current)!==stableStringify(previous))'));
+ assert.ok(body.includes('try{tx.abort();}'));
+ assert.ok(body.includes('throw evidenceRace||error'));
 });
