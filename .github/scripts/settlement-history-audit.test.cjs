@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.184-blocked-partner-revision'));
+  assert.ok(sw.includes('v1.0.185-observed-category-fields'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1489,4 +1489,26 @@ test('invalid runtime row count cannot save stale BLOCKED after partner role cor
   assert.equal(x.status,'blocked');
   assert.equal(x.reason,'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH');
   assert.equal(writes.length,1);
+});
+
+test('HIOSKT partial category references compare only fields explicitly observed',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:0,payout:100}]};
+  const partial=compare(local,{totals,categories:[{code:'B',xac:0}]});
+  assert.equal(partial.safe_to_promote,true,'OMITTED_REFERENCE_PAYOUT_WAS_FABRICATED');
+  assert.equal(partial.categories[0].fields.payout,undefined);
+  assert.equal(partial.categories[0].fields.xac.status,'MATCH_EXACT');
+  const absentLocal={...local,category_rows:[{code:'B',payout:0}]};
+  const missing=compare(absentLocal,{totals,categories:[{code:'B',xac:0}]});
+  assert.equal(missing.safe_to_promote,false,'MISSING_LOCAL_XAC_WAS_TREATED_AS_ZERO');
+  assert.equal(missing.categories[0].status,'NOT_COMPARABLE');
+  assert.equal(missing.categories[0].fields.xac.reason,'LOCAL_CATEGORY_FIELD_MISSING');
+  const duplicate=compare({...local,category_rows:[{code:'B',xac:0,payout:20},{code:'B',xac:0,payout:80}]},
+    {totals,categories:[{code:'B',xac:0},{code:'B',payout:100}]});
+  assert.equal(duplicate.safe_to_promote,true,'DUPLICATE_CATEGORY_FIELDS_SHOULD_AGGREGATE');
+  assert.equal(duplicate.categories[0].fields.payout.status,'MATCH_EXACT');
 });

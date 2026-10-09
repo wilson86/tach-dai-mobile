@@ -144,8 +144,14 @@
     for (const row of (Array.isArray(rows) ? rows : [])) {
       const code = String(row.code || row.category || '').trim().toUpperCase();
       if (!code) continue;
-      if (!out[code]) out[code] = { code, xac: 0, qua_co: 0, hit_units: 0, payout: 0, exact: { xac:'0', qua_co:'0', hit_units:'0', payout:'0' } };
+      if (!out[code]) out[code] = { code, xac: 0, qua_co: 0, hit_units: 0, payout: 0,
+        present: { xac:false, qua_co:false, hit_units:false, payout:false },
+        exact: { xac:'0', qua_co:'0', hit_units:'0', payout:'0' } };
       for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
+        // Zero is evidence only when the original row actually supplied the
+        // field. Do not turn an omitted HIOSKT field into a fabricated zero.
+        if (!Object.prototype.hasOwnProperty.call(row,field)) continue;
+        out[code].present[field] = true;
         const value = numeric(row[field]) || 0;
         out[code][field] += value;
         const exactValue = row.exact && row.exact[field] != null ? row.exact[field] : value;
@@ -189,17 +195,22 @@
       const b = reference[code] || {};
       const fields = {};
       for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
-        if (numeric(b[field]) == null) continue;
+        if (!b.present || !b.present[field]) continue;
+        if (!a.present || !a.present[field]) {
+          fields[field] = {status:'NOT_COMPARABLE',reason:'LOCAL_CATEGORY_FIELD_MISSING',
+            local:null,reference:b[field],delta:null};
+          continue;
+        }
         fields[field] = compareNumber(
-          a[field] || 0,
-          b[field],
-          options,
-          a.exact && a.exact[field],
+          a[field], b[field], options, a.exact && a.exact[field],
           b.exact && b.exact[field]
         );
       }
       const statuses = Object.values(fields).map(x => x.status);
-      const status = statuses.includes('MISMATCH') ? 'MISMATCH' : statuses.includes('MATCH_DISPLAY') ? 'MATCH_DISPLAY' : statuses.length ? 'MATCH_EXACT' : 'NOT_COMPARABLE';
+      const status = statuses.includes('MISMATCH') ? 'MISMATCH' :
+        statuses.includes('NOT_COMPARABLE') ? 'NOT_COMPARABLE' :
+        statuses.includes('MATCH_DISPLAY') ? 'MATCH_DISPLAY' :
+        statuses.length ? 'MATCH_EXACT' : 'NOT_COMPARABLE';
       return { code, status, fields };
     });
   }
@@ -336,7 +347,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v12-exact-metadata-shape',
+    version: 'settlement-shadow-v13-explicit-category-evidence',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
