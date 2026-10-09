@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.197-category-label-integrity'));
+  assert.ok(source.includes('v1.0.198-total-exact-aliases'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1574,4 +1574,33 @@ test('contradictory category code/category aliases fail closed in direct shadow 
   assert.equal(normal({totals,categories:[{code:' b ',category:'B',xac:0}]}).categories[0].code,'B');
   for(const code of ['  ',17,{},[]])
     assert.throws(()=>normal({totals,categories:[{code,xac:0}]}),/HIOSKT_CATEGORY_CODE_REQUIRED/);
+});
+
+test('direct shadow comparison rejects contradictory exact total aliases without HIOSKT normalization',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  const reference={totals:{xac:0,qua_co:0,payout:0,final:0,exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  assert.equal(compare(local,reference).safe_to_promote,true);
+  const clone=x=>JSON.parse(JSON.stringify(x));
+  for(const [name,mutate] of [
+    ['reference_conflict',x=>x.ref.totals.exact.xac='1'],
+    ['local_conflict',x=>x.local.settlement_result.exact.xac='1'],
+    ['reference_bad',x=>x.ref.totals.exact.xac=false],
+    ['local_blank',x=>x.local.settlement_result.exact.xac='  '],
+    ['reference_overflow',x=>x.ref.totals.exact.xac='1e999']
+  ]){
+    const v={local:clone(local),ref:clone(reference)};mutate(v);
+    const result=compare(v.local,v.ref);
+    assert.equal(result.safe_to_promote,false,'INVALID_EXACT_ALIAS_PROMOTED:'+name);
+    assert.equal(result.invalid_exact_alias_evidence,true,'EXACT_ALIAS_MISSED:'+name);
+    assert.equal(result.status,'INCOMPLETE_REFERENCE');
+  }
+  const compatible=clone(reference);
+  compatible.totals.exact={xac:'0.00',qua_co:'0e0',payout:'0',final:'-0'};
+  const result=compare(local,compatible);
+  assert.equal(result.safe_to_promote,true,'SINGLE_EQUIVALENT_SHORTHAND_EXACT_ACCEPTED');
+  assert.equal(result.totals.total_xac.reference_exact,'0');
 });

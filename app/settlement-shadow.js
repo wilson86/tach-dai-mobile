@@ -263,6 +263,24 @@
     return true;
   }
 
+  function exactAliasesValid(exact) {
+    if (exact==null) return true;
+    if (typeof exact!=='object' || Array.isArray(exact)) return false;
+    for (const aliases of Object.values(FIELD_ALIASES)) {
+      let canonical=null;
+      for (const alias of aliases) {
+        if (!Object.prototype.hasOwnProperty.call(exact,alias)) continue;
+        const value=exact[alias];
+        if (numeric(value)===null) return false;
+        let current;
+        try { current=decimalCanonical(value); } catch (_) { return false; }
+        if (canonical!==null && canonical!==current) return false;
+        canonical=current;
+      }
+    }
+    return true;
+  }
+
   function compareSettlement(localSettlement, referenceSnapshot, options) {
     const local = localSettlement && (localSettlement.settlement_result || localSettlement.result_snapshot || localSettlement) || {};
     const reference = referenceSnapshot && (referenceSnapshot.totals || referenceSnapshot) || {};
@@ -272,12 +290,17 @@
     const exactMetadataOkay=exactShapeValid(local.exact)&&exactShapeValid(reference.exact);
     const localExact = exactMetadataOkay && local.exact ? local.exact : {};
     const referenceExact = exactMetadataOkay && reference.exact ? reference.exact : {};
+    const exactAliasesOkay=exactMetadataOkay &&
+      exactAliasesValid(local.exact) && exactAliasesValid(reference.exact);
     const totals = {};
     for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
       const refValue = pick(reference, aliases);
       if (refValue == null) continue;
       const rawReference = pickRaw(reference, aliases);
-      totals[field] = compareNumber(local[field], refValue, options, localExact[field], referenceExact[field] == null ? rawReference : referenceExact[field]);
+      const localExactValue=pickRaw(localExact,aliases);
+      const referenceExactValue=pickRaw(referenceExact,aliases);
+      totals[field] = compareNumber(local[field], refValue, options,
+        localExactValue, referenceExactValue==null?rawReference:referenceExactValue);
     }
 
     const localRows = localSettlement && Array.isArray(localSettlement.category_rows) ? localSettlement.category_rows : local.rows;
@@ -322,7 +345,8 @@
       categories.filter(row=>referenceCategories.some(ref=>codeOf(ref)===row.code))
         .every(row=>row.status==='MATCH_EXACT');
     if (!categoryEvidenceOkay || !aliasEvidenceOkay || !exactMetadataOkay ||
-        missingReferenceCategory || emptyReferenceCategory || missingMonetaryEvidence || invalidDisplayPrecision)
+        !exactAliasesOkay || missingReferenceCategory || emptyReferenceCategory ||
+        missingMonetaryEvidence || invalidDisplayPrecision)
       status='INCOMPLETE_REFERENCE';
     return {
       status,
@@ -335,9 +359,10 @@
       invalid_display_precision: invalidDisplayPrecision,
       invalid_total_alias_evidence: !aliasEvidenceOkay,
       invalid_exact_metadata: !exactMetadataOkay,
+      invalid_exact_alias_evidence: !exactAliasesOkay,
       required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
-      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact && aliasEvidenceOkay && exactMetadataOkay
+      safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact && aliasEvidenceOkay && exactMetadataOkay && exactAliasesOkay
     };
   }
 
@@ -392,7 +417,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v20-category-label-integrity',
+    version: 'settlement-shadow-v21-total-exact-alias-integrity',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
