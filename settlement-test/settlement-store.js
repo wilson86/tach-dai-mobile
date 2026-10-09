@@ -1116,6 +1116,26 @@
       }
       const prior = existingMap(STORES.shadowEvents).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.shadowEvents + ':' + String(row.id));
+      if(prior){
+        // An existing Shadow event ID is an immutable monetary witness.
+        // Compare recomputed fingerprints, not caller-supplied fingerprint
+        // metadata. Do not silently skip two events with one ID but
+        // different local/reference money, operator reason or observation.
+        const signature=value=>{
+          const fresh=normalizeShadowEvent(Object.assign({},value,
+            {evidence_fingerprint:null}));
+          return {
+            id:String(fresh.id),scope_id:fresh.scope_id,
+            partner_id:fresh.partner_id,business_date:fresh.business_date,
+            region:fresh.region,trigger:fresh.trigger,reason:fresh.reason,
+            comparison_status:fresh.comparison_status,
+            observed_at:value.observed_at==null?null:String(value.observed_at),
+            evidence_fingerprint:fresh.evidence_fingerprint
+          };
+        };
+        if(stableStringify(signature(prior))!==stableStringify(signature(row)))
+          throw new Error('IMPORT_SHADOW_EVENT_CONTENT_COLLISION:'+String(row.id));
+      }
     }
 
     const counts = {};
