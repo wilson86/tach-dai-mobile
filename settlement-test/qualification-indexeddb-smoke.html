@@ -550,7 +550,10 @@
     const ix=candidateMeta.candidates.findIndex(c=>c.id==='candidate:synthetic-4');
     if(ix<0)fail('PROMOTED_DELETE_FIXTURE_MISSING_CANDIDATE');
     candidateMeta.candidates[ix]={...candidateMeta.candidates[ix],
-      state:'promoted',case:locked};
+      state:'promoted',case:locked,
+      promoted_at:'2026-09-22T12:00:00.000Z',
+      updated_at:'2026-09-22T12:00:00.000Z',
+      confirmation_note:'SYNTHETIC_OPERATOR_CONFIRMED'};
     await putSynthetic(store.STORES.metadata,candidateMeta);
     let rejectedLinkedDeletion=false;
     try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase(locked.id);}
