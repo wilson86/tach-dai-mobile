@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.203-all-scope-atomic'));
+  assert.ok(source.includes('v1.0.204-golden-metadata-atomic'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1270,6 +1270,18 @@ test('monetary settlement requires atomic multi-store commit rather than blind p
   assert.ok(store.includes("messages.index('by_partner_date').getAll("));
   assert.ok(store.includes("tx.objectStore(STORES.configs).index('by_partner').getAll("));
   assert.ok(store.includes("settlementBucket.put(clone(v))"));
+});
+
+test('golden pin and removal serialize metadata read and write inside one IDB transaction',()=>{
+  const regression=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
+  const store=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+  assert.ok(store.includes('async function mutateMetadataAtomically(key,mutator)'));
+  assert.ok(store.includes("const tx=db.transaction(STORES.metadata,'readwrite')"));
+  assert.ok(store.includes('openDb, mutateMetadataAtomically,'));
+  assert.ok(regression.includes('mutateMetadataAtomically(META_KEY,row=>'));
+  assert.ok(!regression.includes('async function writeMeta('));
+  assert.ok(regression.includes("throw new Error('REGRESSION_METADATA_CORRUPTED')"));
+  assert.ok(store.includes('METADATA_ATOMIC_MUTATOR_MUST_BE_SYNC'));
 });
 
 test('malformed exact metadata shapes cannot hide missing monetary evidence',()=>{
