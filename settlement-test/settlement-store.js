@@ -604,13 +604,34 @@
 
   async function saveShadowEvent(input) {
     const event = normalizeShadowEvent(input || {});
-    const existing = await listShadowEvents({ scope_id: event.scope_id });
-    const previous = existing.length ? existing[existing.length - 1] : null;
-    if (previous && previous.evidence_fingerprint === event.evidence_fingerprint) {
-      return { event: clone(previous), changed: false, previous: clone(previous) };
-    }
-    await put(STORES.shadowEvents, event);
-    return { event, changed: true, previous: previous ? clone(previous) : null };
+    const db = await openDb();
+    try {
+      // The last-event check and append MUST share one readwrite transaction.
+      // IndexedDB serializes overlapping scope journal writers across tabs:
+      // separate listShadowEvents() / put() transactions could both pass the
+      // duplicate test and silently append the same financial evidence twice.
+      const tx = db.transaction(STORES.shadowEvents, 'readwrite');
+      const bucket = tx.objectStore(STORES.shadowEvents);
+      const request = bucket.index('by_scope_id').getAll(event.scope_id);
+      let outcome = null;
+      request.onsuccess = () => {
+        const rows = (request.result || []).slice().sort((a, b) =>
+          String(a.observed_at || '').localeCompare(String(b.observed_at || '')) ||
+          String(a.id || '').localeCompare(String(b.id || '')));
+        const previous = rows.length ? rows[rows.length - 1] : null;
+        if (previous && previous.evidence_fingerprint === event.evidence_fingerprint) {
+          outcome = { event: clone(previous), changed: false, previous: clone(previous) };
+          return;
+        }
+        // add, not put: duplicate caller-supplied event IDs must abort rather
+        // than overwriting a prior audit receipt, even across browsing tabs.
+        bucket.add(clone(event));
+        outcome = { event, changed: true, previous: previous ? clone(previous) : null };
+      };
+      await txDone(tx);
+      if (!outcome) throw new Error('SHADOW_EVENT_ATOMIC_APPEND_FAILED');
+      return outcome;
+    } finally { db.close(); }
   }
 
   async function exportAll() {

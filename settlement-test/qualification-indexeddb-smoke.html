@@ -62,6 +62,41 @@
     if(workers.some(w=>!w||!w.KTS_SETTLEMENT_QUALIFICATION_HISTORY)){
       fail('WORKER_HISTORY_API_MISSING');
     }
+    // Two real browsing contexts must serialize shadow receipt dedupe.
+    const shadowInput={
+      scope_id:'scope:shadow-atomic-test:2026-09-22:mn',
+      partner_id:'shadow-atomic-test',business_date:'2026-09-22',region:'mn',
+      trigger:'SYNTHETIC_CONCURRENT_AUDIT',
+      local_snapshot:{total_xac:0},reference_snapshot:{total_xac:0},
+      comparison:{status:'MATCH_EXACT'},comparison_status:'MATCH_EXACT'
+    };
+    const shadowOutcomes=await Promise.all(workers.map(w=>
+      w.KTS_SETTLEMENT_STORE.saveShadowEvent(shadowInput)));
+    if(shadowOutcomes.filter(r=>r.changed===true).length!==1||
+       shadowOutcomes.filter(r=>r.changed===false).length!==1||
+       shadowOutcomes[0].event.id!==shadowOutcomes[1].event.id)
+      fail('CROSS_TAB_SHADOW_DEDUPE_FAILED');
+    let shadowPersisted=await store.listShadowEvents({scope_id:shadowInput.scope_id});
+    if(shadowPersisted.length!==1||
+       shadowPersisted[0].id!==shadowOutcomes[0].event.id)
+      fail('CROSS_TAB_SHADOW_RECEIPT_NOT_DURABLE');
+    const shadowDifferent={...shadowInput,comparison:{status:'NOT_COMPARABLE'},
+      comparison_status:'NOT_COMPARABLE'};
+    const appended=await workers[1].KTS_SETTLEMENT_STORE.saveShadowEvent(shadowDifferent);
+    if(appended.changed!==true||appended.previous.id!==shadowOutcomes[0].event.id)
+      fail('SHADOW_DIFFERENT_EVIDENCE_NOT_APPENDED');
+    let duplicateIdRejected=false;
+    try {
+      await workers[0].KTS_SETTLEMENT_STORE.saveShadowEvent({
+        ...shadowInput,id:shadowOutcomes[0].event.id,comparison:{status:'MISMATCH'},
+        comparison_status:'MISMATCH'
+      });
+    } catch (_) {duplicateIdRejected=true;}
+    shadowPersisted=await store.listShadowEvents({scope_id:shadowInput.scope_id});
+    if(!duplicateIdRejected||shadowPersisted.length!==2||
+       shadowPersisted[0].id!==shadowOutcomes[0].event.id||
+       shadowPersisted[1].id!==appended.event.id)
+      fail('SHADOW_RECEIPT_ID_OVERWRITE_NOT_REJECTED');
     const options={from_date:'2026-09-22',to_date:'2026-09-22',required_observation_days:1};
     const blocked={qualification_state:'BLOCKED_SHADOW_QUALIFICATION',
       ready_for_production_review:false,blockers:['ACCEPTANCE_SYNTHETIC_BLOCKED'],
@@ -228,6 +263,8 @@
       'QUALIFICATION_CORRUPT_METADATA_UNVERIFIABLE=PASS',
       'QUALIFICATION_CORRUPT_METADATA_APPEND_REFUSED=PASS',
       'QUALIFICATION_APPEND_DIAGNOSTIC_PRESERVED=PASS',
+      'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
+      'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
     ].join('\n');
   }catch(error){
