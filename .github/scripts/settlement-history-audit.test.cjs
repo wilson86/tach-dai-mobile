@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.227-import-recalc-outcome-gate'));
+  assert.ok(sw.includes('v1.0.228-import-atomic-source-snapshot'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2266,4 +2266,20 @@ test('import recalculation rejects null and superseded outcomes without monetary
     await assert.rejects(fn({stores:{messages:[message]}}),/IMPORT_RECALC_SCOPE_NOT_COMMITTED/);
     assert.equal(writes(),0);
   }
+});
+
+test('import preflight is one consistent snapshot and any cross-tab source drift aborts transaction',()=>{
+  const src=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
+  const start=src.indexOf('  async function importAll(');
+  const end=src.indexOf('  global.KTS_SETTLEMENT_STORE',start);
+  const fn=src.slice(start,end);
+  assert.ok(fn.includes('const sourceSnapshot = (await exportAll()).stores'));
+  assert.ok(fn.includes('const evidenceSnapshot=sourceSnapshot[STORES.metadata]'));
+  assert.ok(fn.includes('const shadowSnapshot=sourceSnapshot[STORES.shadowEvents]'));
+  assert.ok(fn.includes('const resultEventSnapshot=sourceSnapshot[STORES.resultEvents]'));
+  assert.ok(fn.includes('const req=tx.objectStore(name).getAll()'));
+  assert.ok(fn.includes('IMPORT_SOURCE_CHANGED_DURING_IMPORT:'));
+  assert.ok(fn.indexOf('const req=tx.objectStore(name).getAll()')<
+    fn.indexOf('if (replace) {\n          store.clear()'));
+  assert.ok(!fn.includes('await getAll(name)'));
 });
