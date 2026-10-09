@@ -855,6 +855,107 @@
       });
     }
 
+    // Imported financial evidence is NOT ordinary mergeable metadata. The
+    // old merge path silently skipped same-key rows, including a different
+    // operator-confirmed HIOSKT oracle or a different READY history.
+    const protectedKeys=[
+      'qualification_history_v1',
+      'shadow_regression_cases_v1',
+      'shadow_regression_candidates_v1'
+    ];
+    const priorMeta=new Map((replace?[]:(existing[STORES.metadata]||[]))
+      .map(row=>[String(row&&row.key||''),row]));
+    const importedMeta=new Map(incoming[STORES.metadata]
+      .map(row=>[String(row.key),row]));
+    for(const key of protectedKeys){
+      const row=importedMeta.get(key);
+      if(!row)continue;
+      const prior=priorMeta.get(key);
+      if(prior&&stableStringify(prior)!==stableStringify(row))
+        throw new Error('IMPORT_PROTECTED_EVIDENCE_COLLISION:'+key);
+      if(row.version!==1)
+        throw new Error('IMPORT_PROTECTED_EVIDENCE_VERSION_INVALID:'+key);
+      if(key==='qualification_history_v1'){
+        const history=global.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
+        if(!history||typeof history.validateJournalRow!=='function'||
+           typeof history.validateHistoryEvents!=='function')
+          throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:'+key);
+        const shape=history.validateJournalRow(row);
+        const events=shape.valid?history.validateHistoryEvents(row.events):shape;
+        if(!events.valid)
+          throw new Error('IMPORT_QUALIFICATION_EVIDENCE_INVALID:'+events.reason);
+        continue;
+      }
+      const golden=global.KTS_SETTLEMENT_REGRESSION_CASES;
+      if(!golden||typeof golden.normalizeCase!=='function')
+        throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:'+key);
+      if(key==='shadow_regression_cases_v1'){
+        if(!Array.isArray(row.cases))throw new Error('IMPORT_GOLDEN_NOT_ARRAY');
+        const ids=new Set(),events=new Set();
+        for(const source of row.cases){
+          const checked=golden.normalizeCase(source);
+          if(ids.has(checked.id))throw new Error('IMPORT_GOLDEN_DUPLICATE_ID');
+          ids.add(checked.id);
+          if(checked.source_event_id){
+            if(events.has(checked.source_event_id))
+              throw new Error('IMPORT_GOLDEN_DUPLICATE_SOURCE');
+            events.add(checked.source_event_id);
+          }
+        }
+      }else{
+        const candidates=global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+        if(!candidates||typeof candidates.normalizeCandidate!=='function')
+          throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:'+key);
+        if(!Array.isArray(row.candidates))
+          throw new Error('IMPORT_CANDIDATES_NOT_ARRAY');
+        const ids=new Set(),events=new Set();
+        for(const source of row.candidates){
+          const c=candidates.normalizeCandidate(source);
+          if(c.id!=='candidate:'+c.source_event_id)
+            throw new Error('IMPORT_CANDIDATE_SOURCE_ID_MISMATCH');
+          if(c.case.source_event_id!=null&&
+             String(c.case.source_event_id)!==c.source_event_id)
+            throw new Error('IMPORT_CANDIDATE_CASE_SOURCE_MISMATCH');
+          golden.normalizeCase(c.case);
+          if(ids.has(c.id)||events.has(c.source_event_id))
+            throw new Error('IMPORT_CANDIDATE_DUPLICATE_SOURCE');
+          ids.add(c.id);events.add(c.source_event_id);
+          const date=value=>typeof value==='string'&&
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)&&
+            Number.isFinite(Date.parse(value));
+          if(c.state==='promoted'&&
+             (!date(c.promoted_at)||!c.confirmation_note.trim()||c.dismissed_at!=null))
+            throw new Error('IMPORT_CANDIDATE_PROMOTION_RECEIPT_MISSING');
+          if(c.state==='dismissed'&&
+             (!date(c.dismissed_at)||!c.dismiss_reason.trim()||c.promoted_at!=null))
+            throw new Error('IMPORT_CANDIDATE_DISMISS_RECEIPT_MISSING');
+        }
+      }
+    }
+    // Cross-check the *effective* metadata after merging; a promoted
+    // candidate may never be restored without its exact confirmed golden.
+    const candidateRow=importedMeta.get('shadow_regression_candidates_v1')||
+      priorMeta.get('shadow_regression_candidates_v1');
+    const goldenRow=importedMeta.get('shadow_regression_cases_v1')||
+      priorMeta.get('shadow_regression_cases_v1');
+    if(candidateRow&&(importedMeta.has('shadow_regression_candidates_v1')||
+       importedMeta.has('shadow_regression_cases_v1'))){
+      const golden=global.KTS_SETTLEMENT_REGRESSION_CASES;
+      if(!golden||typeof golden.normalizeCase!=='function')
+        throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:golden');
+      const cases=goldenRow&&Array.isArray(goldenRow.cases)?goldenRow.cases:[];
+      const claimed=new Set();
+      for(const source of candidateRow.candidates||[]){
+        if(String(source&&source.state||'').toLowerCase()!=='promoted')continue;
+        const c=golden.normalizeCase(source.case);
+        const actual=cases.filter(g=>g&&g.id===c.id);
+        if(actual.length!==1||stableStringify(actual[0])!==stableStringify(c))
+          throw new Error('IMPORT_PROMOTED_GOLDEN_LINK_INVALID');
+        if(claimed.has(c.id))throw new Error('IMPORT_GOLDEN_CLAIM_DUPLICATE');
+        claimed.add(c.id);
+      }
+    }
+
     const incomingPartners = incoming[STORES.partners];
     const existingPartners = replace ? [] : (existing[STORES.partners] || []);
     const partnerIds = new Set([...existingPartners, ...incomingPartners].map(row => String(row && row.id || '')).filter(Boolean));

@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.215-atomic-backup-snapshot'));
+  assert.ok(source.includes('v1.0.216-protected-backup-import'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1840,4 +1840,47 @@ test('backup export must snapshot all IndexedDB stores in one readonly transacti
   assert.ok(exportBody.includes("await txDone(tx)"));
   assert.ok(exportBody.includes('EXPORT_ATOMIC_SNAPSHOT_INCOMPLETE'));
   assert.ok(!exportBody.includes('await getAll(name)'));
+});
+
+test('private HIOSKT golden and qualification evidence backup has strict import preflight',()=>{
+ const context={window:{}};
+ for(const filename of ['settlement-store.js','settlement-regression-cases.js',
+   'settlement-regression-candidates.js','settlement-qualification-history.js']){
+   vm.runInNewContext(readFileSync(resolve(root,'app',filename),'utf8'),context,{filename});
+ }
+ const api=context.window,store=api.KTS_SETTLEMENT_STORE;
+ const gold=api.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase({
+   id:'regression:synthetic-case',source_event_id:'synthetic-event',
+   scope:{partner_id:'synthetic',business_date:'2026-09-22',region:'mn'},
+   partner_role:'customer',config_snapshot:{},lottery_result_snapshot:{},
+   messages:[{id:'synthetic-message',canonical_payload:{}}],
+   expected_reference:{totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}},
+   pinned_at:'2026-09-22T12:00:00.000Z'
+ });
+ const candidate=api.KTS_SETTLEMENT_REGRESSION_CANDIDATES.normalizeCandidate({
+   id:'candidate:synthetic-event',source_event_id:'synthetic-event',
+   state:'promoted',case:gold,promoted_at:'2026-09-22T12:01:00.000Z',
+   confirmation_note:'SYNTHETIC_OPERATOR_CONFIRMATION'
+ });
+ const goldenRow={key:'shadow_regression_cases_v1',version:1,cases:[gold]};
+ const candidateRow={key:'shadow_regression_candidates_v1',version:1,candidates:[candidate]};
+ const input=(metadata)=>({format:'kts-settlement-export',version:5,
+   stores:{metadata}});
+ assert.equal(store.validateImportPayload(input([goldenRow,candidateRow]),{},{}).valid,true);
+ assert.throws(()=>store.validateImportPayload(input([goldenRow,candidateRow]),{
+   metadata:[{...goldenRow,updated_at:'original-local-version'}]},{}),
+   /IMPORT_PROTECTED_EVIDENCE_COLLISION/);
+ assert.throws(()=>store.validateImportPayload(input([{...goldenRow,cases:[gold,gold]}]),{},{}),
+   /IMPORT_GOLDEN_DUPLICATE_ID/);
+ assert.throws(()=>store.validateImportPayload(input([candidateRow]),{},{}),
+   /IMPORT_PROMOTED_GOLDEN_LINK_INVALID/);
+ assert.throws(()=>store.validateImportPayload(input([goldenRow,{
+   ...candidateRow,candidates:[{...candidate,promoted_at:null}]}]),{},{}),
+   /IMPORT_CANDIDATE_PROMOTION_RECEIPT_MISSING/);
+ assert.throws(()=>store.validateImportPayload(input([goldenRow,{
+   ...candidateRow,candidates:[{...candidate,id:'candidate:tampered'}]}]),{},{}),
+   /IMPORT_CANDIDATE_SOURCE_ID_MISMATCH/);
+ assert.throws(()=>store.validateImportPayload(input([{
+   key:'qualification_history_v1',version:1,events:[{id:'synthetic-forged'}]}]),{},{}),
+   /IMPORT_QUALIFICATION_EVIDENCE_INVALID/);
 });
