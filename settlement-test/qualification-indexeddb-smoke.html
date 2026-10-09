@@ -820,6 +820,14 @@
     // existing Shadow receipts must still be rejected before clearing stores.
     const protectedKeys=new Set(['qualification_history_v1',
       'shadow_regression_cases_v1','shadow_regression_candidates_v1']);
+    // The earlier corruption test deliberately leaves a malformed journal
+    // in this disposable profile. Isolate the Shadow replace guard with a
+    // valid synthetic EMPTY journal, then restore the exact prior fixture.
+    const originalJournal=await store.get(
+      store.STORES.metadata,'qualification_history_v1');
+    await putSynthetic(store.STORES.metadata,{
+      key:'qualification_history_v1',version:1,events:[]
+    });
     const protectedRows=(await store.getAll(store.STORES.metadata))
       .filter(row=>protectedKeys.has(row.key));
     const initialShadowReceipt=await store.get(
@@ -841,6 +849,8 @@
        JSON.stringify(initialShadowReceipt))
       fail('REPLACE_SHADOW_SOURCE_RECEIPT_ERASED_OR_NOT_GUARDED:'+
        shadowReplaceReason+':receipt_present='+Boolean(initialShadowReceipt));
+    if(originalJournal)await putSynthetic(store.STORES.metadata,originalJournal);
+    else await store.remove(store.STORES.metadata,'qualification_history_v1');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
