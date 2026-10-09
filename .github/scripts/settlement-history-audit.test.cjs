@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.186-incomplete-monetary-evidence'));
+  assert.ok(sw.includes('v1.0.188-category-validation-fix'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1536,4 +1536,28 @@ test('HIOSKT shadow status cannot claim MATCH_EXACT with missing monetary field 
   assert.equal(valid.status,'MATCH_EXACT');
   assert.equal(valid.missing_monetary_evidence,false);
   assert.equal(valid.safe_to_promote,true);
+});
+
+test('two wrong exact category rows cannot cancel and fake matching aggregate money',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:100,exact:{xac:'0'}},{code:'B',xac:0,exact:{xac:'100'}}]};
+  const oracle={totals,categories:[{code:'B',xac:100,exact:{xac:'100'}}]};
+  const invalid=compare(local,oracle);
+  assert.equal(invalid.safe_to_promote,false,'WRONG_PER_ROW_EXACT_CANCELLED_OUT');
+  assert.equal(invalid.invalid_category_evidence,true);
+  assert.equal(invalid.status,'INCOMPLETE_REFERENCE');
+  const copy=x=>JSON.parse(JSON.stringify(x));
+  const orphan=copy(local);orphan.category_rows=[{code:'B',exact:{xac:'0'},payout:0}];
+  assert.equal(compare(orphan,{totals,categories:[{code:'B',payout:0}]}).safe_to_promote,false,
+    'ORPHAN_EXACT_WITHOUT_VISIBLE_FIELD_MUST_BLOCK');
+  const rounded=copy(local);rounded.category_rows=[
+    {code:'B',xac:0.1,exact:{xac:'0.14'}}
+  ];
+  const roundedRef={totals,categories:[{code:'B',xac:0.1,exact:{xac:'0.14'}}]};
+  assert.equal(compare(rounded,roundedRef,{display_digits:1}).safe_to_promote,true,
+    'LEGITIMATELY_ROUNDED_ROWS_MUST_REMAIN_SUPPORTED');
 });

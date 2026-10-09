@@ -165,7 +165,8 @@
   // Category rows are optional, but an explicitly provided malformed money
   // field is not. Previously rowsByCode silently turned false/null/blank into
   // zero, which allowed a false exact shadow pass when the totals matched.
-  function categoryEvidenceValid(rows) {
+  function categoryEvidenceValid(rows, options) {
+    const digits = Number(!options || options.display_digits == null ? 1 : options.display_digits);
     if (!Array.isArray(rows)) return true;
     const fields=['xac','qua_co','hit_units','payout'];
     for (const row of rows) {
@@ -178,8 +179,16 @@
         if (Object.prototype.hasOwnProperty.call(row,field) && numeric(row[field])===null)
           return false;
         if (row.exact && Object.prototype.hasOwnProperty.call(row.exact,field)) {
-          try { decimalCanonical(row.exact[field]); }
-          catch (_) { return false; }
+          // Validate EACH supplied source row before aggregation. Opposite
+          // inconsistencies in two rows of the same category can cancel out
+          // and make the aggregate appear exact even though both were corrupt.
+          if (!Object.prototype.hasOwnProperty.call(row,field)) return false;
+          try {
+            const exact=decimalCanonical(row.exact[field]);
+            const displayed=numeric(row[field]);
+            if (displayed===null || roundDisplay(Number(exact),digits)!==roundDisplay(displayed,digits))
+              return false;
+          } catch (_) { return false; }
         }
       }
     }
@@ -254,7 +263,7 @@
 
     const localRows = localSettlement && Array.isArray(localSettlement.category_rows) ? localSettlement.category_rows : local.rows;
     const referenceRows = referenceSnapshot && (referenceSnapshot.categories || referenceSnapshot.category_rows);
-    const categoryEvidenceOkay=categoryEvidenceValid(localRows)&&categoryEvidenceValid(referenceRows);
+    const categoryEvidenceOkay=categoryEvidenceValid(localRows,options)&&categoryEvidenceValid(referenceRows,options);
     const aliasEvidenceOkay=referenceAliasesValid(reference);
     // An explicitly supplied HIOSKT category without any monetary fields
     // proves nothing. A referenced category absent from local results cannot
@@ -352,7 +361,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v14-missing-evidence-status',
+    version: 'settlement-shadow-v15-per-row-exact-consistency',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
