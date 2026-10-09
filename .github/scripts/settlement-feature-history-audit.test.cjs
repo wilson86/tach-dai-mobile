@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.200-shadow-event-atomic'));
+  assert.ok(source.includes('v1.0.201-scope-atomic-commit'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -592,6 +592,14 @@ test('scope commit refuses content mutations even when IDs and timestamps remain
     get:async(name)=>copy(name==='results'?storeState.result:storeState.partner),
     resolveConfigForDate:async()=>copy(storeState.config),
     saveSettlement:async settlement=>{written.push(settlement);return settlement;}
+    saveSettlementIfScopeUnchanged:async(settlement,expected)=>{
+      assert.equal(expected.messages[0].id,'msg1');
+      assert.equal(expected.config.partner_id,'synthetic');
+      assert.equal(expected.result.business_date,'2026-09-22');
+      assert.equal(expected.partner.id,'synthetic');
+      written.push(settlement);
+      return {saved:settlement,superseded:false};
+    },
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({
     category_inputs:[{code:'2CB',xac:1,commission_value:0.75,commission_type:'ratio',
@@ -1235,6 +1243,21 @@ test('settlement store CAS serializes snapshot check and write in a readwrite tr
   assert.equal(state.settlement_result.final_net,20);
   assert.equal(writes,1);
   assert.ok(transactionTypes.every(([store,mode])=>store==='settlements'&&mode==='readwrite'));
+});
+
+test('monetary settlement requires atomic multi-store commit rather than blind put',()=> {
+  const pipeline=readFileSync(resolve(root,'app','settlement-pipeline.js'),'utf8');
+  const store=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+  assert.ok(pipeline.includes('saveSettlementIfScopeUnchanged({'));
+  assert.ok(pipeline.includes('settlement:previousSettlement'));
+  assert.ok(pipeline.includes('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED'));
+  assert.ok(!pipeline.includes('for (const message of latestMessages)'));
+  assert.ok(store.includes('async function saveSettlementIfScopeUnchanged('));
+  for(const table of ['STORES.messages','STORES.configs','STORES.results','STORES.partners','STORES.settlements'])
+    assert.ok(store.includes(table),'MISSING_TX_STORE:'+table);
+  assert.ok(store.includes("messages.index('by_partner_date').getAll("));
+  assert.ok(store.includes("tx.objectStore(STORES.configs).index('by_partner').getAll("));
+  assert.ok(store.includes("settlementBucket.put(clone(v))"));
 });
 
 test('malformed exact metadata shapes cannot hide missing monetary evidence',()=>{
