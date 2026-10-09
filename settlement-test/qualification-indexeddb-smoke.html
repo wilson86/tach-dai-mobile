@@ -582,6 +582,32 @@
     await putSynthetic(store.STORES.metadata,cleanCandidateRow);
     if((await candApi.listCandidates()).length!==cleanCandidateRow.candidates.length)
       fail('DUPLICATE_CANDIDATE_RECOVERY_NOT_REPRODUCIBLE');
+
+    // Synthetic imported golden records with duplicate IDs or two IDs from
+    // the same shadow event must fail closed and preserve the source row.
+    const cleanGolden=await store.get(store.STORES.metadata,corruptGolden.key);
+    const baseGolden=cleanGolden.cases[0];
+    if(!baseGolden)fail('GOLDEN_DUPLICATE_FIXTURE_MISSING');
+    for(const [corruption,code] of [
+      [{...cleanGolden,cases:cleanGolden.cases.concat([
+        JSON.parse(JSON.stringify(baseGolden))])},'REGRESSION_GOLDEN_DUPLICATE_ID'],
+      [{...cleanGolden,cases:cleanGolden.cases.concat([
+        {...baseGolden,id:'synthetic-other-id',source_event_id:'evt-identical'},
+        {...baseGolden,id:'synthetic-another-id',source_event_id:'evt-identical'}
+      ])},'REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT']
+    ]){
+      await putSynthetic(store.STORES.metadata,corruption);
+      let blocked=false;
+      try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();}
+      catch(error){blocked=String(error&&error.message||error).includes(code);}
+      if(!blocked)fail('DUPLICATE_GOLDEN_NOT_BLOCKED:'+code);
+      const untouched=await store.get(store.STORES.metadata,corruptGolden.key);
+      if(JSON.stringify(untouched)!==JSON.stringify(corruption))
+        fail('GOLDEN_CORRUPTION_WAS_SILENTLY_REWRITTEN');
+    }
+    await putSynthetic(store.STORES.metadata,cleanGolden);
+    if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases()).length!==cleanGolden.cases.length)
+      fail('GOLDEN_CORRUPT_IMPORT_RECOVERY_INVALID');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -612,6 +638,8 @@
        'GOLDEN_SOURCE_ID_IMMUTABLE=PASS',
        'PROMOTED_LINKED_GOLDEN_DELETE_REFUSED=PASS',
        'DUPLICATE_HIOSKT_CANDIDATE_REJECTED=PASS',
+       'DUPLICATE_GOLDEN_ID_FAIL_CLOSED=PASS',
+       'DUPLICATE_GOLDEN_SOURCE_FAIL_CLOSED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

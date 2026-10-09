@@ -154,8 +154,7 @@
     const store = global.KTS_SETTLEMENT_STORE;
     if (!store || !store.STORES || !store.STORES.metadata || typeof store.get !== 'function') throw new Error('REGRESSION_STORE_UNAVAILABLE');
     const row = await store.get(store.STORES.metadata, META_KEY);
-    if(row!=null&&(row.key!==META_KEY||row.version!==1||!Array.isArray(row.cases)))
-      throw new Error('REGRESSION_METADATA_CORRUPTED');
+    existingCases(row);
     return row || { key: META_KEY, version: 1, cases: [] };
   }
 
@@ -170,6 +169,20 @@
     if(row==null)return [];
     if(row.key!==META_KEY||row.version!==1||!Array.isArray(row.cases))
       throw new Error('REGRESSION_METADATA_CORRUPTED');
+    // A backup or damaged local database can contain conflicting identities.
+    // Never count duplicated golden evidence as independent verification.
+    const ids=new Set(),events=new Set();
+    for(const item of row.cases){
+      const normalized=normalizeCase(item);
+      if(ids.has(normalized.id))
+        throw new Error('REGRESSION_GOLDEN_DUPLICATE_ID');
+      ids.add(normalized.id);
+      if(normalized.source_event_id){
+        if(events.has(normalized.source_event_id))
+          throw new Error('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT');
+        events.add(normalized.source_event_id);
+      }
+    }
     return row.cases;
   }
 
