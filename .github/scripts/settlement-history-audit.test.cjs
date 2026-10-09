@@ -1803,3 +1803,69 @@ test('real IndexedDB browser smoke embedded scripts parse before Chrome startup'
       filename:'qualification-indexeddb-smoke.html#inline-'+i
     }), 'INVALID_BROWSER_INLINE_SCRIPT_'+i);
 });
+
+
+const evidenceGate=require('./settlement-real-evidence-gate.cjs');
+function syntheticEvidence(count=65){
+  return {format:evidenceGate.FORMAT,feature_head:'a'.repeat(40),
+    cases:Array.from({length:count},(_,i)=>({
+      case_id:'SYNTHETIC-'+i,
+      scope:{partner_id:'synthetic-partner',business_date:'2026-09-22',region:'mn'},
+      kts:{source_sha256:'b'.repeat(64),source_ref:'SYNTHETIC_KTS',
+        totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}},
+      hioskt:{source_sha256:'c'.repeat(64),source_ref:'SYNTHETIC_NOT_A_REAL_HIOSKT_ORACLE',
+        totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}},
+      mapping:{method:'operator_verified',review_ref:'SYNTHETIC_ONLY'}
+    }))}
+}
+test('real HIOSKT gate cannot convert missing data or 14 local checks into monetary zero',()=>{
+  const result=evidenceGate.auditEvidence(null,{expectedHead:'a'.repeat(40)});
+  assert.equal(result.monetary_mismatch_count,'NOT_COMPARABLE');
+  assert.equal(result.real_history_65_status,'BLOCKED');
+  assert.equal(result.hioskt_oracle_status,'BLOCKED_INDEPENDENT_VERIFICATION_REQUIRED');
+  assert.equal(result.release_readiness,'BLOCKED');
+  assert.ok(result.problems.includes('REAL_HISTORY_65_MANIFEST_INCOMPLETE'));
+});
+test('even complete SYNTHETIC 65 rows never qualify independent money or production',()=>{
+  const result=evidenceGate.auditEvidence(syntheticEvidence(),{expectedHead:'a'.repeat(40)});
+  assert.equal(result.case_count,65);
+  assert.equal(result.structure,'COMPLETE_BUT_UNAUTHENTICATED');
+  assert.equal(result.candidate_difference_cases,0);
+  assert.equal(result.monetary_mismatch_count,'NOT_COMPARABLE');
+  assert.equal(result.release_readiness,'BLOCKED');
+});
+test('real evidence gate flags duplicate history cases, absent oracle and stale feature HEAD',()=>{
+  const fixture=syntheticEvidence();
+  fixture.cases[1].case_id=fixture.cases[0].case_id;
+  fixture.cases[2].hioskt.totals.final=null;
+  const result=evidenceGate.auditEvidence(fixture,{expectedHead:'d'.repeat(40)});
+  assert.equal(result.structure,'INCOMPLETE');
+  assert.equal(result.candidate_difference_cases,null);
+  assert.equal(result.monetary_mismatch_count,'NOT_COMPARABLE');
+  assert.ok(result.problems.includes('CASE_1_DUPLICATE_ID'));
+  assert.ok(result.problems.includes('CASE_2_MONEY_MISSING_OR_INVALID_final'));
+  assert.ok(result.problems.includes('FEATURE_HEAD_DIFFERS_FROM_GITHUB'));
+});
+test('HIOSKT exact comparison uses decimal strings, not IEEE-754 numeric approximation',()=>{
+  const norm=evidenceGate.exactDecimal;
+  assert.equal(norm('9007199254740993.000'),'9007199254740993');
+  assert.equal(norm('-0.000'),'0');
+  assert.equal(norm('0.1000'),'0.1');
+  for(const invalid of [0,false,null,[],{},'',' ','0x10','1,000','1e4'])
+    assert.equal(norm(invalid),null,String(invalid));
+  const fixture=syntheticEvidence();
+  fixture.cases[0].kts.totals.final='9007199254740993';
+  fixture.cases[0].hioskt.totals.final='9007199254740992';
+  const result=evidenceGate.auditEvidence(fixture,{expectedHead:'a'.repeat(40)});
+  assert.equal(result.candidate_difference_cases,1);
+  assert.equal(result.monetary_mismatch_count,'NOT_COMPARABLE');
+});
+test('oracle source independence cannot be asserted with identical source digests',()=>{
+  const fixture=syntheticEvidence();
+  fixture.cases[0].hioskt.source_sha256=fixture.cases[0].kts.source_sha256;
+  fixture.cases[1].mapping.method='inferred';
+  const result=evidenceGate.auditEvidence(fixture,{expectedHead:'a'.repeat(40)});
+  assert.ok(result.problems.includes('CASE_0_SOURCE_INDEPENDENCE_NOT_ESTABLISHED'));
+  assert.ok(result.problems.includes('CASE_1_MAPPING_UNCONFIRMED'));
+  assert.equal(result.release_readiness,'BLOCKED');
+});
