@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.194-preserve-total-aliases'));
+  assert.ok(source.includes('v1.0.196-source-decimal-category'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1532,4 +1532,22 @@ test('HIOSKT normalization keeps all money aliases and rejects nested or root co
   assert.equal(ctx.window.KTS_SETTLEMENT_SHADOW.decimalCanonical(exact.totals.exact.total_xac),'0');
   assert.equal(compare(local,exact).safe_to_promote,true);
   assert.throws(()=>normalize({totals:[]}),/HIOSKT_TOTALS_INVALID/);
+});
+
+test('category aggregation preserves input exact strings beyond IEEE-754 precision',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:9007199254740992}]};
+  const reference={totals,categories:[{code:'B',xac:'9007199254740993'}]};
+  const diff=compare(local,reference);
+  assert.equal(diff.safe_to_promote,false,'ROUNDED_BIG_INTEGER_PROMOTED');
+  assert.equal(diff.categories[0].fields.xac.status,'MISMATCH');
+  assert.equal(diff.categories[0].fields.xac.reference_exact,'9007199254740993');
+  const longDecimal=compare({...local,category_rows:[{code:'B',payout:0.1}]},
+    {totals,categories:[{code:'B',payout:'0.10000000000000001'}]});
+  assert.equal(longDecimal.safe_to_promote,false,'LONG_DECIMAL_PREMATURELY_ROUNDED');
+  assert.equal(compare({...local,category_rows:[{code:'B',xac:'9007199254740993'}]},reference).safe_to_promote,true);
 });
