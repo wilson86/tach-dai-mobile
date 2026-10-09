@@ -1185,8 +1185,13 @@
 
   async function importAll(payload, options) {
     const replace = Boolean(options && options.replace);
+    // Source rows must be captured in ONE readonly IndexedDB snapshot.
+    // Sequential getAll calls across transactions permit a cross-tab write
+    // to produce a hybrid preflight that never existed at one instant.
+    const sourceSnapshot = (await exportAll()).stores;
     const existing = {};
-    for (const name of Object.values(STORES)) existing[name] = replace ? [] : await getAll(name);
+    for (const name of Object.values(STORES))
+      existing[name] = replace ? [] : sourceSnapshot[name];
     const validation = validateImportPayload(payload, existing, { replace });
     // replace:true is not a license to erase a confirmed HIOSKT golden,
     // operator decision, or immutable qualification journal. This is an API
@@ -1196,12 +1201,9 @@
       'shadow_regression_cases_v1',
       'shadow_regression_candidates_v1'
     ];
-    const evidenceSnapshot=replace?await getAll(STORES.metadata):
-      existing[STORES.metadata]||[];
-    const shadowSnapshot=replace?await getAll(STORES.shadowEvents):
-      existing[STORES.shadowEvents]||[];
-    const resultEventSnapshot=replace?await getAll(STORES.resultEvents):
-      existing[STORES.resultEvents]||[];
+    const evidenceSnapshot=sourceSnapshot[STORES.metadata]||[];
+    const shadowSnapshot=sourceSnapshot[STORES.shadowEvents]||[];
+    const resultEventSnapshot=sourceSnapshot[STORES.resultEvents]||[];
     if(replace){
       const persisted=new Map(evidenceSnapshot.map(row=>[String(row&&row.key||''),row]));
       const incoming=new Map(((payload.stores&&payload.stores[STORES.metadata])||[])
@@ -1245,6 +1247,23 @@
       // candidate, pinned golden or READY journal remained unchanged while
       // another browser tab was writing to the same IndexedDB database.
       let evidenceRace=null;
+      // Protect ALL preflight dependencies, not only overlapping monetary
+      // IDs or the three protected metadata keys. A concurrent new message,
+      // config, draw or receipt must NEVER turn a validated import into an
+      // inconsistent merge or disappear under replace:true store.clear().
+      // Queue every read before mutations; abort rolls back the ENTIRE tx.
+      for (const name of names) {
+        const req=tx.objectStore(name).getAll();
+        req.onsuccess=()=>{
+          try {
+            if(stableStringify(req.result||[])!==stableStringify(sourceSnapshot[name]||[]))
+              throw new Error('IMPORT_SOURCE_CHANGED_DURING_IMPORT:'+name);
+          } catch(error) {
+            evidenceRace=error;
+            try{tx.abort();}catch(_){/* already aborted */ }
+          }
+        };
+      }
       // The same cross-tab CAS also protects a replace import; an earlier
       // snapshot may have changed while any ordinary store was being read.
       {
