@@ -545,6 +545,88 @@
     } finally {db.close();}
   }
 
+  // Monetary settlement + message statuses must commit only when every
+  // input observed by the evaluator still matches in ONE IndexedDB transaction.
+  // This closes the cross-tab gap between pipeline's read/recheck and write.
+  // Reads and writes span the SAME five object stores; no async awaits occur
+  // inside onsuccess handlers, preserving transaction activity.
+  async function saveSettlementIfScopeUnchanged(input, expected) {
+    const v=normalizeSettlement(input);
+    const scope=`scope:${v.partner_id}:${v.business_date}:${String(v.region||'').toLowerCase()}`;
+    if (v.id!==scope || !['mn','mt','mb'].includes(String(v.region||'')) ||
+        !['complete_unverified','provisional'].includes(v.scope_status))
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_INVALID');
+    if (!expected || !Array.isArray(expected.messages) ||
+        !Object.prototype.hasOwnProperty.call(expected,'config') ||
+        !Object.prototype.hasOwnProperty.call(expected,'result') ||
+        !Object.prototype.hasOwnProperty.call(expected,'partner') ||
+        !Object.prototype.hasOwnProperty.call(expected,'settlement') ||
+        !expected.config || !expected.result || !expected.partner)
+      throw new Error('SETTLEMENT_ATOMIC_EVIDENCE_REQUIRED');
+    const db=await openDb();
+    try {
+      const tx=db.transaction(
+        [STORES.messages,STORES.configs,STORES.results,STORES.partners,STORES.settlements],
+        'readwrite');
+      const messages=tx.objectStore(STORES.messages);
+      const settlementBucket=tx.objectStore(STORES.settlements);
+      const requests=[
+        messages.index('by_partner_date').getAll([v.partner_id,v.business_date]),
+        tx.objectStore(STORES.configs).index('by_partner').getAll(v.partner_id),
+        tx.objectStore(STORES.results).get(`${v.business_date}:${v.region}`),
+        tx.objectStore(STORES.partners).get(v.partner_id),
+        settlementBucket.get(v.id)
+      ];
+      const rows=new Array(requests.length);
+      let completed=0,outcome=null;
+      requests.forEach((request,index)=>{
+        request.onsuccess=()=>{
+          rows[index]=request.result;
+          completed++;
+          if(completed!==requests.length)return;
+          const liveMessages=(rows[0]||[])
+            .filter(x=>String(x.region||'').toLowerCase()===v.region &&
+              String(x.status||'').toLowerCase()!=='cancelled')
+            .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+          const seenMessages=expected.messages.slice()
+            .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+          let liveConfig=null;
+          try {
+            liveConfig=resolveConfigFromRows(rows[1]||[],v.partner_id,v.business_date);
+          } catch (_) { /* Missing/invalid config cannot authorize money. */ }
+          const same=(a,b)=>stableStringify(a==null?null:a)===
+            stableStringify(b==null?null:b);
+          if(!same(liveMessages,seenMessages) ||
+              !same(liveConfig,expected.config) ||
+              !same(rows[2],expected.result) ||
+              !same(rows[3],expected.partner) ||
+              !same(rows[4],expected.settlement)) {
+            outcome={saved:null,superseded:true};
+            return;
+          }
+          // Keep each message's settled status and monetary result in the
+          // same atomic transaction; never mutate a newer edited bet afterward.
+          const status=v.scope_status==='complete_unverified'
+            ? 'settled_unverified':'settled_provisional';
+          const timestamp=nowIso();
+          for(const message of liveMessages) {
+            const currentConfig=message.config_snapshot||liveConfig;
+            if(currentConfig && String(currentConfig.partner_id||'')!==String(v.partner_id))
+              throw new Error('MESSAGE_CONFIG_PARTNER_MISMATCH');
+            messages.put(Object.assign({},message,{
+              status,config_snapshot:clone(currentConfig),updated_at:timestamp
+            }));
+          }
+          settlementBucket.put(clone(v));
+          outcome={saved:v,superseded:false};
+        };
+      });
+      await txDone(tx);
+      if(!outcome)throw new Error('SETTLEMENT_ATOMIC_COMMIT_FAILED');
+      return outcome;
+    } finally {db.close();}
+  }
+
   function resultSnapshotIsOlder(candidate, previous) {
     if (!candidate || !previous) return false;
     const candidateMs = Date.parse(String(candidate.fetched_at || ''));
@@ -876,7 +958,7 @@
   global.KTS_SETTLEMENT_STORE = Object.freeze({
     DB_NAME, DB_VERSION, STORES, openDb,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
-    saveMessage, saveSettlement, saveSettlementIfUnchanged, saveResultSnapshot, saveShadowEvent, listShadowEvents,
+    saveMessage, saveSettlement, saveSettlementIfUnchanged, saveSettlementIfScopeUnchanged, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
     normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, nextConfigVersionFromRows, validateImportPayload, resultSnapshotIsOlder, stableStringify
   });

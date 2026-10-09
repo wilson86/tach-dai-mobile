@@ -272,10 +272,11 @@
         config_snapshot:config,result_snapshot:resultSnapshot,reason:'NO_PERMITTED_SETTLEMENT_CATEGORY_INPUTS'});
     }
 
-    let settled, partner;
+    let settled, partner, previousSettlement;
     try {
       partner = await d.store.get(d.store.STORES.partners, partnerId);
       if (!partner) throw new Error('PARTNER_NOT_FOUND');
+      previousSettlement = await d.store.get(d.store.STORES.settlements, scopeId(partnerId,businessDate,region));
       settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config, region });
     } catch (e) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages,
@@ -315,7 +316,9 @@
     }
 
     const scopeStatus = resultSnapshot.complete ? 'complete_unverified' : 'provisional';
-    const saved = await d.store.saveSettlement({
+    if(typeof d.store.saveSettlementIfScopeUnchanged!=='function')
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED');
+    const outcome=await d.store.saveSettlementIfScopeUnchanged({
       id: scopeId(partnerId, businessDate, region),
       partner_id: partnerId,
       message_id: null,
@@ -333,18 +336,10 @@
       scope_status: scopeStatus,
       blocked_reasons: [],
       comparison_status: resultSnapshot.complete ? 'unverified' : 'provisional'
-    });
-
-    for (const message of latestMessages) {
-      const current = await d.store.get(d.store.STORES.messages, message.id);
-      if (!current || isCancelled(current)) continue;
-      if (messageRevisionSignature([current]) !== messageRevisionSignature([message])) continue;
-      await d.store.saveMessage(Object.assign({}, current, {
-        config_snapshot: current.config_snapshot || config,
-        status: resultSnapshot.complete ? 'settled_unverified' : 'settled_provisional'
-      }));
-    }
-    return { status: scopeStatus, settlement: saved };
+    },{messages,config,result:resultSnapshot,partner,settlement:previousSettlement});
+    if(!outcome || outcome.superseded || !outcome.saved)
+      return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    return { status: scopeStatus, settlement: outcome.saved };
   }
 
   function settleScope(input) {
