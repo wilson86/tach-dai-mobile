@@ -288,7 +288,8 @@
     // is unsafe. Block instead of assigning another message's winnings.
     if (!settled || !Array.isArray(settled.rows) || settled.rows.length !== categoryInputs.length) {
       return saveBlockedScope({partner_id:partnerId,business_date:businessDate,region,messages,
-        config_snapshot:config,result_snapshot:resultSnapshot,reason:'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH'});
+        config_snapshot:config,result_snapshot:resultSnapshot,partner_snapshot:partner,
+        reason:'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH'});
     }
     const breakdown = messageEval.map(item => ({
       message_id: item.message_id,
