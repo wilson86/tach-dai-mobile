@@ -53,6 +53,17 @@
     const ids=new Set(),events=new Set();
     for(const item of row.candidates){
       const normalized=normalizeCandidate(item);
+      const stamp=value=>typeof value==='string'&&
+        /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)&&
+        Number.isFinite(Date.parse(value));
+      if(normalized.state===STATES.PROMOTED&&
+         (!stamp(normalized.promoted_at)||!normalized.confirmation_note.trim()||
+          normalized.dismissed_at!=null))
+        throw new Error('REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING');
+      if(normalized.state===STATES.DISMISSED&&
+         (!stamp(normalized.dismissed_at)||!normalized.dismiss_reason.trim()||
+          normalized.promoted_at!=null))
+        throw new Error('REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING');
       if(normalized.id!=='candidate:'+normalized.source_event_id)
         throw new Error('REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH');
       if(normalized.case.source_event_id!=null&&

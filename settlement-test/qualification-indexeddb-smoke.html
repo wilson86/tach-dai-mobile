@@ -661,6 +661,32 @@
     await putSynthetic(store.STORES.metadata,soundCandidates);
     if((await candApi.listCandidates()).length!==soundCandidates.candidates.length)
       fail('SOURCE_ID_RESTORATION_UNREPRODUCIBLE');
+
+    // A tampered imported terminal state without its operator receipt
+    // must never be accepted as a real HIOSKT confirmation or dismissal.
+    const cleanReceipts=await store.get(store.STORES.metadata,candidateKey);
+    const terminal=(state)=>cleanReceipts.candidates.findIndex(c=>c.state===state);
+    for(const [state,damage,reason] of [
+      ['promoted',c=>{c.promoted_at=null;},'REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING'],
+      ['promoted',c=>{c.confirmation_note=' ';},'REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING'],
+      ['dismissed',c=>{c.dismissed_at=null;},'REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING'],
+      ['dismissed',c=>{c.dismiss_reason=' ';},'REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING']
+    ]){
+      const copy=JSON.parse(JSON.stringify(cleanReceipts));
+      const index=terminal(state);
+      if(index<0)fail('TERMINAL_CANDIDATE_TEST_FIXTURE_MISSING:'+state);
+      damage(copy.candidates[index]);
+      await putSynthetic(store.STORES.metadata,copy);
+      let blocked=false;
+      try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
+      catch(error){blocked=String(error&&error.message||error).includes(reason);}
+      if(!blocked)fail('FORGED_TERMINAL_RECEIPT_ACCEPTED:'+state);
+      if(JSON.stringify(await store.get(store.STORES.metadata,candidateKey))!==JSON.stringify(copy))
+        fail('FORGED_TERMINAL_RECEIPT_REWRITTEN');
+    }
+    await putSynthetic(store.STORES.metadata,cleanReceipts);
+    if((await candApi.listCandidates()).length!==cleanReceipts.candidates.length)
+      fail('TERMINAL_RECEIPT_RESTORATION_FAILED');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -696,6 +722,7 @@
        'SECOND_HIOSKT_GOLDEN_CLAIM_REFUSED=PASS',
        'CANDIDATE_SOURCE_ID_FAIL_CLOSED=PASS',
        'CANDIDATE_CASE_SOURCE_FAIL_CLOSED=PASS',
+       'CANDIDATE_TERMINAL_RECEIPT_FAIL_CLOSED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

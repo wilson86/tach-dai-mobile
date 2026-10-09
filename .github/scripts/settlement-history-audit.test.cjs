@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.213-candidate-shadow-source-guard'));
+  assert.ok(sw.includes('v1.0.214-terminal-receipt-failclosed'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2019,4 +2019,12 @@ test('candidate storage rejects mismatched shadow ID or canonical source link',(
  assert.ok(src.includes('REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH'));
  assert.ok(src.includes('REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH'));
  assert.ok(src.includes("normalized.id!=='candidate:'+normalized.source_event_id"));
+});
+
+test('confirmed/dismissed HIOSKT candidate cannot lack operator receipt or timestamp',()=>{
+ const code=readFileSync(resolve(root,'settlement-test','settlement-regression-candidates.js'),'utf8');
+ assert.ok(code.includes('REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING'));
+ assert.ok(code.includes('REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING'));
+ assert.ok(code.includes('normalized.confirmation_note.trim()'));
+ assert.ok(code.includes('normalized.dismiss_reason.trim()'));
 });
