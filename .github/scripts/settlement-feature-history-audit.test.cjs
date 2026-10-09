@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.217-golden-source-atomic'));
+  assert.ok(source.includes('v1.0.218-backup-commit-state-notice'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1891,4 +1891,14 @@ test('direct golden pin refuses claiming a second ID for the same Shadow event',
  assert.ok(pin.includes('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT'));
  assert.ok(pin.includes('item.source_event_id'));
  assert.ok(pin.includes("mutateMetadataAtomically(META_KEY,row=>"));
+});
+
+test('backup UI must never call a committed import failed when only recalc failed',()=>{
+ const source=readFileSync(resolve(root,'app','settlement-backup-ui.js'),'utf8');
+ assert.ok(source.includes('let backupCommitted=false'));
+ assert.ok(source.includes('backupCommitted=true'));
+ assert.ok(source.includes('if(backupCommitted)'));
+ assert.ok(source.includes('ĐÃ GỘP dữ liệu backup'));
+ assert.ok(source.includes('IMPORT_PROTECTED_EVIDENCE_COLLISION:'));
+ assert.ok(source.includes('Không có dữ liệu nào bị ghi đè'));
 });
