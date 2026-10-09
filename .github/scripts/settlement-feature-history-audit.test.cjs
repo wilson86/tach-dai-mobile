@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.213-candidate-shadow-source-guard'));
+  assert.ok(source.includes('v1.0.214-terminal-receipt-failclosed'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1819,4 +1819,14 @@ test('candidate registry refuses forged shadow event lineage imported through me
  assert.ok(src.includes('REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH'));
  assert.ok(src.includes("normalized.id!=='candidate:'+normalized.source_event_id"));
  assert.ok(src.includes('String(normalized.case.source_event_id)!==normalized.source_event_id'));
+});
+
+test('imported promoted or dismissed candidate must carry matching human action receipt',()=>{
+ const src=readFileSync(resolve(root,'app','settlement-regression-candidates.js'),'utf8');
+ assert.ok(src.includes('REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING'));
+ assert.ok(src.includes('REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING'));
+ assert.ok(src.includes("normalized.confirmation_note.trim()"));
+ assert.ok(src.includes("normalized.dismiss_reason.trim()"));
+ assert.ok(src.includes('normalized.dismissed_at!=null'));
+ assert.ok(src.includes('normalized.promoted_at!=null'));
 });
