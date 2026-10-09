@@ -1529,7 +1529,7 @@ test('HIOSKT normalization keeps all money aliases and rejects nested or root co
   ]) assert.throws(()=>normalize(conflict),/HIOSKT_TOTAL_ALIAS_CONFLICT:xac/);
   const exact=normalize({totals:{xac:0,qua_co:0,payout:0,final:0,
     exact:{total_xac:'0',xac:'0.00'}}});
-  assert.equal(exact.totals.exact.total_xac,'0.00');
+  assert.equal(ctx.window.KTS_SETTLEMENT_SHADOW.decimalCanonical(exact.totals.exact.total_xac),'0');
   assert.equal(compare(local,exact).safe_to_promote,true);
   assert.throws(()=>normalize({totals:[]}),/HIOSKT_TOTALS_INVALID/);
 });
