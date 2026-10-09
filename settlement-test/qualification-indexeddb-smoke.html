@@ -316,6 +316,26 @@
     const after=await store.get(store.STORES.settlements,scopeID);
     if(after.id!==currentSettlement.id||after.updated_at!==currentSettlement.updated_at)
       fail('SETTLEMENT_STALE_INPUT_CHANGED_MONEY');
+    // An invalid second message must not partially change the first
+    // message's settled status or write the monetary row.
+    const foreign={...message,id:'synthetic-foreign-config-message',
+      config_snapshot:{...config,partner_id:'another-partner'},
+      status:'parsed_waiting_result'};
+    await putSynthetic(store.STORES.messages,foreign);
+    const beforeFirst=await store.get(store.STORES.messages,message.id);
+    const guarded=await workers[0].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(settle,{
+        messages:[beforeFirst,foreign],config,result:draw,partner,
+        settlement:currentSettlement
+      });
+    if(!guarded.superseded||guarded.saved)
+      fail('FOREIGN_CONFIG_MESSAGE_WAS_COMMITTED');
+    const untouchedFirst=await store.get(store.STORES.messages,message.id);
+    const untouchedMoney=await store.get(store.STORES.settlements,scopeID);
+    if(JSON.stringify(untouchedFirst)!==JSON.stringify(beforeFirst)||
+       JSON.stringify(untouchedMoney)!==JSON.stringify(currentSettlement))
+      fail('INVALID_LATE_MESSAGE_CAUSED_PARTIAL_WRITE');
+
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -333,6 +353,7 @@
       'SETTLEMENT_CROSS_TAB_ATOMIC_COMMIT=PASS',
       'SETTLEMENT_INPUT_REVISION_CAS=PASS',
       'SETTLEMENT_MESSAGE_STATUS_TX=PASS',
+      'SETTLEMENT_ALL_MESSAGE_CONFIG_PREFLIGHT=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
