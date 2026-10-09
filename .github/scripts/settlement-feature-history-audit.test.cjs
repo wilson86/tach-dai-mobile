@@ -1913,14 +1913,14 @@ test('import rechecks protected HIOSKT evidence within the SAME write transactio
  assert.ok(importBody.includes('try{tx.abort();}'));
  assert.ok(importBody.includes('throw evidenceRace||error'));
  assert.ok(importBody.indexOf('const req=metadata.get(key)')<
-   importBody.indexOf('for (const name of names) {'));
+   importBody.indexOf('const store = tx.objectStore(name);'));
 });
 
 test('replace backup cannot remove protected golden/candidate/qualification proof',()=>{
  const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
  const body=src.slice(src.indexOf('  async function importAll('),
    src.indexOf('  global.KTS_SETTLEMENT_STORE'));
- assert.ok(body.includes('const evidenceSnapshot=replace?await getAll(STORES.metadata)'));
+ assert.ok(body.includes('const evidenceSnapshot=sourceSnapshot[STORES.metadata]'));
  assert.ok(body.includes('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED:'));
  assert.ok(body.includes('if(old&&(!incoming.has(key)||'));
  assert.ok(body.includes('stableStringify(old)!==stableStringify(incoming.get(key))'));
@@ -1961,13 +1961,13 @@ test('Shadow event receipts are CAS-protected when importing or replacing backup
  const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
  const body=src.slice(src.indexOf('  async function importAll('),
   src.indexOf('  global.KTS_SETTLEMENT_STORE'));
- assert.ok(body.includes('const shadowSnapshot=replace?await getAll(STORES.shadowEvents)'));
+ assert.ok(body.includes('const shadowSnapshot=sourceSnapshot[STORES.shadowEvents]'));
  assert.ok(body.includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED:'));
  assert.ok(body.includes('const req=shadowStore.get(id)'));
  assert.ok(body.includes('IMPORT_SHADOW_EVENT_CHANGED_DURING_IMPORT:'));
  assert.ok(body.includes('if(stableStringify(prior)!==stableStringify(current))'));
  assert.ok(body.indexOf('const req=shadowStore.get(id)')<
-   body.indexOf('for (const name of names) {'));
+   body.indexOf('const store = tx.objectStore(name);'));
  assert.ok(body.includes('throw evidenceRace||error'));
 });
 
@@ -2008,7 +2008,7 @@ test('monetary merge revalidates result and settlement IDs inside IDB write tran
  assert.ok(part.includes('if(stableStringify(req.result||null)!==stableStringify(expected))'));
  assert.ok(part.includes('try{tx.abort();}'));
  assert.ok(part.indexOf("for(const name of [STORES.results,STORES.settlements])")<
-   part.indexOf('for (const name of names) {'));
+   part.indexOf('const store = tx.objectStore(name);'));
 });
 
 test('result event backup rejects forged reused receipt ID and preserves append-only stores',()=>{
