@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.211-golden-duplicate-read-guard'));
+  assert.ok(source.includes('v1.0.212-claimed-golden-promotion-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1803,4 +1803,12 @@ test('read-only golden registry rejects duplicate IDs and duplicate shadow event
  assert.ok(src.includes("throw new Error('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT')"));
  assert.ok(src.includes('if(events.has(normalized.source_event_id))'));
  assert.ok(src.includes('existingCases(row);'));
+});
+
+test('HIOSKT double-claim attempts reject in the same metadata transaction',()=>{
+ const source=readFileSync(resolve(root,'app','settlement-regression-candidates.js'),'utf8');
+ assert.ok(source.includes('REGRESSION_GOLDEN_ALREADY_CLAIMED'));
+ assert.ok(source.includes('if(other.id===c.id||other.state!==STATES.PROMOTED)continue'));
+ assert.ok(source.includes('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT'));
+ assert.ok(source.includes('mutateMetadataRowsAtomically([META_KEY,regression.META_KEY]'));
 });
