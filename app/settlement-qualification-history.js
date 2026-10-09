@@ -238,7 +238,8 @@
             const promoted=cg.promoted==null?0:cg.promoted;
             const linked=cg.promoted_linked==null?0:cg.promoted_linked;
             const details=[cg.promoted_missing,cg.promoted_conflicting,
-              cg.promoted_duplicate,cg.invalid];
+              cg.promoted_duplicate,cg.invalid,
+              cg.duplicate_candidate_ids,cg.duplicate_golden_links];
             return zero(cg.pending)&&Number.isInteger(promoted)&&promoted>=0&&
               Number.isInteger(linked)&&linked===promoted&&
               details.every(n=>n==null||zero(n))&&

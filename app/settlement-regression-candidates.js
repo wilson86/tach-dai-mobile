@@ -50,6 +50,14 @@
     if(row==null)return [];
     if(row.key!==META_KEY||row.version!==1||!Array.isArray(row.candidates))
       throw new Error('REGRESSION_CANDIDATE_METADATA_CORRUPTED');
+    const ids=new Set(),events=new Set();
+    for(const item of row.candidates){
+      const normalized=normalizeCandidate(item);
+      if(ids.has(normalized.id)||events.has(normalized.source_event_id))
+        throw new Error('REGRESSION_CANDIDATE_DUPLICATE_ID');
+      ids.add(normalized.id);
+      events.add(normalized.source_event_id);
+    }
     return row.candidates;
   }
   function goldenRows(row,regression) {
