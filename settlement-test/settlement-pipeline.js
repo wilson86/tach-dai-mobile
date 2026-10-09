@@ -160,7 +160,12 @@
       business_date: input.business_date,
       region: input.region,
       engine_version: d.engine.version,
-      config_snapshot: clone(input.config_snapshot || null),
+      // A malformed config linked to ANOTHER partner is only evidence for
+      // this block, never a valid pricing snapshot for this partner. The
+      // canonical store rejects cross-partner snapshots by design.
+      config_snapshot: input.config_snapshot &&
+        String(input.config_snapshot.partner_id||'')===String(input.partner_id)
+        ? clone(input.config_snapshot) : null,
       lottery_result_snapshot: clone(input.result_snapshot || null),
       result_snapshot: result,
       settlement_result: result,
