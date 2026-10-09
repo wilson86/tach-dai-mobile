@@ -166,7 +166,7 @@
         out[code].present[field] = true;
         const value = numeric(row[field]) || 0;
         out[code][field] += value;
-        const exactValue = row.exact && row.exact[field] != null ? row.exact[field] : value;
+        const exactValue = row.exact && row.exact[field] != null ? row.exact[field] : row[field];
         try { out[code].exact[field] = decimalAdd(out[code].exact[field], exactValue); }
         catch (_) { out[code].exact[field] = decimalCanonical(out[code][field]); }
       }
@@ -385,7 +385,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v18-validated-display-precision',
+    version: 'settlement-shadow-v19-source-decimal-category-evidence',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
