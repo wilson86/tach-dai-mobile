@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.198-total-exact-aliases'));
+  assert.ok(sw.includes('v1.0.199-reference-exact-schema'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1751,4 +1751,27 @@ test('direct shadow comparison rejects contradictory exact total aliases without
   const result=compare(local,compatible);
   assert.equal(result.safe_to_promote,true,'SINGLE_EQUIVALENT_SHORTHAND_EXACT_ACCEPTED');
   assert.equal(result.totals.total_xac.reference_exact,'0');
+});
+
+test('direct HIOSKT shadow refuses unknown exact monetary keys but allows engine metadata',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0',gross_net:'0',total_percent:'100'}},
+    category_rows:[{code:'B',xac:0,payout:0,exact:{xac:'0',payout:'0',win_rate:'1',commission_value:'0'}}]};
+  const ref={totals:{xac:0,qua_co:0,payout:0,final:0,exact:{total_xac:'0'}},
+    categories:[{code:'B',xac:0,payout:0,exact:{xac:'0',payout:'0'}}]};
+  assert.equal(compare(local,ref).safe_to_promote,true,'SUPPORTED_LOCAL_ENGINE_EXTRA_EXACT');
+  const clone=x=>JSON.parse(JSON.stringify(x));
+  for(const [name,mutate] of [
+    ['unknown_total_exact',x=>x.totals.exact.unapproved='100'],
+    ['unknown_category_exact',x=>x.categories[0].exact.extra_money='100']
+  ]){
+    const v=clone(ref);mutate(v);
+    const outcome=compare(local,v);
+    assert.equal(outcome.safe_to_promote,false,'UNKNOWN_ORACLE_EXACT_PROMOTED:'+name);
+    assert.equal(outcome.invalid_reference_exact_schema,true);
+    assert.equal(outcome.status,'INCOMPLETE_REFERENCE');
+  }
 });
