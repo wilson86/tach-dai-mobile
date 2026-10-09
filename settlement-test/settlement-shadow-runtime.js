@@ -34,6 +34,28 @@
       if (value == null || value === '') continue;
       normalized.totals[key] = strictMoney(value,'HIOSKT_REFERENCE_INVALID:' + key);
     }
+
+    // Preserve explicit oracle exact proof instead of silently stripping it.
+    // The comparison must see disagreement between displayed and exact money.
+    if (Object.prototype.hasOwnProperty.call(totals,'exact')) {
+      if (!totals.exact || typeof totals.exact!=='object' || Array.isArray(totals.exact))
+        throw new Error('HIOSKT_TOTAL_EXACT_INVALID');
+      const aliases={xac:'total_xac',total_xac:'total_xac',
+        qua_co:'total_qua_co',total_qua_co:'total_qua_co',
+        payout:'total_payout',total_payout:'total_payout',tien_trung:'total_payout',
+        hoi:'refund_amount',refund:'refund_amount',refund_amount:'refund_amount',
+        final:'final_net',final_net:'final_net',thu_bu:'final_net'};
+      normalized.totals.exact={};
+      for (const [name,value] of Object.entries(totals.exact)) {
+        const field=aliases[name];
+        if (!field) throw new Error('HIOSKT_TOTAL_EXACT_UNKNOWN:'+name);
+        const amount=strictMoney(value,'HIOSKT_TOTAL_EXACT_INVALID:'+name);
+        if (Object.prototype.hasOwnProperty.call(normalized.totals.exact,field) &&
+            String(normalized.totals.exact[field])!==String(amount))
+          throw new Error('HIOSKT_TOTAL_EXACT_ALIAS_CONFLICT:'+field);
+        normalized.totals.exact[field]=amount;
+      }
+    }
     if (Array.isArray(ref.categories)) {
       normalized.categories = ref.categories.map(row => {
         if (!row || !row.code) throw new Error('HIOSKT_CATEGORY_CODE_REQUIRED');
@@ -41,6 +63,16 @@
         for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
           if (row[field] == null || row[field] === '') continue;
           out[field] = strictMoney(row[field],'HIOSKT_CATEGORY_INVALID:' + field);
+        }
+        if (Object.prototype.hasOwnProperty.call(row,'exact')) {
+          if (!row.exact || typeof row.exact!=='object' || Array.isArray(row.exact))
+            throw new Error('HIOSKT_CATEGORY_EXACT_INVALID');
+          out.exact={};
+          for (const [name,value] of Object.entries(row.exact)) {
+            if (!['xac','qua_co','hit_units','payout'].includes(name))
+              throw new Error('HIOSKT_CATEGORY_EXACT_UNKNOWN:'+name);
+            out.exact[name]=strictMoney(value,'HIOSKT_CATEGORY_EXACT_INVALID:'+name);
+          }
         }
         return out;
       });
@@ -233,7 +265,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v8-category-shape',
+    version: 'settlement-shadow-runtime-v9-preserve-exact-oracle',
     scopeId,
     normalizeReference,
     localEvidence,

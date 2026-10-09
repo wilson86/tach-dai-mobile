@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.192-validated-display-precision'));
+  assert.ok(sw.includes('v1.0.193-preserved-hioskt-exact'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1629,4 +1629,31 @@ test('invalid display precision never makes a monetary comparison promotable',()
   }
   for(const valid of [0,1,'2',12])
     assert.equal(s.compareSettlement(local,ref,{display_digits:valid}).safe_to_promote,true);
+});
+
+test('HIOSKT manual reference must not discard supplied exact monetary proof',()=>{
+  const ctx={window:{}};
+  for (const name of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const norm=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME.normalizeReference;
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:0}]};
+  const src={totals:{xac:0,qua_co:0,payout:0,final:0,exact:{xac:'1.00'}},
+    categories:[{code:'B',xac:0,exact:{xac:'1.00'}}]};
+  const normalized=norm(src);
+  assert.equal(normalized.totals.exact.total_xac,'1.00');
+  assert.equal(normalized.categories[0].exact.xac,'1.00');
+  assert.equal(compare(local,normalized).safe_to_promote,false);
+  const onlyTotals=norm({totals:{xac:0,qua_co:0,payout:0,final:0,exact:{xac:'1.00'}}});
+  const outcome=compare(local,onlyTotals);
+  assert.equal(outcome.safe_to_promote,false);
+  assert.equal(outcome.totals.total_xac.reason,'REFERENCE_EXACT_DISPLAY_CONTRADICTION');
+  for (const bad of [false,[],null,'invalid']){
+    assert.throws(()=>norm({totals:{xac:0,exact:bad}}),/HIOSKT_TOTAL_EXACT_INVALID/);
+    assert.throws(()=>norm({categories:[{code:'B',xac:0,exact:bad}]}),/HIOSKT_CATEGORY_EXACT_INVALID/);
+  }
+  const valid=norm({totals:{xac:0,qua_co:0,payout:0,final:0,exact:{xac:'0'}},
+    categories:[{code:'B',xac:0,exact:{xac:'0'}}]});
+  assert.equal(compare(local,valid).safe_to_promote,true);
 });
