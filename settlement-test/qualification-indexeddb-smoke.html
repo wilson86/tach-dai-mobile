@@ -336,6 +336,47 @@
        JSON.stringify(untouchedMoney)!==JSON.stringify(currentSettlement))
       fail('INVALID_LATE_MESSAGE_CAUSED_PARTIAL_WRITE');
 
+    // A delayed BLOCKED or EMPTY record is also conditional on the same
+    // atomic input and previous-settlement snapshot, without touching money.
+    const beforeBlock=await store.get(store.STORES.messages,message.id);
+    const blockedScope={...settle,scope_status:'blocked',
+      comparison_status:'blocked',blocked_reasons:['SYNTHETIC_UNSUPPORTED']};
+    const blockedCommit=await workers[0].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(blockedScope,{
+        messages:[beforeBlock,foreign],config,result:draw,partner,
+        settlement:currentSettlement
+      });
+    if(blockedCommit.superseded||!blockedCommit.saved||
+       (await store.get(store.STORES.messages,message.id)).status!==beforeBlock.status)
+      fail('BLOCKED_ATOMIC_COMMIT_FAILED');
+    const staleReady=await workers[1].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(settle,{
+        messages:[beforeBlock,foreign],config,result:draw,partner,
+        settlement:currentSettlement
+      });
+    if(!staleReady.superseded||staleReady.saved)
+      fail('STALE_READY_OVERWROTE_BLOCKED');
+
+    const emptyPartner='synthetic-empty-atomic';
+    const emptyID='scope:'+emptyPartner+':'+scopeDate+':mn';
+    const emptyScope={...settle,id:emptyID,partner_id:emptyPartner,
+      config_snapshot:null,lottery_result_snapshot:null,scope_status:'empty',
+      comparison_status:'empty',message_ids:[]};
+    const emptyInputs={messages:[],config:null,result:draw,partner:null,settlement:null};
+    const emptyCommit=await workers[0].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(emptyScope,emptyInputs);
+    if(emptyCommit.superseded||!emptyCommit.saved)
+      fail('EMPTY_ATOMIC_COMMIT_FAILED');
+    await putSynthetic(store.STORES.messages,{
+      ...message,id:'synthetic-new-bet-after-empty',partner_id:emptyPartner,
+      config_snapshot:null
+    });
+    const staleEmpty=await workers[1].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(emptyScope,{
+        ...emptyInputs,settlement:emptyCommit.saved
+      });
+    if(!staleEmpty.superseded||staleEmpty.saved)
+      fail('STALE_EMPTY_OVERWROTE_NEW_BET');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -354,6 +395,7 @@
       'SETTLEMENT_INPUT_REVISION_CAS=PASS',
       'SETTLEMENT_MESSAGE_STATUS_TX=PASS',
       'SETTLEMENT_ALL_MESSAGE_CONFIG_PREFLIGHT=PASS',
+      'SETTLEMENT_BLOCKED_EMPTY_ATOMIC_CAS=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'

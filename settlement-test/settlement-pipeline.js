@@ -96,13 +96,40 @@
     return await d.store.get(d.store.STORES.results, `${businessDate}:${String(region || '').toLowerCase()}`);
   }
 
+  async function captureScopeInputs(partnerId,businessDate,region,messages) {
+    const d=deps();
+    // Capture all four mutable inputs plus the prior settlement. The store
+    // re-reads every source in ONE cross-tab serialized commit transaction.
+    const [rawConfig,result,partner,settlement]=await Promise.all([
+      Promise.resolve().then(()=>d.store.resolveConfigForDate(partnerId,businessDate))
+        .catch(()=>null),
+      findResult(businessDate,region),
+      d.store.get(d.store.STORES.partners,partnerId),
+      d.store.get(d.store.STORES.settlements,scopeId(partnerId,businessDate,region))
+    ]);
+    return {
+      messages,rawConfig,
+      config:rawConfig && String(rawConfig.partner_id||'')===String(partnerId)
+        ? rawConfig : null,
+      result,partner,settlement
+    };
+  }
+
+  function supersededScope() {
+    return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+  }
+
   async function saveEmptyScope(input) {
     const d = deps();
     // An old empty-scope request must not overwrite a newer active bet.
     const current = await findScopeMessages(input.partner_id, input.business_date, input.region);
     if (current.length) return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    const evidence=await captureScopeInputs(
+      input.partner_id,input.business_date,input.region,current);
+    if(typeof d.store.saveSettlementIfScopeUnchanged!=='function')
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED');
     const result = zeroResult(null);
-    const saved = await d.store.saveSettlement({
+    const outcome = await d.store.saveSettlementIfScopeUnchanged({
       id: scopeId(input.partner_id, input.business_date, input.region),
       partner_id: input.partner_id,
       message_id: null,
@@ -120,8 +147,9 @@
       scope_status: 'empty',
       blocked_reasons: [],
       comparison_status: 'empty'
-    });
-    return { status: 'empty', settlement: saved };
+    },evidence);
+    if(!outcome || outcome.superseded || !outcome.saved)return supersededScope();
+    return { status: 'empty', settlement: outcome.saved };
   }
 
   async function saveBlockedScope(input) {
@@ -151,8 +179,22 @@
           (input.partner_snapshot && partnerRevisionSignature(partner)!==partnerRevisionSignature(input.partner_snapshot)))
         return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
     }
+    const evidence=await captureScopeInputs(
+      input.partner_id,input.business_date,input.region,latest);
+    if((input.expect_config_unavailable===true && evidence.rawConfig!==null) ||
+       (input.config_snapshot &&
+        configRevisionSignature(evidence.rawConfig)!==configRevisionSignature(input.config_snapshot)) ||
+       (input.expect_result_missing===true && evidence.result!==null) ||
+       (input.result_snapshot &&
+        resultRevisionSignature(evidence.result)!==resultRevisionSignature(input.result_snapshot)) ||
+       (input.expect_partner_missing===true && evidence.partner!==null) ||
+       (input.partner_snapshot &&
+        partnerRevisionSignature(evidence.partner)!==partnerRevisionSignature(input.partner_snapshot)))
+      return supersededScope();
+    if(typeof d.store.saveSettlementIfScopeUnchanged!=='function')
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED');
     const result = zeroResult(input.reason);
-    const saved = await d.store.saveSettlement({
+    const outcome = await d.store.saveSettlementIfScopeUnchanged({
       id: scopeId(input.partner_id, input.business_date, input.region),
       partner_id: input.partner_id,
       message_id: null,
@@ -175,8 +217,9 @@
       scope_status: 'blocked',
       blocked_reasons: [String(input.reason || 'BLOCKED')],
       comparison_status: 'blocked'
-    });
-    return { status: 'blocked', reason: input.reason, settlement: saved };
+    },evidence);
+    if(!outcome || outcome.superseded || !outcome.saved)return supersededScope();
+    return { status: 'blocked', reason: input.reason, settlement: outcome.saved };
   }
 
   async function settleScopeOnce(input) {
