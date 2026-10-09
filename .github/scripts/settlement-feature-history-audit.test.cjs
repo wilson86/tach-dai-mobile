@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.205-candidate-golden-dual-atomic'));
+  assert.ok(source.includes('v1.0.206-immutable-golden-capture-dedupe'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1688,4 +1688,11 @@ test('candidate promotion and golden pin must share one readwrite IndexedDB tran
   assert.ok(src.includes('REGRESSION_CANDIDATE_PROMOTION_INCOMPLETE'));
   assert.ok(src.includes('mutateMetadataAtomically(META_KEY,row=>'));
   assert.ok(!src.includes('async function writeMeta('));
+});
+
+test('golden regression refuses to replace pinned HIOSKT proof using a recycled case ID',()=>{
+  const src=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
+  assert.ok(src.includes("throw new Error('REGRESSION_GOLDEN_ID_CONFLICT')"));
+  assert.ok(src.includes("delete stable.pinned_at"));
+  assert.ok(src.includes('const prior=cases.find(item=>caseId(item)===c.id)'));
 });
