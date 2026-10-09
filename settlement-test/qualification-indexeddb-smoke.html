@@ -933,6 +933,70 @@
        store.STORES.resultEvents,eventRow.id))!==JSON.stringify(eventRow))
       fail('KQXS_RESULT_EVENT_AUDIT_RECEIPT_MUTATED');
     await store.remove(store.STORES.resultEvents,eventRow.id);
+    // Deterministic REAL Chrome cross-frame import race: hold ONLY the
+    // second IDB.open completion (after atomic readonly preflight), let a
+    // different tab insert a new partner, then release the import writer.
+    // Every preflight store is checked in the writer's own transaction.
+    const racePartnerId='synthetic-import-source-drift-partner';
+    const raceMetadataId='synthetic-import-source-drift-metadata';
+    const importerFrame=workers[0];
+    const originalIDB=importerFrame.indexedDB;
+    let opens=0;
+    let releaseWriter, signalWriter;
+    const writerHeld=new Promise(resolve=>{releaseWriter=resolve;});
+    const writerEntered=new Promise(resolve=>{signalWriter=resolve;});
+    const patchedFactory={
+      open(...args){
+        const nativeRequest=originalIDB.open(...args);
+        opens++;
+        if(opens!==2)return nativeRequest;
+        return new Proxy(nativeRequest,{
+          get(target,field){return Reflect.get(target,field,target);},
+          set(target,field,handler){
+            if(field==='onsuccess'&&typeof handler==='function'){
+              target.onsuccess=event=>{
+                signalWriter();
+                writerHeld.then(()=>handler(event));
+              };
+              return true;
+            }
+            return Reflect.set(target,field,handler,target);
+          }
+        });
+      }
+    };
+    let raceResult=null;
+    try{
+      Object.defineProperty(importerFrame,'indexedDB',{
+        value:patchedFactory,configurable:true});
+      const incoming={format:'kts-settlement-export',version:5,
+        stores:{metadata:[{key:raceMetadataId,version:1,purpose:'synthetic-only'}]}};
+      const importing=importerFrame.KTS_SETTLEMENT_STORE.importAll(
+        incoming,{replace:false}).then(()=>({success:true}),
+        error=>({error:String(error&&error.message||error)}));
+      await Promise.race([
+        writerEntered,
+        new Promise((_,reject)=>setTimeout(()=>
+          reject(new Error('SYNTHETIC_IMPORT_WRITER_HOLD_TIMEOUT')),10000))
+      ]);
+      await workers[1].KTS_SETTLEMENT_STORE.savePartner({
+        id:racePartnerId,name:'Synthetic concurrent import writer',role:'customer'
+      });
+      releaseWriter();
+      raceResult=await importing;
+    } finally {
+      releaseWriter();
+      delete importerFrame.indexedDB;
+    }
+    if(!raceResult||!String(raceResult.error||'')
+      .includes('IMPORT_SOURCE_CHANGED_DURING_IMPORT:partners'))
+      fail('CROSS_TAB_IMPORT_SNAPSHOT_DRIFT_NOT_REJECTED:'+
+        JSON.stringify(raceResult));
+    if(await store.get(store.STORES.metadata,raceMetadataId))
+      fail('CROSS_TAB_IMPORT_PARTIALLY_COMMITTED_METADATA');
+    if(!(await store.get(store.STORES.partners,racePartnerId)))
+      fail('SYNTHETIC_CONCURRENT_PARTNER_WRITE_MISSING');
+    await store.remove(store.STORES.partners,racePartnerId);
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -981,6 +1045,7 @@
        'IMPORT_SETTLEMENT_MONEY_CONFLICT_REJECTED=PASS',
        'IDENTICAL_KQXS_SETTLEMENT_IMPORT_ATOMIC_CAS=PASS',
        'IMMUTABLE_KQXS_RESULT_EVENT_RECEIPT=PASS',
+       'IMPORT_ALL_STORES_CROSS_TAB_CAS=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
