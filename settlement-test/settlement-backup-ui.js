@@ -109,6 +109,7 @@
       let blocked = 0;
       for (const scope of scopes.values()) {
         let outcome;
+        let recoveryCommitted = false;
         try {
           outcome = await pipeline.settleScope(scope);
         } catch (error) {
@@ -158,12 +159,14 @@
           }, { messages:currentMessages, config, result, partner, settlement:priorSettlement });
           if (!attempted || attempted.superseded || !attempted.saved)
             throw new Error('IMPORT_RECALC_BLOCK_SUPERSEDED:' + scopeKey(scope));
+          recoveryCommitted = true;
         }
         // A superseded calculation has committed nothing; it is never a
         // successful recalculation and must not be masked by fallback writes.
         if (outcome && outcome.status === 'blocked') blocked += 1;
-        if (outcome && (!['blocked','empty','complete_unverified','provisional']
-          .includes(outcome.status) || !outcome.settlement))
+        if (!recoveryCommitted && (!outcome ||
+            !['blocked','empty','complete_unverified','provisional']
+              .includes(outcome.status) || !outcome.settlement))
           throw new Error('IMPORT_RECALC_SCOPE_NOT_COMMITTED:' + scopeKey(scope));
       }
       return { scope_count:scopes.size, blocked_count:blocked };
@@ -236,7 +239,7 @@
     });
   }
 
-  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v6-atomic-import-recalc', filename });
+  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v7-verified-import-recalc-outcome', filename });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);

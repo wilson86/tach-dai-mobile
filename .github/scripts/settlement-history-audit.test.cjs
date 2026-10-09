@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.226-import-recalc-atomic-block'));
+  assert.ok(sw.includes('v1.0.227-import-recalc-outcome-gate'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2240,4 +2240,30 @@ test('import backup recalculation refuses stale scope and uses atomic BLOCKED fa
   assert.ok(recalc.includes('IMPORT_RECALC_BLOCK_SUPERSEDED'));
   assert.ok(recalc.includes('IMPORT_RECALC_SCOPE_NOT_COMMITTED'));
   assert.ok(recalc.includes('await store.getAll(store.STORES.messages)'));
+});
+
+test('import recalculation rejects null and superseded outcomes without monetary overwrite',async()=>{
+  const src=readFileSync(resolve(root,'settlement-test','settlement-backup-ui.js'),'utf8');
+  const start=src.indexOf('    async function recalculateImportedScopes(');
+  const end=src.indexOf("    doc.getElementById('settlementExportBackup')",start);
+  assert.ok(start>0&&end>start);
+  const routine=src.slice(start,end);
+  const message={id:'synthetic-msg',partner_id:'synthetic-only',business_date:'2026-09-22',region:'mb',status:'parsed_waiting_result'};
+  const make=outcome=>{
+    let writes=0;
+    const store={STORES:{messages:'messages',settlements:'settlements',results:'results',configs:'configs'},
+      getAll:async()=>[message],
+      saveSettlement:async()=>{writes++;throw Error('UNSAFE_WRITE');}};
+    const pipeline={settleScope:async()=>outcome};
+    const fn=new Function('store','pipeline','validScope','scopeKey',routine+
+      '\nreturn recalculateImportedScopes;')(store,pipeline,
+      scope=>Boolean(scope&&scope.partner_id&&scope.business_date&&scope.region),
+      scope=>scope.partner_id+':'+scope.business_date+':'+scope.region);
+    return {fn,writes:()=>writes};
+  };
+  for(const invalid of [null,{status:'superseded',settlement:null},{status:'blocked',settlement:null}]){
+    const {fn,writes}=make(invalid);
+    await assert.rejects(fn({stores:{messages:[message]}}),/IMPORT_RECALC_SCOPE_NOT_COMMITTED/);
+    assert.equal(writes(),0);
+  }
 });
