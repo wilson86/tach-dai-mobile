@@ -1089,9 +1089,26 @@
         throw new Error('IMPORT_SETTLEMENT_ACTIVE_MESSAGE_SET_MISMATCH:' + String(row.id));
       }
       if (scopeStatus === 'empty') {
-        const totals = row.result_snapshot || row.settlement_result || {};
-        for (const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']) {
-          if (Number(totals[field] || 0) !== 0) throw new Error('IMPORT_EMPTY_SETTLEMENT_NONZERO:' + String(row.id) + ':' + field);
+        // EMPTY is a zero-money assertion. JS coerces false, [],
+        // whitespace and nondecimal strings such as 0x0 into forged zero.
+        // Both provided monetary snapshots must agree on zero.
+        const snapshots=['result_snapshot','settlement_result'].filter(name=>row[name]!=null);
+        if(!snapshots.length)
+          throw new Error('IMPORT_EMPTY_SETTLEMENT_TOTALS_MISSING:'+String(row.id));
+        for(const name of snapshots) {
+          const totals=row[name];
+          if(!totals||typeof totals!=='object'||Array.isArray(totals))
+            throw new Error('IMPORT_EMPTY_SETTLEMENT_TOTALS_INVALID:'+String(row.id)+':'+name);
+          for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']) {
+            if(!Object.prototype.hasOwnProperty.call(totals,field))continue;
+            const value=totals[field];
+            const decimal=typeof value==='string'&&
+              /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim());
+            const valid=(typeof value==='number'&&Number.isFinite(value))||
+              (decimal&&Number.isFinite(Number(value)));
+            if(!valid||Number(value)!==0)
+              throw new Error('IMPORT_EMPTY_SETTLEMENT_NONZERO:'+String(row.id)+':'+field);
+          }
         }
       }
     }
