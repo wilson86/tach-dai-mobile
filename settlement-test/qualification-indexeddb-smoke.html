@@ -807,7 +807,36 @@
        JSON.stringify(await store.get(store.STORES.shadowEvents,originalShadow.id))!==
        JSON.stringify(originalShadow))
       fail('SHADOW_IMPORT_SAME_ID_DIFFERENT_MONEY_NOT_REJECTED');
+    const safeShadowImport={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.shadowEvents]:[originalShadow]}};
+    const restoredShadow=await workers[1].KTS_SETTLEMENT_STORE.importAll(
+      safeShadowImport,{replace:false});
+    if(!restoredShadow.valid||
+       JSON.stringify(await store.get(store.STORES.shadowEvents,originalShadow.id))!==
+       JSON.stringify(originalShadow))
+      fail('SHADOW_IMPORT_SAME_ID_IDENTICAL_MERGE_REFUSED');
     await store.remove(store.STORES.shadowEvents,originalShadow.id);
+    // A replace backup retaining the protected metadata but omitting all
+    // existing Shadow receipts must still be rejected before clearing stores.
+    const protectedKeys=new Set(['qualification_history_v1',
+      'shadow_regression_cases_v1','shadow_regression_candidates_v1']);
+    const protectedRows=(await store.getAll(store.STORES.metadata))
+      .filter(row=>protectedKeys.has(row.key));
+    const initialShadowReceipt=await store.get(
+      store.STORES.shadowEvents,shadowOutcomes[0].event.id);
+    const destructive={format:'kts-settlement-export',version:5,stores:{
+      [store.STORES.metadata]:protectedRows,
+      [store.STORES.shadowEvents]:[]
+    }};
+    let shadowReplaceBlocked=false;
+    try{await workers[0].KTS_SETTLEMENT_STORE.importAll(destructive,{replace:true});}
+    catch(error){shadowReplaceBlocked=String(error&&error.message||error)
+      .includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED');}
+    if(!initialShadowReceipt||!shadowReplaceBlocked||
+       JSON.stringify(await store.get(
+         store.STORES.shadowEvents,initialShadowReceipt.id))!==
+       JSON.stringify(initialShadowReceipt))
+      fail('REPLACE_SHADOW_SOURCE_RECEIPT_ERASED_OR_NOT_GUARDED');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -850,6 +879,8 @@
        'PROTECTED_EVIDENCE_IMPORT_ATOMIC_CAS_POSITIVE=PASS',
        'REPLACE_PROTECTED_HIOSKT_EVIDENCE_REJECTED=PASS',
        'SHADOW_IMPORT_EVENT_ID_MONETARY_CONFLICT_REJECTED=PASS',
+       'SHADOW_IMPORT_SAME_ID_IDENTICAL_MERGE_PASS=YES',
+       'REPLACE_SHADOW_SOURCE_RECEIPT_PROTECTED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
