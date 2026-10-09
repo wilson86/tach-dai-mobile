@@ -638,6 +638,29 @@
        JSON.stringify(goldenBeforeAlias)!==JSON.stringify(goldenAfterAlias))
       fail('DOUBLE_HIOSKT_CONFIRMATION_CHANGED_GOLDEN_OR_CANDIDATE');
     await putSynthetic(store.STORES.metadata,candidatesBeforeAlias);
+
+    // Reject a backup whose candidate's own ID or canonical shadow event
+    // lineage does not match the event that produced its golden evidence.
+    const soundCandidates=await store.get(store.STORES.metadata,candidateKey);
+    if(!soundCandidates||!soundCandidates.candidates.length)
+      fail('SOURCE_ID_FIXTURE_MISSING');
+    for(const [alter,reason] of [
+      [c=>{c.id='candidate:forged-id';},'REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH'],
+      [c=>{c.case.source_event_id='different-shadow-event';},'REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH']
+    ]){
+      const altered=JSON.parse(JSON.stringify(soundCandidates));
+      alter(altered.candidates[0]);
+      await putSynthetic(store.STORES.metadata,altered);
+      let rejected=false;
+      try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
+      catch(error){rejected=String(error&&error.message||error).includes(reason);}
+      if(!rejected)fail('INVALID_CANDIDATE_SOURCE_ACCEPTED:'+reason);
+      if(JSON.stringify(await store.get(store.STORES.metadata,candidateKey))!==JSON.stringify(altered))
+        fail('INVALID_CANDIDATE_SOURCE_AUTOMATICALLY_MODIFIED');
+    }
+    await putSynthetic(store.STORES.metadata,soundCandidates);
+    if((await candApi.listCandidates()).length!==soundCandidates.candidates.length)
+      fail('SOURCE_ID_RESTORATION_UNREPRODUCIBLE');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -671,6 +694,8 @@
        'DUPLICATE_GOLDEN_ID_FAIL_CLOSED=PASS',
        'DUPLICATE_GOLDEN_SOURCE_FAIL_CLOSED=PASS',
        'SECOND_HIOSKT_GOLDEN_CLAIM_REFUSED=PASS',
+       'CANDIDATE_SOURCE_ID_FAIL_CLOSED=PASS',
+       'CANDIDATE_CASE_SOURCE_FAIL_CLOSED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

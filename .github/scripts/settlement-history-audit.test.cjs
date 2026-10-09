@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.212-claimed-golden-promotion-guard'));
+  assert.ok(sw.includes('v1.0.213-candidate-shadow-source-guard'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2012,4 +2012,11 @@ test('no second HIOSKT candidate can promote one already-claimed golden',()=>{
  assert.ok(source.includes('if(other.id===c.id||other.state!==STATES.PROMOTED)continue'));
  assert.ok(source.includes('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT'));
  assert.ok(source.includes('mutateMetadataRowsAtomically([META_KEY,regression.META_KEY]'));
+});
+
+test('candidate storage rejects mismatched shadow ID or canonical source link',()=>{
+ const src=readFileSync(resolve(root,'settlement-test','settlement-regression-candidates.js'),'utf8');
+ assert.ok(src.includes('REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH'));
+ assert.ok(src.includes('REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH'));
+ assert.ok(src.includes("normalized.id!=='candidate:'+normalized.source_event_id"));
 });

@@ -53,6 +53,11 @@
     const ids=new Set(),events=new Set();
     for(const item of row.candidates){
       const normalized=normalizeCandidate(item);
+      if(normalized.id!=='candidate:'+normalized.source_event_id)
+        throw new Error('REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH');
+      if(normalized.case.source_event_id!=null&&
+         String(normalized.case.source_event_id)!==normalized.source_event_id)
+        throw new Error('REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH');
       if(ids.has(normalized.id)||events.has(normalized.source_event_id))
         throw new Error('REGRESSION_CANDIDATE_DUPLICATE_ID');
       ids.add(normalized.id);
