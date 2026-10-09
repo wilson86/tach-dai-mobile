@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.223-monetary-import-id-collision'));
+  assert.ok(sw.includes('v1.0.224-monetary-import-tx-cas'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2187,4 +2187,17 @@ test('import backup cannot silently skip different KQXS draw or settlement money
    {code:'tp',prizes:{DB:['999999']}}]};
  assert.throws(()=>api.validateImportPayload(wrap({results:[differentDraw]}),
    existing,{replace:false}),/IMPORT_RESULT_CONTENT_COLLISION/);
+});
+
+test('monetary merge revalidates result and settlement IDs inside IDB write transaction',()=>{
+ const source=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
+ const part=source.slice(source.indexOf('  async function importAll('),
+  source.indexOf('  global.KTS_SETTLEMENT_STORE'));
+ assert.ok(part.includes("for(const name of [STORES.results,STORES.settlements])"));
+ assert.ok(part.includes("const req=bucket.get(id)"));
+ assert.ok(part.includes('IMPORT_MONETARY_ROW_CHANGED_DURING_IMPORT:'));
+ assert.ok(part.includes('if(stableStringify(req.result||null)!==stableStringify(expected))'));
+ assert.ok(part.includes('try{tx.abort();}'));
+ assert.ok(part.indexOf("for(const name of [STORES.results,STORES.settlements])")<
+   part.indexOf('for (const name of names) {'));
 });
