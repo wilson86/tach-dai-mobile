@@ -1035,6 +1035,28 @@
       assertConfigPartner(row.config_snapshot || null, partnerId);
       const prior = existingMap(STORES.settlements).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.settlements + ':' + String(row.id));
+      if(prior){
+        // A backup can contain an older (or foreign) money calculation
+        // under the same scope ID. Silently skipping it hides a material
+        // discrepancy from the operator.
+        const monetaryCore=value=>({
+          partner_id:String(value.partner_id||''),
+          business_date:String(value.business_date||''),
+          region:String(value.region||'').toLowerCase(),
+          scope_status:value.scope_status||null,
+          comparison_status:value.comparison_status||null,
+          message_ids:Array.isArray(value.message_ids)?
+            value.message_ids.map(String).sort():
+            (value.message_id?[String(value.message_id)]:[]),
+          config_snapshot:value.config_snapshot||null,
+          lottery_result_snapshot:value.lottery_result_snapshot||null,
+          result_snapshot:value.result_snapshot||null,
+          settlement_result:value.settlement_result||null
+        });
+        if(stableStringify(monetaryCore(prior))!==
+           stableStringify(monetaryCore(row)))
+          throw new Error('IMPORT_SETTLEMENT_MONETARY_COLLISION:'+String(row.id));
+      }
       const messageIds = Array.isArray(row.message_ids) ? row.message_ids.map(String) : (row.message_id ? [String(row.message_id)] : []);
       if (new Set(messageIds).size !== messageIds.length) throw new Error('IMPORT_SETTLEMENT_MESSAGE_DUPLICATE:' + String(row.id));
       for (const messageId of messageIds) {
@@ -1088,7 +1110,14 @@
           throw new Error('IMPORT_RESULT_FINGERPRINT_MISMATCH:' + String(row.id));
         }
       }
-      combinedResults.set(String(row.id), row);
+      const prior=combinedResults.get(String(row.id));
+      if(prior){
+        const previous=normalizeResultSnapshot(Object.assign({},prior,
+          {fingerprint:null}));
+        if(previous.fingerprint!==recomputed.fingerprint)
+          throw new Error('IMPORT_RESULT_CONTENT_COLLISION:'+String(row.id));
+      }
+      combinedResults.set(String(row.id), prior||row);
     }
     for (const row of incoming[STORES.resultEvents]) {
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_RESULT_EVENT_SCOPE_INVALID:' + String(row.id));

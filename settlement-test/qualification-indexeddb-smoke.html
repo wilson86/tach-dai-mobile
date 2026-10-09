@@ -851,6 +851,35 @@
        shadowReplaceReason+':receipt_present='+Boolean(initialShadowReceipt));
     if(originalJournal)await putSynthetic(store.STORES.metadata,originalJournal);
     else await store.remove(store.STORES.metadata,'qualification_history_v1');
+    // Imported backup IDs are not allowed to hide a conflicting KQXS
+    // drawing or a different settlement amount. Nothing must be overwritten.
+    const knownDraw=await store.get(store.STORES.results,draw.id);
+    const changedDraw={...knownDraw,
+      stations:[{code:'tp',prizes:{DB:['999999']}}]};
+    delete changedDraw.fingerprint;
+    const conflictingDrawBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.results]:[changedDraw]}};
+    let drawRejected=false;
+    try{await workers[0].KTS_SETTLEMENT_STORE.importAll(
+      conflictingDrawBackup,{replace:false});}
+    catch(error){drawRejected=String(error&&error.message||error)
+      .includes('IMPORT_RESULT_CONTENT_COLLISION');}
+    if(!drawRejected||JSON.stringify(await store.get(
+        store.STORES.results,knownDraw.id))!==JSON.stringify(knownDraw))
+      fail('CONFLICTING_KQXS_IMPORT_SILENTLY_SKIPPED');
+    const knownSettlement=await store.get(store.STORES.settlements,scopeID);
+    const conflictingSettlement={...knownSettlement,
+      settlement_result:{...(knownSettlement.settlement_result||{}),final_net:500}};
+    const conflictingMoneyBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.settlements]:[conflictingSettlement]}};
+    let moneyRejected=false;
+    try{await workers[1].KTS_SETTLEMENT_STORE.importAll(
+      conflictingMoneyBackup,{replace:false});}
+    catch(error){moneyRejected=String(error&&error.message||error)
+      .includes('IMPORT_SETTLEMENT_MONETARY_COLLISION');}
+    if(!moneyRejected||JSON.stringify(await store.get(
+        store.STORES.settlements,scopeID))!==JSON.stringify(knownSettlement))
+      fail('CONFLICTING_SETTLEMENT_IMPORT_SILENTLY_SKIPPED');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -895,6 +924,8 @@
        'SHADOW_IMPORT_EVENT_ID_MONETARY_CONFLICT_REJECTED=PASS',
        'SHADOW_IMPORT_SAME_ID_IDENTICAL_MERGE_PASS=YES',
        'REPLACE_SHADOW_SOURCE_RECEIPT_PROTECTED=PASS',
+       'IMPORT_KQXS_CONTENT_CONFLICT_REJECTED=PASS',
+       'IMPORT_SETTLEMENT_MONEY_CONFLICT_REJECTED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
