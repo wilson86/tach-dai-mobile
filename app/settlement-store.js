@@ -606,17 +606,22 @@
           }
           // Keep each message's settled status and monetary result in the
           // same atomic transaction; never mutate a newer edited bet afterward.
+          // Verify every message's config BEFORE issuing any writes.
+          const messageConfigs=liveMessages.map(message=>
+            message.config_snapshot||liveConfig);
+          if(messageConfigs.some(c=>c &&
+              String(c.partner_id||'')!==String(v.partner_id))) {
+            outcome={saved:null,superseded:true};
+            return;
+          }
           const status=v.scope_status==='complete_unverified'
             ? 'settled_unverified':'settled_provisional';
           const timestamp=nowIso();
-          for(const message of liveMessages) {
-            const currentConfig=message.config_snapshot||liveConfig;
-            if(currentConfig && String(currentConfig.partner_id||'')!==String(v.partner_id))
-              throw new Error('MESSAGE_CONFIG_PARTNER_MISMATCH');
+          liveMessages.forEach((message,index)=>{
             messages.put(Object.assign({},message,{
-              status,config_snapshot:clone(currentConfig),updated_at:timestamp
+              status,config_snapshot:clone(messageConfigs[index]),updated_at:timestamp
             }));
-          }
+          });
           settlementBucket.put(clone(v));
           outcome={saved:v,superseded:false};
         };

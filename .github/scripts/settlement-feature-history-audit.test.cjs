@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.201-scope-atomic-commit'));
+  assert.ok(source.includes('v1.0.202-scope-prevalidate-all'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1253,6 +1253,8 @@ test('monetary settlement requires atomic multi-store commit rather than blind p
   assert.ok(pipeline.includes('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED'));
   assert.ok(!pipeline.includes('for (const message of latestMessages)'));
   assert.ok(store.includes('async function saveSettlementIfScopeUnchanged('));
+  assert.ok(store.includes('const messageConfigs=liveMessages.map('));
+  assert.ok(store.includes('messageConfigs.some('));
   for(const table of ['STORES.messages','STORES.configs','STORES.results','STORES.partners','STORES.settlements'])
     assert.ok(store.includes(table),'MISSING_TX_STORE:'+table);
   assert.ok(store.includes("messages.index('by_partner_date').getAll("));
