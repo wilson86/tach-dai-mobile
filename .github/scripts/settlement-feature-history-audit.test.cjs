@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.182-config-mismatch-recheck'));
+  assert.ok(source.includes('v1.0.183-blocked-config-scope'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1284,7 +1284,11 @@ test('wrong-partner config corrected before BLOCKED save supersedes stale decisi
     getAll:async()=>[copy(msg)],
     resolveConfigForDate:async()=>{calls++;return copy(repair&&calls>=2?fixed:wrong);},
     get:async()=>null,
-    saveSettlement:async row=>{writes.push(row);return row;}
+    saveSettlement:async row=>{
+      if(row.config_snapshot && row.config_snapshot.partner_id!==row.partner_id)
+        throw Error('CONFIG_PARTNER_MISMATCH');
+      writes.push(row);return row;
+    }
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{throw Error('SHOULD_NOT_EVALUATE')}};
   ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('SHOULD_NOT_CALCULATE')}};
@@ -1302,4 +1306,5 @@ test('wrong-partner config corrected before BLOCKED save supersedes stale decisi
   assert.equal(outcome.status,'blocked');
   assert.equal(outcome.reason,'CONFIG_PARTNER_MISMATCH');
   assert.equal(writes.length,1);
+  assert.equal(writes[0].config_snapshot,null,'FOREIGN_CONFIG_MUST_NOT_BE_PERSISTED');
 });
