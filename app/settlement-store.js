@@ -1119,7 +1119,11 @@
       }
       combinedResults.set(String(row.id), prior||row);
     }
+    const existingResultEvents=existingMap(STORES.resultEvents);
     for (const row of incoming[STORES.resultEvents]) {
+      const sameId=existingResultEvents.get(String(row.id));
+      if(sameId&&stableStringify(sameId)!==stableStringify(row))
+        throw new Error('IMPORT_RESULT_EVENT_CONTENT_COLLISION:'+String(row.id));
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_RESULT_EVENT_SCOPE_INVALID:' + String(row.id));
       const expectedResultId = `${String(row.business_date)}:${String(row.region).toLowerCase()}`;
       if (row.result_id != null && String(row.result_id) !== expectedResultId) throw new Error('IMPORT_RESULT_EVENT_ID_SCOPE_MISMATCH:' + String(row.id));
@@ -1196,6 +1200,8 @@
       existing[STORES.metadata]||[];
     const shadowSnapshot=replace?await getAll(STORES.shadowEvents):
       existing[STORES.shadowEvents]||[];
+    const resultEventSnapshot=replace?await getAll(STORES.resultEvents):
+      existing[STORES.resultEvents]||[];
     if(replace){
       const persisted=new Map(evidenceSnapshot.map(row=>[String(row&&row.key||''),row]));
       const incoming=new Map(((payload.stores&&payload.stores[STORES.metadata])||[])
@@ -1217,6 +1223,15 @@
         const incoming=incomingShadow.get(id);
         if(!incoming||stableStringify(incoming)!==stableStringify(old))
           throw new Error('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED:'+id);
+      }
+      const incomingResultEvents=new Map(((payload.stores&&
+        payload.stores[STORES.resultEvents])||[])
+        .map(row=>[String(row.id),row]));
+      for(const old of resultEventSnapshot){
+        const id=String(old.id);
+        const incoming=incomingResultEvents.get(id);
+        if(!incoming||stableStringify(incoming)!==stableStringify(old))
+          throw new Error('IMPORT_REPLACE_RESULT_EVENT_DENIED:'+id);
       }
     }
 
@@ -1260,6 +1275,28 @@
         ((payload.stores&&payload.stores[STORES.shadowEvents])||[])
           .filter(row=>shadowBefore.has(String(row.id))))
         .map(row=>String(row.id));
+      // For replace, check the ENTIRE append-only event stores, including
+      // records created by another tab AFTER the preflight snapshots.
+      // Checking only previously known IDs misses late append and would
+      // silently erase new Shadow/KQXS evidence during store.clear().
+      if(replace){
+        const snapshots=[
+          [STORES.shadowEvents,shadowSnapshot],
+          [STORES.resultEvents,resultEventSnapshot]
+        ];
+        for(const [name,before] of snapshots){
+          const req=tx.objectStore(name).getAll();
+          req.onsuccess=()=>{
+            try{
+              if(stableStringify(req.result||[])!==stableStringify(before))
+                throw new Error('IMPORT_APPEND_ONLY_LOG_CHANGED_DURING_REPLACE:'+name);
+            }catch(error){
+              evidenceRace=error;
+              try{tx.abort();}catch(_){/* already aborted */ }
+            }
+          };
+        }
+      }
       const shadowStore=tx.objectStore(STORES.shadowEvents);
       for(const id of new Set(incomingShadowKeys)){
         const req=shadowStore.get(id);
@@ -1300,6 +1337,27 @@
               }
             };
           }
+        }
+      }
+      if(!replace){
+        const priorEvents=new Map(resultEventSnapshot.map(row=>
+          [String(row&&row.id||''),row]));
+        const resultEvents=tx.objectStore(STORES.resultEvents);
+        for(const incoming of ((payload.stores&&
+          payload.stores[STORES.resultEvents])||[])){
+          const id=String(incoming.id);
+          if(!priorEvents.has(id))continue;
+          const expected=priorEvents.get(id);
+          const req=resultEvents.get(id);
+          req.onsuccess=()=>{
+            try{
+              if(stableStringify(req.result||null)!==stableStringify(expected))
+                throw new Error('IMPORT_RESULT_EVENT_CHANGED_DURING_IMPORT:'+id);
+            }catch(error){
+              evidenceRace=error;
+              try{tx.abort();}catch(_){/* already aborted */ }
+            }
+          };
         }
       }
       for (const name of names) {
