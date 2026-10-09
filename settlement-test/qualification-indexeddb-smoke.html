@@ -313,8 +313,8 @@
         fail('SETTLEMENT_CHANGED_INPUT_COMMITTED:'+table);
       await putSynthetic(table,original);
     }
-    const after=await store.get(store.STORES.settlements,scopeID);
-    if(after.id!==currentSettlement.id||after.updated_at!==currentSettlement.updated_at)
+    const afterMoney=await store.get(store.STORES.settlements,scopeID);
+    if(afterMoney.id!==currentSettlement.id||afterMoney.updated_at!==currentSettlement.updated_at)
       fail('SETTLEMENT_STALE_INPUT_CHANGED_MONEY');
     // An invalid second message must not partially change the first
     // message's settled status or write the monetary row.

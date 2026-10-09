@@ -1783,3 +1783,14 @@ test('direct HIOSKT shadow refuses unknown exact monetary keys but allows engine
     assert.equal(outcome.status,'INCOMPLETE_REFERENCE');
   }
 });
+
+test('real IndexedDB browser smoke embedded scripts parse before Chrome startup',()=>{
+  const html=readFileSync(resolve(root,'settlement-test','qualification-indexeddb-smoke.html'),'utf8');
+  const scripts=[...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)]
+    .map(match=>match[1]).filter(text=>text.trim());
+  assert.ok(scripts.length>=2,'MISSING_BROWSER_INLINE_SCRIPTS');
+  for(let i=0;i<scripts.length;i++)
+    assert.doesNotThrow(()=>new vm.Script(scripts[i],{
+      filename:'qualification-indexeddb-smoke.html#inline-'+i
+    }), 'INVALID_BROWSER_INLINE_SCRIPT_'+i);
+});
