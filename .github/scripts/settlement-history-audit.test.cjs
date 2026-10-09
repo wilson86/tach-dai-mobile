@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.217-golden-source-atomic'));
+  assert.ok(sw.includes('v1.0.218-backup-commit-state-notice'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2088,4 +2088,13 @@ test('direct golden pin refuses two case IDs for one independently observed Shad
    source.indexOf('  async function removePinnedCase('));
  assert.ok(pin.includes('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT'));
  assert.ok(pin.includes("mutateMetadataAtomically(META_KEY,row=>"));
+});
+
+test('backup UI must disclose when an import committed before recalc failure',()=>{
+ const src=readFileSync(resolve(root,'settlement-test','settlement-backup-ui.js'),'utf8');
+ assert.ok(src.includes('let backupCommitted=false'));
+ assert.ok(src.includes('backupCommitted=true'));
+ assert.ok(src.includes('if(backupCommitted)'));
+ assert.ok(src.includes('ĐÃ GỘP dữ liệu backup'));
+ assert.ok(src.includes('IMPORT_PROTECTED_EVIDENCE_COLLISION:'));
 });

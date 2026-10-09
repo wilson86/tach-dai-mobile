@@ -178,12 +178,14 @@
       const file = input && input.files && input.files[0];
       if (!file) return status('Chọn file backup JSON trước.', 'warn');
       setBackupBusy(true);
+      let backupCommitted=false;
       try {
         status('Đang kiểm tra và khôi phục backup…', '');
         const text = await file.text();
         const payload = JSON.parse(text);
         if (!pipeline || typeof pipeline.settleScope !== 'function') throw new Error('IMPORT_RECALC_PIPELINE_UNAVAILABLE');
         const validation = await store.importAll(payload, { replace: false });
+        backupCommitted=true;
         status('Đã gộp dữ liệu · đang tính lại các phạm vi bị ảnh hưởng…', 'warn');
         const recalculated = await recalculateImportedScopes(payload);
         const inserted = Object.values(validation.inserted_counts || validation.counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
@@ -193,7 +195,19 @@
           : '';
         status(`Đã gộp backup an toàn · thêm ${inserted} bản ghi mới${skipped ? ` · giữ nguyên ${skipped} bản ghi đã có trên máy` : ''} · đã tính lại ${recalculated.scope_count} phạm vi${suffix}. Tải lại trang để cập nhật danh sách.`, recalculated.blocked_count ? 'warn' : 'ok');
       } catch (e) {
-        status('KHÔNG khôi phục: ' + String(e && e.message || e), 'err');
+        const reason=String(e && e.message || e);
+        if(backupCommitted){
+          // ImportAll already COMMITTED; reporting "not restored" would
+          // mislead the operator into repeating an import with partial recalc.
+          status('ĐÃ GỘP dữ liệu backup, nhưng tính lại settlement chưa hoàn tất: '+
+            reason+'. Không chốt tiền; kiểm tra phạm vi bị chặn trước khi thao tác tiếp.', 'err');
+        }else if(reason.startsWith('IMPORT_PROTECTED_EVIDENCE_COLLISION:')){
+          status('KHÔNG gộp backup: bằng chứng xác nhận HIOSKT hoặc lịch sử QA '+
+            'khác với dữ liệu đang lưu. Không có dữ liệu nào bị ghi đè. '+
+            'Xuất backup hiện tại để đối chiếu thủ công trước khi khôi phục.', 'err');
+        }else{
+          status('KHÔNG khôi phục: '+reason, 'err');
+        }
       } finally {
         setBackupBusy(false);
       }
