@@ -737,9 +737,17 @@ test('scope commit refuses content mutations even when IDs and timestamps remain
   ctx.window.KTS_SETTLEMENT_STORE={
     STORES:{messages:'messages',results:'results',partners:'partners'},
     getAll:async name=>name==='messages'?copy(storeState.messages):[],
-    get:async(name)=>copy(name==='results'?storeState.result:storeState.partner),
+    get:async(name)=>copy(name==='results'?storeState.result:name==='partners'?storeState.partner:null),
     resolveConfigForDate:async()=>copy(storeState.config),
-    saveSettlement:async settlement=>{written.push(settlement);return settlement;}
+    saveSettlement:async settlement=>{written.push(settlement);return settlement;},
+    saveSettlementIfScopeUnchanged:async (settlement,expected)=>{
+      assert.equal(expected.messages[0].id,'msg1');
+      assert.equal(expected.config.partner_id,'synthetic');
+      assert.equal(expected.result.business_date,'2026-09-22');
+      assert.equal(expected.partner.id,'synthetic');
+      written.push(settlement);
+      return {saved:settlement,superseded:false};
+    }
   };
   ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>({
     category_inputs:[{code:'2CB',xac:1,commission_value:0.75,commission_type:'ratio',
