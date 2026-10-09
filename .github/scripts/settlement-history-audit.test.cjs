@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.193-preserved-hioskt-exact'));
+  assert.ok(sw.includes('v1.0.194-preserve-total-aliases'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1656,4 +1656,28 @@ test('HIOSKT manual reference must not discard supplied exact monetary proof',()
   const valid=norm({totals:{xac:0,qua_co:0,payout:0,final:0,exact:{xac:'0'}},
     categories:[{code:'B',xac:0,exact:{xac:'0'}}]});
   assert.equal(compare(local,valid).safe_to_promote,true);
+});
+
+test('HIOSKT normalization keeps all money aliases and rejects nested or root contradictions',()=>{
+  const ctx={window:{}};
+  for(const file of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',file),'utf8'),ctx,{filename:file});
+  const normalize=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME.normalizeReference;
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}};
+  const input={totals:{xac:'0',total_xac:'0.00',qua_co:0,payout:0,final:0},total_xac:'0e0'};
+  const valid=normalize(input);
+  assert.equal(valid.totals.xac,'0');
+  assert.equal(valid.totals.total_xac,'0.00');
+  assert.equal(compare(local,valid).safe_to_promote,true);
+  for(const conflict of [
+    {totals:{xac:0,total_xac:'1',qua_co:0,payout:0,final:0}},
+    {totals:{xac:0,qua_co:0,payout:0,final:0},total_xac:'3'},
+    {totals:{xac:0,qua_co:0,payout:0,final:0},xac:'4'}
+  ]) assert.throws(()=>normalize(conflict),/HIOSKT_TOTAL_ALIAS_CONFLICT:xac/);
+  const exact=normalize({totals:{xac:0,qua_co:0,payout:0,final:0,
+    exact:{total_xac:'0',xac:'0.00'}}});
+  assert.equal(ctx.window.KTS_SETTLEMENT_SHADOW.decimalCanonical(exact.totals.exact.total_xac),'0');
+  assert.equal(compare(local,exact).safe_to_promote,true);
+  assert.throws(()=>normalize({totals:[]}),/HIOSKT_TOTALS_INVALID/);
 });
