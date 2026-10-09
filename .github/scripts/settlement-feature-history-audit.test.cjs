@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.219-backup-evidence-tx-cas'));
+  assert.ok(source.includes('v1.0.220-replace-evidence-preserve'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1914,4 +1914,17 @@ test('import rechecks protected HIOSKT evidence within the SAME write transactio
  assert.ok(importBody.includes('throw evidenceRace||error'));
  assert.ok(importBody.indexOf('const req=metadata.get(key)')<
    importBody.indexOf('for (const name of names) {'));
+});
+
+test('replace backup cannot remove protected golden/candidate/qualification proof',()=>{
+ const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+ const body=src.slice(src.indexOf('  async function importAll('),
+   src.indexOf('  global.KTS_SETTLEMENT_STORE'));
+ assert.ok(body.includes('const evidenceSnapshot=replace?await getAll(STORES.metadata)'));
+ assert.ok(body.includes('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED:'));
+ assert.ok(body.includes('if(old&&(!incoming.has(key)||'));
+ assert.ok(body.includes('stableStringify(old)!==stableStringify(incoming.get(key))'));
+ assert.ok(body.includes('IMPORT_PROTECTED_EVIDENCE_CHANGED_DURING_IMPORT:'));
+ assert.ok(body.includes('const req=metadata.get(key)'));
+ assert.ok(body.includes('throw evidenceRace||error'));
 });
