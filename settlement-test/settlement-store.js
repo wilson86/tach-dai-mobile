@@ -1135,6 +1135,27 @@
     const existing = {};
     for (const name of Object.values(STORES)) existing[name] = replace ? [] : await getAll(name);
     const validation = validateImportPayload(payload, existing, { replace });
+    // replace:true is not a license to erase a confirmed HIOSKT golden,
+    // operator decision, or immutable qualification journal. This is an API
+    // boundary even though the regular UI only requests merge (replace:false).
+    const protectedKeys=[
+      'qualification_history_v1',
+      'shadow_regression_cases_v1',
+      'shadow_regression_candidates_v1'
+    ];
+    const evidenceSnapshot=replace?await getAll(STORES.metadata):
+      existing[STORES.metadata]||[];
+    if(replace){
+      const persisted=new Map(evidenceSnapshot.map(row=>[String(row&&row.key||''),row]));
+      const incoming=new Map(((payload.stores&&payload.stores[STORES.metadata])||[])
+        .map(row=>[String(row&&row.key||''),row]));
+      for(const key of protectedKeys){
+        const old=persisted.get(key);
+        if(old&&(!incoming.has(key)||
+           stableStringify(old)!==stableStringify(incoming.get(key))))
+          throw new Error('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED:'+key);
+      }
+    }
 
     const db = await openDb();
     try {
@@ -1146,13 +1167,10 @@
       // candidate, pinned golden or READY journal remained unchanged while
       // another browser tab was writing to the same IndexedDB database.
       let evidenceRace=null;
-      if (!replace) {
-        const protectedKeys=[
-          'qualification_history_v1',
-          'shadow_regression_cases_v1',
-          'shadow_regression_candidates_v1'
-        ];
-        const readSnapshot=new Map((existing[STORES.metadata]||[])
+      // The same cross-tab CAS also protects a replace import; an earlier
+      // snapshot may have changed while any ordinary store was being read.
+      {
+        const readSnapshot=new Map(evidenceSnapshot
           .map(row=>[String(row&&row.key||''),row]));
         const metadata=tx.objectStore(STORES.metadata);
         for(const key of protectedKeys){
