@@ -1165,6 +1165,8 @@
     ];
     const evidenceSnapshot=replace?await getAll(STORES.metadata):
       existing[STORES.metadata]||[];
+    const shadowSnapshot=replace?await getAll(STORES.shadowEvents):
+      existing[STORES.shadowEvents]||[];
     if(replace){
       const persisted=new Map(evidenceSnapshot.map(row=>[String(row&&row.key||''),row]));
       const incoming=new Map(((payload.stores&&payload.stores[STORES.metadata])||[])
@@ -1174,6 +1176,18 @@
         if(old&&(!incoming.has(key)||
            stableStringify(old)!==stableStringify(incoming.get(key))))
           throw new Error('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED:'+key);
+      }
+      // Shadow event receipts are source evidence in a separate store,
+      // not metadata. Replacing the database must preserve existing
+      // receipts byte-for-byte, even when the incoming backup omits them.
+      const incomingShadow=new Map(((payload.stores&&
+        payload.stores[STORES.shadowEvents])||[])
+        .map(row=>[String(row.id),row]));
+      for(const old of shadowSnapshot){
+        const id=String(old.id);
+        const incoming=incomingShadow.get(id);
+        if(!incoming||stableStringify(incoming)!==stableStringify(old))
+          throw new Error('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED:'+id);
       }
     }
 
@@ -1207,6 +1221,30 @@
             }
           };
         }
+      }
+      // Existing Shadow receipts also require compare-and-swap INSIDE
+      // the same readwrite transaction. A valid preflight outside the
+      // transaction cannot protect another tab's late monetary update.
+      const shadowBefore=new Map(shadowSnapshot.map(row=>
+        [String(row&&row.id||''),row]));
+      const incomingShadowKeys=(replace?shadowSnapshot:
+        ((payload.stores&&payload.stores[STORES.shadowEvents])||[])
+          .filter(row=>shadowBefore.has(String(row.id))))
+        .map(row=>String(row.id));
+      const shadowStore=tx.objectStore(STORES.shadowEvents);
+      for(const id of new Set(incomingShadowKeys)){
+        const req=shadowStore.get(id);
+        req.onsuccess=()=>{
+          try{
+            const prior=shadowBefore.get(id)||null;
+            const current=req.result||null;
+            if(stableStringify(prior)!==stableStringify(current))
+              throw new Error('IMPORT_SHADOW_EVENT_CHANGED_DURING_IMPORT:'+id);
+          }catch(error){
+            evidenceRace=error;
+            try{tx.abort();}catch(_){/* already aborted */ }
+          }
+        };
       }
       for (const name of names) {
         const store = tx.objectStore(name);

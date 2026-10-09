@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.221-shadow-immutable-import'));
+  assert.ok(source.includes('v1.0.222-shadow-receipt-tx-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1955,4 +1955,18 @@ test('backup merge cannot silently skip another monetary event under same Shadow
  assert.throws(()=>store.validateImportPayload({...payload,stores:{
    [store.STORES.shadowEvents]:[{...shadow,observed_at:'2026-09-23T12:00:00Z'}]
  }},snapshot,{replace:false}),/IMPORT_SHADOW_EVENT_CONTENT_COLLISION/);
+});
+
+test('Shadow event receipts are CAS-protected when importing or replacing backups',()=>{
+ const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+ const body=src.slice(src.indexOf('  async function importAll('),
+  src.indexOf('  global.KTS_SETTLEMENT_STORE'));
+ assert.ok(body.includes('const shadowSnapshot=replace?await getAll(STORES.shadowEvents)'));
+ assert.ok(body.includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED:'));
+ assert.ok(body.includes('const req=shadowStore.get(id)'));
+ assert.ok(body.includes('IMPORT_SHADOW_EVENT_CHANGED_DURING_IMPORT:'));
+ assert.ok(body.includes('if(stableStringify(prior)!==stableStringify(current))'));
+ assert.ok(body.indexOf('const req=shadowStore.get(id)')<
+   body.indexOf('for (const name of names) {'));
+ assert.ok(body.includes('throw evidenceRace||error'));
 });
