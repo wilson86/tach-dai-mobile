@@ -160,15 +160,23 @@
       regionReport.settlements.push(settlement);
       const result = settlement.settlement_result || settlement.result_snapshot || {};
       const categories = settlementCategories(settlement);
-      const scopeStatus = settlement.scope_status || settlement.comparison_status || 'unverified';
+      // Treat legacy/corrupted labels case-insensitively and fail closed
+      // on unknown/missing states. A raw "BLOCKED" label must never turn
+      // into a seemingly valid or exact end-of-day money report.
+      const knownStatus=['blocked','provisional','complete_unverified']
+        .includes(settlementScopeStatus);
+      const scopeStatus=knownStatus?settlementScopeStatus:'blocked';
       regionReport.scope_statuses.push(scopeStatus);
       regionReport.kqxs_statuses.push(kqxsVerificationStatus(settlement));
 
-      if (scopeStatus === 'blocked' || settlement.comparison_status === 'blocked') {
+      if (scopeStatus === 'blocked' ||
+          String(settlement.comparison_status || '').toLowerCase()==='blocked') {
+        const reasons=Array.isArray(settlement.blocked_reasons)
+          ? settlement.blocked_reasons.slice():[];
+        if(!knownStatus)reasons.push('UNRECOGNIZED_SETTLEMENT_SCOPE_STATUS');
         blockedScopes.push({
           settlement_id: settlement.id,
-          region,
-          reasons: Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.slice() : [],
+          region,reasons,
           message_ids: messageIds(settlement)
         });
       }
@@ -216,7 +224,9 @@
         .filter(x => x.xac !== 0 || x.qua_co !== 0 || x.hit_units !== 0 || x.payout !== 0)
         .sort((a, b) => a.code.localeCompare(b.code));
       regionReport.direction = regionReport.final_net > 0 ? 'THU' : regionReport.final_net < 0 ? 'BU' : 'HOA';
-      regionReport.blocked = regionReport.scope_statuses.includes('blocked');
+      regionReport.blocked = regionReport.scope_statuses.includes('blocked') ||
+        regionReport.settlements.some(s=>
+          String(s.comparison_status||'').toLowerCase()==='blocked');
       regionReport.provisional = regionReport.scope_statuses.includes('provisional');
       regionReport.shadow_status = shadowStatusFromSettlements(regionReport.settlements);
       regionReport.kqxs_conflict = regionReport.kqxs_statuses.includes('conflict');
