@@ -828,15 +828,19 @@
       [store.STORES.metadata]:protectedRows,
       [store.STORES.shadowEvents]:[]
     }};
-    let shadowReplaceBlocked=false;
+    let shadowReplaceBlocked=false,shadowReplaceReason='NO_ERROR';
     try{await workers[0].KTS_SETTLEMENT_STORE.importAll(destructive,{replace:true});}
-    catch(error){shadowReplaceBlocked=String(error&&error.message||error)
-      .includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED');}
+    catch(error){
+      shadowReplaceReason=String(error&&error.message||error);
+      shadowReplaceBlocked=shadowReplaceReason
+        .includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED');
+    }
     if(!initialShadowReceipt||!shadowReplaceBlocked||
        JSON.stringify(await store.get(
-         store.STORES.shadowEvents,initialShadowReceipt.id))!==
+         store.STORES.shadowEvents,initialShadowReceipt&&initialShadowReceipt.id))!==
        JSON.stringify(initialShadowReceipt))
-      fail('REPLACE_SHADOW_SOURCE_RECEIPT_ERASED_OR_NOT_GUARDED');
+      fail('REPLACE_SHADOW_SOURCE_RECEIPT_ERASED_OR_NOT_GUARDED:'+
+       shadowReplaceReason+':receipt_present='+Boolean(initialShadowReceipt));
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
