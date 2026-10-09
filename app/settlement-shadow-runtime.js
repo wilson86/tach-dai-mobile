@@ -26,6 +26,8 @@
   function normalizeReference(input) {
     const ref = input && typeof input === 'object' ? clone(input) : {};
     const totals = ref.totals && typeof ref.totals === 'object' ? ref.totals : {};
+    if (Object.prototype.hasOwnProperty.call(ref,'categories') && !Array.isArray(ref.categories))
+      throw new Error('HIOSKT_CATEGORIES_INVALID');
     const normalized = { totals: {}, categories: [] };
     for (const key of ['xac', 'qua_co', 'payout', 'hoi', 'final']) {
       const value = totals[key] != null ? totals[key] : ref[key];
@@ -231,7 +233,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v7-atomic-scope-CAS',
+    version: 'settlement-shadow-runtime-v8-category-shape',
     scopeId,
     normalizeReference,
     localEvidence,
