@@ -281,6 +281,23 @@
     return true;
   }
 
+  function referenceExactSchemaValid(referenceExact, referenceRows) {
+    // The manual HIOSKT importer rejects unfamiliar exact keys. Direct
+    // shadow callers must enforce the same boundary rather than silently
+    // discarding an independent monetary assertion carried in an unknown key.
+    const knownTotals=new Set(Object.values(FIELD_ALIASES).flat());
+    if (referenceExact && Object.keys(referenceExact).some(k=>!knownTotals.has(k)))
+      return false;
+    const knownCategories=new Set(['xac','qua_co','hit_units','payout']);
+    if (Array.isArray(referenceRows)) {
+      for (const row of referenceRows) {
+        if (row && row.exact && typeof row.exact==='object' &&
+            Object.keys(row.exact).some(k=>!knownCategories.has(k))) return false;
+      }
+    }
+    return true;
+  }
+
   function compareSettlement(localSettlement, referenceSnapshot, options) {
     const local = localSettlement && (localSettlement.settlement_result || localSettlement.result_snapshot || localSettlement) || {};
     const reference = referenceSnapshot && (referenceSnapshot.totals || referenceSnapshot) || {};
@@ -314,7 +331,9 @@
       malformedCategoryContainer(localSettlement,['category_rows']) ||
       malformedCategoryContainer(local,['rows']) ||
       malformedCategoryContainer(referenceSnapshot,['categories','category_rows']));
+    const referenceExactSchemaOkay=referenceExactSchemaValid(reference.exact,referenceRows);
     const categoryEvidenceOkay=!invalidCategoryContainer &&
+      referenceExactSchemaOkay &&
       categoryEvidenceValid(localRows,options)&&categoryEvidenceValid(referenceRows,options);
     const invalidDisplayPrecision=displayPrecision(options)===null;
     const aliasEvidenceOkay=referenceAliasesValid(reference);
@@ -360,6 +379,7 @@
       invalid_total_alias_evidence: !aliasEvidenceOkay,
       invalid_exact_metadata: !exactMetadataOkay,
       invalid_exact_alias_evidence: !exactAliasesOkay,
+      invalid_reference_exact_schema: !referenceExactSchemaOkay,
       required_totals_exact: requiredTotalsExact,
       exact: status === 'MATCH_EXACT',
       safe_to_promote: status === 'MATCH_EXACT' && requiredTotalsExact && categoriesExact && aliasEvidenceOkay && exactMetadataOkay && exactAliasesOkay
@@ -417,7 +437,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v21-total-exact-alias-integrity',
+    version: 'settlement-shadow-v22-reference-exact-schema-integrity',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
