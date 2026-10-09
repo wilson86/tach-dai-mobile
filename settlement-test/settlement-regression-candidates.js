@@ -46,36 +46,29 @@
     };
   }
 
+  function candidateRows(row) {
+    if(row==null)return [];
+    if(row.key!==META_KEY||row.version!==1||!Array.isArray(row.candidates))
+      throw new Error('REGRESSION_CANDIDATE_METADATA_CORRUPTED');
+    return row.candidates;
+  }
+  function goldenRows(row,regression) {
+    if(row==null)return [];
+    if(row.key!==regression.META_KEY||row.version!==1||!Array.isArray(row.cases))
+      throw new Error('REGRESSION_GOLDEN_METADATA_CORRUPTED');
+    return row.cases;
+  }
+  function atomicStore() {
+    const {store}=deps();
+    if(typeof store.mutateMetadataAtomically!=='function')
+      throw new Error('REGRESSION_CANDIDATE_ATOMIC_STORE_REQUIRED');
+    return store;
+  }
   async function readMeta() {
-    const { store } = deps();
-    const row = await store.get(store.STORES.metadata, META_KEY);
-    return row && Array.isArray(row.candidates) ? row : { key: META_KEY, version: 1, candidates: [] };
-  }
-  function requestPromise(req) {
-    return new Promise((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('REGRESSION_CANDIDATE_WRITE_FAILED'));
-    });
-  }
-  function txPromise(tx) {
-    return new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error('REGRESSION_CANDIDATE_TX_FAILED'));
-      tx.onabort = () => reject(tx.error || new Error('REGRESSION_CANDIDATE_TX_ABORTED'));
-    });
-  }
-  async function writeMeta(row) {
-    const { store } = deps();
-    if (typeof store.saveMetadata === 'function') return store.saveMetadata(META_KEY, row);
-    if (typeof store.openDb !== 'function') throw new Error('REGRESSION_CANDIDATE_STORE_UNAVAILABLE');
-    const db = await store.openDb();
-    try {
-      const tx = db.transaction(store.STORES.metadata, 'readwrite');
-      const req = tx.objectStore(store.STORES.metadata).put(clone(row));
-      await requestPromise(req);
-      await txPromise(tx);
-    } finally { db.close(); }
-    return row;
+    const {store}=deps();
+    const row=await store.get(store.STORES.metadata,META_KEY);
+    candidateRows(row);
+    return row||{key:META_KEY,version:1,candidates:[]};
   }
 
   async function listCandidates(options) {
@@ -106,13 +99,16 @@
       final_delta: cmp.delta,
       case: replay
     });
-    const row = await readMeta();
-    const existing = row.candidates.find(c => String(c.id) === candidate.id);
-    if (existing) return normalizeCandidate(existing);
-    row.candidates.push(candidate);
-    row.updated_at = nowIso();
-    await writeMeta(row);
-    return candidate;
+    let captured=null;
+    await atomicStore().mutateMetadataAtomically(META_KEY,row=>{
+      const cases=candidateRows(row);
+      const existing=cases.find(c=>String(c.id)===candidate.id);
+      captured=existing?normalizeCandidate(existing):candidate;
+      if(existing)return row;
+      const next=cases.concat([candidate]);
+      return {key:META_KEY,version:1,updated_at:nowIso(),candidates:next};
+    });
+    return captured;
   }
 
   async function captureScope(scope) {
@@ -124,38 +120,67 @@
   }
 
   async function confirmAndPin(id, options) {
-    if (!options || options.reference_confirmed !== true) throw new Error('REGRESSION_CANDIDATE_REFERENCE_CONFIRMATION_REQUIRED');
-    const d = deps();
-    const row = await readMeta();
-    const index = row.candidates.findIndex(c => String(c.id) === String(id));
-    if (index < 0) throw new Error('REGRESSION_CANDIDATE_NOT_FOUND');
-    const candidate = normalizeCandidate(row.candidates[index]);
-    if (candidate.state === STATES.DISMISSED) throw new Error('REGRESSION_CANDIDATE_DISMISSED');
-    await d.regression.pinCase(candidate.case);
-    candidate.state = STATES.PROMOTED;
-    candidate.promoted_at = nowIso();
-    candidate.updated_at = candidate.promoted_at;
-    candidate.confirmation_note = String(options.note || 'HIOSKT reference confirmed by operator');
-    row.candidates[index] = candidate;
-    row.updated_at = candidate.updated_at;
-    await writeMeta(row);
-    return candidate;
+    if(!options||options.reference_confirmed!==true)
+      throw new Error('REGRESSION_CANDIDATE_REFERENCE_CONFIRMATION_REQUIRED');
+    const d=deps();
+    const store=d.store,regression=d.regression;
+    if(typeof store.mutateMetadataRowsAtomically!=='function'||
+       typeof regression.normalizeCase!=='function'||!regression.META_KEY)
+      throw new Error('REGRESSION_CANDIDATE_ATOMIC_PROMOTION_REQUIRED');
+    const target=String(id);
+    return store.mutateMetadataRowsAtomically([META_KEY,regression.META_KEY],rows=>{
+      const candidates=candidateRows(rows[META_KEY]).map(normalizeCandidate);
+      const index=candidates.findIndex(c=>c.id===target);
+      if(index<0)throw new Error('REGRESSION_CANDIDATE_NOT_FOUND');
+      const c=candidates[index];
+      if(c.state===STATES.DISMISSED)throw new Error('REGRESSION_CANDIDATE_DISMISSED');
+      // An existing golden case must never be overwritten by a different
+      // unverified reference (including an older case with matching ID).
+      const golden=goldenRows(rows[regression.META_KEY],regression);
+      const pinned=regression.normalizeCase(c.case);
+      const current=golden.find(row=>row.id===pinned.id);
+      if(current&&JSON.stringify(current)!==JSON.stringify(pinned))
+        throw new Error('REGRESSION_GOLDEN_CONFLICTING_CASE');
+      if(c.state===STATES.PROMOTED&&!current)
+        throw new Error('REGRESSION_CANDIDATE_PROMOTION_INCOMPLETE');
+      if(c.state===STATES.PENDING){
+        c.state=STATES.PROMOTED;
+        c.promoted_at=nowIso();
+        c.updated_at=c.promoted_at;
+        c.confirmation_note=String(options.note||'HIOSKT reference confirmed by operator');
+      }
+      candidates[index]=c;
+      return {
+        rows:{
+          [META_KEY]:{key:META_KEY,version:1,updated_at:nowIso(),candidates},
+          [regression.META_KEY]:{key:regression.META_KEY,version:1,
+            updated_at:nowIso(),cases:current?golden:golden.concat([pinned])}
+        },
+        result:c
+      };
+    });
   }
 
-  async function dismissCandidate(id, reason) {
-    const row = await readMeta();
-    const index = row.candidates.findIndex(c => String(c.id) === String(id));
-    if (index < 0) throw new Error('REGRESSION_CANDIDATE_NOT_FOUND');
-    const candidate = normalizeCandidate(row.candidates[index]);
-    if (candidate.state === STATES.PROMOTED) throw new Error('REGRESSION_CANDIDATE_ALREADY_PROMOTED');
-    candidate.state = STATES.DISMISSED;
-    candidate.dismissed_at = nowIso();
-    candidate.updated_at = candidate.dismissed_at;
-    candidate.dismiss_reason = String(reason || 'dismissed by operator');
-    row.candidates[index] = candidate;
-    row.updated_at = candidate.updated_at;
-    await writeMeta(row);
-    return candidate;
+  async function dismissCandidate(id,reason) {
+    const wanted=String(id);
+    let dismissed=null;
+    await atomicStore().mutateMetadataAtomically(META_KEY,row=>{
+      const candidates=candidateRows(row).map(normalizeCandidate);
+      const index=candidates.findIndex(c=>c.id===wanted);
+      if(index<0)throw new Error('REGRESSION_CANDIDATE_NOT_FOUND');
+      const c=candidates[index];
+      if(c.state===STATES.PROMOTED)throw new Error('REGRESSION_CANDIDATE_ALREADY_PROMOTED');
+      if(c.state!==STATES.DISMISSED){
+        c.state=STATES.DISMISSED;
+        c.dismissed_at=nowIso();
+        c.updated_at=c.dismissed_at;
+        c.dismiss_reason=String(reason||'dismissed by operator');
+      }
+      dismissed=c;
+      candidates[index]=c;
+      return {key:META_KEY,version:1,updated_at:nowIso(),candidates};
+    });
+    return dismissed;
   }
 
   function mismatchScopesFromSavedDetail(detail) {

@@ -21,9 +21,8 @@
   global.KTS_SETTLEMENT_REGRESSION_CASES={
     version:'synthetic-regression-dependency',listPinnedCases:async()=>[]
   };
-  global.KTS_SETTLEMENT_REGRESSION_CANDIDATES={
-    listCandidates:async()=>[]
-  };
+  global.KTS_SETTLEMENT_REGRESSION_CANDIDATES={listCandidates:async()=>[]};
+  global.KTS_SETTLEMENT_SHADOW_RUNTIME={version:'synthetic-no-oracle'};
   global.KTS_SETTLEMENT_PARSER_PROVIDER={
     version:'synthetic-parser-provider',fetchIdentity:async()=>identity
   };
@@ -32,6 +31,7 @@
 </script>
 <script src="./settlement-qualification-history.js"></script>
 <script src="./settlement-regression-cases.js"></script>
+<script src="./settlement-regression-candidates.js"></script>
 <script>
 (async()=>{
   const query=new URLSearchParams(location.search);
@@ -418,6 +418,65 @@
     const preservedCorrupt=await store.get(store.STORES.metadata,corruptGolden.key);
     if(!refusedCorrupt||preservedCorrupt.cases!=='CORRUPTED')
       fail('CORRUPT_GOLDEN_METADATA_OVERWRITTEN');
+
+    // Restoring *only synthetic fixture rows*: never imports or overwrites
+    // any genuine historical payout or unverified HIOSKT source.
+    await putSynthetic(store.STORES.metadata,{
+      key:corruptGolden.key,version:1,cases:retained
+    });
+    const candApi=window.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    if(!candApi||typeof candApi.confirmAndPin!=='function'||
+       workers.some(w=>!w.KTS_SETTLEMENT_REGRESSION_CANDIDATES))
+      fail('CANDIDATE_BROWSER_WORKER_API_MISSING');
+    const candidateFor=i=>candApi.normalizeCandidate({
+      id:'candidate:synthetic-'+i,source_event_id:'synthetic-'+i,
+      state:'pending',source_comparison_status:'MISMATCH',
+      case:window.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase(regressionCase(i))
+    });
+    const candidateKey=candApi.META_KEY;
+    await putSynthetic(store.STORES.metadata,{
+      key:candidateKey,version:1,candidates:[candidateFor(4),candidateFor(5),candidateFor(6)]
+    });
+    // Two unrelated HIOSKT mismatch candidates promoted from separate
+    // same-origin frames must both survive and both create golden cases.
+    const dual=await Promise.all([4,5].map((i,j)=>
+      workers[j].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        'candidate:synthetic-'+i,{reference_confirmed:true,note:'SYNTHETIC_ONLY'})));
+    if(dual.some(c=>c.state!=='promoted'))
+      fail('CANDIDATE_DUAL_PROMOTION_NOT_COMMITTED');
+    const latestGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    const candidateStored=await candApi.listCandidates();
+    if(latestGolden.length!==4||candidateStored.filter(c=>c.state==='promoted').length!==2)
+      fail('CANDIDATE_GOLDEN_PROMOTION_CROSS_TAB_LOST_UPDATE');
+    // Concurrent promote vs dismiss for the SAME candidate must commit
+    // only one terminal state; loser must throw and cannot leave orphan gold.
+    const conflict=await Promise.allSettled([
+      workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        'candidate:synthetic-6',{reference_confirmed:true,note:'SYNTHETIC_ONLY'}),
+      workers[1].KTS_SETTLEMENT_REGRESSION_CANDIDATES.dismissCandidate(
+        'candidate:synthetic-6','SYNTHETIC_ONLY')
+    ]);
+    if(conflict.filter(x=>x.status==='fulfilled').length!==1||
+       conflict.filter(x=>x.status==='rejected').length!==1)
+      fail('CANDIDATE_PROMOTE_DISMISS_RACE_NOT_SERIALIZED');
+    const afterRace=(await candApi.listCandidates()).find(c=>c.id==='candidate:synthetic-6');
+    const afterRaceGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(!afterRace||!['promoted','dismissed'].includes(afterRace.state)||
+       afterRaceGolden.some(c=>c.id==='synthetic-golden-6')!==(afterRace.state==='promoted'))
+      fail('CANDIDATE_GOLDEN_STATE_NOT_ATOMIC');
+    const corruptCandidate={key:candidateKey,version:1,candidates:'CORRUPTED'};
+    await putSynthetic(store.STORES.metadata,corruptCandidate);
+    const beforeBadGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    let refusedBadCandidate=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        'candidate:synthetic-4',{reference_confirmed:true});
+    }catch(error){refusedBadCandidate=String(error&&error.message||error).includes('METADATA_CORRUPTED');}
+    const badCandidateStored=await store.get(store.STORES.metadata,candidateKey);
+    const unchangedGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(!refusedBadCandidate||badCandidateStored.candidates!=='CORRUPTED'||
+       unchangedGolden.length!==beforeBadGolden.length)
+      fail('CANDIDATE_CORRUPT_METADATA_ACCEPTED_OR_PARTIAL_PIN');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -439,6 +498,9 @@
       'SETTLEMENT_BLOCKED_EMPTY_ATOMIC_CAS=PASS',
        'GOLDEN_CROSS_TAB_METADATA_ATOMIC=PASS',
        'GOLDEN_CORRUPT_METADATA_FAIL_CLOSED=PASS',
+       'CANDIDATE_CROSS_TAB_ATOMIC_PROMOTION=PASS',
+       'CANDIDATE_PROMOTE_DISMISS_RACE_SERIAL=PASS',
+       'CANDIDATE_CORRUPT_METADATA_FAIL_CLOSED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'

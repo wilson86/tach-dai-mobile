@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.204-golden-metadata-atomic'));
+  assert.ok(sw.includes('v1.0.205-candidate-golden-dual-atomic'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1879,4 +1879,16 @@ test('regression golden PIN/REMOVE require serializable atomic metadata store',(
   assert.ok(regression.includes('mutateMetadataAtomically(META_KEY,row=>'));
   assert.ok(!regression.includes('async function writeMeta('));
   assert.ok(regression.includes("throw new Error('REGRESSION_METADATA_CORRUPTED')"));
+});
+
+test('HIOSKT candidate PROMOTED and golden case must commit as one IndexedDB metadata transaction',()=>{
+  const source=readFileSync(resolve(root,'settlement-test','settlement-regression-candidates.js'),'utf8');
+  const store=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
+  assert.ok(source.includes('mutateMetadataRowsAtomically([META_KEY,regression.META_KEY]'));
+  assert.ok(store.includes('async function mutateMetadataRowsAtomically(keys,mutator)'));
+  assert.ok(source.includes('REGRESSION_CANDIDATE_METADATA_CORRUPTED'));
+  assert.ok(source.includes('REGRESSION_GOLDEN_CONFLICTING_CASE'));
+  assert.ok(source.includes('REGRESSION_CANDIDATE_PROMOTION_INCOMPLETE'));
+  assert.ok(source.includes('mutateMetadataAtomically(META_KEY,row=>'));
+  assert.ok(!source.includes('async function writeMeta('));
 });
