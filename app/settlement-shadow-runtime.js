@@ -25,14 +25,42 @@
 
   function normalizeReference(input) {
     const ref = input && typeof input === 'object' ? clone(input) : {};
-    const totals = ref.totals && typeof ref.totals === 'object' ? ref.totals : {};
+    if (Object.prototype.hasOwnProperty.call(ref,'totals') &&
+        (!ref.totals || typeof ref.totals!=='object' || Array.isArray(ref.totals)))
+      throw new Error('HIOSKT_TOTALS_INVALID');
+    const totals = ref.totals || {};
     if (Object.prototype.hasOwnProperty.call(ref,'categories') && !Array.isArray(ref.categories))
       throw new Error('HIOSKT_CATEGORIES_INVALID');
     const normalized = { totals: {}, categories: [] };
-    for (const key of ['xac', 'qua_co', 'payout', 'hoi', 'final']) {
-      const value = totals[key] != null ? totals[key] : ref[key];
-      if (value == null || value === '') continue;
-      normalized.totals[key] = strictMoney(value,'HIOSKT_REFERENCE_INVALID:' + key);
+    const canon=global.KTS_SETTLEMENT_SHADOW && global.KTS_SETTLEMENT_SHADOW.decimalCanonical;
+    // Equal numbers may be written 0, 0.00 or 0e0; never compare their
+    // decimal evidence by IEEE-754 Number or raw string formatting.
+    const equalMoney=(left,right)=>typeof canon==='function'
+      ? canon(left)===canon(right) : String(left).trim()===String(right).trim();
+    const groups={
+      xac:['total_xac','xac'],
+      qua_co:['total_qua_co','qua_co'],
+      payout:['total_payout','payout','tien_trung'],
+      hoi:['refund_amount','refund','hoi'],
+      final:['final_net','final','thu_bu']
+    };
+    // Preserve ALL known names found in nested totals or top-level input:
+    // otherwise an imported conflicting alias can vanish before comparison.
+    for (const [group,aliases] of Object.entries(groups)) {
+      let previous=null;
+      for (const key of aliases) {
+        for (const source of [totals,ref]) {
+          if (!Object.prototype.hasOwnProperty.call(source,key)) continue;
+          const raw=source[key];
+          if (raw==null || raw==='') continue;
+          const amount=strictMoney(raw,'HIOSKT_REFERENCE_INVALID:'+key);
+          if (previous!==null && !equalMoney(previous,amount))
+            throw new Error('HIOSKT_TOTAL_ALIAS_CONFLICT:'+group);
+          if (!Object.prototype.hasOwnProperty.call(normalized.totals,key))
+            normalized.totals[key]=amount;
+          previous=amount;
+        }
+      }
     }
 
     // Preserve explicit oracle exact proof instead of silently stripping it.
@@ -51,7 +79,7 @@
         if (!field) throw new Error('HIOSKT_TOTAL_EXACT_UNKNOWN:'+name);
         const amount=strictMoney(value,'HIOSKT_TOTAL_EXACT_INVALID:'+name);
         if (Object.prototype.hasOwnProperty.call(normalized.totals.exact,field) &&
-            String(normalized.totals.exact[field])!==String(amount))
+            !equalMoney(normalized.totals.exact[field],amount))
           throw new Error('HIOSKT_TOTAL_EXACT_ALIAS_CONFLICT:'+field);
         normalized.totals.exact[field]=amount;
       }
@@ -265,7 +293,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v9-preserve-exact-oracle',
+    version: 'settlement-shadow-runtime-v10-preserve-total-aliases',
     scopeId,
     normalizeReference,
     localEvidence,
