@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.196-source-decimal-category'));
+  assert.ok(sw.includes('v1.0.197-category-label-integrity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1698,4 +1698,28 @@ test('category aggregation preserves input exact strings beyond IEEE-754 precisi
     {totals,categories:[{code:'B',payout:'0.10000000000000001'}]});
   assert.equal(longDecimal.safe_to_promote,false,'LONG_DECIMAL_PREMATURELY_ROUNDED');
   assert.equal(compare({...local,category_rows:[{code:'B',xac:'9007199254740993'}]},reference).safe_to_promote,true);
+});
+
+test('contradictory category code/category aliases fail closed in direct shadow and manual reference',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',name),'utf8'),ctx,{filename:name});
+  const shadow=ctx.window.KTS_SETTLEMENT_SHADOW;
+  const normal=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME.normalizeReference;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',xac:0,payout:0}]};
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  const valid=shadow.compareSettlement(local,{totals,categories:[{code:'B',category:' b ',xac:0}]});
+  assert.equal(valid.safe_to_promote,true,'EQUIVALENT_CATEGORY_ALIASES');
+  const mismatched=shadow.compareSettlement(local,{totals,categories:[{code:'B',category:'DD',xac:0}]});
+  assert.equal(mismatched.safe_to_promote,false,'CONFLICTING_CATEGORY_ALIAS_PROMOTED');
+  assert.equal(mismatched.invalid_category_evidence,true);
+  const localConflict=shadow.compareSettlement({...local,category_rows:[{code:'B',category:'DD',xac:0}]},
+    {totals,categories:[{code:'B',xac:0}]});
+  assert.equal(localConflict.safe_to_promote,false,'LOCAL_CONFLICTING_CATEGORY_PROMOTED');
+  assert.throws(()=>normal({totals,categories:[{code:'B',category:'DD',xac:0}]}),
+    /HIOSKT_CATEGORY_LABEL_CONFLICT/);
+  assert.equal(normal({totals,categories:[{code:' b ',category:'B',xac:0}]}).categories[0].code,'B');
+  for(const code of ['  ',17,{},[]])
+    assert.throws(()=>normal({totals,categories:[{code,xac:0}]}),/HIOSKT_CATEGORY_CODE_REQUIRED/);
 });
