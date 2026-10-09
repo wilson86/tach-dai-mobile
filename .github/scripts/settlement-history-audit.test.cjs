@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.229-empty-import-money-safety'));
+  assert.ok(sw.includes('v1.0.230-blocked-import-integrity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2307,4 +2307,51 @@ test('empty backup scope rejects disguised zero and contradictory monetary evide
     {},{replace:false}),/IMPORT_EMPTY_SETTLEMENT_TOTALS_INVALID/);
   assert.throws(()=>st.validateImportPayload(backup({...row,settlement_result:null}),
     {},{replace:false}),/IMPORT_EMPTY_SETTLEMENT_TOTALS_MISSING/);
+});
+
+test('BLOCKED backup cannot smuggle payable money, rows or fabricated scope status',()=>{
+  const context={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8'),context);
+  const st=context.window.KTS_SETTLEMENT_STORE;
+  const partner={id:'synthetic-block-money',name:'Synthetic',role:'customer'};
+  const msg={id:'synthetic-block-msg',partner_id:partner.id,
+    business_date:'2026-09-22',region:'mn',raw_text:'SYNTHETIC',status:'parser_error',
+    parser_error:'synthetic-only',canonical_payload:null};
+  const zeros={total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0};
+  const row={id:'scope:synthetic-block-money:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'blocked',comparison_status:'blocked',
+    message_ids:[msg.id],blocked_reasons:['PARSER_ERROR'],
+    settlement_result:{...zeros},result_snapshot:{...zeros}};
+  const wrap=v=>({format:'kts-settlement-export',version:5,
+    stores:{partners:[partner],messages:[msg],settlements:[v]}});
+  assert.equal(st.validateImportPayload(wrap(row),{},{replace:false}).valid,true);
+  for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
+    for(const location of ['settlement_result','result_snapshot']){
+      for(const bad of [1,-3,'5',false,[],{},'0x0','  ']){
+        const mutation={...row,[location]:{...row[location],[field]:bad}};
+        assert.throws(()=>st.validateImportPayload(wrap(mutation),{},{replace:false}),
+          /IMPORT_BLOCKED_SETTLEMENT_NONZERO/);
+      }
+    }
+  }
+  for(const location of ['settlement_result','result_snapshot']){
+    for(const field of ['detail_rows','category_rows','message_breakdown']){
+      assert.throws(()=>st.validateImportPayload(wrap({...row,
+        [location]:{...row[location],[field]:[{final_net:100}]}}),{},{replace:false}),
+        /IMPORT_BLOCKED_SETTLEMENT_ATTRIBUTION_NONEMPTY/);
+    }
+  }
+  for(const field of ['detail_rows','category_rows','message_breakdown']){
+    assert.throws(()=>st.validateImportPayload(wrap({...row,
+      [field]:[{final_net:100}]}),{},{replace:false}),
+      /IMPORT_BLOCKED_SETTLEMENT_ATTRIBUTION_NONEMPTY/);
+  }
+  for(const status of ['verified','ready','settled_verified','complete','not_comparable']){
+    assert.throws(()=>st.validateImportPayload(wrap({...row,scope_status:status}),
+      {},{replace:false}),/IMPORT_SETTLEMENT_STATUS_INVALID/);
+  }
+  assert.throws(()=>st.validateImportPayload(wrap({...row,result_snapshot:null,
+    settlement_result:null}),{},{replace:false}),
+    /IMPORT_BLOCKED_SETTLEMENT_TOTALS_MISSING/);
 });
