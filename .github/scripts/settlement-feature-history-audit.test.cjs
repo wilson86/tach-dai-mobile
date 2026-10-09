@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.208-promoted-golden-lineage'));
+  assert.ok(source.includes('v1.0.209-promoted-golden-delete-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1728,6 +1728,10 @@ test('PROMOTED HIOSKT candidate without matching golden blocks READY even when o
     regression:{total:1,passed:1,failed:0},
     feature_safety:{met:true,unsafe_count:0}
   };
+  const incomplete=Q.combineQualification({...gates,
+    candidates:{...linked,promoted_conflicting:undefined}});
+  assert.equal(incomplete.ready_for_production_review,false);
+  assert.ok(incomplete.blockers.includes('PROMOTED_GOLDEN_EVIDENCE_UNLINKED'));
   const valid=Q.combineQualification({...gates,candidates:linked});
   assert.equal(valid.ready_for_production_review,true);
   assert.equal(H.validateSnapshotDecision(valid).valid,true);
@@ -1747,4 +1751,12 @@ test('PROMOTED HIOSKT candidate without matching golden blocks READY even when o
   delete bypass.candidate_gate.promoted_missing;
   assert.equal(H.validateSnapshotDecision(bypass).reason,
     'READY_GATE_EVIDENCE_CONTRADICTION_CANDIDATE_GATE');
+});
+
+test('deletion of golden backing PROMOTED HIOSKT is forbidden inside atomic candidate+golden transaction',()=>{
+  const golden=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
+  assert.ok(golden.includes('REGRESSION_GOLDEN_LINKED_TO_PROMOTED_CANDIDATE'));
+  assert.ok(golden.includes('mutateMetadataRowsAtomically([META_KEY,candidateKey]'));
+  assert.ok(golden.includes('REGRESSION_CANDIDATE_METADATA_CORRUPTED'));
+  assert.ok(golden.includes('REGRESSION_GOLDEN_DELETE_LINK_GUARD_UNAVAILABLE'));
 });
