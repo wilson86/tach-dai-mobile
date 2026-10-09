@@ -573,12 +573,14 @@
       candidates:cleanCandidateRow.candidates.concat([
         JSON.parse(JSON.stringify(cleanCandidateRow.candidates[0]))])};
     await putSynthetic(store.STORES.metadata,duplicateCandidateRow);
-    let duplicateReadRejected=false;
+    let duplicateReadRejected=false,duplicateDiagnostic='NO_ERROR';
     try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
-    catch(error){duplicateReadRejected=String(error&&error.message||error)
-      .includes('REGRESSION_CANDIDATE_DUPLICATE_ID');}
+    catch(error){
+      duplicateDiagnostic=String(error&&error.message||error);
+      duplicateReadRejected=duplicateDiagnostic.includes('REGRESSION_CANDIDATE_DUPLICATE_ID');
+    }
     if(!duplicateReadRejected)
-      fail('DUPLICATE_HIOSKT_CANDIDATE_METADATA_NOT_REJECTED');
+      fail('DUPLICATE_HIOSKT_CANDIDATE_METADATA_NOT_REJECTED:'+duplicateDiagnostic);
     await putSynthetic(store.STORES.metadata,cleanCandidateRow);
     if((await candApi.listCandidates()).length!==cleanCandidateRow.candidates.length)
       fail('DUPLICATE_CANDIDATE_RECOVERY_NOT_REPRODUCIBLE');
