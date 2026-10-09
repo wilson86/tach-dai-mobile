@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.220-replace-evidence-preserve'));
+  assert.ok(source.includes('v1.0.221-shadow-immutable-import'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1927,4 +1927,32 @@ test('replace backup cannot remove protected golden/candidate/qualification proo
  assert.ok(body.includes('IMPORT_PROTECTED_EVIDENCE_CHANGED_DURING_IMPORT:'));
  assert.ok(body.includes('const req=metadata.get(key)'));
  assert.ok(body.includes('throw evidenceRace||error'));
+});
+
+test('backup merge cannot silently skip another monetary event under same Shadow ID',()=>{
+ const context={window:{}};
+ vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),context);
+ const store=context.window.KTS_SETTLEMENT_STORE;
+ const partner={id:'synthetic-partner',role:'customer'};
+ const shadow={
+   id:'shadow-synthetic-1',partner_id:partner.id,
+   scope_id:'scope:synthetic-partner:2026-09-22:mn',
+   business_date:'2026-09-22',region:'mn',
+   trigger:'SYNTHETIC_IMPORT',reason:'SYNTHETIC_ONLY',
+   observed_at:'2026-09-22T12:00:00Z',
+   local_snapshot:{settlement_result:{final_net:0}},
+   reference_snapshot:{totals:{final:'0'}},
+   comparison:{status:'MATCH_EXACT'},comparison_status:'MATCH_EXACT'
+ };
+ const stores={[store.STORES.shadowEvents]:[shadow]};
+ const snapshot={[store.STORES.partners]:[partner],[store.STORES.shadowEvents]:[shadow]};
+ const payload={format:'kts-settlement-export',version:5,stores};
+ assert.equal(store.validateImportPayload(payload,snapshot,{replace:false}).valid,true);
+ const conflicting={...shadow,reference_snapshot:{totals:{final:'100'}}};
+ assert.throws(()=>store.validateImportPayload({...payload,stores:{
+   [store.STORES.shadowEvents]:[conflicting]}},snapshot,{replace:false}),
+   /IMPORT_SHADOW_EVENT_CONTENT_COLLISION/);
+ assert.throws(()=>store.validateImportPayload({...payload,stores:{
+   [store.STORES.shadowEvents]:[{...shadow,observed_at:'2026-09-23T12:00:00Z'}]
+ }},snapshot,{replace:false}),/IMPORT_SHADOW_EVENT_CONTENT_COLLISION/);
 });
