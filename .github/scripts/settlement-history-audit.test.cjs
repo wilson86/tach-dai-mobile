@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.211-golden-duplicate-read-guard'));
+  assert.ok(sw.includes('v1.0.212-claimed-golden-promotion-guard'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2004,4 +2004,12 @@ test('golden metadata read refuses duplicate IDs and duplicated source events',(
  assert.ok(src.includes('REGRESSION_GOLDEN_DUPLICATE_ID'));
  assert.ok(src.includes('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT'));
  assert.ok(src.includes('existingCases(row);'));
+});
+
+test('no second HIOSKT candidate can promote one already-claimed golden',()=>{
+ const source=readFileSync(resolve(root,'settlement-test','settlement-regression-candidates.js'),'utf8');
+ assert.ok(source.includes('REGRESSION_GOLDEN_ALREADY_CLAIMED'));
+ assert.ok(source.includes('if(other.id===c.id||other.state!==STATES.PROMOTED)continue'));
+ assert.ok(source.includes('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT'));
+ assert.ok(source.includes('mutateMetadataRowsAtomically([META_KEY,regression.META_KEY]'));
 });

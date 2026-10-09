@@ -608,6 +608,36 @@
     await putSynthetic(store.STORES.metadata,cleanGolden);
     if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases()).length!==cleanGolden.cases.length)
       fail('GOLDEN_CORRUPT_IMPORT_RECOVERY_INVALID');
+
+    // A second operator candidate must not attach to an already-confirmed
+    // golden even if it supplies the same normalized reference/case ID.
+    const candidatesBeforeAlias=await store.get(store.STORES.metadata,candidateKey);
+    const goldenBeforeAlias=await store.get(store.STORES.metadata,corruptGolden.key);
+    const originalClaim=candidatesBeforeAlias.candidates.find(c=>
+      c.id==='candidate:synthetic-4'&&c.state==='promoted');
+    if(!originalClaim)fail('PROMOTED_CLAIM_FIXTURE_MISSING');
+    const duplicateClaim=candApi.normalizeCandidate({
+      ...originalClaim,id:'candidate:synthetic-alias',
+      source_event_id:'synthetic-alias',state:'pending',
+      promoted_at:null,confirmation_note:''
+    });
+    await putSynthetic(store.STORES.metadata,{
+      ...candidatesBeforeAlias,
+      candidates:candidatesBeforeAlias.candidates.concat([duplicateClaim])
+    });
+    let aliasBlocked=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        duplicateClaim.id,{reference_confirmed:true,note:'SYNTHETIC_ONLY'});
+    }catch(error){
+      aliasBlocked=String(error&&error.message||error).includes('REGRESSION_GOLDEN_ALREADY_CLAIMED');
+    }
+    const afterAlias=await store.get(store.STORES.metadata,candidateKey);
+    const goldenAfterAlias=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!aliasBlocked||afterAlias.candidates.find(c=>c.id===duplicateClaim.id).state!=='pending'||
+       JSON.stringify(goldenBeforeAlias)!==JSON.stringify(goldenAfterAlias))
+      fail('DOUBLE_HIOSKT_CONFIRMATION_CHANGED_GOLDEN_OR_CANDIDATE');
+    await putSynthetic(store.STORES.metadata,candidatesBeforeAlias);
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -640,6 +670,7 @@
        'DUPLICATE_HIOSKT_CANDIDATE_REJECTED=PASS',
        'DUPLICATE_GOLDEN_ID_FAIL_CLOSED=PASS',
        'DUPLICATE_GOLDEN_SOURCE_FAIL_CLOSED=PASS',
+       'SECOND_HIOSKT_GOLDEN_CLAIM_REFUSED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

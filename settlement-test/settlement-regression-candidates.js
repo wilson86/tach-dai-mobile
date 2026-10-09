@@ -64,6 +64,16 @@
     if(row==null)return [];
     if(row.key!==regression.META_KEY||row.version!==1||!Array.isArray(row.cases))
       throw new Error('REGRESSION_GOLDEN_METADATA_CORRUPTED');
+    const ids=new Set(),events=new Set();
+    for(const item of row.cases){
+      const n=regression.normalizeCase(item);
+      if(ids.has(n.id))throw new Error('REGRESSION_GOLDEN_DUPLICATE_ID');
+      ids.add(n.id);
+      if(n.source_event_id){
+        if(events.has(n.source_event_id))throw new Error('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT');
+        events.add(n.source_event_id);
+      }
+    }
     return row.cases;
   }
   function atomicStore() {
@@ -171,6 +181,13 @@
       // unverified reference (including an older case with matching ID).
       const golden=goldenRows(rows[regression.META_KEY],regression);
       const pinned=regression.normalizeCase(c.case);
+      // Only one reviewed HIOSKT event may claim a given golden identity.
+      // Check sibling candidates in the same metadata transaction as promotion.
+      for(const other of candidates){
+        if(other.id===c.id||other.state!==STATES.PROMOTED)continue;
+        if(regression.normalizeCase(other.case).id===pinned.id)
+          throw new Error('REGRESSION_GOLDEN_ALREADY_CLAIMED');
+      }
       const current=golden.find(row=>row.id===pinned.id);
       if(current&&JSON.stringify(current)!==JSON.stringify(pinned))
         throw new Error('REGRESSION_GOLDEN_CONFLICTING_CASE');
