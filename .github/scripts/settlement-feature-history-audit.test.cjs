@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.222-shadow-receipt-tx-guard'));
+  assert.ok(source.includes('v1.0.223-monetary-import-id-collision'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1969,4 +1969,31 @@ test('Shadow event receipts are CAS-protected when importing or replacing backup
  assert.ok(body.indexOf('const req=shadowStore.get(id)')<
    body.indexOf('for (const name of names) {'));
  assert.ok(body.includes('throw evidenceRace||error'));
+});
+
+test('import backup cannot silently skip different KQXS draw or settlement money under existing ID',()=>{
+ const context={window:{}};
+ vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),
+   context);
+ const api=context.window.KTS_SETTLEMENT_STORE;
+ const p={id:'synthetic-import-01',role:'customer'};
+ const sett={id:'scope:synthetic-import-01:2026-09-22:mn',
+   partner_id:p.id,business_date:'2026-09-22',region:'mn',
+   scope_status:'empty',message_ids:[],
+   settlement_result:{final_net:0,total_xac:0,total_qua_co:0,total_payout:0}};
+ const draw={id:'2026-09-22:mn',business_date:'2026-09-22',
+   region:'mn',complete:false,status:'partial',
+   stations:[{code:'tp',prizes:{DB:['123456']}}]};
+ const existing={partners:[p],settlements:[sett],results:[draw]};
+ const wrap=(entries)=>({format:'kts-settlement-export',version:5,stores:entries});
+ assert.equal(api.validateImportPayload(wrap({settlements:[sett],results:[draw]}),
+   existing,{replace:false}).valid,true);
+ const differentMoney={...sett,settlement_result:{
+   ...sett.settlement_result,final_net:500}};
+ assert.throws(()=>api.validateImportPayload(wrap({settlements:[differentMoney]}),
+   existing,{replace:false}),/IMPORT_SETTLEMENT_MONETARY_COLLISION/);
+ const differentDraw={...draw,stations:[
+   {code:'tp',prizes:{DB:['999999']}}]};
+ assert.throws(()=>api.validateImportPayload(wrap({results:[differentDraw]}),
+   existing,{replace:false}),/IMPORT_RESULT_CONTENT_COLLISION/);
 });
