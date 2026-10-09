@@ -187,6 +187,13 @@
         return false;
       const code=row.code || row.category;
       if (typeof code !== 'string' || !code.trim()) return false;
+      // Both labels refer to the SAME HIOSKT category. Imported evidence
+      // with contradictory labels must not be quietly assigned to row.code.
+      if (Object.prototype.hasOwnProperty.call(row,'code') &&
+          Object.prototype.hasOwnProperty.call(row,'category') &&
+          (typeof row.code!=='string' || typeof row.category!=='string' ||
+            row.code.trim().toUpperCase()!==row.category.trim().toUpperCase()))
+        return false;
       for (const field of fields) {
         if (Object.prototype.hasOwnProperty.call(row,field) && numeric(row[field])===null)
           return false;
@@ -385,7 +392,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v19-source-decimal-category-evidence',
+    version: 'settlement-shadow-v20-category-label-integrity',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,

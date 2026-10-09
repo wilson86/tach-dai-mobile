@@ -86,8 +86,13 @@
     }
     if (Array.isArray(ref.categories)) {
       normalized.categories = ref.categories.map(row => {
-        if (!row || !row.code) throw new Error('HIOSKT_CATEGORY_CODE_REQUIRED');
-        const out = { code: String(row.code).toUpperCase() };
+        if (!row || typeof row.code!=='string' || !row.code.trim())
+          throw new Error('HIOSKT_CATEGORY_CODE_REQUIRED');
+        const code=row.code.trim().toUpperCase();
+        if (Object.prototype.hasOwnProperty.call(row,'category') &&
+            (typeof row.category!=='string' || row.category.trim().toUpperCase()!==code))
+          throw new Error('HIOSKT_CATEGORY_LABEL_CONFLICT');
+        const out = { code };
         for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
           if (row[field] == null || row[field] === '') continue;
           out[field] = strictMoney(row[field],'HIOSKT_CATEGORY_INVALID:' + field);
@@ -293,7 +298,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v10-preserve-total-aliases',
+    version: 'settlement-shadow-runtime-v11-category-label-integrity',
     scopeId,
     normalizeReference,
     localEvidence,
