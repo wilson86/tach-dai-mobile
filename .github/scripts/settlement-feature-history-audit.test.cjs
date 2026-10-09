@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.191-incomplete-evidence-diagnostics'));
+  assert.ok(source.includes('v1.0.192-validated-display-precision'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1461,4 +1461,24 @@ test('HIOSKT mismatch diagnostics must surface incomparable category evidence',(
   const d=sh.buildMismatchDiagnostics(local,{status:'INCOMPLETE_REFERENCE',totals:{
     total_xac:{status:'NOT_COMPARABLE',reason:'INVALID_EXACT_MONETARY_EVIDENCE',local:0,reference:0,delta:0}},categories:[]});
   assert.equal(d.total_issues[0].reason,'INVALID_EXACT_MONETARY_EVIDENCE');
+});
+
+test('invalid display precision never makes a monetary comparison promotable',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const s=ctx.window.KTS_SETTLEMENT_SHADOW;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0,
+    exact:{total_xac:'0',total_qua_co:'0',total_payout:'0',final_net:'0'}}};
+  const ref={totals:{xac:0,qua_co:0,payout:0,final:0}};
+  assert.equal(s.compareSettlement(local,ref).safe_to_promote,true);
+  for(const invalid of [NaN,Infinity,-1,1000,'','no','NaN',true,false,{},[],12.5]){
+    const opts={display_digits:invalid};
+    const compared=s.compareSettlement(local,ref,opts);
+    assert.equal(compared.safe_to_promote,false,'PROMOTED_INVALID_PRECISION:'+String(invalid));
+    assert.equal(compared.invalid_display_precision,true);
+    assert.equal(compared.status,'INCOMPLETE_REFERENCE');
+    assert.equal(s.compareNumber(0,0,opts,'0','0').reason,'INVALID_DISPLAY_PRECISION');
+  }
+  for(const valid of [0,1,'2',12])
+    assert.equal(s.compareSettlement(local,ref,{display_digits:valid}).safe_to_promote,true);
 });

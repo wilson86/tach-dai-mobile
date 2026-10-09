@@ -87,11 +87,23 @@
     return Math.sign(n) * rounded / factor;
   }
 
+  function displayPrecision(options) {
+    if (options != null && (typeof options !== 'object' || Array.isArray(options))) return null;
+    const raw=options && options.display_digits;
+    if (raw == null) return 1;
+    if (!(typeof raw==='number' || (typeof raw==='string' && /^\d+$/.test(raw.trim())))) return null;
+    const digits=Number(raw);
+    // Never allow invalid/unbounded precision to turn null === null into
+    // apparently agreeing rounded financial evidence.
+    return Number.isInteger(digits) && digits>=0 && digits<=12 ? digits : null;
+  }
+
   function compareNumber(localValue, referenceValue, options, localExactValue, referenceExactValue) {
-    const opts = options || {};
-    const digits = Number(opts.display_digits == null ? 1 : opts.display_digits);
+    const digits = displayPrecision(options);
     const local = numeric(localValue);
     const reference = numeric(referenceValue);
+    if (digits===null) return {status:'NOT_COMPARABLE',local,reference,delta:null,
+      reason:'INVALID_DISPLAY_PRECISION'};
     if (local == null || reference == null) return { status: 'NOT_COMPARABLE', local, reference, delta: null };
     const delta = local - reference;
 
@@ -274,6 +286,7 @@
       malformedCategoryContainer(referenceSnapshot,['categories','category_rows']));
     const categoryEvidenceOkay=!invalidCategoryContainer &&
       categoryEvidenceValid(localRows,options)&&categoryEvidenceValid(referenceRows,options);
+    const invalidDisplayPrecision=displayPrecision(options)===null;
     const aliasEvidenceOkay=referenceAliasesValid(reference);
     // An explicitly supplied HIOSKT category without any monetary fields
     // proves nothing. A referenced category absent from local results cannot
@@ -302,7 +315,7 @@
       categories.filter(row=>referenceCategories.some(ref=>codeOf(ref)===row.code))
         .every(row=>row.status==='MATCH_EXACT');
     if (!categoryEvidenceOkay || !aliasEvidenceOkay || !exactMetadataOkay ||
-        missingReferenceCategory || emptyReferenceCategory || missingMonetaryEvidence)
+        missingReferenceCategory || emptyReferenceCategory || missingMonetaryEvidence || invalidDisplayPrecision)
       status='INCOMPLETE_REFERENCE';
     return {
       status,
@@ -312,6 +325,7 @@
       invalid_category_evidence: !categoryEvidenceOkay || emptyReferenceCategory,
       missing_reference_category: missingReferenceCategory,
       missing_monetary_evidence: missingMonetaryEvidence,
+      invalid_display_precision: invalidDisplayPrecision,
       invalid_total_alias_evidence: !aliasEvidenceOkay,
       invalid_exact_metadata: !exactMetadataOkay,
       required_totals_exact: requiredTotalsExact,
@@ -371,7 +385,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v17-incomplete-evidence-diagnostics',
+    version: 'settlement-shadow-v18-validated-display-precision',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
