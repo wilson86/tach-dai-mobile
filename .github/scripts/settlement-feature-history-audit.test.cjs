@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.228-import-atomic-source-snapshot'));
+  assert.ok(source.includes('v1.0.229-empty-import-money-safety'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2091,4 +2091,29 @@ test('import preflight is one consistent snapshot and any cross-tab source drift
   assert.ok(fn.indexOf('const req=tx.objectStore(name).getAll()')<
     fn.indexOf('if (replace) {\n          store.clear()'));
   assert.ok(!fn.includes('await getAll(name)'));
+});
+
+test('empty backup scope rejects disguised zero and contradictory monetary evidence',()=>{
+  const context={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),context);
+  const st=context.window.KTS_SETTLEMENT_STORE;
+  const partner={id:'synthetic-empty-money',name:'Synthetic',role:'customer'};
+  const row={id:'scope:synthetic-empty-money:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    message_ids:[],scope_status:'empty',
+    settlement_result:{total_xac:'0.000',total_qua_co:0,total_payout:'0e999',refund_amount:'-0',final_net:0}};
+  const backup=v=>({format:'kts-settlement-export',version:5,
+    stores:{partners:[partner],settlements:[v]}});
+  assert.equal(st.validateImportPayload(backup(row),{},{replace:false}).valid,true);
+  for(const invalid of [false,[],{},'0x0',' ','bad','5e-1',500]){
+    assert.throws(()=>st.validateImportPayload(backup({...row,
+      settlement_result:{...row.settlement_result,final_net:invalid}}),{},{replace:false}),
+      /IMPORT_EMPTY_SETTLEMENT_NONZERO/);
+  }
+  assert.throws(()=>st.validateImportPayload(backup({...row,result_snapshot:{final_net:10}}),
+    {},{replace:false}),/IMPORT_EMPTY_SETTLEMENT_NONZERO/);
+  assert.throws(()=>st.validateImportPayload(backup({...row,result_snapshot:[]}),
+    {},{replace:false}),/IMPORT_EMPTY_SETTLEMENT_TOTALS_INVALID/);
+  assert.throws(()=>st.validateImportPayload(backup({...row,settlement_result:null}),
+    {},{replace:false}),/IMPORT_EMPTY_SETTLEMENT_TOTALS_MISSING/);
 });
