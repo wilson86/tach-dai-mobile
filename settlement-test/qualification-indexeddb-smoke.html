@@ -477,6 +477,52 @@
     if(!refusedBadCandidate||badCandidateStored.candidates!=='CORRUPTED'||
        unchangedGolden.length!==beforeBadGolden.length)
       fail('CANDIDATE_CORRUPT_METADATA_ACCEPTED_OR_PARTIAL_PIN');
+
+    // Preserve true and false money totals by identity: reusing the same
+    // golden ID with a different reference must never overwrite the source.
+    const lockOriginal=await store.get(store.STORES.metadata,corruptGolden.key);
+    const changedGolden=regressionCase(2);
+    changedGolden.expected_reference={totals:{xac:'1',qua_co:'0',payout:'0',final:'0'}};
+    let refusedGoldenCollision=false;
+    try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(changedGolden);}
+    catch(e){refusedGoldenCollision=String(e&&e.message||e).includes('REGRESSION_GOLDEN_ID_CONFLICT');}
+    const afterGoldenCollision=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!refusedGoldenCollision||
+       JSON.stringify(lockOriginal)!==JSON.stringify(afterGoldenCollision))
+      fail('GOLDEN_ID_CONFLICT_WAS_NOT_REJECTED');
+    // Restore the synthetic candidate fixture after the corruption test,
+    // then prove same mismatched event from two tabs appends exactly once.
+    await putSynthetic(store.STORES.metadata,{
+      key:candidateKey,version:1,candidates:await Promise.all([
+        candidateFor(4),candidateFor(5),candidateFor(6)
+      ])
+    });
+    for(const w of workers){
+      w.KTS_SETTLEMENT_SHADOW_RUNTIME.buildReplayCase=()=>w.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase(
+        regressionCase(7));
+    }
+    const mismatchEvent={id:'synthetic-event-7',
+      comparison_status:'MISMATCH',observed_at:'2026-09-22T00:00:00Z',
+      local_snapshot:{settlement_result:{final_net:0}},
+      reference_snapshot:{totals:{final:'0'}},
+      comparison:{totals:{final_net:{delta:'0'}}}};
+    const captured=await Promise.all(workers.map(w=>
+      w.KTS_SETTLEMENT_REGRESSION_CANDIDATES.captureEvidence(mismatchEvent,{
+        note:'synthetic concurrent duplicate event'
+      })));
+    if(captured.length!==2||captured[0].id!==captured[1].id)
+      fail('CANDIDATE_DUPLICATE_CAPTURE_NOT_STABLE');
+    const eventsAfterCapture=(await candApi.listCandidates())
+      .filter(c=>c.id===captured[0].id);
+    if(eventsAfterCapture.length!==1||eventsAfterCapture[0].state!=='pending')
+      fail('CANDIDATE_CROSS_TAB_DUPLICATE_CAPTURE_LOST_OR_DUPLICATED');
+    await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES
+      .dismissCandidate(captured[0].id,'synthetic dismissal');
+    const repeated=await workers[1].KTS_SETTLEMENT_REGRESSION_CANDIDATES
+      .captureEvidence(mismatchEvent,{note:'should not resurrect'});
+    if(repeated.state!=='dismissed'||(await candApi.listCandidates())
+       .filter(c=>c.id===captured[0].id).length!==1)
+      fail('CANDIDATE_DISMISSED_EVENT_RESURRECTED');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -501,6 +547,9 @@
        'CANDIDATE_CROSS_TAB_ATOMIC_PROMOTION=PASS',
        'CANDIDATE_PROMOTE_DISMISS_RACE_SERIAL=PASS',
        'CANDIDATE_CORRUPT_METADATA_FAIL_CLOSED=PASS',
+       'CANDIDATE_CROSS_TAB_CAPTURE_DEDUPE=PASS',
+       'CANDIDATE_DISMISSED_CAPTURE_NO_RESURRECTION=PASS',
+       'GOLDEN_SOURCE_ID_IMMUTABLE=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'

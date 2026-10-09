@@ -182,9 +182,24 @@
   async function pinCase(input) {
     const c=normalizeCase(input);
     await requireAtomicStore().mutateMetadataAtomically(META_KEY,row=>{
-      const cases=existingCases(row).filter(item=>caseId(item)!==c.id);
-      cases.push(c);
-      return {key:META_KEY,version:1,updated_at:new Date().toISOString(),cases};
+      const cases=existingCases(row);
+      const prior=cases.find(item=>caseId(item)===c.id);
+      if(prior){
+        const stored=normalizeCase(prior);
+        // Re-import of identical evidence is idempotent; a competing
+        // payload for an existing confirmed ID is never an overwrite.
+        const withoutTimestamp=x=>{
+          const stable=clone(x);
+          delete stable.pinned_at;
+          return stable;
+        };
+        if(JSON.stringify(withoutTimestamp(stored))!==
+           JSON.stringify(withoutTimestamp(c)))
+          throw new Error('REGRESSION_GOLDEN_ID_CONFLICT');
+        return row;
+      }
+      return {key:META_KEY,version:1,updated_at:new Date().toISOString(),
+        cases:cases.concat([c])};
     });
     return c;
   }

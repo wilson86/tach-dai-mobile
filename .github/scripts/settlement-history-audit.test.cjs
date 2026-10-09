@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.205-candidate-golden-dual-atomic'));
+  assert.ok(sw.includes('v1.0.206-immutable-golden-capture-dedupe'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1891,4 +1891,11 @@ test('HIOSKT candidate PROMOTED and golden case must commit as one IndexedDB met
   assert.ok(source.includes('REGRESSION_CANDIDATE_PROMOTION_INCOMPLETE'));
   assert.ok(source.includes('mutateMetadataAtomically(META_KEY,row=>'));
   assert.ok(!source.includes('async function writeMeta('));
+});
+
+test('immutable golden case identity refuses silent replacement of confirmed HIOSKT amounts',()=>{
+  const src=readFileSync(resolve(root,'settlement-test','settlement-regression-cases.js'),'utf8');
+  assert.ok(src.includes('REGRESSION_GOLDEN_ID_CONFLICT'));
+  assert.ok(src.includes('const prior=cases.find(item=>caseId(item)===c.id)'));
+  assert.ok(src.includes('delete stable.pinned_at'));
 });
