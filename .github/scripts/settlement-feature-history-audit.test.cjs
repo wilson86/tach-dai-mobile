@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.181-exact-metadata-shape'));
+  assert.ok(source.includes('v1.0.182-config-mismatch-recheck'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1270,4 +1270,36 @@ test('malformed exact metadata shapes cannot hide missing monetary evidence',()=
     assert.equal(verdict.invalid_category_evidence,true);
     assert.equal(verdict.status,'INCOMPLETE_REFERENCE');
   }
+});
+
+test('wrong-partner config corrected before BLOCKED save supersedes stale decision',async()=>{
+  const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x));
+  const scope={partner_id:'synthetic',business_date:'2026-09-22',region:'mn'};
+  const msg={...scope,id:'msg1',status:'parsed',canonical_payload:{region:'mn',legs:[{code:'2CB'}]}};
+  const wrong={id:'cfg-1',partner_id:'other',version:1};
+  const fixed={id:'cfg-2',partner_id:'synthetic',version:2};
+  let calls=0,repair=false,writes=[];
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{messages:'messages',results:'results',partners:'partners'},
+    getAll:async()=>[copy(msg)],
+    resolveConfigForDate:async()=>{calls++;return copy(repair&&calls>=2?fixed:wrong);},
+    get:async()=>null,
+    saveSettlement:async row=>{writes.push(row);return row;}
+  };
+  ctx.window.KTS_SETTLEMENT_EVALUATOR={evaluateCanonicalMessage:()=>{throw Error('SHOULD_NOT_EVALUATE')}};
+  ctx.window.KTS_SETTLEMENT_RUNTIME={settleWithConfig:()=>{throw Error('SHOULD_NOT_CALCULATE')}};
+  ctx.window.KTS_SETTLEMENT_ENGINE={version:'synthetic'};
+  for(const name of ['settlement-feature-gates.js','settlement-pipeline.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'app',name),'utf8'),ctx,{filename:name});
+  const settle=ctx.window.KTS_SETTLEMENT_PIPELINE.settleScope;
+  repair=true;calls=0;writes=[];
+  let outcome=await settle(scope);
+  assert.equal(outcome.status,'superseded','CORRECTED_CONFIG_MUST_NOT_SAVE_STALE_BLOCK');
+  assert.equal(writes.length,0);
+  assert.equal(calls,2);
+  repair=false;calls=0;writes=[];
+  outcome=await settle(scope);
+  assert.equal(outcome.status,'blocked');
+  assert.equal(outcome.reason,'CONFIG_PARTNER_MISMATCH');
+  assert.equal(writes.length,1);
 });

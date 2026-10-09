@@ -201,7 +201,9 @@
     try { config = await d.store.resolveConfigForDate(partnerId, businessDate); }
     catch (e) { return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, expect_config_unavailable:true, reason: String(e.message || e) }); }
     if (!config || String(config.partner_id || '') !== String(partnerId)) {
-      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: 'CONFIG_PARTNER_MISMATCH' });
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages,
+        config_snapshot:config||null,expect_config_unavailable:!config,
+        reason: 'CONFIG_PARTNER_MISMATCH' });
     }
 
     // A parser_error cannot be waived by a stale canonical payload or a
