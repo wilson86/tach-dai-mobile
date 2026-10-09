@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.216-protected-backup-import'));
+  assert.ok(sw.includes('v1.0.217-golden-source-atomic'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2080,4 +2080,12 @@ test('private HIOSKT golden and qualification evidence backup has strict import 
  assert.throws(()=>store.validateImportPayload(input([{
    key:'qualification_history_v1',version:1,events:[{id:'synthetic-forged'}]}]),{},{}),
    /IMPORT_QUALIFICATION_EVIDENCE_INVALID/);
+});
+
+test('direct golden pin refuses two case IDs for one independently observed Shadow event',()=>{
+ const source=readFileSync(resolve(root,'settlement-test','settlement-regression-cases.js'),'utf8');
+ const pin=source.slice(source.indexOf('  async function pinCase('),
+   source.indexOf('  async function removePinnedCase('));
+ assert.ok(pin.includes('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT'));
+ assert.ok(pin.includes("mutateMetadataAtomically(META_KEY,row=>"));
 });

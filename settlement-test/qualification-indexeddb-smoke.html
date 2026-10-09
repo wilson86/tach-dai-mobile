@@ -724,6 +724,25 @@
     if(!refusedProtectedMerge||
        JSON.stringify(verifiedBeforeImport)!==JSON.stringify(verifiedAfterImport))
       fail('CONFLICTING_HIOSKT_BACKUP_IMPORTED_OR_PROOF_CHANGED');
+
+    // A newly pinned ID cannot claim a Shadow event already used by a
+    // different golden ID, even when two same-origin tabs perform the pins.
+    const firstSourceCase={...regressionCase(12),
+      source_event_id:'synthetic-source-event-12'};
+    await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(firstSourceCase);
+    const aliasSourceCase={...firstSourceCase,id:'synthetic-golden-other-12'};
+    let sourceClaimDenied=false;
+    try{await workers[1].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(aliasSourceCase);}
+    catch(error){sourceClaimDenied=String(error&&error.message||error)
+      .includes('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT');}
+    const sourceClaimRows=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(!sourceClaimDenied||
+       sourceClaimRows.filter(c=>c.source_event_id==='synthetic-source-event-12').length!==1)
+      fail('GOLDEN_SECOND_SOURCE_CLAIM_COMMITTED');
+    await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase(firstSourceCase.id);
+    if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
+       .some(c=>c.source_event_id==='synthetic-source-event-12'))
+      fail('SYNTHETIC_GOLDEN_SOURCE_FIXTURE_NOT_CLEAN');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -762,6 +781,7 @@
        'CANDIDATE_TERMINAL_RECEIPT_FAIL_CLOSED=PASS',
        'ATOMIC_CROSS_STORE_BACKUP_EXPORT=PASS',
        'HIOSKT_BACKUP_CONFLICT_FAIL_CLOSED=PASS',
+       'GOLDEN_ATOMIC_SOURCE_CLAIM_REFUSED=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

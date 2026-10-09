@@ -196,6 +196,13 @@
     const c=normalizeCase(input);
     await requireAtomicStore().mutateMetadataAtomically(META_KEY,row=>{
       const cases=existingCases(row);
+      // One independently observed Shadow event cannot mint multiple
+      // differently named golden records. Reject BEFORE committing so a
+      // direct pin never poisons the registry for every later read.
+      if(c.source_event_id&&cases.some(item=>
+        item.source_event_id!=null&&
+        String(item.source_event_id)===c.source_event_id&&caseId(item)!==c.id))
+        throw new Error('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT');
       const prior=cases.find(item=>caseId(item)===c.id);
       if(prior){
         const stored=normalizeCase(prior);
