@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.212-claimed-golden-promotion-guard'));
+  assert.ok(source.includes('v1.0.213-candidate-shadow-source-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1811,4 +1811,12 @@ test('HIOSKT double-claim attempts reject in the same metadata transaction',()=>
  assert.ok(source.includes('if(other.id===c.id||other.state!==STATES.PROMOTED)continue'));
  assert.ok(source.includes('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT'));
  assert.ok(source.includes('mutateMetadataRowsAtomically([META_KEY,regression.META_KEY]'));
+});
+
+test('candidate registry refuses forged shadow event lineage imported through metadata',()=>{
+ const src=readFileSync(resolve(root,'app','settlement-regression-candidates.js'),'utf8');
+ assert.ok(src.includes('REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH'));
+ assert.ok(src.includes('REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH'));
+ assert.ok(src.includes("normalized.id!=='candidate:'+normalized.source_event_id"));
+ assert.ok(src.includes('String(normalized.case.source_event_id)!==normalized.source_event_id'));
 });
