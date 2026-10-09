@@ -906,6 +906,33 @@
       fail('IDENTICAL_KQXS_MONEY_IMPORT_ATOMIC_CAS_NOT_IDEMPOTENT');
     await store.remove(store.STORES.settlements,txScope);
     await store.remove(store.STORES.partners,txPartner.id);
+    // KQXS audit events are immutable receipts, separate from the
+    // latest results snapshot. An older backup cannot reuse a receipt ID
+    // with different observed_at or prizes while silently skipping it.
+    const eventRow={id:'result_event_synthetic_import_receipt',
+      result_id:draw.id,business_date:'2026-09-22',region:'mn',
+      status:'partial',complete:false,stations:[],
+      observed_at:'2026-09-22T12:00:00.000Z'};
+    await putSynthetic(store.STORES.resultEvents,eventRow);
+    const goodEventBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.resultEvents]:[eventRow]}};
+    const resultEventAccepted=await workers[0].KTS_SETTLEMENT_STORE.importAll(
+      goodEventBackup,{replace:false});
+    if(!resultEventAccepted.valid)
+      fail('IDENTICAL_KQXS_EVENT_RECEIPT_BACKUP_REJECTED');
+    const alteredEvent={...eventRow,observed_at:'2026-09-23T12:00:00.000Z'};
+    let eventRejected=false;
+    try{
+      await workers[1].KTS_SETTLEMENT_STORE.importAll({
+        format:'kts-settlement-export',version:5,
+        stores:{[store.STORES.resultEvents]:[alteredEvent]}
+      },{replace:false});
+    }catch(error){eventRejected=String(error&&error.message||error)
+      .includes('IMPORT_RESULT_EVENT_CONTENT_COLLISION');}
+    if(!eventRejected||JSON.stringify(await store.get(
+       store.STORES.resultEvents,eventRow.id))!==JSON.stringify(eventRow))
+      fail('KQXS_RESULT_EVENT_AUDIT_RECEIPT_MUTATED');
+    await store.remove(store.STORES.resultEvents,eventRow.id);
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -953,6 +980,7 @@
        'IMPORT_KQXS_CONTENT_CONFLICT_REJECTED=PASS',
        'IMPORT_SETTLEMENT_MONEY_CONFLICT_REJECTED=PASS',
        'IDENTICAL_KQXS_SETTLEMENT_IMPORT_ATOMIC_CAS=PASS',
+       'IMMUTABLE_KQXS_RESULT_EVENT_RECEIPT=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

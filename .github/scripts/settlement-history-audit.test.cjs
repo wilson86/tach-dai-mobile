@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.224-monetary-import-tx-cas'));
+  assert.ok(sw.includes('v1.0.225-append-only-evidence-backup'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2200,4 +2200,30 @@ test('monetary merge revalidates result and settlement IDs inside IDB write tran
  assert.ok(part.includes('try{tx.abort();}'));
  assert.ok(part.indexOf("for(const name of [STORES.results,STORES.settlements])")<
    part.indexOf('for (const name of names) {'));
+});
+
+test('result event backup rejects forged reused receipt ID and preserves append-only stores',()=>{
+ const context={window:{}};
+ vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8'),context);
+ const st=context.window.KTS_SETTLEMENT_STORE;
+ const draw={id:'2026-09-22:mn',business_date:'2026-09-22',
+   region:'mn',status:'partial',complete:false,stations:[]};
+ const event={...draw,id:'result_event_synthetic_1',result_id:draw.id,
+   observed_at:'2026-09-22T12:00:00.000Z'};
+ const existing={results:[draw],result_events:[event]};
+ const backup={format:'kts-settlement-export',version:5,
+   stores:{result_events:[event]}};
+ assert.equal(st.validateImportPayload(backup,existing,{replace:false}).valid,true);
+ assert.throws(()=>st.validateImportPayload({...backup,stores:{
+   result_events:[{...event,observed_at:'2026-09-23T12:00:00.000Z'}]
+ }},existing,{replace:false}),/IMPORT_RESULT_EVENT_CONTENT_COLLISION/);
+ const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+ const imp=src.slice(src.indexOf('  async function importAll('),
+  src.indexOf('  global.KTS_SETTLEMENT_STORE'));
+ assert.ok(imp.includes('IMPORT_REPLACE_RESULT_EVENT_DENIED:'));
+ assert.ok(imp.includes('IMPORT_APPEND_ONLY_LOG_CHANGED_DURING_REPLACE:'));
+ assert.ok(imp.includes("STORES.shadowEvents,shadowSnapshot"));
+ assert.ok(imp.includes("STORES.resultEvents,resultEventSnapshot"));
+ assert.ok(imp.includes('IMPORT_RESULT_EVENT_CHANGED_DURING_IMPORT:'));
+ assert.ok(imp.includes("const req=tx.objectStore(name).getAll()"));
 });
