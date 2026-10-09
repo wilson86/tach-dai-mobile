@@ -2217,7 +2217,7 @@ test('result event backup rejects forged reused receipt ID and preserves append-
  assert.throws(()=>st.validateImportPayload({...backup,stores:{
    result_events:[{...event,observed_at:'2026-09-23T12:00:00.000Z'}]
  }},existing,{replace:false}),/IMPORT_RESULT_EVENT_CONTENT_COLLISION/);
- const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+ const src=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
  const imp=src.slice(src.indexOf('  async function importAll('),
   src.indexOf('  global.KTS_SETTLEMENT_STORE'));
  assert.ok(imp.includes('IMPORT_REPLACE_RESULT_EVENT_DENIED:'));
