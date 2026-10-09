@@ -692,6 +692,24 @@
     await putSynthetic(store.STORES.metadata,cleanReceipts);
     if((await candApi.listCandidates()).length!==cleanReceipts.candidates.length)
       fail('TERMINAL_RECEIPT_RESTORATION_FAILED');
+
+    // Backup export covers all stores in one readonly transaction.
+    // No private history or production data exists in this browser profile.
+    const backup=await store.exportAll();
+    if(backup.format!=='kts-settlement-export'||backup.version!==5)
+      fail('ATOMIC_BACKUP_SCHEMA_CHANGED');
+    for(const name of Object.values(store.STORES)){
+      if(!Array.isArray(backup.stores[name]))
+        fail('ATOMIC_BACKUP_STORE_MISSING:'+name);
+    }
+    const snapGolden=backup.stores[store.STORES.metadata].find(
+      x=>x.key===corruptGolden.key);
+    const snapCandidates=backup.stores[store.STORES.metadata].find(
+      x=>x.key===candidateKey);
+    if(!snapGolden||!snapCandidates||
+       snapGolden.cases.length!==(await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases()).length||
+       snapCandidates.candidates.length!==(await candApi.listCandidates()).length)
+      fail('ATOMIC_BACKUP_GOLDEN_CANDIDATE_SNAPSHOT_MISSING');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -728,6 +746,7 @@
        'CANDIDATE_SOURCE_ID_FAIL_CLOSED=PASS',
        'CANDIDATE_CASE_SOURCE_FAIL_CLOSED=PASS',
        'CANDIDATE_TERMINAL_RECEIPT_FAIL_CLOSED=PASS',
+       'ATOMIC_CROSS_STORE_BACKUP_EXPORT=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',

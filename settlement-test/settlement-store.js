@@ -812,9 +812,24 @@
   }
 
   async function exportAll() {
-    const payload = { format: 'kts-settlement-export', version: 5, exported_at: nowIso(), stores: {} };
-    for (const name of Object.values(STORES)) payload.stores[name] = await getAll(name);
-    return payload;
+    // All store snapshots must come from the SAME IndexedDB transaction.
+    // Independent getAll() calls can interleave with another tab's commits
+    // and export a mismatched message/config/settlement/evidence backup.
+    const db=await openDb();
+    try {
+      const names=Object.values(STORES);
+      const payload={format:'kts-settlement-export',version:5,
+        exported_at:nowIso(),stores:{}};
+      const tx=db.transaction(names,'readonly');
+      for(const name of names){
+        const request=tx.objectStore(name).getAll();
+        request.onsuccess=()=>{payload.stores[name]=clone(request.result||[]);};
+      }
+      await txDone(tx);
+      if(names.some(name=>!Object.prototype.hasOwnProperty.call(payload.stores,name)))
+        throw new Error('EXPORT_ATOMIC_SNAPSHOT_INCOMPLETE');
+      return payload;
+    }finally{db.close();}
   }
 
   function validateImportPayload(payload, existingByStore, options) {

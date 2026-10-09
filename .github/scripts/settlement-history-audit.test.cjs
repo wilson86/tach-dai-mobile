@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.214-terminal-receipt-failclosed'));
+  assert.ok(sw.includes('v1.0.215-atomic-backup-snapshot'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2027,4 +2027,14 @@ test('confirmed/dismissed HIOSKT candidate cannot lack operator receipt or times
  assert.ok(code.includes('REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING'));
  assert.ok(code.includes('normalized.confirmation_note.trim()'));
  assert.ok(code.includes('normalized.dismiss_reason.trim()'));
+});
+
+test('backup snapshot reads all stores in one IndexedDB readonly transaction',()=>{
+ const src=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
+ const part=src.slice(src.indexOf('  async function exportAll() {'),
+  src.indexOf('  function validateImportPayload(',src.indexOf('  async function exportAll() {')));
+ assert.ok(part.includes("const tx=db.transaction(names,'readonly')"));
+ assert.ok(part.includes("tx.objectStore(name).getAll()"));
+ assert.ok(part.includes('await txDone(tx)'));
+ assert.ok(!part.includes('await getAll(name)'));
 });
