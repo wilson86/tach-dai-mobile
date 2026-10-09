@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.204-golden-metadata-atomic'));
+  assert.ok(source.includes('v1.0.205-candidate-golden-dual-atomic'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1675,4 +1675,17 @@ test('direct HIOSKT shadow refuses unknown exact monetary keys but allows engine
     assert.equal(outcome.invalid_reference_exact_schema,true);
     assert.equal(outcome.status,'INCOMPLETE_REFERENCE');
   }
+});
+
+test('candidate promotion and golden pin must share one readwrite IndexedDB transaction',()=>{
+  const src=readFileSync(resolve(root,'app','settlement-regression-candidates.js'),'utf8');
+  const store=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+  assert.ok(src.includes('mutateMetadataRowsAtomically([META_KEY,regression.META_KEY]'));
+  assert.ok(store.includes("async function mutateMetadataRowsAtomically(keys,mutator)"));
+  assert.ok(store.includes("const tx=db.transaction(STORES.metadata,'readwrite')"));
+  assert.ok(src.includes('REGRESSION_CANDIDATE_METADATA_CORRUPTED'));
+  assert.ok(src.includes('REGRESSION_GOLDEN_CONFLICTING_CASE'));
+  assert.ok(src.includes('REGRESSION_CANDIDATE_PROMOTION_INCOMPLETE'));
+  assert.ok(src.includes('mutateMetadataAtomically(META_KEY,row=>'));
+  assert.ok(!src.includes('async function writeMeta('));
 });

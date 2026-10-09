@@ -408,6 +408,54 @@
     }finally{db.close();}
   }
 
+
+  // Make linked metadata edits (candidate state + golden pin) a single
+  // all-or-nothing IndexedDB transaction across multiple browser tabs.
+  // All IndexedDB requests are scheduled from active request callbacks;
+  // the mutator must be synchronous to avoid transaction auto-close.
+  async function mutateMetadataRowsAtomically(keys,mutator) {
+    if(!Array.isArray(keys)||!keys.length||new Set(keys).size!==keys.length||
+      keys.some(key=>typeof key!=='string'||!key.trim())||
+      typeof mutator!=='function')
+      throw new Error('METADATA_ROWS_ATOMIC_ARGUMENTS_REQUIRED');
+    const db=await openDb();
+    let failure=null,outcome=null,completed=false;
+    try {
+      const tx=db.transaction(STORES.metadata,'readwrite');
+      const bucket=tx.objectStore(STORES.metadata);
+      const rows=Object.create(null);
+      let pending=keys.length;
+      for(const key of keys){
+        const request=bucket.get(key);
+        request.onsuccess=()=>{
+          try {
+            rows[key]=request.result==null?null:clone(request.result);
+            if(--pending!==0)return;
+            const edited=mutator(rows);
+            if(edited&&typeof edited.then==='function')
+              throw new Error('METADATA_ROWS_ATOMIC_MUTATOR_MUST_BE_SYNC');
+            if(!edited||typeof edited!=='object'||!edited.rows||
+               typeof edited.rows!=='object')
+              throw new Error('METADATA_ROWS_ATOMIC_RESULT_INVALID');
+            for(const name of keys){
+              if(!Object.prototype.hasOwnProperty.call(edited.rows,name))
+                throw new Error('METADATA_ROWS_ATOMIC_ROW_MISSING:'+name);
+              const value=edited.rows[name];
+              if(!value||typeof value!=='object'||Array.isArray(value)||value.key!==name)
+                throw new Error('METADATA_ROWS_ATOMIC_ROW_INVALID:'+name);
+            }
+            for(const name of keys)bucket.put(clone(edited.rows[name]));
+            outcome=clone(edited.result);
+            completed=true;
+          } catch(error){failure=error;tx.abort();}
+        };
+      }
+      try{await txDone(tx);}catch(error){throw failure||error;}
+      if(!completed)throw new Error('METADATA_ROWS_ATOMIC_COMMIT_MISSING');
+      return outcome;
+    }finally{db.close();}
+  }
+
   async function savePartner(input) {
     const v = normalizePartner(input);
     await put(STORES.partners, v);
@@ -1003,7 +1051,7 @@
   }
 
   global.KTS_SETTLEMENT_STORE = Object.freeze({
-    DB_NAME, DB_VERSION, STORES, openDb, mutateMetadataAtomically,
+    DB_NAME, DB_VERSION, STORES, openDb, mutateMetadataAtomically, mutateMetadataRowsAtomically,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveSettlementIfUnchanged, saveSettlementIfScopeUnchanged, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
