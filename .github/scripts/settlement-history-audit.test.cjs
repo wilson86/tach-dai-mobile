@@ -2114,7 +2114,7 @@ test('replace:true cannot silently erase protected HIOSKT or qualification evide
  const src=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
  const body=src.slice(src.indexOf('  async function importAll('),
   src.indexOf('  global.KTS_SETTLEMENT_STORE'));
- assert.ok(body.includes('const evidenceSnapshot=replace?await getAll(STORES.metadata)'));
+ assert.ok(body.includes('const evidenceSnapshot=sourceSnapshot[STORES.metadata]'));
  assert.ok(body.includes('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED:'));
  assert.ok(body.includes('if(old&&(!incoming.has(key)||'));
  assert.ok(body.includes('stableStringify(old)!==stableStringify(incoming.get(key))'));
@@ -2154,7 +2154,7 @@ test('Shadow source receipts survive replace and concurrent backup changes',()=>
  const src=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
  const body=src.slice(src.indexOf('  async function importAll('),
   src.indexOf('  global.KTS_SETTLEMENT_STORE'));
- assert.ok(body.includes('const shadowSnapshot=replace?await getAll(STORES.shadowEvents)'));
+ assert.ok(body.includes('const shadowSnapshot=sourceSnapshot[STORES.shadowEvents]'));
  assert.ok(body.includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED:'));
  assert.ok(body.includes('const req=shadowStore.get(id)'));
  assert.ok(body.includes('IMPORT_SHADOW_EVENT_CHANGED_DURING_IMPORT:'));
@@ -2199,7 +2199,7 @@ test('monetary merge revalidates result and settlement IDs inside IDB write tran
  assert.ok(part.includes('if(stableStringify(req.result||null)!==stableStringify(expected))'));
  assert.ok(part.includes('try{tx.abort();}'));
  assert.ok(part.indexOf("for(const name of [STORES.results,STORES.settlements])")<
-   part.indexOf('for (const name of names) {'));
+   part.indexOf('const store = tx.objectStore(name);'));
 });
 
 test('result event backup rejects forged reused receipt ID and preserves append-only stores',()=>{
