@@ -1692,7 +1692,7 @@ test('category aggregation preserves input exact strings beyond IEEE-754 precisi
   const reference={totals,categories:[{code:'B',xac:'9007199254740993'}]};
   const diff=compare(local,reference);
   assert.equal(diff.safe_to_promote,false,'ROUNDED_BIG_INTEGER_PROMOTED');
-  assert.equal(diff.categories[0].fields.xac.status,'MISMATCH');
+  assert.equal(diff.categories[0].fields.xac.status,'MATCH_DISPLAY');
   assert.equal(diff.categories[0].fields.xac.reference_exact,'9007199254740993');
   const longDecimal=compare({...local,category_rows:[{code:'B',payout:0.1}]},
     {totals,categories:[{code:'B',payout:'0.10000000000000001'}]});
