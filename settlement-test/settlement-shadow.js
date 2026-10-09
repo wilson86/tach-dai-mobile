@@ -340,15 +340,15 @@
     const totalIssues = [];
     for (const [field, row] of Object.entries(c.totals || {})) {
       if (!row || row.status === 'MATCH_EXACT') continue;
-      totalIssues.push({ field, status: row.status, local: row.local, reference: row.reference, delta: row.delta });
+      totalIssues.push({ field, status: row.status, reason: row.reason || null, local: row.local, reference: row.reference, delta: row.delta });
     }
 
     const categoryIssues = [];
     for (const row of c.categories || []) {
-      if (!row || row.status === 'MATCH_EXACT' || row.status === 'NOT_COMPARABLE') continue;
+      if (!row || row.status === 'MATCH_EXACT') continue;
       const fields = Object.entries(row.fields || {})
         .filter(([, value]) => value && value.status !== 'MATCH_EXACT')
-        .map(([field, value]) => ({ field, status: value.status, local: value.local, reference: value.reference, delta: value.delta }));
+        .map(([field, value]) => ({ field, status: value.status, reason: value.reason || null, local: value.local, reference: value.reference, delta: value.delta }));
       categoryIssues.push({
         code: String(row.code || '').toUpperCase(),
         status: row.status,
@@ -371,7 +371,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v16-category-container-shape',
+    version: 'settlement-shadow-v17-incomplete-evidence-diagnostics',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,

@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.189-category-container-shape'));
+  assert.ok(sw.includes('v1.0.191-incomplete-evidence-diagnostics'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1585,4 +1585,28 @@ test('malformed category container never masquerades as absent HIOSKT evidence',
   }
   assert.equal(compare(local,{totals,categories:[]}).safe_to_promote,true);
   assert.equal(normalize({totals,categories:[]}).categories.length,0);
+});
+
+test('HIOSKT mismatch diagnostics must surface incomparable category evidence',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const sh=ctx.window.KTS_SETTLEMENT_SHADOW;
+  const local={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',payout:0}],
+    message_breakdown:[{message_id:'m-01',category_rows:[{code:'B',payout:0}]}]};
+  const ref={totals:{xac:0,qua_co:0,payout:0,final:0},categories:[{code:'B',xac:0}]};
+  const comp=sh.compareSettlement(local,ref);
+  assert.equal(comp.status,'INCOMPLETE_REFERENCE');
+  assert.equal(comp.safe_to_promote,false);
+  const diag=sh.buildMismatchDiagnostics(local,comp);
+  assert.equal(diag.has_actionable_category_issue,true,'INCOMPARABLE_MONEY_WAS_HIDDEN');
+  assert.equal(diag.category_issues.length,1);
+  assert.equal(diag.category_issues[0].code,'B');
+  assert.equal(diag.category_issues[0].status,'NOT_COMPARABLE');
+  assert.equal(diag.category_issues[0].fields[0].field,'xac');
+  assert.equal(diag.category_issues[0].fields[0].reason,'LOCAL_CATEGORY_FIELD_MISSING');
+  assert.deepEqual(Array.from(diag.category_issues[0].message_ids),['m-01']);
+  const d=sh.buildMismatchDiagnostics(local,{status:'INCOMPLETE_REFERENCE',totals:{
+    total_xac:{status:'NOT_COMPARABLE',reason:'INVALID_EXACT_MONETARY_EVIDENCE',local:0,reference:0,delta:0}},categories:[]});
+  assert.equal(d.total_issues[0].reason,'INVALID_EXACT_MONETARY_EVIDENCE');
 });
