@@ -268,6 +268,9 @@
         Object.prototype.hasOwnProperty.call(row,key)));
     const categories = Array.isArray(referenceRows) && categoryEvidenceOkay ?
       compareCategories(localRows, referenceRows, options) : [];
+    const missingMonetaryEvidence=Object.values(totals).some(x=>x.status==='NOT_COMPARABLE') ||
+      categories.some(row=>referenceCategories.some(ref=>codeOf(ref)===row.code) &&
+        row.status==='NOT_COMPARABLE');
     const statuses = [...Object.values(totals).map(x => x.status), ...categories.map(x => x.status)].filter(x => x !== 'NOT_COMPARABLE');
     let status = 'INCOMPLETE_REFERENCE';
     if (statuses.length) {
@@ -279,7 +282,8 @@
     const categoriesExact = categoryEvidenceOkay && !missingReferenceCategory && !emptyReferenceCategory &&
       categories.filter(row=>referenceCategories.some(ref=>codeOf(ref)===row.code))
         .every(row=>row.status==='MATCH_EXACT');
-    if (!categoryEvidenceOkay || !aliasEvidenceOkay || !exactMetadataOkay || missingReferenceCategory || emptyReferenceCategory)
+    if (!categoryEvidenceOkay || !aliasEvidenceOkay || !exactMetadataOkay ||
+        missingReferenceCategory || emptyReferenceCategory || missingMonetaryEvidence)
       status='INCOMPLETE_REFERENCE';
     return {
       status,
@@ -288,6 +292,7 @@
       compared_fields: statuses.length,
       invalid_category_evidence: !categoryEvidenceOkay || emptyReferenceCategory,
       missing_reference_category: missingReferenceCategory,
+      missing_monetary_evidence: missingMonetaryEvidence,
       invalid_total_alias_evidence: !aliasEvidenceOkay,
       invalid_exact_metadata: !exactMetadataOkay,
       required_totals_exact: requiredTotalsExact,
@@ -347,7 +352,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW = Object.freeze({
-    version: 'settlement-shadow-v13-explicit-category-evidence',
+    version: 'settlement-shadow-v14-missing-evidence-status',
     REQUIRED_PROMOTION_TOTALS,
     decimalCanonical,
     roundDisplay,
