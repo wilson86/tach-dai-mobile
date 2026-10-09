@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.214-terminal-receipt-failclosed'));
+  assert.ok(source.includes('v1.0.215-atomic-backup-snapshot'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1829,4 +1829,15 @@ test('imported promoted or dismissed candidate must carry matching human action 
  assert.ok(src.includes("normalized.dismiss_reason.trim()"));
  assert.ok(src.includes('normalized.dismissed_at!=null'));
  assert.ok(src.includes('normalized.promoted_at!=null'));
+});
+
+test('backup export must snapshot all IndexedDB stores in one readonly transaction',()=>{
+  const src=readFileSync(resolve(root,'app','settlement-store.js'),'utf8');
+  const exportBody=src.slice(src.indexOf('  async function exportAll() {'),
+    src.indexOf('  function validateImportPayload(',src.indexOf('  async function exportAll() {')));
+  assert.ok(exportBody.includes("const tx=db.transaction(names,'readonly')"));
+  assert.ok(exportBody.includes("const request=tx.objectStore(name).getAll()"));
+  assert.ok(exportBody.includes("await txDone(tx)"));
+  assert.ok(exportBody.includes('EXPORT_ATOMIC_SNAPSHOT_INCOMPLETE'));
+  assert.ok(!exportBody.includes('await getAll(name)'));
 });
