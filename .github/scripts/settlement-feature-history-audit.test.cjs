@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.210-duplicate-evidence-failclosed'));
+  assert.ok(source.includes('v1.0.211-golden-duplicate-read-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1795,4 +1795,12 @@ test('duplicate HIOSKT candidate IDs or two PROMOTED rows claiming one golden bl
   const candidateSrc=readFileSync(resolve(root,'app','settlement-regression-candidates.js'),'utf8');
   assert.ok(candidateSrc.includes('REGRESSION_CANDIDATE_DUPLICATE_ID'));
   assert.ok(candidateSrc.includes('events.has(normalized.source_event_id)'));
+});
+
+test('read-only golden registry rejects duplicate IDs and duplicate shadow event sources',()=>{
+ const src=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
+ assert.ok(src.includes("throw new Error('REGRESSION_GOLDEN_DUPLICATE_ID')"));
+ assert.ok(src.includes("throw new Error('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT')"));
+ assert.ok(src.includes('if(events.has(normalized.source_event_id))'));
+ assert.ok(src.includes('existingCases(row);'));
 });
