@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.225-append-only-evidence-backup'));
+  assert.ok(sw.includes('v1.0.226-import-recalc-atomic-block'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2226,4 +2226,18 @@ test('result event backup rejects forged reused receipt ID and preserves append-
  assert.ok(imp.includes("STORES.resultEvents,resultEventSnapshot"));
  assert.ok(imp.includes('IMPORT_RESULT_EVENT_CHANGED_DURING_IMPORT:'));
  assert.ok(imp.includes("const req=tx.objectStore(name).getAll()"));
+});
+
+test('import backup recalculation refuses stale scope and uses atomic BLOCKED fallback',()=>{
+  const src=readFileSync(resolve(root,'settlement-test','settlement-backup-ui.js'),'utf8');
+  const start=src.indexOf('    async function recalculateImportedScopes(');
+  const end=src.indexOf("    doc.getElementById('settlementExportBackup')",start);
+  assert.ok(start>=0&&end>start);
+  const recalc=src.slice(start,end);
+  assert.ok(recalc.includes('store.saveSettlementIfScopeUnchanged('));
+  assert.ok(!recalc.includes('await store.saveSettlement('));
+  assert.ok(recalc.includes('IMPORT_RECALC_ATOMIC_BLOCK_REQUIRED'));
+  assert.ok(recalc.includes('IMPORT_RECALC_BLOCK_SUPERSEDED'));
+  assert.ok(recalc.includes('IMPORT_RECALC_SCOPE_NOT_COMMITTED'));
+  assert.ok(recalc.includes('await store.getAll(store.STORES.messages)'));
 });

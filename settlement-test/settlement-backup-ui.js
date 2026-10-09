@@ -108,12 +108,14 @@
 
       let blocked = 0;
       for (const scope of scopes.values()) {
+        let outcome;
         try {
-          const outcome = await pipeline.settleScope(scope);
-          if (outcome && outcome.status === 'blocked') blocked += 1;
+          outcome = await pipeline.settleScope(scope);
         } catch (error) {
           blocked += 1;
-          const currentMessages = allMessages.filter(message =>
+          // Re-read rather than reuse the pre-import loop snapshot: another
+          // tab may have edited, cancelled or added a bet since that read.
+          const currentMessages = (await store.getAll(store.STORES.messages)).filter(message =>
             String(message && message.status || '').toLowerCase() !== 'cancelled' &&
             String(message && message.partner_id || '') === scope.partner_id &&
             String(message && message.business_date || '') === scope.business_date &&
@@ -125,7 +127,19 @@
             total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0,
             direction:'HOA',category_totals:{},category_rows:[],detail_rows:[],message_breakdown:[]
           };
-          await store.saveSettlement({
+          // Never clobber another tab's newer monetary settlement on the
+          // exceptional recovery path. The normal pipeline already uses
+          // the same cross-store atomic revalidation contract.
+          if (typeof store.saveSettlementIfScopeUnchanged !== 'function')
+            throw new Error('IMPORT_RECALC_ATOMIC_BLOCK_REQUIRED');
+          const [config, result, partner, priorSettlement] = await Promise.all([
+            store.resolveConfigForDate(scope.partner_id, scope.business_date).catch(() => null),
+            store.get(store.STORES.results, `${scope.business_date}:${scope.region}`),
+            store.get(store.STORES.partners, scope.partner_id),
+            store.get(store.STORES.settlements,
+              `scope:${scope.partner_id}:${scope.business_date}:${scope.region}`)
+          ]);
+          const attempted = await store.saveSettlementIfScopeUnchanged({
             id:`scope:${scope.partner_id}:${scope.business_date}:${scope.region}`,
             partner_id:scope.partner_id,
             message_ids:currentMessages.map(message => message.id),
@@ -141,8 +155,16 @@
             scope_status:'blocked',
             blocked_reasons:[reason],
             comparison_status:'blocked'
-          });
+          }, { messages:currentMessages, config, result, partner, settlement:priorSettlement });
+          if (!attempted || attempted.superseded || !attempted.saved)
+            throw new Error('IMPORT_RECALC_BLOCK_SUPERSEDED:' + scopeKey(scope));
         }
+        // A superseded calculation has committed nothing; it is never a
+        // successful recalculation and must not be masked by fallback writes.
+        if (outcome && outcome.status === 'blocked') blocked += 1;
+        if (outcome && (!['blocked','empty','complete_unverified','provisional']
+          .includes(outcome.status) || !outcome.settlement))
+          throw new Error('IMPORT_RECALC_SCOPE_NOT_COMMITTED:' + scopeKey(scope));
       }
       return { scope_count:scopes.size, blocked_count:blocked };
     }
@@ -214,7 +236,7 @@
     });
   }
 
-  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v5-recalculate-imported-scopes', filename });
+  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v6-atomic-import-recalc', filename });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);
