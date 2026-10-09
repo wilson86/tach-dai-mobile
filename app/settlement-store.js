@@ -1275,6 +1275,33 @@
           }
         };
       }
+      // When an import overlaps an existing result or settlement ID, the
+      // monetary evidence validated before opening this transaction must
+      // STILL be the current row when the write transaction starts.
+      if(!replace){
+        for(const name of [STORES.results,STORES.settlements]){
+          const currentRows=new Map((existing[name]||[]).map(row=>
+            [String(row&&row.id||''),row]));
+          const incomingRows=(payload.stores&&payload.stores[name])||[];
+          const bucket=tx.objectStore(name);
+          for(const row of incomingRows){
+            const id=String(row&&row.id||'');
+            if(!currentRows.has(id))continue;
+            const expected=currentRows.get(id);
+            const req=bucket.get(id);
+            req.onsuccess=()=>{
+              try{
+                if(stableStringify(req.result||null)!==stableStringify(expected))
+                  throw new Error('IMPORT_MONETARY_ROW_CHANGED_DURING_IMPORT:'+
+                    name+':'+id);
+              }catch(error){
+                evidenceRace=error;
+                try{tx.abort();}catch(_){/* already aborted */ }
+              }
+            };
+          }
+        }
+      }
       for (const name of names) {
         const store = tx.objectStore(name);
         if (replace) {
