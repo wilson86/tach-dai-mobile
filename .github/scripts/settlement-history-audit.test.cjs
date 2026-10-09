@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.203-all-scope-atomic'));
+  assert.ok(sw.includes('v1.0.204-golden-metadata-atomic'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1868,4 +1868,15 @@ test('oracle source independence cannot be asserted with identical source digest
   assert.ok(result.problems.includes('CASE_0_SOURCE_INDEPENDENCE_NOT_ESTABLISHED'));
   assert.ok(result.problems.includes('CASE_1_MAPPING_UNCONFIRMED'));
   assert.equal(result.release_readiness,'BLOCKED');
+});
+
+test('regression golden PIN/REMOVE require serializable atomic metadata store',()=>{
+  const store=readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8');
+  const regression=readFileSync(resolve(root,'settlement-test','settlement-regression-cases.js'),'utf8');
+  assert.ok(store.includes('async function mutateMetadataAtomically(key,mutator)'));
+  assert.ok(store.includes('openDb, mutateMetadataAtomically,'));
+  assert.ok(store.includes("const tx=db.transaction(STORES.metadata,'readwrite')"));
+  assert.ok(regression.includes('mutateMetadataAtomically(META_KEY,row=>'));
+  assert.ok(!regression.includes('async function writeMeta('));
+  assert.ok(regression.includes("throw new Error('REGRESSION_METADATA_CORRUPTED')"));
 });

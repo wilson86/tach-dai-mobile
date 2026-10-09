@@ -374,6 +374,40 @@
     } finally { db.close(); }
   }
 
+  // Metadata updates from two same-origin tabs must never use a detached
+  // read -> put sequence. The caller mutator is synchronous and executes
+  // while the metadata readwrite transaction remains active.
+  async function mutateMetadataAtomically(key,mutator) {
+    if(typeof key!=='string'||!key.trim()||typeof mutator!=='function')
+      throw new Error('METADATA_ATOMIC_ARGUMENTS_REQUIRED');
+    const db=await openDb();
+    let failure=null,result=null;
+    try {
+      const tx=db.transaction(STORES.metadata,'readwrite');
+      const bucket=tx.objectStore(STORES.metadata);
+      const req=bucket.get(key);
+      req.onsuccess=()=>{
+        try {
+          const previous=req.result==null?null:clone(req.result);
+          const updated=mutator(previous);
+          if(updated&&typeof updated.then==='function')
+            throw new Error('METADATA_ATOMIC_MUTATOR_MUST_BE_SYNC');
+          if(!updated||typeof updated!=='object'||Array.isArray(updated)||
+             updated.key!==key)
+            throw new Error('METADATA_ATOMIC_RESULT_INVALID');
+          result=clone(updated);
+          bucket.put(clone(result));
+        } catch(error) {
+          failure=error;
+          tx.abort();
+        }
+      };
+      try{await txDone(tx);}catch(error){throw failure||error;}
+      if(!result)throw new Error('METADATA_ATOMIC_COMMIT_MISSING');
+      return result;
+    }finally{db.close();}
+  }
+
   async function savePartner(input) {
     const v = normalizePartner(input);
     await put(STORES.partners, v);
@@ -969,7 +1003,7 @@
   }
 
   global.KTS_SETTLEMENT_STORE = Object.freeze({
-    DB_NAME, DB_VERSION, STORES, openDb,
+    DB_NAME, DB_VERSION, STORES, openDb, mutateMetadataAtomically,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
     saveMessage, saveSettlement, saveSettlementIfUnchanged, saveSettlementIfScopeUnchanged, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,

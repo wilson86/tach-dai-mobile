@@ -154,54 +154,50 @@
     const store = global.KTS_SETTLEMENT_STORE;
     if (!store || !store.STORES || !store.STORES.metadata || typeof store.get !== 'function') throw new Error('REGRESSION_STORE_UNAVAILABLE');
     const row = await store.get(store.STORES.metadata, META_KEY);
-    return row && Array.isArray(row.cases) ? row : { key: META_KEY, version: 1, cases: [] };
+    if(row!=null&&(row.key!==META_KEY||row.version!==1||!Array.isArray(row.cases)))
+      throw new Error('REGRESSION_METADATA_CORRUPTED');
+    return row || { key: META_KEY, version: 1, cases: [] };
   }
 
-  function requestPromise(req) {
-    return new Promise((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('REGRESSION_METADATA_WRITE_FAILED'));
-    });
+  function requireAtomicStore() {
+    const store=global.KTS_SETTLEMENT_STORE;
+    if(!store||typeof store.mutateMetadataAtomically!=='function')
+      throw new Error('REGRESSION_ATOMIC_METADATA_STORE_REQUIRED');
+    return store;
   }
-  function txPromise(tx) {
-    return new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error('REGRESSION_METADATA_TX_FAILED'));
-      tx.onabort = () => reject(tx.error || new Error('REGRESSION_METADATA_TX_ABORTED'));
-    });
-  }
-  async function writeMeta(row) {
-    const store = global.KTS_SETTLEMENT_STORE;
-    if (!store || typeof store.openDb !== 'function' || !store.STORES || !store.STORES.metadata) throw new Error('REGRESSION_STORE_UNAVAILABLE');
-    const db = await store.openDb();
-    try {
-      const tx = db.transaction(store.STORES.metadata, 'readwrite');
-      const req = tx.objectStore(store.STORES.metadata).put(clone(row));
-      await requestPromise(req);
-      await txPromise(tx);
-    } finally { db.close(); }
-    return row;
+
+  function existingCases(row) {
+    if(row==null)return [];
+    if(row.key!==META_KEY||row.version!==1||!Array.isArray(row.cases))
+      throw new Error('REGRESSION_METADATA_CORRUPTED');
+    return row.cases;
   }
 
   async function listPinnedCases() {
-    const row = await readMeta();
-    return row.cases.map(normalizeCase).sort((a, b) => String(a.pinned_at).localeCompare(String(b.pinned_at)));
+    const row=await readMeta();
+    return row.cases.map(normalizeCase)
+      .sort((a,b)=>String(a.pinned_at).localeCompare(String(b.pinned_at)));
   }
 
   async function pinCase(input) {
-    const c = normalizeCase(input);
-    const row = await readMeta();
-    const cases = row.cases.filter(existing => caseId(existing) !== c.id);
-    cases.push(c);
-    await writeMeta({ key: META_KEY, version: 1, updated_at: new Date().toISOString(), cases });
+    const c=normalizeCase(input);
+    await requireAtomicStore().mutateMetadataAtomically(META_KEY,row=>{
+      const cases=existingCases(row).filter(item=>caseId(item)!==c.id);
+      cases.push(c);
+      return {key:META_KEY,version:1,updated_at:new Date().toISOString(),cases};
+    });
     return c;
   }
 
   async function removePinnedCase(id) {
-    const row = await readMeta();
-    const cases = row.cases.filter(existing => caseId(existing) !== String(id));
-    await writeMeta({ key: META_KEY, version: 1, updated_at: new Date().toISOString(), cases });
-    return cases.length;
+    const wanted=String(id);
+    let count=0;
+    await requireAtomicStore().mutateMetadataAtomically(META_KEY,row=>{
+      const cases=existingCases(row).filter(item=>caseId(item)!==wanted);
+      count=cases.length;
+      return {key:META_KEY,version:1,updated_at:new Date().toISOString(),cases};
+    });
+    return count;
   }
 
   async function caseFromEvidence(event, options) {

@@ -31,6 +31,7 @@
 })(window);
 </script>
 <script src="./settlement-qualification-history.js"></script>
+<script src="./settlement-regression-cases.js"></script>
 <script>
 (async()=>{
   const query=new URLSearchParams(location.search);
@@ -377,6 +378,46 @@
       });
     if(!staleEmpty.superseded||staleEmpty.saved)
       fail('STALE_EMPTY_OVERWROTE_NEW_BET');
+    // Real browser contexts pin golden regressions using the actual
+    // regression module with ONLY synthetic zero-money fixtures.
+    const regressionCase=i=>({
+      id:'synthetic-golden-'+i,
+      scope:{partner_id:'synthetic-golden-partner',business_date:'2026-09-22',region:'mn'},
+      partner_role:'customer',
+      config_snapshot:{partner_id:'synthetic-golden-partner',version:1},
+      lottery_result_snapshot:{region:'mn',business_date:'2026-09-22'},
+      messages:[{id:'synthetic-golden-message-'+i,region:'mn',raw_text:'11 b 1n',
+        canonical_payload:{region:'mn',legs:[{code:'2CB'}]}}],
+      expected_reference:{totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}}
+    });
+    if(workers.some(w=>!w.KTS_SETTLEMENT_REGRESSION_CASES||
+       typeof w.KTS_SETTLEMENT_REGRESSION_CASES.pinCase!=='function'))
+      fail('GOLDEN_REGRESSION_WORKER_API_MISSING');
+    await Promise.all(workers.map((w,i)=>
+      w.KTS_SETTLEMENT_REGRESSION_CASES.pinCase(regressionCase(i))));
+    const golden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(golden.length!==2||!golden.some(c=>c.id==='synthetic-golden-0')||
+       !golden.some(c=>c.id==='synthetic-golden-1'))
+      fail('GOLDEN_CONCURRENT_PIN_LOST_CASE');
+    await Promise.all([
+      workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase('synthetic-golden-0'),
+      workers[1].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(regressionCase(2))
+    ]);
+    const retained=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(retained.length!==2||retained.some(c=>c.id==='synthetic-golden-0')||
+       !retained.some(c=>c.id==='synthetic-golden-1')||
+       !retained.some(c=>c.id==='synthetic-golden-2'))
+      fail('GOLDEN_CONCURRENT_REMOVE_AND_PIN_LOST_UPDATE');
+    const corruptGolden={
+      key:'shadow_regression_cases_v1',version:1,cases:'CORRUPTED'
+    };
+    await putSynthetic(store.STORES.metadata,corruptGolden);
+    let refusedCorrupt=false;
+    try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(regressionCase(3));}
+    catch(e){refusedCorrupt=String(e&&e.message||e).includes('REGRESSION_METADATA_CORRUPTED');}
+    const preservedCorrupt=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!refusedCorrupt||preservedCorrupt.cases!=='CORRUPTED')
+      fail('CORRUPT_GOLDEN_METADATA_OVERWRITTEN');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -396,6 +437,8 @@
       'SETTLEMENT_MESSAGE_STATUS_TX=PASS',
       'SETTLEMENT_ALL_MESSAGE_CONFIG_PREFLIGHT=PASS',
       'SETTLEMENT_BLOCKED_EMPTY_ATOMIC_CAS=PASS',
+       'GOLDEN_CROSS_TAB_METADATA_ATOMIC=PASS',
+       'GOLDEN_CORRUPT_METADATA_FAIL_CLOSED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
