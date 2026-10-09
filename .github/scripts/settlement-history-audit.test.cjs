@@ -1956,7 +1956,7 @@ test('PROMOTED HIOSKT candidate without matching golden blocks READY even when o
     'READY_GATE_EVIDENCE_CONTRADICTION_CANDIDATE_GATE');
 });
 test('deletion of golden backing PROMOTED HIOSKT is forbidden inside atomic candidate+golden transaction',()=>{
-  const golden=readFileSync(resolve(root,'app','settlement-regression-cases.js'),'utf8');
+  const golden=readFileSync(resolve(root,'settlement-test','settlement-regression-cases.js'),'utf8');
   assert.ok(golden.includes('REGRESSION_GOLDEN_LINKED_TO_PROMOTED_CANDIDATE'));
   assert.ok(golden.includes('mutateMetadataRowsAtomically([META_KEY,candidateKey]'));
   assert.ok(golden.includes('REGRESSION_CANDIDATE_METADATA_CORRUPTED'));
