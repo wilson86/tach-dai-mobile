@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.185-observed-category-fields'));
+  assert.ok(source.includes('v1.0.186-incomplete-monetary-evidence'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1363,4 +1363,29 @@ test('HIOSKT partial category references compare only fields explicitly observed
     {totals,categories:[{code:'B',xac:0},{code:'B',payout:100}]});
   assert.equal(duplicate.safe_to_promote,true,'DUPLICATE_CATEGORY_FIELDS_SHOULD_AGGREGATE');
   assert.equal(duplicate.categories[0].fields.payout.status,'MATCH_EXACT');
+});
+
+test('HIOSKT shadow status cannot claim MATCH_EXACT with missing monetary field evidence',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-shadow.js'),'utf8'),ctx,{filename:'settlement-shadow.js'});
+  const compare=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement;
+  const totals={xac:0,qua_co:0,payout:0,final:0};
+  const base={settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    category_rows:[{code:'B',payout:0}]};
+  const missingCategory=compare(base,{totals,categories:[{code:'B',xac:0}]});
+  assert.equal(missingCategory.status,'INCOMPLETE_REFERENCE');
+  assert.equal(missingCategory.missing_monetary_evidence,true);
+  assert.equal(missingCategory.exact,false);
+  assert.equal(missingCategory.safe_to_promote,false);
+  const missingTotal=compare({settlement_result:{total_xac:0,total_qua_co:0,final_net:0}},
+    {totals});
+  assert.equal(missingTotal.status,'INCOMPLETE_REFERENCE');
+  assert.equal(missingTotal.missing_monetary_evidence,true);
+  assert.equal(missingTotal.exact,false);
+  assert.equal(missingTotal.safe_to_promote,false);
+  const valid=compare({...base,category_rows:[{code:'B',xac:0,payout:0}]},
+    {totals,categories:[{code:'B',xac:0}]});
+  assert.equal(valid.status,'MATCH_EXACT');
+  assert.equal(valid.missing_monetary_evidence,false);
+  assert.equal(valid.safe_to_promote,true);
 });
