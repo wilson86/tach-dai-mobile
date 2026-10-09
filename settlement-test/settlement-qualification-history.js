@@ -234,7 +234,16 @@
           ['parser_provenance',exact(pp.total,pp.known)&&zero(pp.unknown)&&zero(pp.invalid)&&zero(pp.parser_errors)&&zero(pp.missing_canonical)],
           ['parser_backend',exact(pb.total,pb.matched)&&zero(pb.mismatched)&&pb.unreachable===false],
           ['regression_gate',exact(rg.total,rg.passed)&&zero(rg.failed)],
-          ['candidate_gate',zero(cg.pending)],
+          ['candidate_gate',(()=>{
+            const promoted=cg.promoted==null?0:cg.promoted;
+            const linked=cg.promoted_linked==null?0:cg.promoted_linked;
+            const details=[cg.promoted_missing,cg.promoted_conflicting,
+              cg.promoted_duplicate,cg.invalid];
+            return zero(cg.pending)&&Number.isInteger(promoted)&&promoted>=0&&
+              Number.isInteger(linked)&&linked===promoted&&
+              details.every(n=>n==null||zero(n))&&
+              (promoted===0||details.every(zero));
+          })()],
           ['feature_safety',zero(fs.unsafe_count)]
         ]){
           if(!valid)return {valid:false,reason:'READY_GATE_EVIDENCE_CONTRADICTION_'+name.toUpperCase()};

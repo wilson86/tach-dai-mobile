@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.207-event-identity-immutable'));
+  assert.ok(sw.includes('v1.0.208-promoted-golden-lineage'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -1907,4 +1907,47 @@ test('HIOSKT source event IDs cannot hide changed canonical money after duplicat
   assert.ok(src.includes('delete immutableCase.note'));
   assert.ok(src.includes('reference_final:c.reference_final'));
   assert.ok(src.includes('mutateMetadataAtomically(META_KEY,row=>'));
+});
+
+test('PROMOTED HIOSKT candidate without matching golden blocks READY even when other golden replay passes',()=>{
+  const c={id:'regression:synthetic-1',source_event_id:'synthetic-1',pinned_at:'2026-09-22T00:00:00Z',
+    expected_reference:{totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}}};
+  const promote={id:'candidate:synthetic-1',state:'promoted',case:JSON.parse(JSON.stringify(c))};
+  const linked=Q.candidateSummary([promote],[c]);
+  assert.equal(linked.promoted,1);
+  assert.equal(linked.promoted_linked,1);
+  assert.equal(linked.promoted_missing,0);
+  const deleted=Q.candidateSummary([promote],[]);
+  assert.equal(deleted.promoted_missing,1);
+  const wrong={...c,expected_reference:{totals:{xac:'1',qua_co:'0',payout:'0',final:'0'}}};
+  assert.equal(Q.candidateSummary([promote],[wrong]).promoted_conflicting,1);
+  assert.equal(Q.candidateSummary([promote],[c,c]).promoted_duplicate,1);
+  assert.equal(Q.candidateSummary([{state:'REVIEW_CORRUPT'}],[]).invalid,1);
+  const gates={
+    observation:{promotion_ready:true,blockers:[],counts:{total:1,exact:1,missing_scopes:0}},
+    kqxs:{met:true,total:1,verified:1,conflict:0,unverified:0},
+    parser_provenance:{met:true,total:1,known:1,unknown:0,invalid:0,parser_errors:0,missing_canonical:0},
+    parser_backend:{met:true,total:1,matched:1,mismatched:0,unreachable:false},
+    regression:{total:1,passed:1,failed:0},
+    feature_safety:{met:true,unsafe_count:0}
+  };
+  const valid=Q.combineQualification({...gates,candidates:linked});
+  assert.equal(valid.ready_for_production_review,true);
+  assert.equal(H.validateSnapshotDecision(valid).valid,true);
+  for(const stats of [deleted,Q.candidateSummary([promote],[wrong]),
+       Q.candidateSummary([promote],[c,c]),
+       Q.candidateSummary([{state:'UNRECOGNIZED'}],[])]) {
+    const verdict=Q.combineQualification({...gates,candidates:stats});
+    assert.equal(verdict.ready_for_production_review,false);
+    assert.equal(verdict.candidate_gate.met,false);
+    assert.ok(verdict.blockers.includes('PROMOTED_GOLDEN_EVIDENCE_UNLINKED'));
+  }
+  const forged=JSON.parse(JSON.stringify(valid));
+  forged.candidate_gate.promoted_linked=0;
+  assert.equal(H.validateSnapshotDecision(forged).reason,
+    'READY_GATE_EVIDENCE_CONTRADICTION_CANDIDATE_GATE');
+  const bypass=JSON.parse(JSON.stringify(valid));
+  delete bypass.candidate_gate.promoted_missing;
+  assert.equal(H.validateSnapshotDecision(bypass).reason,
+    'READY_GATE_EVIDENCE_CONTRADICTION_CANDIDATE_GATE');
 });

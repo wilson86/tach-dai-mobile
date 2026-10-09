@@ -179,13 +179,40 @@
     }
     return { met:unsafe.length === 0, unsafe_scopes:unsafe, unsafe_count:unsafe.length };
   }
-  function candidateSummary(rows) {
-    const list = Array.isArray(rows) ? rows : [];
-    return {
-      pending:list.filter(x=>String(x && x.state || '').toLowerCase()==='pending').length,
-      promoted:list.filter(x=>String(x && x.state || '').toLowerCase()==='promoted').length,
-      dismissed:list.filter(x=>String(x && x.state || '').toLowerCase()==='dismissed').length
-    };
+  // Confirming HIOSKT once does not grant authority to silently delete
+  // or rewrite the linked golden case. Every PROMOTED candidate must still
+  // have exactly one matching, pinned regression case at qualification time.
+  function candidateSummary(rows, goldenCases) {
+    const list=Array.isArray(rows)?rows:[];
+    const golden=Array.isArray(goldenCases)?goldenCases:[];
+    const counts={pending:0,promoted:0,dismissed:0,invalid:0,
+      promoted_linked:0,promoted_missing:0,promoted_conflicting:0,
+      promoted_duplicate:0};
+    const byId=new Map();
+    for(const item of golden) {
+      const id=item&&typeof item.id==='string'?item.id:'';
+      if(!id)continue;
+      const all=byId.get(id)||[];
+      all.push(item);
+      byId.set(id,all);
+    }
+    for(const item of list) {
+      const state=String(item&&item.state||'').toLowerCase();
+      if(state==='pending')counts.pending++;
+      else if(state==='dismissed')counts.dismissed++;
+      else if(state==='promoted') {
+        counts.promoted++;
+        const caseInput=item&&item.case;
+        const id=caseInput&&typeof caseInput.id==='string'?caseInput.id:'';
+        const matches=id?byId.get(id)||[]:[];
+        if(!matches.length)counts.promoted_missing++;
+        else if(matches.length!==1)counts.promoted_duplicate++;
+        else if(JSON.stringify(matches[0])!==JSON.stringify(caseInput))
+          counts.promoted_conflicting++;
+        else counts.promoted_linked++;
+      } else counts.invalid++;
+    }
+    return counts;
   }
   function combineQualification(input) {
     const x = input || {}, observation = x.observation || {}, regression = x.regression || {total:0,passed:0,failed:0}, candidates = x.candidates || {pending:0,promoted:0,dismissed:0};
@@ -203,6 +230,13 @@
     if (!(regression.total > 0)) blockers.add('NO_PINNED_REGRESSION_CASES');
     if (regression.failed > 0) blockers.add(`REGRESSION_FAILED:${regression.failed}/${regression.total}`);
     if (regression.total > 0 && !regressionExact) blockers.add(`REGRESSION_NOT_ALL_PASSED:${Number(regression.passed||0)}/${Number(regression.total||0)}`);
+    const linkedCandidateProof=Number.isInteger(candidates.promoted||0)&&
+      Number.isInteger(candidates.promoted_linked||0)&&
+      (candidates.promoted||0)===(candidates.promoted_linked||0)&&
+      [candidates.promoted_missing,candidates.promoted_conflicting,
+       candidates.promoted_duplicate,candidates.invalid].every(n=>n==null||n===0);
+    if (!linkedCandidateProof)
+      blockers.add('PROMOTED_GOLDEN_EVIDENCE_UNLINKED');
     if (candidates.pending > 0) {
       const rs = readiness.summary || {};
       if (rs.total > 0 && rs.ready === rs.total) blockers.add(`OPERATOR_CONFIRMATION_PENDING:${candidates.pending}`);
@@ -227,7 +261,7 @@
       ['parser_provenance',exact(provenance.total,provenance.known)&&zero(provenance.unknown)&&zero(provenance.invalid)&&zero(provenance.parser_errors)&&zero(provenance.missing_canonical)],
       ['parser_backend',exact(parserBackend.total,parserBackend.matched)&&zero(parserBackend.mismatched)&&parserBackend.unreachable===false],
       ['regression_gate',regressionExact],
-      ['candidate_gate',zero(candidates.pending)],
+      ['candidate_gate',zero(candidates.pending)&&linkedCandidateProof],
       ['feature_safety',zero(features.unsafe_count)]
     ];
     for(const [name,valid] of checks){
@@ -249,7 +283,7 @@
       parser_provenance:clone(provenance),
       parser_backend:clone(parserBackend),
       regression_gate:{ total:Number(regression.total||0), passed:Number(regression.passed||0), failed:Number(regression.failed||0), met:regressionExact },
-      candidate_gate:Object.assign({}, clone(candidates), { met:candidates.pending===0 }),
+      candidate_gate:Object.assign({}, clone(candidates), { met:candidates.pending===0&&linkedCandidateProof }),
       repair_readiness:clone(readiness),
       feature_safety:clone(features),
       blockers:[...blockers]
@@ -264,7 +298,9 @@
       d.regression.runPinnedCases(),
       d.candidates.listCandidates()
     ]);
-    const cs = candidateSummary(candidateRows);
+    const pinnedCases = Array.isArray(regressionSummary.results)
+      ? regressionSummary.results.map(row=>row&&row.case).filter(Boolean) : [];
+    const cs = candidateSummary(candidateRows,pinnedCases);
     const observationSummary = d.observation.buildObservation(settlements, {
       from_date:o.from_date,
       to_date:o.to_date,
