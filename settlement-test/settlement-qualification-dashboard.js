@@ -230,11 +230,14 @@
     if (!(regression.total > 0)) blockers.add('NO_PINNED_REGRESSION_CASES');
     if (regression.failed > 0) blockers.add(`REGRESSION_FAILED:${regression.failed}/${regression.total}`);
     if (regression.total > 0 && !regressionExact) blockers.add(`REGRESSION_NOT_ALL_PASSED:${Number(regression.passed||0)}/${Number(regression.total||0)}`);
-    const linkedCandidateProof=Number.isInteger(candidates.promoted||0)&&
-      Number.isInteger(candidates.promoted_linked||0)&&
-      (candidates.promoted||0)===(candidates.promoted_linked||0)&&
-      [candidates.promoted_missing,candidates.promoted_conflicting,
-       candidates.promoted_duplicate,candidates.invalid].every(n=>n==null||n===0);
+    const promoted=candidates.promoted==null?0:candidates.promoted;
+    const linked=candidates.promoted_linked==null?0:candidates.promoted_linked;
+    const linkIssues=[candidates.promoted_missing,candidates.promoted_conflicting,
+      candidates.promoted_duplicate,candidates.invalid];
+    const linkedCandidateProof=Number.isInteger(promoted)&&promoted>=0&&
+      Number.isInteger(linked)&&linked===promoted&&
+      linkIssues.every(n=>n==null||n===0)&&
+      (promoted===0||linkIssues.every(n=>Number.isInteger(n)&&n===0));
     if (!linkedCandidateProof)
       blockers.add('PROMOTED_GOLDEN_EVIDENCE_UNLINKED');
     if (candidates.pending > 0) {

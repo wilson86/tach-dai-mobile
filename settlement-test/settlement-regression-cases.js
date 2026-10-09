@@ -206,13 +206,38 @@
 
   async function removePinnedCase(id) {
     const wanted=String(id);
-    let count=0;
-    await requireAtomicStore().mutateMetadataAtomically(META_KEY,row=>{
-      const cases=existingCases(row).filter(item=>caseId(item)!==wanted);
-      count=cases.length;
-      return {key:META_KEY,version:1,updated_at:new Date().toISOString(),cases};
+    const store=global.KTS_SETTLEMENT_STORE;
+    const candidates=global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    if(!store||typeof store.mutateMetadataRowsAtomically!=='function'||
+       !candidates||!candidates.META_KEY)
+      throw new Error('REGRESSION_GOLDEN_DELETE_LINK_GUARD_UNAVAILABLE');
+    const candidateKey=candidates.META_KEY;
+    if(candidateKey===META_KEY)
+      throw new Error('REGRESSION_METADATA_KEY_COLLISION');
+    return store.mutateMetadataRowsAtomically([META_KEY,candidateKey],rows=>{
+      const existing=existingCases(rows[META_KEY]);
+      const candidateRow=rows[candidateKey];
+      if(candidateRow!=null&&
+         (candidateRow.key!==candidateKey||candidateRow.version!==1||
+          !Array.isArray(candidateRow.candidates)))
+        throw new Error('REGRESSION_CANDIDATE_METADATA_CORRUPTED');
+      for(const item of candidateRow&&candidateRow.candidates||[]) {
+        if(String(item&&item.state||'').toLowerCase()!=='promoted')continue;
+        // A malformed PROMOTED record is not proof that a linked golden
+        // is disposable: abort all deletion until metadata is reviewed.
+        const promoted=normalizeCase(item&&item.case);
+        if(promoted.id===wanted)
+          throw new Error('REGRESSION_GOLDEN_LINKED_TO_PROMOTED_CANDIDATE');
+      }
+      const cases=existing.filter(item=>caseId(item)!==wanted);
+      return {
+        rows:{
+          [META_KEY]:{key:META_KEY,version:1,updated_at:new Date().toISOString(),cases},
+          [candidateKey]:candidateRow||{key:candidateKey,version:1,candidates:[]}
+        },
+        result:cases.length
+      };
     });
-    return count;
   }
 
   async function caseFromEvidence(event, options) {

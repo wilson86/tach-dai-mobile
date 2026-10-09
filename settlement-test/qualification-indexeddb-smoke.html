@@ -541,6 +541,30 @@
     if(!rejectedChangedEvidence||
        JSON.stringify(candidatesBeforeCollision)!==JSON.stringify(candidatesAfterCollision))
       fail('CANDIDATE_SAME_ID_DIFFERENT_MONEY_WAS_SILENTLY_DEDUPED');
+    // Synthetic confirmed money must not be deleted while a promoted
+    // candidate references its golden proof. Unlinked records may be removed.
+    const beforeProtected=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    const locked=beforeProtected.find(c=>c.id==='synthetic-golden-4');
+    if(!locked)fail('PROMOTED_DELETE_FIXTURE_MISSING_GOLDEN');
+    const candidateMeta=await store.get(store.STORES.metadata,candidateKey);
+    const ix=candidateMeta.candidates.findIndex(c=>c.id==='candidate:synthetic-4');
+    if(ix<0)fail('PROMOTED_DELETE_FIXTURE_MISSING_CANDIDATE');
+    candidateMeta.candidates[ix]={...candidateMeta.candidates[ix],
+      state:'promoted',case:locked};
+    await putSynthetic(store.STORES.metadata,candidateMeta);
+    let rejectedLinkedDeletion=false;
+    try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase(locked.id);}
+    catch(error){rejectedLinkedDeletion=String(error&&error.message||error)
+      .includes('REGRESSION_GOLDEN_LINKED_TO_PROMOTED_CANDIDATE');}
+    if(!rejectedLinkedDeletion||
+       (await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
+         .filter(c=>c.id===locked.id).length!==1)
+      fail('PROMOTED_LINKED_GOLDEN_WAS_DELETED');
+    await workers[1].KTS_SETTLEMENT_REGRESSION_CASES
+      .removePinnedCase('synthetic-golden-2');
+    if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
+       .some(c=>c.id==='synthetic-golden-2'))
+      fail('UNLINKED_GOLDEN_DELETE_BLOCKED');
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -569,6 +593,8 @@
        'CANDIDATE_DISMISSED_CAPTURE_NO_RESURRECTION=PASS',
        'CANDIDATE_SAME_EVENT_ID_IMMUTABLE=PASS',
        'GOLDEN_SOURCE_ID_IMMUTABLE=PASS',
+       'PROMOTED_LINKED_GOLDEN_DELETE_REFUSED=PASS',
+       'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
       'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
