@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.206-immutable-golden-capture-dedupe'));
+  assert.ok(source.includes('v1.0.207-event-identity-immutable'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1695,4 +1695,13 @@ test('golden regression refuses to replace pinned HIOSKT proof using a recycled 
   assert.ok(src.includes("throw new Error('REGRESSION_GOLDEN_ID_CONFLICT')"));
   assert.ok(src.includes("delete stable.pinned_at"));
   assert.ok(src.includes('const prior=cases.find(item=>caseId(item)===c.id)'));
+});
+
+test('HIOSKT candidate duplicate event ID checks immutable source amounts before dedupe',()=>{
+  const source=readFileSync(resolve(root,'app','settlement-regression-candidates.js'),'utf8');
+  assert.ok(source.includes('REGRESSION_CANDIDATE_EVENT_ID_CONFLICT'));
+  assert.ok(source.includes('delete immutableCase.pinned_at'));
+  assert.ok(source.includes('delete immutableCase.note'));
+  assert.ok(source.includes('reference_final:c.reference_final'));
+  assert.ok(source.includes('mutateMetadataAtomically(META_KEY,row=>'));
 });
