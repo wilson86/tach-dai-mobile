@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.230-blocked-import-integrity'));
+  assert.ok(sw.includes('v1.0.232-report-canonical-empty'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2354,4 +2354,41 @@ test('BLOCKED backup cannot smuggle payable money, rows or fabricated scope stat
   assert.throws(()=>st.validateImportPayload(wrap({...row,result_snapshot:null,
     settlement_result:null}),{},{replace:false}),
     /IMPORT_BLOCKED_SETTLEMENT_TOTALS_MISSING/);
+});
+
+test('report and imported backup both reject noncanonical settlement status at money close',()=>{
+  const context={window:{}};
+  for(const file of ['settlement-store.js','settlement-report.js']){
+    vm.runInNewContext(readFileSync(resolve(root,'settlement-test',file),'utf8'),context);
+  }
+  const st=context.window.KTS_SETTLEMENT_STORE;
+  const rep=context.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-report-state',name:'Synthetic',role:'customer'};
+  const msg={id:'synthetic-report-message',partner_id:partner.id,
+    business_date:'2026-09-22',region:'mn',raw_text:'SYNTHETIC',status:'parser_error'};
+  const zero={total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0};
+  const row={id:'scope:synthetic-report-state:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'blocked',comparison_status:'MATCH_EXACT',
+    message_ids:[msg.id],settlement_result:{...zero}};
+  const backup=x=>({format:'kts-settlement-export',version:5,
+    stores:{partners:[partner],messages:[msg],settlements:[x]}});
+  assert.equal(st.validateImportPayload(backup(row),{},{replace:false}).valid,true);
+  for(const status of ['BLOCKED','Provisional','COMPLETE_UNVERIFIED','Empty','verified','',null]){
+    assert.throws(()=>st.validateImportPayload(backup({...row,scope_status:status}),
+      {},{replace:false}),/IMPORT_SETTLEMENT_STATUS_INVALID/);
+    const result=rep.buildDailyOperationsReport({
+      business_date:'2026-09-22',partners:[partner],
+      settlements:[{...row,scope_status:status}],messages:[msg]});
+    assert.equal(result.status,'BLOCKED');
+    assert.equal(result.counts.blocked,1);
+    assert.equal(result.counts.exact,0);
+    assert.equal(result.partners[0].regions[0].blocked,true);
+  }
+  const staleComparison=rep.buildDailyOperationsReport({
+    business_date:'2026-09-22',partners:[partner],
+    settlements:[{...row,scope_status:'complete_unverified',
+      comparison_status:'BLOCKED'}],messages:[msg]});
+  assert.equal(staleComparison.status,'BLOCKED');
+  assert.equal(staleComparison.partners[0].regions[0].blocked,true);
 });

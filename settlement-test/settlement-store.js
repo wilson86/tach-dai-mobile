@@ -1079,7 +1079,11 @@
         .sort();
       const settlementMessageIds = messageIds.slice().sort();
       const scopeStatus = String(row.scope_status || '').toLowerCase();
-      if (!['empty','blocked','provisional','complete_unverified'].includes(scopeStatus))
+      // Preserve canonical case: older report readers and close gates use
+      // literal status comparisons. Do not import a differently cased
+      // BLOCKED or PROVISIONAL label that bypasses those safety checks.
+      if (typeof row.scope_status!=='string' || row.scope_status!==scopeStatus ||
+          !['empty','blocked','provisional','complete_unverified'].includes(scopeStatus))
         throw new Error('IMPORT_SETTLEMENT_STATUS_INVALID:' + String(row.id));
       if (scopeStatus === 'empty' && activeScopeMessageIds.length) {
         throw new Error('IMPORT_EMPTY_SETTLEMENT_HAS_ACTIVE_MESSAGES:' + String(row.id));
