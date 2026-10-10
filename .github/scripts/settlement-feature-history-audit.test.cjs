@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.234-recalc-postcommit-fence'));
+  assert.ok(source.includes('v1.0.235-report-malformed-money-gate'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2290,4 +2290,39 @@ test('backup recalc exception never overwrites settlement already committed by p
   assert.equal(recovery.blocked_count,1);
   assert.equal(latest.scope_status,'blocked');
   assert.equal(writes,1);
+});
+
+test('invalid stored active monetary totals are not silently reported as zero or exact',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-report.js'),'utf8'),ctx);
+  const report=ctx.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-money-shape',name:'Synthetic',role:'customer'};
+  const messageId='synthetic-money-shape-message';
+  const row={id:'scope:synthetic-money-shape:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    message_ids:[messageId],settlement_result:{
+      total_xac:'100',total_qua_co:'90.0',total_payout:110,
+      refund_amount:0,final_net:-20}};
+  const input=settlement=>({business_date:'2026-09-22',partners:[partner],
+    settlements:[settlement],messages:[{
+      id:messageId,partner_id:partner.id,business_date:'2026-09-22',region:'mn'
+    }]});
+  const valid=report.buildDailyOperationsReport(input(row));
+  assert.equal(valid.status,'MATCH_EXACT');
+  assert.equal(valid.totals.xac,100);
+  for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
+    for(const malformed of [null,false,[],{},'',' ', '0x0', 'NaN', 'not-money']){
+      const mutated={...row,settlement_result:{
+        ...row.settlement_result,[field]:malformed}};
+      const daily=report.buildDailyOperationsReport(input(mutated));
+      assert.equal(daily.status,'BLOCKED','failed to block '+field);
+      assert.equal(daily.counts.blocked,1);
+      assert.equal(daily.counts.exact,0);
+      for(const key of ['xac','qua_co','payout','refund_amount','final_net'])
+        assert.equal(daily.totals[key],0,'leaked '+key+' from '+field);
+      assert.ok(daily.partners[0].blocked_scopes[0].reasons
+        .includes('SETTLEMENT_MONETARY_TOTALS_INVALID'));
+    }
+  }
 });
