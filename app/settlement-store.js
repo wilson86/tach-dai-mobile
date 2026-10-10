@@ -315,6 +315,14 @@
     if (!partnerId || !validDateOnly(businessDate)) throw new Error('SHADOW_EVENT_SCOPE_REQUIRED');
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('SHADOW_EVENT_REGION_REQUIRED');
     const scopeId = String(input.scope_id || `scope:${partnerId}:${businessDate}:${region}`);
+    // A caller-supplied comparison_status must never contradict the
+    // actual normalized comparison held by the immutable Shadow receipt.
+    // Otherwise backup/diagnostics could display a forged MATCH_EXACT label.
+    const expectedComparisonStatus=String(
+      input.comparison&&input.comparison.status||'').toUpperCase();
+    if(input.comparison_status!=null && expectedComparisonStatus &&
+       String(input.comparison_status).toUpperCase()!==expectedComparisonStatus)
+      throw new Error('SHADOW_EVENT_COMPARISON_STATUS_MISMATCH');
     const evidenceCore = {
       scope_id: scopeId,
       trigger: String(input.trigger || 'UNKNOWN'),
@@ -781,6 +789,13 @@
 
   async function saveShadowEvent(input) {
     const event = normalizeShadowEvent(input || {});
+    // Hash metadata is derived from the event core. Refuse a caller-provided
+    // different fingerprint BEFORE opening any write transaction; it could
+    // bypass cross-tab duplicate suppression for an identical money receipt.
+    const computed=normalizeShadowEvent(
+      Object.assign({},input||{},{evidence_fingerprint:null}));
+    if(event.evidence_fingerprint!==computed.evidence_fingerprint)
+      throw new Error('SHADOW_EVENT_FINGERPRINT_MISMATCH');
     const db = await openDb();
     try {
       // The last-event check and append MUST share one readwrite transaction.

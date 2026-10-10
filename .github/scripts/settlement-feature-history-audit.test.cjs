@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.240-import-exact-receipt-fence'));
+  assert.ok(source.includes('v1.0.241-shadow-receipt-integrity'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2569,4 +2569,27 @@ test('imported exact money claim requires matching durable HIOSKT Shadow receipt
   assert.throws(()=>store.validateImportPayload(payload({
     ...scope,reference_app_snapshot:null},[receipt]),{},{}),
     /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+});
+
+test('Shadow event core rejects falsely labeled exact receipts and hash spoofing before IDB',async()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),ctx);
+  const store=ctx.window.KTS_SETTLEMENT_STORE;
+  const event={id:'synthetic-shadow-consistency',scope_id:'scope:synthetic:2026-09-22:mn',
+    partner_id:'synthetic',business_date:'2026-09-22',region:'mn',
+    comparison:{status:'MISMATCH',totals:{final_net:{status:'MISMATCH'}}},
+    comparison_status:'MATCH_EXACT',
+    local_snapshot:{settlement_result:{final_net:0}},
+    reference_snapshot:{totals:{final:100}}};
+  assert.throws(()=>store.normalizeShadowEvent(event),
+    /SHADOW_EVENT_COMPARISON_STATUS_MISMATCH/);
+  await assert.rejects(store.saveShadowEvent(event),
+    /SHADOW_EVENT_COMPARISON_STATUS_MISMATCH/);
+  const valid={...event,comparison_status:'MISMATCH'};
+  const normalized=store.normalizeShadowEvent(valid);
+  assert.equal(normalized.comparison_status,'MISMATCH');
+  assert.equal(typeof normalized.evidence_fingerprint,'string');
+  await assert.rejects(store.saveShadowEvent({
+    ...valid,evidence_fingerprint:'SYNTHETIC_BOGUS_HASH'}),
+    /SHADOW_EVENT_FINGERPRINT_MISMATCH/);
 });
