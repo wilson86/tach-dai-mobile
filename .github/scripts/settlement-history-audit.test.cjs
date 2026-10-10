@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.237-empty-shadow-integrity'));
+  assert.ok(sw.includes('v1.0.238-eod-kqxs-independent-gate'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2498,7 +2498,7 @@ test('invalid stored active monetary totals are not silently reported as zero or
       id:messageId,partner_id:partner.id,business_date:'2026-09-22',region:'mn'
     }]});
   const valid=report.buildDailyOperationsReport(input(row));
-  assert.equal(valid.status,'MATCH_EXACT');
+  assert.equal(valid.status,'UNVERIFIED');
   assert.equal(valid.totals.xac,100);
   for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
     for(const malformed of [null,false,[],{},'',' ', '0x0', 'NaN', 'not-money']){
@@ -2540,7 +2540,7 @@ test('contradictory monetary snapshot views never import or enter daily totals',
     stores:{partners:[partner],messages:[msg],settlements:[settlement]}});
   assert.equal(st.validateImportPayload(payload(row),{},{replace:false}).valid,true);
   const safe=report.buildDailyOperationsReport(input(row));
-  assert.equal(safe.status,'MATCH_EXACT');
+  assert.equal(safe.status,'UNVERIFIED');
   assert.equal(safe.totals.xac,100);
   for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
     const corrupted={...row,result_snapshot:{...zero,[field]:zero[field]+1}};
@@ -2623,4 +2623,43 @@ test('shadow refuses comparison and receipts for empty, noncanonical and invalid
   await assert.rejects(api.compareAndSave(req),/SHADOW_SCOPE_MONEY_VIEW_CONFLICT/);
   assert.equal(writes,0);
   assert.equal(receipts,0);
+});
+
+test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-report.js'),'utf8'),ctx);
+  const report=ctx.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-kqxs-gate',name:'Synthetic',role:'customer'};
+  const row={id:'scope:synthetic-kqxs-gate:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    message_ids:['synthetic-kqxs-message'],
+    settlement_result:{total_xac:100,total_qua_co:90,total_payout:40,
+      refund_amount:0,final_net:50}};
+  const input=x=>({business_date:'2026-09-22',partners:[partner],
+    settlements:[x],messages:[{id:'synthetic-kqxs-message',
+      partner_id:partner.id,business_date:'2026-09-22',region:'mn'}]});
+  const without=report.buildDailyOperationsReport(input(row));
+  assert.equal(without.status,'UNVERIFIED');
+  assert.equal(without.counts.exact,0);
+  assert.equal(without.exact_totals.xac,0);
+  assert.equal(without.totals.xac,100);
+  assert.equal(without.partners[0].shadow_status,'MATCH_EXACT');
+  const prizes={G8:['12'],G7:['123'],G6:['101','102','103'],
+    G5:['321'],G4:['1111','2222','3333','4444','5555','6666','7777'],
+    G3:['12345','54321'],G2:['12222'],G1:['11111'],DB:['123456']};
+  const draw={business_date:'2026-09-22',region:'mn',
+    complete:true,verified:true,verification_status:'verified',
+    expected_station_codes:['tp'],verification_sources:['primary','secondary'],
+    verification_conflicts:[],stations:[{code:'tp',prizes}]};
+  const verified=report.buildDailyOperationsReport(input({
+    ...row,lottery_result_snapshot:draw}));
+  assert.equal(verified.status,'MATCH_EXACT');
+  assert.equal(verified.counts.exact,1);
+  assert.equal(verified.exact_totals.xac,100);
+  const conflicting=report.buildDailyOperationsReport(input({
+    ...row,lottery_result_snapshot:{...draw,verification_status:'conflict',
+      verification_conflicts:['synthetic-source-mismatch']}}));
+  assert.equal(conflicting.counts.exact,0);
+  assert.notEqual(conflicting.status,'MATCH_EXACT');
 });

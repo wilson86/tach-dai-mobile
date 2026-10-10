@@ -361,7 +361,11 @@
       addTotals(totals, report.totals);
       if (report.blocked) counts.blocked += 1;
       if (report.provisional) counts.provisional += 1;
-      if (report.shadow_status === 'MATCH_EXACT' && !report.blocked && !report.provisional) {
+      // Shadow exactness proves HIOSKT comparison only. An unverified
+      // lottery result is a separate authority; the end-of-day close must
+      // not display MATCH_EXACT or count exact monetary totals without it.
+      if (report.shadow_status === 'MATCH_EXACT' && !report.blocked &&
+          !report.provisional && report.kqxs_verified) {
         counts.exact += 1;
         addTotals(exactTotals, report.totals);
       } else if (report.shadow_status === 'MISMATCH') counts.mismatch += 1;
