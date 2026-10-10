@@ -1016,7 +1016,7 @@
           result_snapshot:zero,settlement_result:zero}]
       }};
       let blocked='';
-      try{await workers[0].KTS_SETTLEMENT_STORE.importAll(payload,
+      try{await workers[1].KTS_SETTLEMENT_STORE.importAll(payload,
         {replace:false});}
       catch(err){blocked=String(err&&err.message||err);}
       if(!blocked.includes('IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING')||
