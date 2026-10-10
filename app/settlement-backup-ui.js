@@ -108,6 +108,13 @@
 
       let blocked = 0;
       for (const scope of scopes.values()) {
+        // Record the monetary row BEFORE invoking the pipeline. A pipeline
+        // might commit a valid settlement and then throw (e.g. downstream
+        // callback failure); treating that late exception as permission to
+        // overwrite the new money with zero-valued BLOCKED is unsafe.
+        const settlementId =
+          `scope:${scope.partner_id}:${scope.business_date}:${scope.region}`;
+        const settlementAtStart = await store.get(store.STORES.settlements, settlementId);
         let outcome;
         let recoveryCommitted = false;
         try {
@@ -140,8 +147,15 @@
             store.get(store.STORES.settlements,
               `scope:${scope.partner_id}:${scope.business_date}:${scope.region}`)
           ]);
+          // Even without a cross-tab race after recovery's fresh snapshot,
+          // the pipeline itself may already have committed a newer result.
+          // Require the original pre-run settlement to still be current;
+          // the following atomic CAS covers subsequent tab mutations.
+          if (JSON.stringify(priorSettlement || null) !==
+              JSON.stringify(settlementAtStart || null))
+            throw new Error('IMPORT_RECALC_SETTLEMENT_CHANGED_DURING_ERROR:' + scopeKey(scope));
           const attempted = await store.saveSettlementIfScopeUnchanged({
-            id:`scope:${scope.partner_id}:${scope.business_date}:${scope.region}`,
+            id:settlementId,
             partner_id:scope.partner_id,
             message_ids:currentMessages.map(message => message.id),
             business_date:scope.business_date,
