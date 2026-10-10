@@ -160,8 +160,16 @@
       }
       const regionReport = byRegion[region];
       regionReport.settlements.push(settlement);
-      const result = settlement.settlement_result || settlement.result_snapshot || {};
-      const categories = settlementCategories(settlement);
+      // A BLOCKED or corrupted scope is NOT a source of payable money.
+      // Legacy databases can contain malformed monetary rows even when
+      // backup-import validation would reject them today. Preserve their
+      // diagnostic message and blocker, but do not aggregate their money.
+      const monetaryScope = ['provisional','complete_unverified']
+        .includes(settlement.scope_status);
+      const result = monetaryScope
+        ? settlement.settlement_result || settlement.result_snapshot || {}
+        : {};
+      const categories = monetaryScope ? settlementCategories(settlement) : [];
       // Treat legacy/corrupted labels case-insensitively and fail closed
       // on unknown/missing states. A raw "BLOCKED" label must never turn
       // into a seemingly valid or exact end-of-day money report.
@@ -202,7 +210,8 @@
       finalNet += num(result.final_net);
 
       const ids = messageIds(settlement);
-      const detailRows = Array.isArray(settlement.detail_rows) ? settlement.detail_rows : [];
+      const detailRows = monetaryScope && Array.isArray(settlement.detail_rows)
+        ? settlement.detail_rows : [];
       for (const id of ids) {
         const msg = messagesById[id] || null;
         const messageReport = {
@@ -211,7 +220,7 @@
           region,
           raw_text: msg ? String(msg.raw_text || '') : '',
           message_status: msg ? String(msg.status || '') : '',
-          categories: messageBreakdown(settlement, id),
+          categories: monetaryScope ? messageBreakdown(settlement, id) : [],
           detail_rows: detailRows.filter(x => !x.message_id || x.message_id === id).map(x => Object.assign({}, x)),
           result: Object.assign({}, result),
           scope_status: scopeStatus,
