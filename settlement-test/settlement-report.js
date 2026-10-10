@@ -45,6 +45,43 @@
     });
   }
 
+  // Category breakdown amounts are financial evidence. A corrupt row must
+  // never be coerced to zero while the main money totals remain MATCH_EXACT.
+  function verifiedCategoryMoney(settlement) {
+    const isAmount=value=>{
+      if(typeof value==='number')return Number.isFinite(value);
+      return typeof value==='string' &&
+        /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+        Number.isFinite(Number(value));
+    };
+    const numericFields=['xac','qua_co','hit_units','payout'];
+    const rowsValid=value=>Array.isArray(value) && value.every(row=>
+      row&&typeof row==='object'&&!Array.isArray(row) &&
+      numericFields.every(field=>!Object.prototype.hasOwnProperty.call(row,field) ||
+        isAmount(row[field])));
+    const sources=[settlement];
+    for(const key of ['settlement_result','result_snapshot']){
+      const value=settlement[key];
+      if(value!=null) {
+        if(!value||typeof value!=='object'||Array.isArray(value))return false;
+        sources.push(value);
+      }
+    }
+    for(const obj of sources)
+      for(const key of ['category_rows','rows']){
+        if(obj[key]!=null && !rowsValid(obj[key]))return false;
+      }
+    if(settlement.message_breakdown!=null){
+      if(!Array.isArray(settlement.message_breakdown))return false;
+      for(const group of settlement.message_breakdown){
+        if(!group||typeof group!=='object'||Array.isArray(group) ||
+           (group.category_rows!=null&&!rowsValid(group.category_rows)))
+          return false;
+      }
+    }
+    return true;
+  }
+
   // Only genuinely empty, zero-valued scopes may disappear from the daily
   // close view. A corrupted EMPTY label hiding bets or money is a blocker.
   function isCleanEmptyScope(settlement, messagesById) {
@@ -220,8 +257,11 @@
          verifiedMonetaryTotals(settlement.settlement_result) &&
          MONEY_FIELDS.every(field=>String(settlement.result_snapshot[field])===
            String(settlement.settlement_result[field])));
+      const validCategories=!declaredMonetary ||
+        verifiedCategoryMoney(settlement);
       const monetaryScope = declaredMonetary &&
-        verifiedMonetaryTotals(untrustedResult) && moneyViewsAgree;
+        verifiedMonetaryTotals(untrustedResult) && moneyViewsAgree &&
+        validCategories;
       const result = monetaryScope ? untrustedResult : {};
       const categories = monetaryScope ? settlementCategories(settlement) : [];
       // Treat legacy/corrupted labels case-insensitively and fail closed
@@ -241,6 +281,8 @@
           ? settlement.blocked_reasons.slice():[];
         if(!knownStatus)reasons.push(settlement.scope_status==='empty'
           ? 'SETTLEMENT_EMPTY_SCOPE_INTEGRITY_INVALID'
+          : declaredMonetary && !validCategories
+          ? 'SETTLEMENT_CATEGORY_MONEY_INVALID'
           : !monetaryScope && declaredMonetary
           ? 'SETTLEMENT_MONETARY_TOTALS_INVALID'
           : 'UNRECOGNIZED_SETTLEMENT_SCOPE_STATUS');
