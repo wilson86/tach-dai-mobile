@@ -199,7 +199,7 @@
     const validLocal=value=>{
       if(typeof value==='number')return Number.isFinite(value);
       return typeof value==='string' &&
-        /^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(value.trim()) &&
+        /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
         Number.isFinite(Number(value));
     };
     const views=[settlement.settlement_result,settlement.result_snapshot]
