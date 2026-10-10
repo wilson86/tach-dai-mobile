@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.235-report-malformed-money-gate'));
+  assert.ok(source.includes('v1.0.236-dual-money-view-proof'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2324,5 +2324,44 @@ test('invalid stored active monetary totals are not silently reported as zero or
       assert.ok(daily.partners[0].blocked_scopes[0].reasons
         .includes('SETTLEMENT_MONETARY_TOTALS_INVALID'));
     }
+  }
+});
+
+test('contradictory monetary snapshot views never import or enter daily totals',()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-store.js','settlement-report.js']){
+    vm.runInNewContext(readFileSync(resolve(root,'app',name),'utf8'),ctx);
+  }
+  const st=ctx.window.KTS_SETTLEMENT_STORE;
+  const report=ctx.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-view-conflict',name:'Synthetic',role:'customer'};
+  const msg={id:'synthetic-view-message',partner_id:partner.id,
+    business_date:'2026-09-22',region:'mn',raw_text:'SYNTHETIC',
+    status:'settled_unverified'};
+  const zero={total_xac:100,total_qua_co:90,total_payout:60,
+    refund_amount:0,final_net:30};
+  const row={id:'scope:synthetic-view-conflict:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    message_ids:[msg.id],result_snapshot:{...zero},
+    settlement_result:{...zero}};
+  const input=settlement=>({business_date:'2026-09-22',partners:[partner],
+    settlements:[settlement],messages:[msg]});
+  const payload=settlement=>({format:'kts-settlement-export',version:5,
+    stores:{partners:[partner],messages:[msg],settlements:[settlement]}});
+  assert.equal(st.validateImportPayload(payload(row),{},{replace:false}).valid,true);
+  const safe=report.buildDailyOperationsReport(input(row));
+  assert.equal(safe.status,'MATCH_EXACT');
+  assert.equal(safe.totals.xac,100);
+  for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
+    const corrupted={...row,result_snapshot:{...zero,[field]:zero[field]+1}};
+    assert.throws(()=>st.validateImportPayload(payload(corrupted),
+      {},{replace:false}),/IMPORT_SETTLEMENT_MONEY_VIEW_CONFLICT/);
+    const blocked=report.buildDailyOperationsReport(input(corrupted));
+    assert.equal(blocked.status,'BLOCKED');
+    assert.equal(blocked.counts.exact,0);
+    assert.equal(blocked.totals.xac,0);
+    assert.ok(blocked.partners[0].blocked_scopes[0].reasons
+      .includes('SETTLEMENT_MONETARY_TOTALS_INVALID'));
   }
 });

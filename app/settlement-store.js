@@ -1085,6 +1085,19 @@
       if (typeof row.scope_status!=='string' || row.scope_status!==scopeStatus ||
           !['empty','blocked','provisional','complete_unverified'].includes(scopeStatus))
         throw new Error('IMPORT_SETTLEMENT_STATUS_INVALID:' + String(row.id));
+      // Two saved views of the SAME monetary calculation must not disagree.
+      // Otherwise a restored source can report one amount while a downstream
+      // audit or replay reads another from the same scope ID. Do not silently
+      // choose whichever value happens to be first in a fallback chain.
+      if (['provisional','complete_unverified'].includes(scopeStatus) &&
+          row.result_snapshot != null && row.settlement_result != null) {
+        for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
+          const a=row.result_snapshot[field], b=row.settlement_result[field];
+          if(a==null || b==null || String(a)!==String(b))
+            throw new Error('IMPORT_SETTLEMENT_MONEY_VIEW_CONFLICT:'+
+              String(row.id)+':'+field);
+        }
+      }
       if (scopeStatus === 'empty' && activeScopeMessageIds.length) {
         throw new Error('IMPORT_EMPTY_SETTLEMENT_HAS_ACTIVE_MESSAGES:' + String(row.id));
       }

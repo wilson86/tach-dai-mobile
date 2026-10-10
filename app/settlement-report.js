@@ -181,8 +181,14 @@
         .includes(settlement.scope_status);
       const untrustedResult =
         settlement.settlement_result || settlement.result_snapshot || null;
+      const moneyViewsAgree = !declaredMonetary ||
+        !settlement.result_snapshot || !settlement.settlement_result ||
+        (verifiedMonetaryTotals(settlement.result_snapshot) &&
+         verifiedMonetaryTotals(settlement.settlement_result) &&
+         MONEY_FIELDS.every(field=>String(settlement.result_snapshot[field])===
+           String(settlement.settlement_result[field])));
       const monetaryScope = declaredMonetary &&
-        verifiedMonetaryTotals(untrustedResult);
+        verifiedMonetaryTotals(untrustedResult) && moneyViewsAgree;
       const result = monetaryScope ? untrustedResult : {};
       const categories = monetaryScope ? settlementCategories(settlement) : [];
       // Treat legacy/corrupted labels case-insensitively and fail closed
