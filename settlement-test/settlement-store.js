@@ -1027,6 +1027,45 @@
       combinedMessages.set(String(row.id), prior || row);
     }
 
+
+    // A restored MATCH_EXACT money claim must have the same durable Shadow
+    // receipt which the live HIOSKT workflow requires before promotion.
+    // Validate its full reference/comparison, not only a forged status text.
+    const knownShadowReceipts=[
+      ...(replace?[]:(existing[STORES.shadowEvents]||[])),
+      ...incoming[STORES.shadowEvents]
+    ];
+    const exactReceiptFor=row=>{
+      const ref=row.reference_app_snapshot;
+      if(!ref||typeof ref!=='object'||Array.isArray(ref)||
+          !ref.comparison||String(ref.comparison.status||'').toUpperCase()!=='MATCH_EXACT')
+        return false;
+      const reference=clone(ref);
+      delete reference.comparison;
+      const expectedAmounts=row.settlement_result||row.result_snapshot;
+      const values=['total_xac','total_qua_co','total_payout','refund_amount','final_net'];
+      const monetaryMatch=actual=>actual&&typeof actual==='object'&&
+        values.every(key=>expectedAmounts && actual[key]!=null &&
+          expectedAmounts[key]!=null &&
+          String(actual[key])===String(expectedAmounts[key]));
+      return knownShadowReceipts.some(event=>
+        event && String(event.scope_id||'')===String(row.id) &&
+        String(event.partner_id||'')===String(row.partner_id) &&
+        String(event.business_date||'')===String(row.business_date) &&
+        String(event.region||'').toLowerCase()===String(row.region||'').toLowerCase() &&
+        String(event.comparison_status||'').toUpperCase()==='MATCH_EXACT' &&
+        event.comparison && String(event.comparison.status||'').toUpperCase()==='MATCH_EXACT' &&
+        stableStringify(event.comparison)===stableStringify(ref.comparison) &&
+        stableStringify(event.reference_snapshot||null)===stableStringify(reference) &&
+        event.local_snapshot && monetaryMatch(event.local_snapshot.settlement_result) &&
+        stableStringify((event.local_snapshot.message_ids||[]).map(String).sort())===
+          stableStringify((row.message_ids||[]).map(String).sort()) &&
+        (!event.evidence_fingerprint ||
+          String(event.evidence_fingerprint)===
+            normalizeShadowEvent({...event,evidence_fingerprint:null}).evidence_fingerprint)
+      );
+    };
+
     for (const row of incoming[STORES.settlements]) {
       const partnerId = requirePartner(row, STORES.settlements);
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_SETTLEMENT_SCOPE_INVALID:' + String(row.id));
@@ -1098,6 +1137,10 @@
               String(row.id)+':'+field);
         }
       }
+      if (['provisional','complete_unverified'].includes(scopeStatus) &&
+          String(row.comparison_status||'').toUpperCase()==='MATCH_EXACT' &&
+          !exactReceiptFor(row))
+        throw new Error('IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING:'+String(row.id));
       if (scopeStatus === 'empty' && activeScopeMessageIds.length) {
         throw new Error('IMPORT_EMPTY_SETTLEMENT_HAS_ACTIVE_MESSAGES:' + String(row.id));
       }
