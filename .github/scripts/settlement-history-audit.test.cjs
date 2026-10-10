@@ -2531,7 +2531,7 @@ test('contradictory monetary snapshot views never import or enter daily totals',
     refund_amount:0,final_net:30};
   const row={id:'scope:synthetic-view-conflict:2026-09-22:mn',
     partner_id:partner.id,business_date:'2026-09-22',region:'mn',
-    scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    scope_status:'complete_unverified',comparison_status:'unverified',
     message_ids:[msg.id],result_snapshot:{...zero},
     settlement_result:{...zero}};
   const input=settlement=>({business_date:'2026-09-22',partners:[partner],
