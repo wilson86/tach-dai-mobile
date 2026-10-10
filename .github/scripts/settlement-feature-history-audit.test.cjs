@@ -2062,6 +2062,7 @@ test('import recalculation rejects null and superseded outcomes without monetary
     let writes=0;
     const store={STORES:{messages:'messages',settlements:'settlements',results:'results',configs:'configs'},
       getAll:async()=>[message],
+      get:async()=>null,
       saveSettlement:async()=>{writes++;throw Error('UNSAFE_WRITE');}};
     const pipeline={settleScope:async()=>outcome};
     const fn=new Function('store','pipeline','validScope','scopeKey',routine+
