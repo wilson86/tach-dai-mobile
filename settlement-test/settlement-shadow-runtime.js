@@ -215,7 +215,12 @@
         : false))
       throw new Error('SHADOW_SCOPE_MONEY_VIEW_CONFLICT');
     const reference = normalizeReference(input.reference_snapshot || {});
-    const comparison = d.shadow.compareSettlement(settlement, reference, input.options || {});
+    const rawComparison = d.shadow.compareSettlement(settlement, reference, input.options || {});
+    // A partial exact display match is not an authorized monetary match.
+    const comparison=rawComparison.status==='MATCH_EXACT' &&
+      rawComparison.safe_to_promote!==true
+      ? Object.assign({},rawComparison,{status:'INCOMPLETE_REFERENCE',exact:false,
+          safe_to_promote:false}) : rawComparison;
     const savedReference = Object.assign({}, reference, { comparison: clone(comparison) });
     if(typeof d.store.saveSettlementIfUnchanged!=='function')
       throw new Error('SHADOW_ATOMIC_SETTLEMENT_STORE_REQUIRED');
