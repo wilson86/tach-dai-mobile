@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.232-report-canonical-empty'));
+  assert.ok(source.includes('v1.0.233-blocked-money-report-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2200,4 +2200,45 @@ test('report and imported backup both fail closed on noncanonical or unknown sco
       comparison_status:'BLOCKED'}],messages:[msg]});
   assert.equal(staleComparison.status,'BLOCKED');
   assert.equal(staleComparison.partners[0].regions[0].blocked,true);
+});
+
+test('blocked or corrupt persisted scope never contributes money to daily report',()=>{
+  const context={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-report.js'),'utf8'),context);
+  const report=context.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-report-money',name:'Synthetic',role:'customer'};
+  const messageId='synthetic-report-money-message';
+  const scope={id:'scope:synthetic-report-money:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    message_ids:[messageId],comparison_status:'MATCH_EXACT',
+    settlement_result:{total_xac:90,total_qua_co:85,total_payout:200,
+      refund_amount:15,final_net:-100,
+      rows:[{code:'2CB',xac:90,qua_co:85,payout:200}]},
+    category_rows:[{code:'2CB',xac:90,qua_co:85,payout:200}],
+    detail_rows:[{message_id:messageId,amount:90}],
+    message_breakdown:[{message_id:messageId,category_rows:[{code:'2CB',xac:90}]}]
+  };
+  const input=row=>({business_date:'2026-09-22',partners:[partner],
+    settlements:[row],messages:[{id:messageId,partner_id:partner.id,
+      business_date:'2026-09-22',region:'mn',raw_text:'SYNTHETIC'}]});
+  for(const scope_status of ['blocked','BLOCKED','unexpected','',null]){
+    const daily=report.buildDailyOperationsReport(input({...scope,scope_status}));
+    assert.equal(daily.status,'BLOCKED');
+    assert.equal(daily.counts.blocked,1);
+    assert.equal(daily.counts.exact,0);
+    for(const field of ['xac','qua_co','payout','refund_amount','final_net'])
+      assert.equal(daily.totals[field],0,'excluded '+field+':'+scope_status);
+    const partnerReport=daily.partners[0];
+    assert.equal(partnerReport.categories.length,0);
+    assert.equal(partnerReport.regions[0].categories.length,0);
+    assert.equal(partnerReport.messages[0].categories.length,0);
+    assert.equal(partnerReport.messages[0].detail_rows.length,0);
+    assert.equal(partnerReport.regions[0].blocked,true);
+  }
+  for(const scope_status of ['provisional','complete_unverified']){
+    const daily=report.buildDailyOperationsReport(input({...scope,scope_status}));
+    assert.equal(daily.totals.xac,90);
+    assert.equal(daily.totals.final_net,-100);
+    assert.equal(daily.partners[0].categories.length,1);
+  }
 });
