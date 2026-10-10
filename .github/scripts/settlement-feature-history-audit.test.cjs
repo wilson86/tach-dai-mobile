@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.239-durable-shadow-promotion'));
+  assert.ok(source.includes('v1.0.240-import-exact-receipt-fence'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2342,7 +2342,7 @@ test('contradictory monetary snapshot views never import or enter daily totals',
     refund_amount:0,final_net:30};
   const row={id:'scope:synthetic-view-conflict:2026-09-22:mn',
     partner_id:partner.id,business_date:'2026-09-22',region:'mn',
-    scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    scope_status:'complete_unverified',comparison_status:'unverified',
     message_ids:[msg.id],result_snapshot:{...zero},
     settlement_result:{...zero}};
   const input=settlement=>({business_date:'2026-09-22',partners:[partner],
@@ -2519,4 +2519,54 @@ test('Shadow exact is never published before durable receipt; CAS race after rec
   assert.equal(current.comparison_status,'MATCH_EXACT');
   assert.equal(writes,2);assert.equal(receipts,1);
   assert.ok(good.evidence&&good.evidence.event);
+});
+
+test('imported exact money claim requires matching durable HIOSKT Shadow receipt',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),ctx);
+  const store=ctx.window.KTS_SETTLEMENT_STORE;
+  const partner={id:'synthetic-exact-import',name:'Synthetic',role:'customer'};
+  const msg={id:'synthetic-exact-message',partner_id:partner.id,
+    business_date:'2026-09-22',region:'mn',status:'parsed_waiting_result',
+    raw_text:'SYNTHETIC_ONLY',canonical_payload:null};
+  const totals={total_xac:100,total_qua_co:90,total_payout:70,
+    refund_amount:0,final_net:20};
+  const comparison={status:'MATCH_EXACT',totals:{final_net:{status:'MATCH_EXACT'}}};
+  const reference={totals:{xac:100,qua_co:90,payout:70,final:20},
+    source:'SYNTHETIC_TEST_ONLY',comparison};
+  const scope={id:'scope:synthetic-exact-import:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    message_ids:[msg.id],scope_status:'complete_unverified',
+    result_snapshot:{...totals},settlement_result:{...totals},
+    reference_app_snapshot:reference,comparison_status:'MATCH_EXACT'};
+  const receipt={id:'synthetic-exact-receipt',scope_id:scope.id,
+    partner_id:partner.id,business_date:scope.business_date,region:'mn',
+    comparison_status:'MATCH_EXACT',comparison,
+    local_snapshot:{settlement_result:{...totals},message_ids:[msg.id]},
+    reference_snapshot:{totals:{...reference.totals},source:reference.source},
+    trigger:'SYNTHETIC_TEST_ONLY'};
+  const backup=(row,events=[])=>({format:'kts-settlement-export',version:5,
+    stores:{partners:[partner],messages:[msg],settlements:[row],
+      shadow_events:events}});
+  // Use the actual schema store key, never assume its IndexedDB spelling.
+  const payload=(row,events=[])=>({
+    format:'kts-settlement-export',version:5,
+    stores:{[store.STORES.partners]:[partner],
+      [store.STORES.messages]:[msg],[store.STORES.settlements]:[row],
+      [store.STORES.shadowEvents]:events}});
+  assert.throws(()=>store.validateImportPayload(payload(scope),{},{}),
+    /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+  const valid=payload(scope,[receipt]);
+  assert.equal(store.validateImportPayload(valid,{},{}).valid,true);
+  assert.throws(()=>store.validateImportPayload(payload(scope,[{
+    ...receipt,local_snapshot:{...receipt.local_snapshot,
+      settlement_result:{...totals,final_net:500}}}]),{},{}),
+    /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+  assert.throws(()=>store.validateImportPayload(payload(scope,[{
+    ...receipt,reference_snapshot:{...receipt.reference_snapshot,
+      source:'DIFFERENT'} }]),{},{}),
+    /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+  assert.throws(()=>store.validateImportPayload(payload({
+    ...scope,reference_app_snapshot:null},[receipt]),{},{}),
+    /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
 });
