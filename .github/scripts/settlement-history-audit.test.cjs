@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.233-blocked-money-report-guard'));
+  assert.ok(sw.includes('v1.0.234-recalc-postcommit-fence'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2432,4 +2432,50 @@ test('blocked or corrupt persisted scope never contributes money to daily report
     assert.equal(daily.totals.final_net,-100);
     assert.equal(daily.partners[0].categories.length,1);
   }
+});
+
+test('backup recalc exception never overwrites settlement already committed by pipeline',async()=>{
+  const src=readFileSync(resolve(root,'settlement-test','settlement-backup-ui.js'),'utf8');
+  const a=src.indexOf('    async function recalculateImportedScopes(');
+  const b=src.indexOf("    doc.getElementById('settlementExportBackup')",a);
+  assert.ok(a>0&&b>a);
+  const routine=src.slice(a,b);
+  const message={id:'synthetic-fail-postcommit',partner_id:'synthetic',
+    business_date:'2026-09-22',region:'mn',status:'parsed_waiting_result'};
+  const id='scope:synthetic:2026-09-22:mn';
+  const build=(pipeline,store)=>new Function('store','pipeline','validScope',
+    'scopeKey',routine+'\nreturn recalculateImportedScopes;')(
+    store,pipeline,
+    x=>Boolean(x&&x.partner_id&&x.business_date&&x.region),
+    x=>x.partner_id+':'+x.business_date+':'+x.region);
+  let latest=null,writes=0;
+  const store={
+    STORES:{messages:'messages',settlements:'settlements',configs:'configs',
+      results:'results',partners:'partners'},
+    getAll:async()=>[message],
+    get:async(name,key)=>name==='settlements'&&key===id?latest:null,
+    resolveConfigForDate:async()=>null,
+    saveSettlementIfScopeUnchanged:async()=>{writes++;throw Error('UNSAFE_BLOCK_WRITE');}
+  };
+  const pipeline={settleScope:async()=>{
+    latest={id,scope_status:'complete_unverified',
+      settlement_result:{total_xac:100,final_net:100}};
+    throw Error('SYNTHETIC_THROW_AFTER_REAL_COMMIT');
+  }};
+  const fn=build(pipeline,store);
+  await assert.rejects(fn({stores:{messages:[message]}}),
+    /IMPORT_RECALC_SETTLEMENT_CHANGED_DURING_ERROR/);
+  assert.equal(writes,0);
+  assert.equal(latest.settlement_result.final_net,100);
+  latest=null;writes=0;
+  const healthyStore={...store,
+    saveSettlementIfScopeUnchanged:async(result)=>{writes++;latest=result;
+      return {saved:result,superseded:false};}};
+  const failedPipeline={settleScope:async()=>{throw Error('SYNTHETIC_EVALUATION_FAIL');}};
+  const recovery=await build(failedPipeline,healthyStore)({
+    stores:{messages:[message]}});
+  assert.equal(recovery.scope_count,1);
+  assert.equal(recovery.blocked_count,1);
+  assert.equal(latest.scope_status,'blocked');
+  assert.equal(writes,1);
 });
