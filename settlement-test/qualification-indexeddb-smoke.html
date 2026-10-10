@@ -997,6 +997,34 @@
     if(!(await store.get(store.STORES.partners,racePartnerId)))
       fail('SYNTHETIC_CONCURRENT_PARTNER_WRITE_MISSING');
     await store.remove(store.STORES.partners,racePartnerId);
+    {
+      // Real Chrome proof: a forged MATCH_EXACT backup without a matching
+      // durable Shadow receipt cannot insert even its synthetic partner.
+      const pid='synthetic-browser-exact-no-receipt';
+      const mid='synthetic-browser-exact-message';
+      const sid='scope:'+pid+':2026-09-22:mn';
+      const zero={total_xac:0,total_qua_co:0,total_payout:0,
+        refund_amount:0,final_net:0};
+      const payload={format:'kts-settlement-export',version:5,stores:{
+        [store.STORES.partners]:[{id:pid,name:'Synthetic only',role:'customer'}],
+        [store.STORES.messages]:[{id:mid,partner_id:pid,
+          business_date:'2026-09-22',region:'mn',raw_text:'SYNTHETIC ONLY',
+          status:'parsed_waiting_result'}],
+        [store.STORES.settlements]:[{id:sid,partner_id:pid,
+          business_date:'2026-09-22',region:'mn',scope_status:'complete_unverified',
+          comparison_status:'MATCH_EXACT',message_ids:[mid],
+          result_snapshot:zero,settlement_result:zero}]
+      }};
+      let blocked='';
+      try{await workers[0].KTS_SETTLEMENT_STORE.importAll(payload,
+        {replace:false});}
+      catch(err){blocked=String(err&&err.message||err);}
+      if(!blocked.includes('IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING')||
+        await store.get(store.STORES.partners,pid)||
+        await store.get(store.STORES.messages,mid)||
+        await store.get(store.STORES.settlements,sid))
+        fail('FORGED_EXACT_BACKUP_NOT_ATOMICALLY_REJECTED:'+blocked);
+    }
   out.dataset.state='pass';
     out.textContent=[
       'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
@@ -1046,6 +1074,7 @@
        'IDENTICAL_KQXS_SETTLEMENT_IMPORT_ATOMIC_CAS=PASS',
        'IMMUTABLE_KQXS_RESULT_EVENT_RECEIPT=PASS',
        'IMPORT_ALL_STORES_CROSS_TAB_CAS=PASS',
+       'IMPORT_EXACT_RECEIPT_CHROME_GUARD=PASS',
        'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
       'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
       'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
