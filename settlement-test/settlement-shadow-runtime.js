@@ -219,16 +219,34 @@
     const savedReference = Object.assign({}, reference, { comparison: clone(comparison) });
     if(typeof d.store.saveSettlementIfUnchanged!=='function')
       throw new Error('SHADOW_ATOMIC_SETTLEMENT_STORE_REQUIRED');
-    const committed=await d.store.saveSettlementIfUnchanged(Object.assign({},settlement,{
-      reference_app_snapshot:savedReference,
-      comparison_status:comparison.status,
+    // A saved MATCH_EXACT without its independently committed Shadow receipt
+    // is a false authority. First put the scope in an UNVERIFIED staging state.
+    // If the receipt append fails the day/partner close cannot read MATCH_EXACT.
+    const staged=await d.store.saveSettlementIfUnchanged(Object.assign({},settlement,{
+      reference_app_snapshot:null,
+      comparison_status:'unverified',
       created_at:settlement.created_at
     }),settlement);
-    if(!committed || committed.superseded || !committed.saved)
+    if(!staged || staged.superseded || !staged.saved)
       throw new Error('SHADOW_SCOPE_CHANGED_DURING_COMPARISON');
-    const saved=committed.saved;
-    const evidence = await saveEvidence(d.store, saved, reference, comparison, input || {});
-    return { settlement: saved, reference: savedReference, comparison, evidence };
+    // Shadow append is an independent durable transaction. Any failure
+    // leaves the staging state unverified; never publish the match first.
+    const evidence=await saveEvidence(d.store, staged.saved,
+      reference,comparison,input||{});
+    if(!evidence || !evidence.event)
+      throw new Error('SHADOW_EVIDENCE_NOT_DURABLE');
+    // A cross-tab settlement update between evidence append and promotion
+    // invalidates the old result. The CAS cannot publish stale exact money.
+    const activated=await d.store.saveSettlementIfUnchanged(
+      Object.assign({},staged.saved,{
+        reference_app_snapshot:savedReference,
+        comparison_status:comparison.status,
+        created_at:staged.saved.created_at
+      }),staged.saved);
+    if(!activated || activated.superseded || !activated.saved)
+      throw new Error('SHADOW_SCOPE_CHANGED_AFTER_EVIDENCE');
+    return { settlement: activated.saved, reference: savedReference,
+      comparison, evidence };
   }
 
   async function getComparison(input) {
