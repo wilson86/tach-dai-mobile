@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.243-category-money-fail-closed'));
+  assert.ok(source.includes('v1.0.244-blocked-shadows-are-blocked'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2665,4 +2665,29 @@ test('invalid category money cannot silently become zero in daily report',()=>{
         .includes('SETTLEMENT_CATEGORY_MONEY_INVALID'));
     }
   }
+});
+
+test('blocked financial scopes do not inherit obsolete MATCH_EXACT badges',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-report.js'),'utf8'),ctx);
+  const R=ctx.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-badge-block',name:'Synthetic',role:'customer'};
+  const zero={total_xac:5,total_qua_co:5,total_payout:0,refund_amount:0,final_net:5};
+  const s={id:'scope:synthetic-badge-block:2026-09-22:mn',
+    partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    message_ids:['synthetic-badge-msg'],settlement_result:{...zero},
+    category_rows:[{code:'2CB',xac:false}]};
+  const daily=R.buildDailyOperationsReport({business_date:'2026-09-22',
+    partners:[partner],settlements:[s],messages:[{
+      id:'synthetic-badge-msg',partner_id:partner.id,
+      business_date:'2026-09-22',region:'mn'}]});
+  assert.equal(daily.status,'BLOCKED');
+  assert.equal(daily.counts.exact,0);
+  assert.equal(daily.totals.xac,0);
+  const p=daily.partners[0];
+  assert.equal(p.shadow_status,'BLOCKED');
+  assert.equal(p.regions[0].shadow_status,'BLOCKED');
+  assert.equal(p.messages[0].comparison_status,'BLOCKED');
+  assert.equal(p.blocked_scopes.length,1);
 });

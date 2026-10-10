@@ -325,7 +325,10 @@
           detail_rows: detailRows.filter(x => !x.message_id || x.message_id === id).map(x => Object.assign({}, x)),
           result: Object.assign({}, result),
           scope_status: scopeStatus,
-          comparison_status: settlement.comparison_status || 'unverified'
+          // Never show an old MATCH_EXACT badge for a scope whose money
+          // or category integrity just failed the fail-closed checks.
+          comparison_status: scopeStatus==='blocked' ? 'BLOCKED' :
+            settlement.comparison_status || 'unverified'
         };
         regionReport.messages.push(messageReport);
         messageReports.push(messageReport);
@@ -341,7 +344,8 @@
         regionReport.settlements.some(s=>
           String(s.comparison_status||'').toLowerCase()==='blocked');
       regionReport.provisional = regionReport.scope_statuses.includes('provisional');
-      regionReport.shadow_status = shadowStatusFromSettlements(regionReport.settlements);
+      regionReport.shadow_status = regionReport.blocked ? 'BLOCKED' :
+        shadowStatusFromSettlements(regionReport.settlements);
       regionReport.kqxs_conflict = regionReport.kqxs_statuses.includes('conflict');
       regionReport.kqxs_verified = regionReport.kqxs_statuses.length > 0 && regionReport.kqxs_statuses.every(x => x === 'verified');
       regionReport.kqxs_verification_status = regionReport.kqxs_conflict ? 'conflict' : regionReport.kqxs_verified ? 'verified' : 'unverified';
@@ -364,7 +368,8 @@
       blocked_scopes: blockedScopes,
       provisional: regions.some(x => x.provisional),
       blocked: blockedScopes.length > 0,
-      shadow_status: shadowStatusFromSettlements(partnerSettlements),
+      shadow_status: blockedScopes.length ? 'BLOCKED' :
+        shadowStatusFromSettlements(partnerSettlements),
       kqxs_conflict: regions.some(x => x.kqxs_conflict),
       kqxs_verified: regions.length > 0 && regions.every(x => x.kqxs_verified),
       totals: {
