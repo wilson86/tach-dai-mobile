@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.241-shadow-receipt-integrity'));
+  assert.ok(source.includes('v1.0.242-shadow-scope-status-guard'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2592,4 +2592,36 @@ test('Shadow event core rejects falsely labeled exact receipts and hash spoofing
   await assert.rejects(store.saveShadowEvent({
     ...valid,evidence_fingerprint:'SYNTHETIC_BOGUS_HASH'}),
     /SHADOW_EVENT_FINGERPRINT_MISMATCH/);
+});
+
+test('Shadow receipts reject cross-scope IDs and match claims without comparison core',async()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),ctx);
+  const store=ctx.window.KTS_SETTLEMENT_STORE;
+  const source={id:'synthetic-receipt-scope',partner_id:'synthetic',
+    business_date:'2026-09-22',region:'mn',
+    scope_id:'scope:synthetic:2026-09-22:mn',
+    local_snapshot:{settlement_result:{final_net:0}},
+    reference_snapshot:{totals:{final:0}},trigger:'SYNTHETIC'};
+  for(const scope_id of ['scope:another:2026-09-22:mn',
+    'scope:synthetic:2026-09-22:mt','scope:synthetic:2026-09-21:mn','']){
+    assert.throws(()=>store.normalizeShadowEvent({...source,scope_id}),
+      /SHADOW_EVENT_SCOPE_ID_MISMATCH/);
+    await assert.rejects(store.saveShadowEvent({...source,scope_id}),
+      /SHADOW_EVENT_SCOPE_ID_MISMATCH/);
+  }
+  for(const comparison_status of ['MATCH_EXACT','MATCH_DISPLAY_ONLY']){
+    assert.throws(()=>store.normalizeShadowEvent({
+      ...source,comparison_status,comparison:null}),
+      /SHADOW_EVENT_MATCH_WITHOUT_COMPARISON/);
+    await assert.rejects(store.saveShadowEvent({
+      ...source,comparison_status,comparison:null}),
+      /SHADOW_EVENT_MATCH_WITHOUT_COMPARISON/);
+  }
+  const good=store.normalizeShadowEvent({...source,
+    comparison_status:'MATCH_EXACT',comparison:{status:'MATCH_EXACT'}});
+  assert.equal(good.scope_id,source.scope_id);
+  assert.equal(good.comparison_status,'MATCH_EXACT');
+  const neutral=store.normalizeShadowEvent({...source,comparison_status:'UNVERIFIED'});
+  assert.equal(neutral.comparison_status,'UNVERIFIED');
 });

@@ -314,7 +314,10 @@
     const region = String(input && input.region || '').toLowerCase();
     if (!partnerId || !validDateOnly(businessDate)) throw new Error('SHADOW_EVENT_SCOPE_REQUIRED');
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('SHADOW_EVENT_REGION_REQUIRED');
-    const scopeId = String(input.scope_id || `scope:${partnerId}:${businessDate}:${region}`);
+    const canonicalScopeId=`scope:${partnerId}:${businessDate}:${region}`;
+    const scopeId = input.scope_id == null ? canonicalScopeId : String(input.scope_id);
+    if(scopeId!==canonicalScopeId)
+      throw new Error('SHADOW_EVENT_SCOPE_ID_MISMATCH');
     // A caller-supplied comparison_status must never contradict the
     // actual normalized comparison held by the immutable Shadow receipt.
     // Otherwise backup/diagnostics could display a forged MATCH_EXACT label.
@@ -323,6 +326,11 @@
     if(input.comparison_status!=null && expectedComparisonStatus &&
        String(input.comparison_status).toUpperCase()!==expectedComparisonStatus)
       throw new Error('SHADOW_EVENT_COMPARISON_STATUS_MISMATCH');
+    // A claim of matching money without a comparison object is not evidence.
+    if((String(input.comparison_status||'').toUpperCase()==='MATCH_EXACT' ||
+        String(input.comparison_status||'').toUpperCase()==='MATCH_DISPLAY_ONLY') &&
+       !expectedComparisonStatus)
+      throw new Error('SHADOW_EVENT_MATCH_WITHOUT_COMPARISON');
     const evidenceCore = {
       scope_id: scopeId,
       trigger: String(input.trigger || 'UNKNOWN'),
