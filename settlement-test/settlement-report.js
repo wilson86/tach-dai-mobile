@@ -32,6 +32,19 @@
     return stations.length>0 && stations.every(station=>resultStationComplete(region,station));
   }
 
+  const MONEY_FIELDS=['total_xac','total_qua_co','total_payout','refund_amount','final_net'];
+  function verifiedMonetaryTotals(result) {
+    if(!result||typeof result!=='object'||Array.isArray(result))return false;
+    return MONEY_FIELDS.every(field=>{
+      if(!Object.prototype.hasOwnProperty.call(result,field))return false;
+      const value=result[field];
+      if(typeof value==='number')return Number.isFinite(value);
+      if(typeof value!=='string')return false;
+      const decimal=/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+      return decimal.test(value.trim()) && Number.isFinite(Number(value));
+    });
+  }
+
   function categoryLabel(code) { return CATEGORY_LABELS[String(code || '').toUpperCase()] || String(code || 'UNKNOWN'); }
 
   function addCategory(target, row) {
@@ -164,18 +177,21 @@
       // Legacy databases can contain malformed monetary rows even when
       // backup-import validation would reject them today. Preserve their
       // diagnostic message and blocker, but do not aggregate their money.
-      const monetaryScope = ['provisional','complete_unverified']
+      const declaredMonetary = ['provisional','complete_unverified']
         .includes(settlement.scope_status);
-      const result = monetaryScope
-        ? settlement.settlement_result || settlement.result_snapshot || {}
-        : {};
+      const untrustedResult =
+        settlement.settlement_result || settlement.result_snapshot || null;
+      const monetaryScope = declaredMonetary &&
+        verifiedMonetaryTotals(untrustedResult);
+      const result = monetaryScope ? untrustedResult : {};
       const categories = monetaryScope ? settlementCategories(settlement) : [];
       // Treat legacy/corrupted labels case-insensitively and fail closed
       // on unknown/missing states. A raw "BLOCKED" label must never turn
       // into a seemingly valid or exact end-of-day money report.
       const knownStatus=settlement.scope_status===settlementScopeStatus &&
         ['blocked','provisional','complete_unverified']
-          .includes(settlementScopeStatus);
+          .includes(settlementScopeStatus) &&
+        (!declaredMonetary || monetaryScope);
       const scopeStatus=knownStatus?settlementScopeStatus:'blocked';
       regionReport.scope_statuses.push(scopeStatus);
       regionReport.kqxs_statuses.push(kqxsVerificationStatus(settlement));
@@ -184,7 +200,9 @@
           String(settlement.comparison_status || '').toLowerCase()==='blocked') {
         const reasons=Array.isArray(settlement.blocked_reasons)
           ? settlement.blocked_reasons.slice():[];
-        if(!knownStatus)reasons.push('UNRECOGNIZED_SETTLEMENT_SCOPE_STATUS');
+        if(!knownStatus)reasons.push(!monetaryScope && declaredMonetary
+          ? 'SETTLEMENT_MONETARY_TOTALS_INVALID'
+          : 'UNRECOGNIZED_SETTLEMENT_SCOPE_STATUS');
         blockedScopes.push({
           settlement_id: settlement.id,
           region,reasons,
