@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.238-eod-kqxs-independent-gate'));
+  assert.ok(source.includes('v1.0.239-durable-shadow-promotion'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1191,7 +1191,7 @@ test('HIOSKT compare requires an atomic settlement CAS and never writes stale sh
       if(JSON.stringify(current)!==JSON.stringify(expected))return {saved:null,superseded:true};
       writes++;current=copy(v);return {saved:copy(v),superseded:false};
     },
-    saveShadowEvent:async receipt=>{receipts++;return receipt;}
+    saveShadowEvent:async receipt=>{receipts++;return {event:receipt,changed:true};}
   };
   const sr=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME;
   const request={partner_id:'p',business_date:'2026-09-22',region:'mn',
@@ -1203,7 +1203,7 @@ test('HIOSKT compare requires an atomic settlement CAS and never writes stale sh
   changeBeforeCommit=false;current=copy(original);
   const ok=await sr.compareAndSave(request);
   assert.equal(ok.comparison.safe_to_promote,true);
-  assert.equal(writes,1);assert.equal(receipts,1);
+  assert.equal(writes,2);assert.equal(receipts,1);
 });
 test('settlement store CAS serializes snapshot check and write in a readwrite transaction',async()=>{
   const clone=x=>JSON.parse(JSON.stringify(x));
@@ -2473,4 +2473,50 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
       verification_conflicts:['synthetic-source-mismatch']}}));
   assert.equal(conflicting.counts.exact,0);
   assert.notEqual(conflicting.status,'MATCH_EXACT');
+});
+
+test('Shadow exact is never published before durable receipt; CAS race after receipt fails closed',async()=>{
+  const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x));
+  for(const f of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'app',f),'utf8'),ctx,{filename:f});
+  const original={id:'scope:synthetic:2026-09-22:mn',partner_id:'synthetic',
+    business_date:'2026-09-22',region:'mn',scope_status:'complete_unverified',
+    settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+    comparison_status:'unverified',reference_app_snapshot:null};
+  const input={partner_id:'synthetic',business_date:'2026-09-22',region:'mn',
+    reference_snapshot:{totals:{xac:0,qua_co:0,payout:0,final:0}}};
+  let current=copy(original),writes=0,receipts=0,failReceipt=true,
+    changeAfterReceipt=false;
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{settlements:'settlements',messages:'messages',partners:'partners'},
+    get:async()=>copy(current),
+    saveSettlementIfUnchanged:async(value,expected)=>{
+      if(JSON.stringify(current)!==JSON.stringify(expected))
+        return {saved:null,superseded:true};
+      writes++;current=copy(value);
+      return {saved:copy(current),superseded:false};
+    },
+    saveShadowEvent:async value=>{
+      receipts++;
+      if(failReceipt)throw Error('SYNTHETIC_RECEIPT_STORAGE_FAILED');
+      if(changeAfterReceipt)current={...current,updated_at:'OTHER_TAB'};
+      return {event:value,changed:true};
+    }
+  };
+  const api=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME;
+  await assert.rejects(api.compareAndSave(input),/SYNTHETIC_RECEIPT_STORAGE_FAILED/);
+  assert.equal(current.comparison_status,'unverified');
+  assert.equal(current.reference_app_snapshot,null);
+  assert.equal(writes,1);assert.equal(receipts,1);
+  current=copy(original);writes=0;receipts=0;failReceipt=false;
+  changeAfterReceipt=true;
+  await assert.rejects(api.compareAndSave(input),/SHADOW_SCOPE_CHANGED_AFTER_EVIDENCE/);
+  assert.equal(current.comparison_status,'unverified');
+  assert.equal(writes,1);assert.equal(receipts,1);
+  current=copy(original);writes=0;receipts=0;changeAfterReceipt=false;
+  const good=await api.compareAndSave(input);
+  assert.equal(good.settlement.comparison_status,'MATCH_EXACT');
+  assert.equal(current.comparison_status,'MATCH_EXACT');
+  assert.equal(writes,2);assert.equal(receipts,1);
+  assert.ok(good.evidence&&good.evidence.event);
 });
