@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.236-dual-money-view-proof'));
+  assert.ok(source.includes('v1.0.237-empty-shadow-integrity'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2364,4 +2364,74 @@ test('contradictory monetary snapshot views never import or enter daily totals',
     assert.ok(blocked.partners[0].blocked_scopes[0].reasons
       .includes('SETTLEMENT_MONETARY_TOTALS_INVALID'));
   }
+});
+
+test('valid empty scope vanishes but corrupted EMPTY money or active messages blocks close',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-report.js'),'utf8'),ctx);
+  const R=ctx.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-empty-check',name:'Synthetic',role:'customer'};
+  const date='2026-09-22',region='mn';
+  const zeros={rows:[],total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0};
+  const s={id:'scope:synthetic-empty-check:2026-09-22:mn',partner_id:partner.id,
+    business_date:date,region,message_ids:[],scope_status:'empty',
+    comparison_status:'empty',settlement_result:zeros,result_snapshot:zeros,
+    category_rows:[],detail_rows:[],message_breakdown:[]};
+  const build=(row,messages=[])=>R.buildDailyOperationsReport({
+    partners:[partner],business_date:date,settlements:[row],messages});
+  assert.equal(build(s).status,'EMPTY');
+  assert.equal(build(s).partners.length,0);
+  for(const corrupted of [
+    {...s,result_snapshot:{...zeros,final_net:500}},
+    {...s,category_rows:[{code:'2CB',payout:500}]},
+    {...s,message_ids:['synthetic-bet']},
+    {...s,settlement_result:{...zeros,rows:[{payout:999}]}}
+  ]){
+    const result=build(corrupted);
+    assert.equal(result.status,'BLOCKED');
+    assert.equal(result.counts.blocked,1);
+    assert.equal(result.totals.final_net,0);
+    assert.equal(result.counts.exact,0);
+    assert.ok(result.partners[0].blocked_scopes[0].reasons
+      .includes('SETTLEMENT_EMPTY_SCOPE_INTEGRITY_INVALID'));
+  }
+  const live=build(s,[{id:'synthetic-bet',partner_id:partner.id,
+    business_date:date,region,status:'parsed_waiting_result'}]);
+  assert.equal(live.status,'BLOCKED');
+  const cancelled=build(s,[{id:'synthetic-bet',partner_id:partner.id,
+    business_date:date,region,status:'cancelled'}]);
+  assert.equal(cancelled.status,'EMPTY');
+});
+
+test('shadow refuses comparison and receipts for empty, noncanonical and invalid local money',async()=>{
+  const ctx={window:{}};
+  for(const name of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+    vm.runInNewContext(readFileSync(resolve(root,'app',name),'utf8'),ctx);
+  let writes=0,receipts=0;
+  const base={id:'scope:synthetic:2026-09-22:mn',partner_id:'synthetic',
+    business_date:'2026-09-22',region:'mn',scope_status:'complete_unverified',
+    settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}};
+  let current=base;
+  ctx.window.KTS_SETTLEMENT_STORE={
+    STORES:{settlements:'settlements',messages:'messages',partners:'partners'},
+    get:async()=>current,saveSettlementIfUnchanged:async()=>{writes++;return null;},
+    saveShadowEvent:async()=>{receipts++;return null;}
+  };
+  const api=ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME;
+  const req={partner_id:'synthetic',business_date:'2026-09-22',region:'mn',
+    reference_snapshot:{totals:{xac:0,qua_co:0,payout:0,final:0}}};
+  for(const status of ['empty','EMPTY','BLOCKED','unknown',null]){
+    current={...base,scope_status:status};
+    await assert.rejects(api.compareAndSave(req),/SHADOW_SCOPE_NOT_COMPARABLE/);
+  }
+  current={...base,scope_status:'blocked'};
+  await assert.rejects(api.compareAndSave(req),/SETTLEMENT_SCOPE_BLOCKED/);
+  for(const amount of [null,false,[],'0x0',{},'bad']){
+    current={...base,settlement_result:{...base.settlement_result,total_xac:amount}};
+    await assert.rejects(api.compareAndSave(req),/SHADOW_SCOPE_MONEY_INVALID/);
+  }
+  current={...base,result_snapshot:{...base.settlement_result,final_net:50}};
+  await assert.rejects(api.compareAndSave(req),/SHADOW_SCOPE_MONEY_VIEW_CONFLICT/);
+  assert.equal(writes,0);
+  assert.equal(receipts,0);
 });

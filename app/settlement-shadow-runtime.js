@@ -189,6 +189,31 @@
     const settlement = await d.store.get(d.store.STORES.settlements, id);
     if (!settlement) throw new Error('SETTLEMENT_SCOPE_NOT_FOUND');
     if (settlement.scope_status === 'blocked') throw new Error('SETTLEMENT_SCOPE_BLOCKED');
+    // EMPTY/unknown/corrupted statuses are not legitimate independent money
+    // comparisons. Do not mint HIOSKT receipts or MATCH_EXACT for them.
+    if (!['provisional','complete_unverified'].includes(settlement.scope_status))
+      throw new Error('SHADOW_SCOPE_NOT_COMPARABLE');
+    // Legacy IndexedDB can contain corrupted money that a new import would
+    // refuse. Reject it before updating scope comparison or Shadow evidence.
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    const validLocal=value=>{
+      if(typeof value==='number')return Number.isFinite(value);
+      return typeof value==='string' &&
+        /^[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?$/.test(value.trim()) &&
+        Number.isFinite(Number(value));
+    };
+    const views=[settlement.settlement_result,settlement.result_snapshot]
+      .filter(view=>view!=null);
+    if(!views.length || views.some(view=>!view ||
+        typeof view!=='object'||Array.isArray(view) ||
+        fields.some(field=>!validLocal(view[field])) ||
+        (view.refund_amount!=null&&!validLocal(view.refund_amount))))
+      throw new Error('SHADOW_SCOPE_MONEY_INVALID');
+    if(views.length===2 && fields.concat(['refund_amount']).some(field=>
+      views[0][field]!=null || views[1][field]!=null
+        ? String(views[0][field])!==String(views[1][field])
+        : false))
+      throw new Error('SHADOW_SCOPE_MONEY_VIEW_CONFLICT');
     const reference = normalizeReference(input.reference_snapshot || {});
     const comparison = d.shadow.compareSettlement(settlement, reference, input.options || {});
     const savedReference = Object.assign({}, reference, { comparison: clone(comparison) });
