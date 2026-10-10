@@ -45,6 +45,38 @@
     });
   }
 
+  // Only genuinely empty, zero-valued scopes may disappear from the daily
+  // close view. A corrupted EMPTY label hiding bets or money is a blocker.
+  function isCleanEmptyScope(settlement, messagesById) {
+    if(settlement.scope_status!=='empty' ||
+       !Array.isArray(settlement.message_ids) || settlement.message_ids.length ||
+       settlement.message_id)return false;
+    const liveMessages=Object.values(messagesById||{}).some(message=>
+      String(message&&message.partner_id||'')===String(settlement.partner_id||'') &&
+      String(message&&message.business_date||'')===String(settlement.business_date||'') &&
+      String(message&&message.region||'').toLowerCase()===
+        String(settlement.region||'').toLowerCase() &&
+      String(message&&message.status||'').toLowerCase()!=='cancelled');
+    if(liveMessages)return false;
+    const views=['result_snapshot','settlement_result']
+      .map(field=>settlement[field]).filter(view=>view!=null);
+    if(!views.length)return false;
+    for(const record of [settlement,...views]){
+      if(record!==settlement &&
+        (!verifiedMonetaryTotals(record)||
+         MONEY_FIELDS.some(field=>Number(record[field])!==0)))return false;
+      for(const field of ['rows','detail_rows','category_rows','message_breakdown']){
+        const rows=record[field];
+        if(rows!=null && (!Array.isArray(rows)||rows.length))return false;
+      }
+      const categoryTotals=record.category_totals;
+      if(categoryTotals!=null &&
+        (typeof categoryTotals!=='object'||Array.isArray(categoryTotals)||
+         Object.keys(categoryTotals).length))return false;
+    }
+    return true;
+  }
+
   function categoryLabel(code) { return CATEGORY_LABELS[String(code || '').toUpperCase()] || String(code || 'UNKNOWN'); }
 
   function addCategory(target, row) {
@@ -161,7 +193,8 @@
       // in money reports or end-of-day close gates.
       // Only canonical lowercase EMPTY may be skipped. A corrupted
       // "Empty" label must not hide an active scope from close controls.
-      if (settlement.scope_status === 'empty') continue;
+      if (settlement.scope_status === 'empty' &&
+          isCleanEmptyScope(settlement,messagesById)) continue;
       partnerSettlements.push(settlement);
 
       const region = String(settlement.region || 'unknown').toLowerCase();
@@ -206,7 +239,9 @@
           String(settlement.comparison_status || '').toLowerCase()==='blocked') {
         const reasons=Array.isArray(settlement.blocked_reasons)
           ? settlement.blocked_reasons.slice():[];
-        if(!knownStatus)reasons.push(!monetaryScope && declaredMonetary
+        if(!knownStatus)reasons.push(settlement.scope_status==='empty'
+          ? 'SETTLEMENT_EMPTY_SCOPE_INTEGRITY_INVALID'
+          : !monetaryScope && declaredMonetary
           ? 'SETTLEMENT_MONETARY_TOTALS_INVALID'
           : 'UNRECOGNIZED_SETTLEMENT_SCOPE_STATUS');
         blockedScopes.push({
