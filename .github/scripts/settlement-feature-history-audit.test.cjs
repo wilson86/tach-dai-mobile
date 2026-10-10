@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.242-shadow-scope-status-guard'));
+  assert.ok(source.includes('v1.0.243-category-money-fail-closed'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2624,4 +2624,45 @@ test('Shadow receipts reject cross-scope IDs and match claims without comparison
   assert.equal(good.comparison_status,'MATCH_EXACT');
   const neutral=store.normalizeShadowEvent({...source,comparison_status:'UNVERIFIED'});
   assert.equal(neutral.comparison_status,'UNVERIFIED');
+});
+
+test('invalid category money cannot silently become zero in daily report',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-report.js'),'utf8'),ctx);
+  const report=ctx.window.KTS_SETTLEMENT_REPORT;
+  const partner={id:'synthetic-category-guard',name:'Synthetic',role:'customer'};
+  const id='scope:synthetic-category-guard:2026-09-22:mn';
+  const baseMoney={total_xac:100,total_qua_co:90,total_payout:40,
+    refund_amount:0,final_net:50};
+  const category={code:'2CB',xac:100,qua_co:90,hit_units:0,payout:40};
+  const row={id,partner_id:partner.id,business_date:'2026-09-22',region:'mn',
+    scope_status:'complete_unverified',comparison_status:'unverified',
+    message_ids:['synthetic-category-msg'],settlement_result:{...baseMoney},
+    category_rows:[category],
+    message_breakdown:[{message_id:'synthetic-category-msg',
+      category_rows:[category]}]};
+  const build=settlement=>report.buildDailyOperationsReport({
+    business_date:'2026-09-22',partners:[partner],settlements:[settlement],
+    messages:[{id:'synthetic-category-msg',partner_id:partner.id,
+      business_date:'2026-09-22',region:'mn'}]});
+  const healthy=build(row);
+  assert.equal(healthy.totals.xac,100);
+  assert.equal(healthy.partners[0].categories.length,1);
+  for(const bad of [null,false,[],'NaN','0x0','abc',{},Infinity]){
+    const cases=[
+      {...row,category_rows:[{...category,xac:bad}]},
+      {...row,settlement_result:{...baseMoney,rows:[{...category,payout:bad}]}},
+      {...row,message_breakdown:[{message_id:'synthetic-category-msg',
+        category_rows:[{...category,qua_co:bad}]}]}
+    ];
+    for(const invalid of cases){
+      const blocked=build(invalid);
+      assert.equal(blocked.status,'BLOCKED');
+      assert.equal(blocked.counts.blocked,1);
+      assert.equal(blocked.totals.xac,0);
+      assert.equal(blocked.partners[0].categories.length,0);
+      assert.ok(blocked.partners[0].blocked_scopes[0].reasons
+        .includes('SETTLEMENT_CATEGORY_MONEY_INVALID'));
+    }
+  }
 });
