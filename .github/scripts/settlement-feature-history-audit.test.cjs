@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.244-blocked-shadows-are-blocked'));
+  assert.ok(source.includes('v1.0.245-exact-requires-promotion-proof'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2531,7 +2531,10 @@ test('imported exact money claim requires matching durable HIOSKT Shadow receipt
     raw_text:'SYNTHETIC_ONLY',canonical_payload:null};
   const totals={total_xac:100,total_qua_co:90,total_payout:70,
     refund_amount:0,final_net:20};
-  const comparison={status:'MATCH_EXACT',totals:{final_net:{status:'MATCH_EXACT'}}};
+  const comparison={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+    required_totals_exact:true,compared_fields:4,
+    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+      .map(field=>[field,{status:'MATCH_EXACT'}]))};
   const reference={totals:{xac:100,qua_co:90,payout:70,final:20},
     source:'SYNTHETIC_TEST_ONLY',comparison};
   const scope={id:'scope:synthetic-exact-import:2026-09-22:mn',
@@ -2558,6 +2561,19 @@ test('imported exact money claim requires matching durable HIOSKT Shadow receipt
     /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
   const valid=payload(scope,[receipt]);
   assert.equal(store.validateImportPayload(valid,{},{}).valid,true);
+  for(const badComparison of [
+    {...comparison,safe_to_promote:false},
+    {...comparison,required_totals_exact:false},
+    {...comparison,exact:false},
+    {...comparison,compared_fields:1},
+    {...comparison,totals:{final_net:{status:'MATCH_EXACT'}}}
+  ]){
+    const altered={...scope,reference_app_snapshot:{...reference,comparison:badComparison}};
+    const changedEvent={...receipt,comparison:badComparison};
+    assert.throws(()=>store.validateImportPayload(
+      payload(altered,[changedEvent]),{},{}),
+      /IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+  }
   assert.throws(()=>store.validateImportPayload(payload(scope,[{
     ...receipt,local_snapshot:{...receipt.local_snapshot,
       settlement_result:{...totals,final_net:500}}}]),{},{}),
@@ -2690,4 +2706,34 @@ test('blocked financial scopes do not inherit obsolete MATCH_EXACT badges',()=>{
   assert.equal(p.regions[0].shadow_status,'BLOCKED');
   assert.equal(p.messages[0].comparison_status,'BLOCKED');
   assert.equal(p.blocked_scopes.length,1);
+});
+
+test('partial Shadow comparison must never publish exact monetary status',async()=>{
+ const ctx={window:{}},copy=x=>JSON.parse(JSON.stringify(x));
+ for(const file of ['settlement-shadow.js','settlement-shadow-runtime.js'])
+   vm.runInNewContext(readFileSync(resolve(root,'app',file),'utf8'),ctx);
+ const original={id:'scope:synthetic-partial:2026-09-22:mn',
+   partner_id:'synthetic-partial',business_date:'2026-09-22',region:'mn',
+   scope_status:'complete_unverified',comparison_status:'unverified',
+   settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0}};
+ let live=copy(original),count=0,receipt=null;
+ ctx.window.KTS_SETTLEMENT_STORE={
+   STORES:{settlements:'settlements',messages:'messages',partners:'partners'},
+   get:async()=>copy(live),
+   saveSettlementIfUnchanged:async(v,expected)=>{
+     assert.equal(JSON.stringify(expected),JSON.stringify(live));
+     count++;live=copy(v);return {saved:copy(v),superseded:false};},
+   saveShadowEvent:async v=>{receipt=v;return {event:v,changed:true};}
+ };
+ const reference_snapshot={totals:{final:0}};
+ const raw=ctx.window.KTS_SETTLEMENT_SHADOW.compareSettlement(original,reference_snapshot);
+ assert.equal(raw.status,'MATCH_EXACT');assert.equal(raw.safe_to_promote,false);
+ const saved=await ctx.window.KTS_SETTLEMENT_SHADOW_RUNTIME.compareAndSave({
+   partner_id:original.partner_id,business_date:original.business_date,
+   region:original.region,reference_snapshot});
+ assert.equal(saved.comparison.status,'INCOMPLETE_REFERENCE');
+ assert.equal(saved.comparison.safe_to_promote,false);
+ assert.equal(saved.settlement.comparison_status,'INCOMPLETE_REFERENCE');
+ assert.equal(receipt.comparison_status,'INCOMPLETE_REFERENCE');
+ assert.equal(count,2);
 });

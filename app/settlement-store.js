@@ -1061,7 +1061,15 @@
     const exactReceiptFor=row=>{
       const ref=row.reference_app_snapshot;
       if(!ref||typeof ref!=='object'||Array.isArray(ref)||
-          !ref.comparison||String(ref.comparison.status||'').toUpperCase()!=='MATCH_EXACT')
+          !ref.comparison||String(ref.comparison.status||'').toUpperCase()!=='MATCH_EXACT'||
+          ref.comparison.safe_to_promote!==true ||
+          ref.comparison.required_totals_exact!==true ||
+          ref.comparison.exact!==true ||
+          !Number.isInteger(ref.comparison.compared_fields) ||
+          ref.comparison.compared_fields<4 ||
+          !['total_xac','total_qua_co','total_payout','final_net'].every(
+            field=>ref.comparison.totals&&ref.comparison.totals[field]&&
+              ref.comparison.totals[field].status==='MATCH_EXACT'))
         return false;
       const reference=clone(ref);
       delete reference.comparison;
