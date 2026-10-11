@@ -88,3 +88,22 @@ memory. A browser restart can also lose all volatile draft state. Secure
 encrypted per-user/per-workspace offline storage with crash/restart recovery,
 re-authenticated ownership and key-management is a separate release blocker.
 Do not promise no-loss offline support until it is independently proven.
+
+
+## Injection-only auth/ledger service composition
+
+`team-settlement/team-composition.cjs` wires the durable PostgreSQL auth
+candidate and the versioned financial ledger candidate to the synthetic
+HTTP facade, with **two distinct injected PostgreSQL pools** for auth and
+ledger roles. It refuses the same pool for both security domains and requires
+an explicit `syntheticOnly: true` flag. Merely assembling this object does
+not access databases, create tables, bind a port, expose credentials, or
+enable any production money operation.
+
+**Not a deployment recipe:** the composition accepts caller-created pools
+but does NOT ship credential provisioning, secure HTTPS/Tailscale listener,
+environment loader, production configuration, database migrations,
+login-failure audit/rate-limit persistence, backup/restore or health
+monitoring. A local pilot must have owner approval, reviewed private DB roles,
+an isolated disposable dataset, and Codex read-only Windows qualification.
+No HIOSKT cancellation or operator settlement release is authorized.
