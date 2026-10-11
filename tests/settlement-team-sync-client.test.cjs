@@ -74,3 +74,19 @@ test('login sends credentials once, keeps the returned bearer in memory, and log
   assert.equal(calls[1].options.headers.authorization, 'Bearer ' + token);
   assert.equal(client.snapshot().authenticated, false);
 });
+
+test('subscription exposes state transitions for a UI without exposing credentials', async () => {
+  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', new_revision: 1 }) });
+  const states = [];
+  const unsubscribe = client.subscribe(state => states.push(state));
+  client.setSessionToken('s'.repeat(43));
+  const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
+  await client.syncDraft(draft.id);
+  unsubscribe();
+  client.clearSession();
+  assert.equal(states[0].authenticated, false);
+  assert.equal(states.some(state => state.authenticated === true), true);
+  assert.equal(states.at(-1).drafts[0].status, Sync.STATUS.SYNCED);
+  assert.equal(Object.prototype.hasOwnProperty.call(states.at(-1), 'session_token'), false);
+  assert.equal(states.length >= 4, true);
+});

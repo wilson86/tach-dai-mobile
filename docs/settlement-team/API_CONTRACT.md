@@ -22,6 +22,8 @@ The PWA `app/settlement-team-sync-client.js` keeps bearer credentials memory-onl
 
 The same client exposes `login(auth_subject, password, workspace_id)` and `logout()` as thin adapters for the synthetic `/v1/login` and `/v1/logout` contract. It does not persist the password or returned bearer token; TLS and an approved deployed identity service remain prerequisites before any real account is used.
 
+UI code may subscribe to immutable snapshots through `subscribe(listener)` to render authentication and draft status transitions. The snapshot intentionally omits the bearer token and never promotes `PENDING` or `CONFLICT` drafts to authoritative money.
+
 The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated sessions with the repository seam. `team-settlement/postgres-ledger-repository.cjs` sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. These modules open no connection and are not a production deployment.
 
 ## Suggested error and evidence semantics

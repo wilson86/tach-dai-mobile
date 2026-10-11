@@ -19,10 +19,19 @@
     let cursor = null;
     try { cursor = store.get(CURSOR_KEY) || null; } catch (_) { cursor = null; }
     const pending = new Map();
+    const listeners = new Set();
+
+    function emit() {
+      const state = snapshot();
+      for (const listener of listeners) {
+        try { listener(state); } catch (_) {}
+      }
+    }
 
     function setStatus(item, status, code) {
       item.status = status;
       if (code) item.error = code; else delete item.error;
+      emit();
       return Object.freeze(clone(item));
     }
 
@@ -40,6 +49,7 @@
     function setSessionToken(token) {
       if (typeof token !== 'string' || token.length < 32) throw new Error('SYNC_SESSION_INVALID');
       sessionToken = token;
+      emit();
       return snapshot();
     }
 
@@ -69,7 +79,15 @@
       for (const item of pending.values()) {
         if (item.status !== STATUS.SYNCED) setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
       }
+      emit();
       return snapshot();
+    }
+
+    function subscribe(listener) {
+      if (typeof listener !== 'function') throw new Error('SYNC_LISTENER_INVALID');
+      listeners.add(listener);
+      listener(snapshot());
+      return function unsubscribe() { listeners.delete(listener); };
     }
 
     function queueDraft(scope, payload, baseRevision = 0) {
@@ -79,6 +97,7 @@
       const id = 'local_draft_' + (++sequence);
       const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING };
       pending.set(id, item);
+      emit();
       return Object.freeze(clone(item));
     }
 
@@ -137,7 +156,7 @@
       });
     }
 
-    return Object.freeze({ login, logout, setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, reconnect, snapshot, STATUS });
+    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, reconnect, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });
