@@ -64,7 +64,19 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
 
   async function getScope(sessionToken, scope) {
     const trustedActor = await actor(sessionToken);
-    return repository.getScope(trustedActor, C.requireScope(scope));
+    const checked = C.requireScope(scope);
+    if (checked.workspace_id !== trustedActor.workspace_id)
+      throw new Error('TEAM_WORKSPACE_DENIED');
+    const result = await repository.getScope(trustedActor, checked);
+    // An injected repository or stale cache must not leak another financial
+    // scope even if the HTTP handler and the browser validate independently.
+    if (!result || typeof result !== 'object' || Array.isArray(result) ||
+        result.workspace_id !== checked.workspace_id ||
+        result.partner_id !== checked.partner_id ||
+        result.business_date !== checked.business_date ||
+        result.region !== checked.region)
+      throw new Error('TEAM_SCOPE_RESPONSE_UNVERIFIED');
+    return result;
   }
 
   async function getChanges(sessionToken, options) {

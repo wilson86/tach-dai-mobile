@@ -59,3 +59,38 @@ test('revision overflow fails before calling the database',async()=>{
     {...intent,expected_revision:Number.MAX_SAFE_INTEGER}),/TEAM_REVISION_INVALID/);
   assert.equal(count(),0);
 });
+
+
+test('read-only server boundary rejects wrong-scope repository data',async()=>{
+  for(const response of [
+    null, {},
+    {...scope,workspace_id:'group_b'},
+    {...scope,partner_id:'different'},
+    {...scope,business_date:'2026-10-11'},
+    {...scope,region:'mt'}
+  ]){
+    let reads=0;
+    const auth={verifySession:async()=>trusted};
+    const repository={
+      appendDraft:async()=>{throw Error('UNEXPECTED_WRITE');},
+      getScope:async()=>{reads++;return response;}
+    };
+    const api=createServerLedgerApi({auth,repository});
+    await assert.rejects(api.getScope('synthetic_session',scope),
+      /TEAM_SCOPE_RESPONSE_UNVERIFIED/);
+    assert.equal(reads,1);
+    await assert.rejects(api.getScope('synthetic_session',
+      {...scope,workspace_id:'group_b'}),/TEAM_WORKSPACE_DENIED/);
+    assert.equal(reads,1);
+  }
+});
+test('matching session-bound repository scope remains readable',async()=>{
+  const auth={verifySession:async()=>trusted};
+  const record={...scope,state:'DRAFT',revision:2};
+  const repository={
+    appendDraft:async()=>{throw Error('UNEXPECTED_WRITE');},
+    getScope:async()=>record
+  };
+  const api=createServerLedgerApi({auth,repository});
+  assert.deepEqual(await api.getScope('synthetic_session',scope),record);
+});
