@@ -19,3 +19,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Canonical runtime history regression
         run: node --test .github/scripts/settlement-feature-history-audit.test.cjs
+      - name: Batch HIOSKT input and exact-proof regression (synthetic)
+        run: node tests/settlement-shadow-batch-tests.js

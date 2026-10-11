@@ -24,7 +24,8 @@ const state = {
   },
   writes: [],
   failScope: null,
-  unsafe: false
+  unsafe: false,
+  forged: false
 };
 
 function refNumber(ref, key) {
@@ -42,7 +43,15 @@ const shadow = {
       if (rv == null) continue;
       if (Math.abs(Number(local[lk]) - rv) > 1e-9) mismatch = true;
     }
-    return { status: mismatch ? 'MISMATCH' : 'MATCH_EXACT', safe_to_promote: !mismatch && !state.unsafe, totals: {}, categories: [] };
+    const names = { total_xac: 'xac', total_qua_co: 'qua_co', total_payout: 'payout', final_net: 'final' };
+    const totals = Object.fromEntries(Object.entries(names).map(([field, key]) => [
+      field, { status: mismatch ? 'MISMATCH' : 'MATCH_EXACT',
+        local: Number(local[field]), reference: refNumber(ref, key) }
+    ]));
+    return { status: mismatch ? 'MISMATCH' : 'MATCH_EXACT',
+      exact: !mismatch, required_totals_exact: !mismatch,
+      compared_fields: 4, safe_to_promote: !mismatch && !state.unsafe,
+      totals: state.forged && !mismatch ? { final_net: totals.final_net } : totals, categories: [] };
   }
 };
 const store = {
@@ -98,10 +107,37 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(unsafePreview.rows[0].comparison.status, 'MATCH_EXACT');
   assert.strictEqual(unsafePreview.rows[0].comparison.safe_to_promote, false);
   assert.strictEqual(unsafePreview.counts.exact, 0, 'unsafe exact status must not count as exact');
-  const batchSource = fs.readFileSync('app/settlement-shadow-batch.js', 'utf8');
-  assert(batchSource.includes("const displayStatus = st === 'MATCH_EXACT' && !safe ? 'INCOMPLETE_REFERENCE' : st;"),
-    'unsafe exact status must not render as an exact operator tag');
+  assert.strictEqual(unsafePreview.counts.incomplete, 1);
+  assert.strictEqual(B.displayComparisonStatus(unsafePreview.rows[0].comparison), 'INCOMPLETE_REFERENCE');
   state.unsafe = false;
+
+  // A forged promotion flag cannot convert an incomplete four-total proof into an exact badge.
+  state.forged = true;
+  const forgedPreview = await B.preview(tsv);
+  assert.strictEqual(forgedPreview.rows[0].comparison.status, 'MATCH_EXACT');
+  assert.strictEqual(forgedPreview.rows[0].comparison.safe_to_promote, true);
+  assert.strictEqual(forgedPreview.counts.exact, 0);
+  assert.strictEqual(forgedPreview.counts.incomplete, 1);
+  assert.strictEqual(B.displayComparisonStatus(forgedPreview.rows[0].comparison), 'INCOMPLETE_REFERENCE');
+  const forgedApplied = await B.apply(forgedPreview);
+  assert.strictEqual(forgedApplied.exact, 0);
+  assert.strictEqual(forgedApplied.incomplete, 1);
+  assert.strictEqual(forgedApplied.results[0].comparison_status, 'INCOMPLETE_REFERENCE');
+  assert.strictEqual(forgedApplied.results[0].safe_to_promote, false);
+  state.writes.length = 0; // Reset isolated synthetic writes before normal-path assertions.
+  state.forged = false;
+  // Malformed exact evidence cannot be promoted simply by setting safe_to_promote=true.
+  const real = (await B.preview(tsv)).rows[0].comparison;
+  for (const broken of [
+    {...real, exact: false},
+    {...real, required_totals_exact: false},
+    {...real, compared_fields: 1},
+    {...real, totals: {...real.totals, total_xac: {status:'MATCH_EXACT',local:[],reference:288}}},
+    {...real, totals: {...real.totals, final_net: {status:'MATCH_EXACT',local:10}}}
+  ]) {
+    assert.strictEqual(B.exactProofUsable(broken), false);
+    assert.strictEqual(B.displayComparisonStatus(broken), 'INCOMPLETE_REFERENCE');
+  }
 
   const applied = await B.apply(preview);
   assert.strictEqual(applied.format, 'kts-shadow-batch-apply-v2-stale-guard');
@@ -121,6 +157,28 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(jsonPreview.ready, true);
   assert.strictEqual(jsonPreview.rows[0].reference_snapshot.totals.hoi, '0');
   assert.strictEqual(jsonPreview.rows[0].reference_snapshot.categories.length, 1);
+
+  // An invalid or decorated business date must never silently be truncated into a real scope.
+  for (const badDate of ['2026-02-30', '2026-09-22T00:00:00Z', '2026-13-22', '2025-02-29']) {
+    const bad = await B.preview(JSON.stringify([{business_date:badDate,partner:'Hiền',region:'mn',
+      totals:{xac:'288',qua_co:'218.88',payout:'4650',final:'-4431.12'}}]));
+    assert.strictEqual(bad.ready, false, badDate);
+    assert(bad.errors[0].error.includes('BATCH_DATE_REQUIRED'), badDate);
+  }
+  // Arrays/objects/booleans are never valid financial amounts, even if JS String() looks numeric.
+  for (const value of [[288], [], {}, true, false]) {
+    const bad = await B.preview(JSON.stringify([{business_date:'2026-09-22',partner:'Hiền',region:'mn',
+      totals:{xac:value,qua_co:'218.88',payout:'4650',final:'-4431.12'}}]));
+    assert.strictEqual(bad.ready, false);
+    assert(bad.errors[0].error.includes('BATCH_TOTAL_INVALID:xac') ||
+      bad.errors[0].error.includes('BATCH_TOTAL_REQUIRED:xac'));
+  }
+  for (const malformedTotals of [[1,2], 'not-an-object']) {
+    const bad = await B.preview(JSON.stringify([{business_date:'2026-09-22',partner:'Hiền',region:'mn',
+      totals:malformedTotals,xac:'288',qua_co:'218.88',payout:'4650',final:'-4431.12'}]));
+    assert.strictEqual(bad.ready, false);
+    assert(bad.errors[0].error.includes('BATCH_TOTALS_OBJECT_REQUIRED'));
+  }
 
   const duplicate = await B.preview([
     'business_date\tpartner\tregion\txac\tqua_co\tpayout\tfinal',
