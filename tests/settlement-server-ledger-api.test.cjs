@@ -14,7 +14,11 @@ function setup(resultRows = [{ result: { event_id: 'event_1', replayed: false, n
   auth.setMembership({ workspace_id: 'group_a', user_id: 'operator_1', role: 'operator' });
   const session = auth.login({ auth_subject: 'subject_operator', password: 'synthetic-operator-password', workspace_id: 'group_a' });
   const calls = [];
-  const db = { async transaction(work) { return work({ query: async (text, params) => { calls.push({ text, params }); return { rows: resultRows }; } }); } };
+  const db = { async transaction(work) { return work({ query: async (text, params) => {
+    calls.push({ text, params });
+    if (text.includes('FROM kts_team.memberships m')) return { rows:[{ team_role:'operator' }] };
+    return { rows: resultRows };
+  } }); } };
   return { auth, calls, api: createServerLedgerApi({ auth, repository: createPostgresLedgerRepository({ db }), eventId: () => 'event_1' }), token: session.session_token };
 }
 
@@ -22,10 +26,11 @@ test('server API authenticates session, canonicalizes request and delegates to r
   const { api, calls, token } = setup();
   const result = await api.appendDraft(token, { scope, expected_revision: 0, idempotency_key: 'request_1', payload: { synthetic: true, selector: '123' } });
   assert.deepEqual(result, { event_id: 'event_1', replayed: false, new_revision: 1, scope_key: 'group_a:counterparty_1:2026-10-12:mn', sync_status: 'SYNCED' });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 3); // tenant context, active membership, draft SQL
   assert.equal(calls[1].params[0], 'group_a');
-  assert.match(calls[1].params[7], /^[a-f0-9]{64}$/);
-  assert.equal(calls[1].params[8], '{"selector":"123","synthetic":true}');
+  assert.equal(calls[2].params[0], 'group_a');
+  assert.match(calls[2].params[7], /^[a-f0-9]{64}$/);
+  assert.equal(calls[2].params[8], '{"selector":"123","synthetic":true}');
 });
 
 test('server API blocks offline, cross-tenant and malformed requests before repository access', async () => {
