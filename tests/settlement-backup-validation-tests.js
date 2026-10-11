@@ -137,6 +137,24 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   assert.throws(()=>S.validateImportPayload(p,empty(),{}),/SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
 }
 
+// An imported exact receipt must not pass when its supplied HIOSKT categories
+// contradict the local category rows, even if its four aggregate totals claim
+// MATCH_EXACT. This is a forged-proof negative case, not a money-rule test.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}},
+    categories:[{code:'DAT',status:'MISMATCH'}]};
+  const reference={totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const settlement={id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    result_snapshot:money,settlement_result:money,category_rows:[{code:'DAT',xac:11,qua_co:8.36,payout:0}],reference_app_snapshot:{source:'HIOSKT_MANUAL',...reference,comparison}};
+  const eventReference={source:'HIOSKT_MANUAL',...reference};
+  settlement.reference_app_snapshot={...eventReference,comparison};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:settlement.category_rows,message_ids:['m-forged']},reference_snapshot:eventReference,comparison,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
+  const validComparison={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT'}]};
+  assert.doesNotThrow(()=>S.normalizeShadowEvent({id:'se-valid-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}));
+}
+
 
 {
   const legacyResult={

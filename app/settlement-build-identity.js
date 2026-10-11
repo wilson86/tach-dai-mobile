@@ -4,7 +4,7 @@
     'app/index.html':'68ac5874e65920df92171e6951efa8baea6d34da',
     'app/unified-core.js':'469d53f80cafc78b5616388363e8a4ee905b14d9',
     'app/settlement.html':'8b19d44f11f9a0b30b17c6b3e05bfcf61bd8b8fa',
-    'app/settlement-store.js':'de6ddd35ac1f7a598645568af2996c1b4b7708ae',
+    'app/settlement-store.js':'59a7e061a7fb0224bd6eb165bdf577346ba07f3a',
     'app/settlement-engine.js':'93471a5e809746a91a847b0e64b2bff09cdc0a37',
     'app/settlement-mb-rules.js':'01e7636d0ea0ab5dbbb2e51e0968a5c5e2f73081',
     'app/settlement-category-map.js':'5cbd0575ec451b6a6a5a351fbe67d1599fccfb4d',

@@ -347,6 +347,22 @@
            comparison.totals[field] &&
            comparison.totals[field].status==='MATCH_EXACT'))
         throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+      // If the independent HIOSKT reference carried category evidence, the
+      // immutable receipt must carry the category-level proof too. Aggregate
+      // totals alone cannot authorize an exact claim after a category-level
+      // mismatch has been observed.
+      const referenceRows=input.reference_snapshot &&
+        (input.reference_snapshot.categories || input.reference_snapshot.category_rows);
+      if (Array.isArray(referenceRows) && referenceRows.length) {
+        const comparisonRows=Array.isArray(comparison.categories) ? comparison.categories : [];
+        const codeOf=row=>String(row && (row.code || row.category) || '').trim().toUpperCase();
+        const referenceCodes=referenceRows.map(codeOf).sort();
+        const comparisonCodes=comparisonRows.map(codeOf).sort();
+        if (referenceCodes.length!==comparisonCodes.length ||
+            referenceCodes.some((code,index)=>code!==comparisonCodes[index]) ||
+            comparisonRows.some(row=>String(row && row.status || '').toUpperCase()!=='MATCH_EXACT'))
+          throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+      }
     }
     const evidenceCore = {
       scope_id: scopeId,
