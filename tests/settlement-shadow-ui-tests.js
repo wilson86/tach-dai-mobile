@@ -17,5 +17,7 @@ assert(shadow.includes('buildMismatchDiagnostics'));
 assert(shadow.includes('messageIdsForCategory'));
 assert(ui.includes("const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;"));
 assert(ui.includes('comp.safe_to_promote === true'));
+assert(ui.includes("const safeExact = rawStatus === 'MATCH_EXACT' && comparison.safe_to_promote === true && comparison.exact === true;"));
+assert(ui.includes("labels[displayStatus]||displayStatus"));
 
 console.log('settlement-shadow-ui-tests: PASS');

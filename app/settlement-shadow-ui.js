@@ -86,7 +86,10 @@
     function render(comparison, diagnostics) {
       const out = doc.getElementById('shadowOutput');
       if (!comparison) { out.innerHTML=''; return; }
-      const cls = comparison.status === 'MATCH_EXACT' ? 'ok' : comparison.status === 'MISMATCH' ? 'err' : 'warn';
+      const rawStatus = String(comparison.status || 'UNKNOWN').toUpperCase();
+      const safeExact = rawStatus === 'MATCH_EXACT' && comparison.safe_to_promote === true && comparison.exact === true;
+      const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
+      const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
       const labels = {
         MATCH_EXACT:'KHỚP CHÍNH XÁC', MATCH_DISPLAY_ONLY:'CHỈ KHỚP SỐ HIỂN THỊ', MISMATCH:'LỆCH TIỀN', INCOMPLETE_REFERENCE:'THIẾU SỐ HIOSKT'
       };
@@ -96,7 +99,7 @@
         const bad=Object.entries(c.fields||{}).filter(([,r])=>r.status!=='MATCH_EXACT').map(([field,r])=>`${esc(fieldLabel(field))}: ${money(r.local)} / ${money(r.reference)} (${money(r.delta)})`).join('<br>');
         return `<tr><td>${esc(c.code)}</td><td>${esc(c.status)}</td><td>${bad||'—'}</td></tr>`;
       }).join('');
-      out.innerHTML=`<div class="status ${cls}">${esc(labels[comparison.status]||comparison.status)}${comparison.safe_to_promote?' · ĐỦ ĐIỀU KIỆN SHADOW':' · CHƯA ĐỦ ĐIỀU KIỆN'}</div>`+
+      out.innerHTML=`<div class="status ${cls}">${esc(labels[displayStatus]||displayStatus)}${safeExact?' · ĐỦ ĐIỀU KIỆN SHADOW':' · CHƯA ĐỦ ĐIỀU KIỆN'}</div>`+
         `<div class="result-grid"><table><thead><tr><th>Trường</th><th>KTS</th><th>HIOSKT</th><th>Lệch</th><th>Trạng thái</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`+
         (categoryRows ? `<details open style="margin-top:7px"><summary class="hint"><b>So category</b></summary><div class="result-grid"><table><thead><tr><th>Loại</th><th>Trạng thái</th><th>Trường lệch</th></tr></thead><tbody>${categoryRows}</tbody></table></div></details>` : '')+
         renderDiagnostics(diagnostics);
