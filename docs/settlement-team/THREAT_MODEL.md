@@ -63,3 +63,19 @@ also demonstrate workspace RLS denying an unset tenant and limiting queries
 to the selected workspace. This does **not** prove two independent network
 connections, confidential credentials, an installed local PostgreSQL
 service or a pilot on Windows. Both roles are created in disposable CI only.
+
+
+## Explicit dual-Pool runtime-role preflight (synthetic candidate)
+
+`team-settlement/role-probe.cjs` exposes an **opt-in, read-only** probe
+that calls `SELECT current_user`, checks non-superuser/no-`BYPASSRLS`,
+and examines auth-schema, ledger-event-read and draft-function privileges
+through two caller-supplied connections. It requires two different PostgreSQL
+roles with strictly separated auth/financial SQL rights. Failed probes
+fail closed and destroy acquired clients. App construction has **zero**
+automatic database connections; `verifyPools()` is not invoked by HTTP.
+
+CI presently verifies this probe with **synthetic Pool doubles** and proves
+the corresponding role permissions with real disposable PostgreSQL SQL tests.
+It does **not** prove a Windows deployment, actual separately credentialed
+Pool clients or an authorized live pilot. No production admission flag exists.
