@@ -171,6 +171,20 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
 }
 
+// Message IDs alone are not enough provenance for an exact receipt: the
+// persisted raw/canonical message evidence must be the same input snapshot.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}}};
+  const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6}};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const id='scope:a:2026-10-06:mn';
+  const row={id,partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m-content'],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:money,settlement_result:money,category_rows:[],reference_app_snapshot:{...reference,comparison}};
+  const event=S.normalizeShadowEvent({id:'se-forged-message',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[],message_ids:['m-content'],scope_status:'complete_unverified',messages:[{id:'m-content',raw_text:'FORGED CONTENT',region:'mn',status:'parsed_waiting_result',canonical_version:null,canonical_payload:null,parser_error:null}]},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  const p=payload({partners:[partner('a')],messages:[msg('m-content')],settlements:[row],shadow_events:[event]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+}
+
 // Exact receipts must be tied to the same persisted KQXS draw provenance;
 // matching money alone must not authorize evidence from another draw.
 {

@@ -1129,6 +1129,19 @@
            String(lottery.verification_status||'')) return false;
         return true;
       };
+      const expectedMessageEvidence=(row.message_ids||[]).map(messageId=>{
+        const message=combinedMessages.get(String(messageId));
+        if(!message) return null;
+        return {
+          id:String(message.id||''),
+          raw_text:String(message.raw_text||''),
+          region:String(message.region||''),
+          status:String(message.status||''),
+          canonical_version:message.canonical_version==null ? null : String(message.canonical_version),
+          canonical_payload:clone(message.canonical_payload||null),
+          parser_error:message.parser_error==null ? null : String(message.parser_error)
+        };
+      });
       return knownShadowReceipts.some(event=>
         event && String(event.scope_id||'')===String(row.id) &&
         String(event.partner_id||'')===String(row.partner_id) &&
@@ -1142,6 +1155,8 @@
         localProvenanceMatches(event.local_snapshot) &&
         Array.isArray(event.local_snapshot.category_rows) &&
         stableStringify(event.local_snapshot.category_rows)===stableStringify(settlementCategoryRows) &&
+        Array.isArray(event.local_snapshot.messages) &&
+        stableStringify(event.local_snapshot.messages)===stableStringify(expectedMessageEvidence) &&
         stableStringify((event.local_snapshot.message_ids||[]).map(String).sort())===
           stableStringify((row.message_ids||[]).map(String).sort()) &&
         (!event.evidence_fingerprint ||
