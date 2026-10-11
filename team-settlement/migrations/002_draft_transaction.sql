@@ -98,7 +98,7 @@ BEGIN
     'new_revision',p_expected_revision+1
   );
 END;
-$;
+$$;
 -- PostgreSQL functions have EXECUTE TO PUBLIC by default; remove that grant.
 REVOKE ALL ON FUNCTION kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb) FROM PUBLIC;
 COMMIT;
