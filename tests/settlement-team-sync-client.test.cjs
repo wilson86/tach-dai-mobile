@@ -285,3 +285,36 @@ test('outstanding scope read cannot leak a previous account snapshot into the ne
   assert.equal(outcome.error,'SYNC_SESSION_CHANGED');
   assert.equal(client.snapshot().workspace_id,'group_b');
 });
+
+test('unsynced financial drafts cannot silently disappear on logout or account switching',async()=>{
+  const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
+  const calls=[];
+  const client=Sync.createSyncClient({fetchImpl:async url=>{
+    calls.push(url);
+    if(url.endsWith('/v1/logout'))return response(204,{});
+    if(url.endsWith('/v1/login'))return response(200,{session_token:'b'.repeat(43)});
+    return response(503,{error:'offline'});
+  }});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const draft=client.queueDraft(scope,{synthetic:'unsent'});
+  await assert.rejects(client.logout(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+  await assert.rejects(client.login('account_b','synthetic-passphrase','group_b'),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+  assert.throws(()=>client.setSessionToken('b'.repeat(43),'group_b'),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+  assert.equal(calls.length,0); // Decision required before any request.
+  assert.equal(client.snapshot().drafts.length,1);
+  assert.equal(client.snapshot().drafts[0].id,draft.id);
+  await client.logout({discardPending:true});
+  assert.equal(calls.length,1);
+  assert.equal(client.snapshot().authenticated,false);
+  assert.equal(client.snapshot().drafts.length,0);
+});
+test('successful synced draft may log out without unsent-data prompt',async()=>{
+  const client=Sync.createSyncClient({fetchImpl:async url=>
+    url.endsWith('/v1/logout')?response(204,{}):
+      response(200,{event_id:'event_1',new_revision:1,sync_status:'SYNCED'})});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const draft=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
+    business_date:'2026-10-12',region:'mn'}, {synthetic:true});
+  assert.equal((await client.syncDraft(draft.id)).status,'SYNCED');
+  assert.equal((await client.logout()).authenticated,false);
+});

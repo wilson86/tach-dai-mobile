@@ -74,10 +74,16 @@
       return { response, body: await jsonResponse(response) };
     }
 
-    function setSessionToken(token, workspace = null) {
+    function hasUnsyncedDrafts() {
+      return Array.from(pending.values()).some(item => item.status !== STATUS.SYNCED);
+    }
+
+    function setSessionToken(token, workspace = null, { discardPending = false } = {}) {
       if (typeof token !== 'string' || token.length < 32) throw new Error('SYNC_SESSION_INVALID');
       if (workspace !== null && (typeof workspace !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workspace)))
         throw new Error('SYNC_WORKSPACE_INVALID');
+      if (hasUnsyncedDrafts() && discardPending !== true)
+        throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       // Switches between people or workspaces must discard in-memory financial
       // snapshots, including previously SYNCED rows, and start a fresh feed.
       sessionEpoch += 1;
@@ -90,6 +96,7 @@
     }
 
     async function login(authSubject, password, workspaceId) {
+      if (hasUnsyncedDrafts()) throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       if (typeof authSubject !== 'string' || !authSubject || typeof password !== 'string' ||
           !password || typeof workspaceId !== 'string' || !workspaceId)
         throw new Error('SYNC_LOGIN_INVALID');
@@ -106,7 +113,9 @@
       return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
     }
 
-    async function logout() {
+    async function logout({ discardPending = false } = {}) {
+      if (hasUnsyncedDrafts() && discardPending !== true)
+        throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       if (!sessionToken) return clearSession();
       const epoch = sessionEpoch;
       try { await request('/v1/logout', { method: 'POST' }); } catch (_) {}

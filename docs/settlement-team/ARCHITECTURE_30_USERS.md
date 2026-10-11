@@ -70,3 +70,21 @@ For a shared workspace, a per-device incrementing key like `local_draft_1` is **
 The server's change cursor must advance after a final partial page, not only while `has_more=true`; otherwise repeated polling replays already consumed financial events. HTTP 200 with missing `SYNCED` or malformed page/cursor must **not** advance the in-memory client cursor. These are safety-contract and synthetic checks only.
 
 **Bounded synthetic mitigation:** The isolated candidate schema now maintains a per-workspace `feed_seq` incremented by `append_draft` within the same PostgreSQL transaction, under a shared workspace-row lock. Event feeds page by that sequence, not by the event timestamp, which can precede COMMIT. Disposable PostgreSQL CI races two independent scopes within one workspace and asserts consecutive committed sequence 1..5. **This is not a production change-feed qualification**: every future write path (submit, review, corrections and imports) MUST use the same serialized transactional sequencing contract; no production migration or historic data backfill has been reviewed. Editing draft DDL on this never-deployed prototype is not permission to apply it to an existing ledger.
+
+
+## Operator confirmation before discarding unsent group drafts
+
+The in-memory PWA prototype now refuses `logout()`, `login()` and direct
+session-token switches when any draft is `PENDING`, `CONFLICT`, or
+`BLOCKED`. It returns `SYNC_UNSENT_DRAFTS_REQUIRE_DECISION` before
+sending any request or deleting drafts. A product UI must show the exact
+unsent count, offer a safe explicit export/review of that user-owned data,
+and only then call `logout({discardPending:true})` if the human consents
+to discard it.
+
+**This is NOT durable offline persistence.** Programmatic `clearSession()`
+is still an explicit emergency session invalidation and discards volatile
+memory. A browser restart can also lose all volatile draft state. Secure
+encrypted per-user/per-workspace offline storage with crash/restart recovery,
+re-authenticated ownership and key-management is a separate release blocker.
+Do not promise no-loss offline support until it is independently proven.
