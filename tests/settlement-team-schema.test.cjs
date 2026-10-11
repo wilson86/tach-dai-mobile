@@ -78,4 +78,9 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(ledger.includes('TEAM_IDEMPOTENCY_CONFLICT'));
   assert(ledger.includes('checkMutationIntent'));
   assert(ledger.includes('append-only')||ledger.includes('events.set'));
+  const repository=readFileSync(resolve(__dirname,'../team-settlement/postgres-ledger-repository.cjs'),'utf8');
+  assert(repository.includes('kts_team.append_draft'));
+  assert(repository.includes('set_config'));
+  assert(repository.includes('TEAM_DB_ADAPTER_REQUIRED'));
+  assert(!repository.includes('kts_router.sqlite3'));
 });
