@@ -191,13 +191,30 @@
     const ref=settlement && settlement.reference_app_snapshot;
     const proof=ref && ref.comparison;
     const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    const local=settlement && (settlement.settlement_result || settlement.result_snapshot) || {};
+    const reference=ref && (ref.totals || ref) || {};
+    const aliases={
+      total_xac:['total_xac','xac'], total_qua_co:['total_qua_co','qua_co'],
+      total_payout:['total_payout','payout','tien_trung'],
+      final_net:['final_net','final','thu_bu']
+    };
+    const validMoney=value=>
+      (typeof value==='number' && Number.isFinite(value)) ||
+      (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+       Number.isFinite(Number(value)));
     return Boolean(proof && proof.status==='MATCH_EXACT' &&
       proof.safe_to_promote===true && proof.exact===true &&
       proof.required_totals_exact===true &&
       Number.isInteger(proof.compared_fields) &&
       proof.compared_fields>=fields.length &&
       fields.every(field=>proof.totals && proof.totals[field] &&
-        proof.totals[field].status==='MATCH_EXACT'));
+        proof.totals[field].status==='MATCH_EXACT' &&
+        validMoney(proof.totals[field].local) &&
+        validMoney(proof.totals[field].reference) &&
+        validMoney(local[field]) &&
+        Number(proof.totals[field].local)===Number(local[field]) &&
+        (aliases[field]||[]).some(alias=>validMoney(reference[alias]) &&
+          Number(proof.totals[field].reference)===Number(reference[alias]))));
   }
 
   function effectiveShadowStatus(settlement) {

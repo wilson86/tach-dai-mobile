@@ -2478,9 +2478,9 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
   assert.equal(noShadowProof.counts.exact,0);
   const exactComparison={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
     required_totals_exact:true,compared_fields:4,
-     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
-       .map(field=>[field,{status:'MATCH_EXACT',local:0,reference:0}]))};
-  const proved={...row,reference_app_snapshot:{source:'SYNTHETIC_ONLY',
+      totals:Object.fromEntries([['total_xac',100],['total_qua_co',90],['total_payout',40],['final_net',50]]
+        .map(([field,value])=>[field,{status:'MATCH_EXACT',local:value,reference:value}]))};
+  const proved={...row,reference_app_snapshot:{source:'SYNTHETIC_ONLY',totals:{xac:100,qua_co:90,payout:40,final:50},
     comparison:exactComparison}};
   const verified=report.buildDailyOperationsReport(input({
     ...proved,lottery_result_snapshot:draw}));

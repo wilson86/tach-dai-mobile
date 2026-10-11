@@ -36,7 +36,7 @@ const report = R.buildDailyPartnerReport({
         { station: 'tg', numbers: '74', selector: 'duoi', points: 1 }
       ],
       result_snapshot: { total_xac: 22, total_qua_co: 16.72, total_payout: 300, refund_amount: 0, final_net: -283.28 },
-      comparison_status: 'MATCH_EXACT', reference_app_snapshot: { comparison: { status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:5, totals:{ total_xac:{status:'MATCH_EXACT'}, total_qua_co:{status:'MATCH_EXACT'}, total_payout:{status:'MATCH_EXACT'}, final_net:{status:'MATCH_EXACT'} } } }
+      comparison_status: 'MATCH_EXACT', reference_app_snapshot: { totals:{xac:22,qua_co:16.72,payout:300,final:-283.28}, comparison: { status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:5, totals:{ total_xac:{status:'MATCH_EXACT',local:22,reference:22}, total_qua_co:{status:'MATCH_EXACT',local:16.72,reference:16.72}, total_payout:{status:'MATCH_EXACT',local:300,reference:300}, final_net:{status:'MATCH_EXACT',local:-283.28,reference:-283.28} } } }
     },
     {
       id: 's2', partner_id: 'hien', message_id: 'm2', business_date: '2026-10-04', region: 'mn', scope_status: 'complete_unverified', settlement_result: { total_xac: 36, total_qua_co: 27.36, total_payout: 1125, refund_amount: 0, final_net: -1097.64 },
@@ -47,7 +47,7 @@ const report = R.buildDailyPartnerReport({
         { station: 'tg', numbers: '32-75', selector: 'dat', points: 1.5 }
       ],
       result_snapshot: { total_xac: 36, total_qua_co: 27.36, total_payout: 1125, refund_amount: 0, final_net: -1097.64 },
-      comparison_status: 'MATCH_EXACT', reference_app_snapshot: { comparison: { status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:5, totals:{ total_xac:{status:'MATCH_EXACT'}, total_qua_co:{status:'MATCH_EXACT'}, total_payout:{status:'MATCH_EXACT'}, final_net:{status:'MATCH_EXACT'} } } }
+      comparison_status: 'MATCH_EXACT', reference_app_snapshot: { totals:{xac:36,qua_co:27.36,payout:1125,final:-1097.64}, comparison: { status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:5, totals:{ total_xac:{status:'MATCH_EXACT',local:36,reference:36}, total_qua_co:{status:'MATCH_EXACT',local:27.36,reference:27.36}, total_payout:{status:'MATCH_EXACT',local:1125,reference:1125}, final_net:{status:'MATCH_EXACT',local:-1097.64,reference:-1097.64} } } }
     }
   ]
 });
@@ -67,6 +67,25 @@ assert.strictEqual(report.totals.direction, 'BU');
 assert.strictEqual(report.shadow_status, 'MATCH_EXACT');
 assert.strictEqual(report.regions[0].shadow_status, 'MATCH_EXACT');
 
+const unproved = R.buildDailyPartnerReport({
+  partner: { id: 'legacy', name: 'Legacy', role: 'customer' },
+  business_date: '2026-10-04',
+  messages_by_id: { legacy_message: { raw_text: 'SYNTHETIC_ONLY' } },
+  settlements: [{
+    id: 'legacy-scope', partner_id: 'legacy', business_date: '2026-10-04', region: 'mn',
+    message_ids: ['legacy_message'], scope_status: 'complete_unverified',
+    comparison_status: 'MATCH_EXACT',
+    result_snapshot: { total_xac: 10, total_qua_co: 7.6, total_payout: 0, refund_amount: 0, final_net: 7.6 },
+    reference_app_snapshot: { comparison: {
+      status: 'MATCH_EXACT', safe_to_promote: true, exact: true,
+      required_totals_exact: true, compared_fields: 4,
+      totals: Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+        .map(field => [field, { status: 'MATCH_EXACT' }]))
+    } }
+  }]
+});
+assert.strictEqual(unproved.shadow_status, 'UNVERIFIED', 'status-only exact proof must not count in report');
+
 const ops = R.buildDailyOperationsReport({
   business_date: '2026-10-04',
   partners: [
@@ -83,7 +102,7 @@ const ops = R.buildDailyOperationsReport({
     {
       id:'scope:hien', partner_id:'hien', business_date:'2026-10-04', region:'mn', message_ids:['h1'],
       scope_status:'complete_unverified', comparison_status:'MATCH_EXACT', category_rows:[{code:'2CB',xac:18,qua_co:13.68,hit_units:1,payout:75}],
-      result_snapshot:{total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32}, lottery_result_snapshot:{business_date:'2026-10-04',region:'mn',verification_status:'verified',verified:true,status:'complete',complete:true,coverage_complete:true,verification_sources:['source-a','source-b'],expected_station_codes:['tg'],stations:[{code:'tg',prizes:fullPrizes('mn','ops')} ]}, reference_app_snapshot:{comparison:{status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}}}}
+      result_snapshot:{total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32}, lottery_result_snapshot:{business_date:'2026-10-04',region:'mn',verification_status:'verified',verified:true,status:'complete',complete:true,coverage_complete:true,verification_sources:['source-a','source-b'],expected_station_codes:['tg'],stations:[{code:'tg',prizes:fullPrizes('mn','ops')} ]}, reference_app_snapshot:{totals:{xac:18,qua_co:13.68,payout:75,final:-61.32},comparison:{status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,totals:{total_xac:{status:'MATCH_EXACT',local:18,reference:18},total_qua_co:{status:'MATCH_EXACT',local:13.68,reference:13.68},total_payout:{status:'MATCH_EXACT',local:75,reference:75},final_net:{status:'MATCH_EXACT',local:-61.32,reference:-61.32}}}}
     },
     {
       id:'scope:truc', partner_id:'truc', business_date:'2026-10-04', region:'mb', message_ids:['t1'],
