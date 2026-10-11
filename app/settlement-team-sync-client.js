@@ -207,6 +207,46 @@
       }
     }
 
+    async function readScope(scope) {
+      // Read-only team snapshot. Never turn it into a local financial settlement
+      // or accept a scope from a different user/workspace.
+      if (!sessionToken || workspaceId === null)
+        return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED' };
+      if (!scope || scope.workspace_id !== workspaceId ||
+          typeof scope.partner_id !== 'string' ||
+          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(scope.partner_id) ||
+          typeof scope.business_date !== 'string' ||
+          !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(scope.business_date) ||
+          !['mn','mt','mb'].includes(scope.region))
+        return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_INVALID' };
+      const epoch = sessionEpoch;
+      try {
+        const path = '/v1/scopes/' + scope.partner_id + '/' + scope.business_date + '/' + scope.region;
+        const result = await request(path, { method: 'GET' });
+        if (epoch !== sessionEpoch)
+          return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' };
+        if (result.response.status === 401)
+          return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_INVALID' };
+        if (!result.response.ok)
+          return { status: STATUS.BLOCKED, error: result.body.error || 'SYNC_SERVER_REJECTED' };
+        const row = result.body;
+        const revision = row && row.revision;
+        const numericRevision = typeof revision === 'number'
+          ? Number.isSafeInteger(revision) && revision >= 0
+          : typeof revision === 'string' && /^(0|[1-9][0-9]*)$/.test(revision);
+        if (!row || row.workspace_id !== workspaceId ||
+            row.partner_id !== scope.partner_id ||
+            row.business_date !== scope.business_date ||
+            row.region !== scope.region || !numericRevision)
+          return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_UNVERIFIED' };
+        return { status: STATUS.SYNCED, scope: clone(row) };
+      } catch (error) {
+        if (epoch !== sessionEpoch)
+          return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' };
+        return { status: STATUS.PENDING, error: errorCode(error, 'SYNC_NETWORK_UNAVAILABLE') };
+      }
+    }
+
     async function reconnect() {
       const pulled = await pullChanges();
       if (pulled.status === STATUS.BLOCKED) return { pull: pulled, drafts: [] };
@@ -224,7 +264,7 @@
       });
     }
 
-    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, reconnect, snapshot, STATUS });
+    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, readScope, reconnect, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });

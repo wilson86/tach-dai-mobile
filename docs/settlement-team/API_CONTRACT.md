@@ -35,3 +35,21 @@ The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated ses
 - `503 TEAM_BACKEND_UNAVAILABLE`, no fallback to local client-money approval.
 
 **Notes:** No direct production Telegram dispatch; no implicit HIOSKT algorithm copying. KTS uses its independently implemented verified engine; 65 authentic cases and independent oracle are still missing. M0 pure contract checks are not a substitute for authenticated HTTP, correct SQL transaction behavior or human authorization.
+
+
+## Isolated read-only team scope endpoint
+
+`GET /v1/scopes/{partner_id}/{YYYY-MM-DD}/{mn|mt|mb}` is implemented in
+the **synthetic HTTP contract**. It takes a Bearer session and derives the
+workspace from the verified server session; a query/body-supplied workspace
+is never an authorization source. Respond with a workspace-scoped draft/review
+state, `401` for revoked sessions, `404` for absent scope and `422` for
+invalid date or malformed path. The future live PostgreSQL repository must
+recheck active membership on this read inside a tenant-scoped transaction.
+
+The PWA `readScope` method fail-closes if the returned workspace, partner,
+business date, region or revision does not match the authenticated request;
+a response from a superseded login session is discarded. A successful
+**transport read** is not authorization to finalize money or proof of HIOSKT
+accuracy. There is no live hosting, production approval or shared-finance
+release yet.

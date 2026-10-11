@@ -84,3 +84,37 @@ test('team draft route is disabled unless a ledger dependency is explicitly supp
     assert.deepEqual(JSON.parse(response.body), { error: 'TEAM_ROUTE_NOT_ENABLED' });
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('read-only team scope route is session-scoped and rejects revoked/cross-workspace access', async () => {
+  const auth=A.createAuthService({clock:()=>1000,sessionTtlMs:10000});
+  auth.registerIdentity({user_id:'operator_1',auth_subject:'operator_login',password:'synthetic-operator-password'});
+  auth.registerIdentity({user_id:'viewer_1',auth_subject:'viewer_login',password:'synthetic-viewer-password'});
+  auth.setMembership({workspace_id:'group_a',user_id:'operator_1',role:'operator'});
+  auth.setMembership({workspace_id:'group_a',user_id:'viewer_1',role:'viewer'});
+  auth.setMembership({workspace_id:'group_b',user_id:'viewer_1',role:'viewer'});
+  const ledger=createLedgerApi({auth,clock:()=>1000});
+  const server=createAuthHttpServer(auth,{ledger:{
+    appendDraft:(token,input)=>ledger.mutateDraft(token,input),
+    getScope:(token,scope)=>ledger.getScope(token,scope)
+  }});
+  const operator=auth.login({auth_subject:'operator_login',password:'synthetic-operator-password',workspace_id:'group_a'});
+  const viewer=auth.login({auth_subject:'viewer_login',password:'synthetic-viewer-password',workspace_id:'group_a'});
+  const other=auth.login({auth_subject:'viewer_login',password:'synthetic-viewer-password',workspace_id:'group_b'});
+  const scope={workspace_id:'group_a',partner_id:'customer_1',business_date:'2026-10-12',region:'mn'};
+  const path='/v1/scopes/customer_1/2026-10-12/mn';
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+    const saved=await request(server,{method:'POST',path:'/v1/scopes/drafts',token:operator.session_token,
+      body:{scope,expected_revision:0,idempotency_key:'unique_synthetic_1',payload:{synthetic:true}}});
+    assert.equal(saved.status,200);
+    assert.equal((await request(server,{method:'GET',path})).status,401);
+    const read=await request(server,{method:'GET',path,token:viewer.session_token});
+    assert.equal(read.status,200);
+    assert.equal(JSON.parse(read.body).revision,1);
+    assert.equal((await request(server,{method:'GET',path,token:other.session_token})).status,404);
+    assert.equal((await request(server,{method:'GET',path:'/v1/scopes/customer_1/2026-02-30/mn',token:viewer.session_token})).status,422);
+    assert.equal((await request(server,{method:'GET',path:'/v1/scopes/customer_1/2026-10-12/mn?workspace_id=group_b',token:viewer.session_token})).status,422);
+    auth.setMembership({workspace_id:'group_a',user_id:'viewer_1',role:'viewer',revoked_at:1000});
+    assert.equal((await request(server,{method:'GET',path,token:viewer.session_token})).status,401);
+  } finally {await new Promise(resolve=>server.close(resolve));}
+});

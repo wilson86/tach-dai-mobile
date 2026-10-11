@@ -249,3 +249,39 @@ test('partial HTTP 200 change feed cannot advance cursor or claim SYNCED', async
     assert.equal(client.snapshot().cursor, 'cursor_a');
   }
 });
+
+test('PWA reads only its authenticated workspace scope and validates server snapshot identity', async()=>{
+  const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
+  const received=[];
+  let wrong=false;
+  const client=Sync.createSyncClient({fetchImpl:async(url)=>{
+    received.push(url);
+    return response(200,{...scope,workspace_id:wrong?'group_b':'group_a',revision:'1',state:'DRAFT'});
+  }});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const read=await client.readScope(scope);
+  assert.equal(read.status,'SYNCED');
+  assert.equal(read.scope.revision,'1');
+  assert.equal(received.length,1);
+  assert.equal(received[0].endsWith('/v1/scopes/counterparty_1/2026-10-12/mn'),true);
+  assert.equal((await client.readScope({...scope,workspace_id:'group_b'})).status,'BLOCKED');
+  assert.equal(received.length,1);
+  wrong=true;
+  const forged=await client.readScope(scope);
+  assert.equal(forged.status,'BLOCKED');
+  assert.equal(forged.error,'SYNC_SCOPE_UNVERIFIED');
+});
+
+test('outstanding scope read cannot leak a previous account snapshot into the new session', async()=>{
+  let finish;
+  const client=Sync.createSyncClient({fetchImpl:async()=>new Promise(resolve=>{finish=resolve;})});
+  const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const previous=client.readScope(scope);
+  client.setSessionToken('b'.repeat(43),'group_b');
+  finish(response(200,{...scope,revision:1,state:'DRAFT'}));
+  const outcome=await previous;
+  assert.equal(outcome.status,'BLOCKED');
+  assert.equal(outcome.error,'SYNC_SESSION_CHANGED');
+  assert.equal(client.snapshot().workspace_id,'group_b');
+});

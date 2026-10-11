@@ -75,7 +75,8 @@ function createAuthHttpServer(auth, {
       typeof auth.setIdentityDisabled !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
       !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function' ||
-      (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' && typeof ledger.getChanges !== 'function'))))
+      (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' &&
+        typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function'))))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
   const loginAttempts = new Map();
 
@@ -174,6 +175,35 @@ function createAuthHttpServer(auth, {
           if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
             return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
           return json(res, 400, { error: error.message === 'AUTH_SELF_DISABLE_DENIED' ? error.message : 'AUTH_IDENTITY_INVALID' });
+        }
+      }
+      // Read-only scope endpoint. Browser-supplied workspace IDs are ignored;
+      // the workspace must be derived from the authenticated server session.
+      if (req.method === 'GET' && req.url.startsWith('/v1/scopes/')) {
+        if (!ledger || typeof ledger.getScope !== 'function')
+          return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
+        const token = bearer(req);
+        if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+        const parts = req.url.split('/');
+        if (parts.length !== 6 || parts[1] !== 'v1' || parts[2] !== 'scopes' ||
+            !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(parts[3]) ||
+            !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(parts[4]) ||
+            !['mn','mt','mb'].includes(parts[5]))
+          return json(res, 422, { error: 'TEAM_SCOPE_INVALID' });
+        try {
+          const actor = auth.verifySession(token);
+          const scope = { workspace_id: actor.workspace_id, partner_id: parts[3],
+            business_date: parts[4], region: parts[5] };
+          return json(res, 200, await ledger.getScope(token, scope));
+        } catch (error) {
+          const code = error && error.message;
+          if (code === 'AUTH_SESSION_INVALID' || code === 'AUTH_SESSION_REVOKED')
+            return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+          if (code === 'TEAM_SCOPE_NOT_FOUND') return json(res, 404, { error: 'TEAM_SCOPE_NOT_FOUND' });
+          if (code === 'TEAM_SCOPE_INVALID') return json(res, 422, { error: 'TEAM_SCOPE_INVALID' });
+          if (code === 'TEAM_WORKSPACE_DENIED' || code === 'TEAM_ROLE_DENIED')
+            return json(res, 403, { error: code });
+          return json(res, 500, { error: 'TEAM_BACKEND_UNAVAILABLE' });
         }
       }
       if (req.url === '/v1/scopes/drafts' && req.method === 'POST') {
