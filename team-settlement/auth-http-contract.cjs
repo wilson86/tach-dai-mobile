@@ -163,7 +163,11 @@ function createAuthHttpServer(auth, {
       if (req.url === '/v1/logout' && req.method === 'POST') {
         const token = bearer(req);
         if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
-        await auth.revokeSession(token);
+        // A false/ambiguous revocation cannot be reported as successful.
+        // Never claim the server invalidated a bearer that was not found.
+        const revoked = await auth.revokeSession(token);
+        if (revoked !== true)
+          return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
         return noContent(res);
       }
       if (req.url === '/v1/admin/memberships' && req.method === 'POST') {
@@ -237,7 +241,8 @@ function createAuthHttpServer(auth, {
         }
       }
       if (req.url === '/v1/scopes/drafts' && req.method === 'POST') {
-        if (!ledger) return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
+        if (!ledger || typeof ledger.appendDraft !== 'function')
+          return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
         const token = bearer(req);
         if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
         let input;

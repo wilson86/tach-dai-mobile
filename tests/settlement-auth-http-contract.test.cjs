@@ -128,3 +128,33 @@ test('HTTP admin routes require server-derived admin role and can revoke a membe
     assert.equal(memberLogin.status, 401);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('unknown or already-revoked session cannot be falsely acknowledged as logged out',async()=>{
+  const auth=setup();
+  await withServer(auth,async server=>{
+    const unknown=await request(server,{method:'POST',path:'/v1/logout',
+      token:'x'.repeat(43)});
+    assert.equal(unknown.status,401);
+    assert.deepEqual(JSON.parse(unknown.body),{error:'AUTH_SESSION_INVALID'});
+    const issued=auth.login({auth_subject:'subject_1',
+      password:'synthetic-password-1',workspace_id:'group_a'});
+    const first=await request(server,{method:'POST',path:'/v1/logout',
+      token:issued.session_token});
+    assert.equal(first.status,204);
+    const repeat=await request(server,{method:'POST',path:'/v1/logout',
+      token:issued.session_token});
+    assert.equal(repeat.status,401);
+  });
+});
+
+test('draft-only route stays disabled when only change-feed ledger dependency exists',async()=>{
+  const auth=setup();
+  await withServer(auth,async server=>{
+    const issued=auth.login({auth_subject:'subject_1',
+      password:'synthetic-password-1',workspace_id:'group_a'});
+    const sent=await request(server,{method:'POST',path:'/v1/scopes/drafts',
+      token:issued.session_token,body:{synthetic:true}});
+    assert.equal(sent.status,404);
+    assert.deepEqual(JSON.parse(sent.body),{error:'TEAM_ROUTE_NOT_ENABLED'});
+  },{ledger:{getChanges:async()=>({})}});
+});
