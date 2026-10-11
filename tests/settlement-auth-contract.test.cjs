@@ -60,7 +60,8 @@ test('explicit revocation and workspace mismatch deny the session', () => {
   assert.throws(() => auth.verifySession(session.session_token, 'group_b'), /AUTH_WORKSPACE_DENIED/);
   assert.equal(auth.revokeSession(session.session_token), true);
   assert.throws(() => auth.verifySession(session.session_token), /AUTH_SESSION_INVALID/);
-  assert.equal(auth.revokeSession(session.session_token), true);
+  // The second revocation cannot claim success for a token already revoked.
+  assert.equal(auth.revokeSession(session.session_token), false);
   assert.equal(auth.revokeSession('not-a-real-token'), false);
 });
 
