@@ -86,6 +86,28 @@ const unproved = R.buildDailyPartnerReport({
 });
 assert.strictEqual(unproved.shadow_status, 'UNVERIFIED', 'status-only exact proof must not count in report');
 
+const categoryMismatch = R.buildDailyPartnerReport({
+  partner: { id: 'category-proof', name: 'Category proof', role: 'customer' },
+  business_date: '2026-10-04',
+  messages_by_id: { category_message: { raw_text: 'SYNTHETIC_ONLY' } },
+  settlements: [{
+    id: 'category-scope', partner_id: 'category-proof', business_date: '2026-10-04', region: 'mn',
+    message_ids: ['category_message'], scope_status: 'complete_unverified', comparison_status: 'MATCH_EXACT',
+    category_rows: [{ code: 'DAT', xac: 10, qua_co: 7.6, payout: 0 }],
+    result_snapshot: { total_xac: 10, total_qua_co: 7.6, total_payout: 0, refund_amount: 0, final_net: 7.6 },
+    reference_app_snapshot: {
+      totals: { xac: 10, qua_co: 7.6, payout: 0, final: 7.6 },
+      categories: [{ code: 'DAT', xac: 10, qua_co: 7.6, payout: 0 }],
+      comparison: {
+        status: 'MATCH_EXACT', safe_to_promote: true, exact: true, required_totals_exact: true, compared_fields: 5,
+        totals: { total_xac: { status: 'MATCH_EXACT', local: 10, reference: 10 }, total_qua_co: { status: 'MATCH_EXACT', local: 7.6, reference: 7.6 }, total_payout: { status: 'MATCH_EXACT', local: 0, reference: 0 }, final_net: { status: 'MATCH_EXACT', local: 7.6, reference: 7.6 } },
+        categories: [{ code: 'DAT', status: 'MISMATCH', fields: { xac: { status: 'MISMATCH', local: 10, reference: 10 } } }]
+      }
+    }
+  }]
+});
+assert.strictEqual(categoryMismatch.shadow_status, 'UNVERIFIED', 'category mismatch must not count as exact report evidence');
+
 const ops = R.buildDailyOperationsReport({
   business_date: '2026-10-04',
   partners: [
