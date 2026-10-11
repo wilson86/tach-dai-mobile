@@ -34,12 +34,22 @@ BEGIN
        'kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)',
        'EXECUTE')
     OR has_schema_privilege(current_user,'kts_auth','USAGE')
-    OR has_table_privilege(current_user,'kts_auth.credentials','SELECT')
-    OR has_table_privilege(current_user,'kts_auth.sessions','SELECT')
-    OR has_table_privilege(current_user,'kts_auth.sessions','INSERT')
     OR has_table_privilege(current_user,'kts_team.memberships','UPDATE') THEN
     RAISE EXCEPTION 'TEAM_LEDGER_ROLE_CREDENTIAL_ACCESS_LEAK';
   END IF;
+  -- A role without schema USAGE cannot directly resolve protected tables.
+  -- Check actual denied reads rather than calling a privilege helper that
+  -- itself may raise "permission denied for schema kts_auth".
+  BEGIN
+    EXECUTE 'SELECT count(*) FROM kts_auth.sessions';
+    RAISE EXCEPTION 'TEAM_LEDGER_SESSION_READ_ALLOWED';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
+  BEGIN
+    EXECUTE 'SELECT count(*) FROM kts_auth.credentials';
+    RAISE EXCEPTION 'TEAM_LEDGER_CREDENTIAL_READ_ALLOWED';
+  EXCEPTION WHEN insufficient_privilege THEN NULL;
+  END;
   -- Without the transaction-local workspace, tenant RLS must return zero.
   IF EXISTS (SELECT 1 FROM kts_team.scope_events) THEN
     RAISE EXCEPTION 'TEAM_LEDGER_UNSCOPED_EVENTS_LEAK';
