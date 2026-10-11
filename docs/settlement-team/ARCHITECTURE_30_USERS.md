@@ -14,7 +14,7 @@
 
 - **Web/Mobile PWA:** login screen, verified tenant context, draft data entry, pending/rejected/conflict UI, group ledger reports and audit. Offline IndexedDB is *only* draft/cache. Logout or session expiration invalidates cached sensitive views.
 - **Team API (new isolated process):** authenticates each session, fetches DB membership; enforces role and resource access; exact parser / effective-dated money-config check; ensures KQXS is independently verified before money is final; controls idempotency, versioned transactions and logging. It may call a **read-only** canonical parser/KQXS service, but never send Telegram or mutate KTS Router.
-- **Team PostgreSQL (new dedicated database):** workspace, identity, membership, customer/owner counterparty, scope state, append-only financial events and idempotency receipts. Separate runtime DB account without superuser, table ownership or `BYPASSRLS`. See `team-settlement/migrations/001_team_ledger.sql`; migration is a **candidate**, not run.
+- **Team PostgreSQL (new dedicated database):** workspace, identity, membership, customer/owner counterparty, scope state, append-only financial events and idempotency receipts. Separate runtime DB account without superuser, table ownership or `BYPASSRLS`. See `team-settlement/migrations/001_team_ledger.sql`; migration is a **candidate**, never run against the operational database.
 - **Independent oracle (future):** operator-authorized real HIOSKT reports and mapping/provenance are reviewed in a **private**, read-only evidence environment. Exactly verified XÁC, QUA CÒ, TRẢ, THU/BÙ; no public HIOSKT data or bypass of existing Issue #4 qualification.
 
 ## Financial and concurrency invariants
@@ -48,7 +48,7 @@ API payload must omit client-selected `role`, `workspace_id` from authorization 
 
 | Stage | Work | Evidence required |
 |---|---|---|
-| **M0** | This ADR, PostgreSQL DDL candidate and pure fail-closed role/scope/transition contract | Exact GitHub branch/source; reproducible `node --test` synthetic PASS; SQL **not executed** |
+| **M0** | This ADR, PostgreSQL DDL candidate and pure fail-closed role/scope/transition contract | Exact GitHub branch/source; reproducible `node --test` synthetic PASS; SQL tested in a disposable CI PostgreSQL database only, not deployed |
 | M1 | Isolated identity provider, PostgreSQL-backed transactional service; two clients | No cross-tenant reads; idempotent retry vs collision; CAS/rollback; transaction kill/restart tests |
 | M2 | PWA login and shared optimistic-sync UI; reviewed money workflow, backup restore | Browser/device restart, offline reconnect, lost update, 30 concurrent synthetic clients, restore from separate backup |
 | M3 | Independent HIOSKT money oracle from approved private 65-case corpus | Every mapping/provenance verified; all supported fields exact; discrepancies resolved; no `NOT_COMPARABLE` |

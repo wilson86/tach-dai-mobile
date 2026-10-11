@@ -21,6 +21,6 @@
 
 **Thirty-client test scope:** 30 authenticated identities; 3 roles plus admins; 30 simultaneous reads, 10 racing edits to one scope, 20 unique edits, 30 identical idempotency retries, 30 conflicting keys, two workspace populations, two devices per session, offline reconnection and server restart. Tests must assert stable event count and money integrity after restart, **not only successful HTTP status**.
 
-**Key limitations:** The M0 `core-contract.cjs` assumes caller supplies `server_verified` actor from a trusted authentication boundary; this marker **is not itself a security mechanism**. The PostgreSQL DDL candidate was not deployed or tested against Postgres and may need migration review. Existing green KTS synthetic CI cannot authenticate real HIOSKT outcomes.
+**Key limitations:** The M0 `core-contract.cjs` assumes caller supplies `server_verified` actor from a trusted authentication boundary; this marker **is not itself a security mechanism**. The PostgreSQL DDL candidate has not been deployed; only a disposable synthetic PostgreSQL smoke test is permitted in CI. This is not a security audit or production migration approval. Existing green KTS synthetic CI cannot authenticate real HIOSKT outcomes.
 
 **Privacy and cost:** Public GitHub contains only contracts, fake IDs, schema and synthetic tests. Production account/device data and access keys must remain private. No cloud account, billing or external runner authorized.

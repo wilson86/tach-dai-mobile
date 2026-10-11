@@ -67,7 +67,7 @@ test('rejects stale revision, offline confirmation and unauthorized operation',(
   assert.throws(()=>C.checkMutationIntent(actor(),intent,{...x,status:'CLOSED'}),/TEAM_CLOSED_OR_PENDING_IMMUTABLE/);
   assert.throws(()=>C.checkMutationIntent(actor(),{...intent,workspace_id:'group_b'},x),/TEAM_SCOPE_MISMATCH/);
   assert.throws(()=>C.checkMutationIntent(actor(),{...intent,action:'close_scope'},x),/TEAM_ROLE_DENIED/);
-  assert.throws(()=>C.checkMutationIntent(actor('admin'),{...intent,action:'close_scope'},x),/TEAM_INTENT_ACTION_FORBIDDEN/);
+  assert.throws(()=>C.checkMutationIntent(actor('admin','group_a','admin_2'),{...intent,action:'close_scope'},x),/TEAM_INTENT_ACTION_FORBIDDEN/);
 });
 test('offline cache and conflicts never masquerade as authoritative financial balance',()=>{
   assert.equal(C.offlineBadge({}), 'PENDING');
