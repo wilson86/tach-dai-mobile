@@ -1,0 +1,32 @@
+name: KTS Settlement Team M0 isolated contract QA
+on:
+  pull_request:
+    paths:
+      - 'team-settlement/**'
+      - 'docs/settlement-team/**'
+      - 'tests/settlement-team-*.test.cjs'
+      - '.github/workflows/settlement-team-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: team-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  team-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node contract and schema source tests (synthetic only)
+        run: node --test tests/settlement-team-*.test.cjs
+      - name: No production or paid deploy tasks
+        run: |
+          echo "TEAM_CONTRACT_QA_ONLY=PASS"
+          echo "POSTGRES_DATABASE_TEST=NOT_RUN"
+          echo "AUTH_HTTP_TEST=NOT_RUN"
+          echo "REAL_HIOSKT_ORACLE=BLOCKED"
+          echo "RELEASE_READINESS=BLOCKED"
