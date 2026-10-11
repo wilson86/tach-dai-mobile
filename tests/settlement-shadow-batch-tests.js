@@ -98,6 +98,9 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(unsafePreview.rows[0].comparison.status, 'MATCH_EXACT');
   assert.strictEqual(unsafePreview.rows[0].comparison.safe_to_promote, false);
   assert.strictEqual(unsafePreview.counts.exact, 0, 'unsafe exact status must not count as exact');
+  const batchSource = fs.readFileSync('app/settlement-shadow-batch.js', 'utf8');
+  assert(batchSource.includes("const displayStatus = st === 'MATCH_EXACT' && !safe ? 'INCOMPLETE_REFERENCE' : st;"),
+    'unsafe exact status must not render as an exact operator tag');
   state.unsafe = false;
 
   const applied = await B.apply(preview);
