@@ -12,7 +12,7 @@
 7. Response includes `workspace`, `scope`, `new_revision`, `event_id`, `sync_status` and change cursor. No PII/full raw messages in default logs.
 8. A client with dropped response resends same idempotency key: never creates second event. Reactivation after offline must revalidate member rights and state.
 
-The synthetic `team-settlement/postgres-ledger-repository.cjs` is the repository seam for the future `pg` adapter: it sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. It opens no connection and is not a production deployment.
+The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated sessions with the repository seam. `team-settlement/postgres-ledger-repository.cjs` sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. These modules open no connection and are not a production deployment.
 
 ## Suggested error and evidence semantics
 - `401 TEAM_ACTOR_UNVERIFIED`, `403 TEAM_ROLE_DENIED/TEAM_WORKSPACE_DENIED`

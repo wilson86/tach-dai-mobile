@@ -83,4 +83,8 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(repository.includes('set_config'));
   assert(repository.includes('TEAM_DB_ADAPTER_REQUIRED'));
   assert(!repository.includes('kts_router.sqlite3'));
+  const serverApi=readFileSync(resolve(__dirname,'../team-settlement/server-ledger-api.cjs'),'utf8');
+  assert(serverApi.includes('verifySession'));
+  assert(serverApi.includes('repository.appendDraft'));
+  assert(serverApi.includes('TEAM_OFFLINE_NOT_AUTHORITATIVE'));
 });
