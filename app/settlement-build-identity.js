@@ -24,7 +24,7 @@
     'app/settlement-shadow.js':'bfab15e3d1414aa76e209f01958478a1c3a35a81',
     'app/settlement-shadow-runtime.js':'8ed529e5ec9471064aa2e3ee84a5a2d8a4f1fac6',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
-    'app/settlement-observation.js':'44f9fe2aa4335088f1e862d0391c85a75a8477b4',
+    'app/settlement-observation.js':'7afe9e56402fe16299299455961ef1e59ddac1a9',
     'app/settlement-regression-cases.js':'f143ae884d002d45b1d7067e1015e14e32625213',
     'app/settlement-parser-replay.js':'46f804323d4d6b3c6ad82d689421d6fdd33c3f3f',
     'app/settlement-repair-workflow.js':'890b2159ab005375c8718861276c50159938be91',

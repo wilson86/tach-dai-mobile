@@ -31,7 +31,12 @@ function scope(date, region, comparison, extra) {
     region,
     scope_status: 'complete_unverified',
     comparison_status: comparison,
-    settlement_result: { final_net: 1 },
+    settlement_result: { total_xac: 0, total_qua_co: 0, total_payout: 0, refund_amount: 0, final_net: 1 },
+    reference_app_snapshot: comparison === 'MATCH_EXACT' ? {
+      totals: { xac: 0, qua_co: 0, payout: 0, final: 1 },
+      comparison: { status: 'MATCH_EXACT', safe_to_promote: true, exact: true, required_totals_exact: true, compared_fields: 4,
+        totals: { total_xac: { status: 'MATCH_EXACT', local: 0, reference: 0 }, total_qua_co: { status: 'MATCH_EXACT', local: 0, reference: 0 }, total_payout: { status: 'MATCH_EXACT', local: 0, reference: 0 }, final_net: { status: 'MATCH_EXACT', local: 1, reference: 1 } } }
+    } : null,
     lottery_result_snapshot: verifiedKqxs(date,region)
   }, extra || {});
 }
@@ -90,9 +95,15 @@ function message(id, date, region, status, partner) {
 {
   const nested = scope('2026-10-01', 'mn', '', {
     comparison_status: '',
-    reference_app_snapshot: { comparison: { status: 'MATCH_EXACT' } }
+    reference_app_snapshot: { totals: { xac: 0, qua_co: 0, payout: 0, final: 1 }, comparison: {
+      status: 'MATCH_EXACT', safe_to_promote: true, exact: true, required_totals_exact: true, compared_fields: 4,
+      totals: { total_xac: { status: 'MATCH_EXACT', local: 0, reference: 0 }, total_qua_co: { status: 'MATCH_EXACT', local: 0, reference: 0 }, total_payout: { status: 'MATCH_EXACT', local: 0, reference: 0 }, final_net: { status: 'MATCH_EXACT', local: 1, reference: 1 } }
+    } }
   });
   assert.strictEqual(O.comparisonStatus(nested), 'MATCH_EXACT');
+  assert.strictEqual(O.comparisonStatus(scope('2026-10-01', 'mn', 'MATCH_EXACT', {
+    reference_app_snapshot: { comparison: { status: 'MATCH_EXACT' } }
+  })), 'UNVERIFIED');
 }
 
 // KQXS/shadow guard can block via comparison_status while the accounting scope itself remains complete.
