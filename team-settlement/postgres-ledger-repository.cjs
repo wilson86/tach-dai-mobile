@@ -112,7 +112,7 @@ function createPostgresLedgerRepository({ db } = {}) {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('TEAM_LIMIT_INVALID');
     const verifiedActor = C.actorFromServer(actor);
     const after = decodeCursor(cursor, verifiedActor.workspace_id);
-    return inActorTransaction(verifiedActor, async (tx, trustedActor) => {
+    return inActorTransaction(actor, async (tx, trustedActor) => {
       const result = await tx.query(
         `SELECT event_id,partner_id,business_date::text AS business_date,region,
                 scope_revision,feed_seq,actor_user_id,event_kind,payload_sha256,result_snapshot,recorded_at
