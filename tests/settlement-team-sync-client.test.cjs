@@ -391,3 +391,44 @@ test('two concurrent change polls never let a slower response roll the cursor ba
   assert.equal(client.snapshot().cursor,'cursor_newer');
   assert.equal(urls[0],urls[1]);
 });
+
+test('concurrent submits of one financial draft issue only one request and preserve successful receipt',async()=>{
+  let finish;
+  const calls=[];
+  const client=Sync.createSyncClient({fetchImpl:(url,opts)=>{
+    calls.push({url,opts});
+    return new Promise(resolve=>{finish=resolve;});
+  }});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
+    business_date:'2026-10-12',region:'mn'},{synthetic:true});
+  const first=client.syncDraft(item.id);
+  const second=await client.syncDraft(item.id);
+  assert.equal(calls.length,1);
+  assert.equal(second.status,'BLOCKED');
+  assert.equal(second.error,'SYNC_DRAFT_ALREADY_IN_FLIGHT');
+  assert.equal(client.snapshot().drafts[0].status,'PENDING');
+  finish(response(200,{
+    event_id:'event_persisted',replayed:false,new_revision:1,
+    feed_seq:1,sync_status:'SYNCED'
+  }));
+  const committed=await first;
+  assert.equal(committed.status,'SYNCED');
+  assert.equal(client.snapshot().drafts[0].status,'SYNCED');
+});
+
+test('failed draft request releases its flight slot so a later explicit retry can proceed',async()=>{
+  let calls=0;
+  const client=Sync.createSyncClient({fetchImpl:async()=>{
+    calls++;
+    if(calls===1)throw Object.assign(Error('offline'),{code:'NETWORK_DOWN'});
+    return response(200,{event_id:'event_saved',replayed:false,new_revision:1,
+      feed_seq:1,sync_status:'SYNCED'});
+  }});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
+    business_date:'2026-10-12',region:'mn'},{synthetic:true});
+  assert.equal((await client.syncDraft(item.id)).status,'PENDING');
+  assert.equal((await client.syncDraft(item.id)).status,'SYNCED');
+  assert.equal(calls,2);
+});

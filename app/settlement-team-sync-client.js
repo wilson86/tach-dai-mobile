@@ -53,6 +53,7 @@
     // from generic local storage: doing so can skip new user's change events.
     let cursor = null;
     const pending = new Map();
+    const draftFlights = new Set();
     const listeners = new Set();
 
     function emit() {
@@ -166,11 +167,15 @@
     async function syncDraft(id) {
       const item = pending.get(id);
       if (!item) throw new Error('SYNC_DRAFT_NOT_FOUND');
+      if (draftFlights.has(id))
+        return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_DRAFT_ALREADY_IN_FLIGHT' });
       if (item.status === STATUS.CONFLICT || item.status === STATUS.BLOCKED) return Object.freeze(clone(item));
       if (!sessionToken) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
       if (workspaceId !== null && item.scope.workspace_id !== workspaceId)
         return setStatus(item, STATUS.BLOCKED, 'SYNC_WORKSPACE_MISMATCH');
       const epoch = sessionEpoch;
+      draftFlights.add(id);
+      try {
       try {
         const result = await request('/v1/scopes/drafts', {
           method: 'POST',
@@ -197,6 +202,9 @@
       } catch (error) {
         if (epoch !== sessionEpoch) return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' });
         return setStatus(item, STATUS.PENDING, errorCode(error, 'SYNC_NETWORK_UNAVAILABLE'));
+      }
+      } finally {
+        draftFlights.delete(id);
       }
     }
 
