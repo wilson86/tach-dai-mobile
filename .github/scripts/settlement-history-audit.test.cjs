@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.249-exact-proof-guards'));
+  assert.ok(sw.includes('v1.0.250-batch-exact-proof'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -3007,4 +3007,36 @@ test('Shadow receipt exact claim requires full comparator promotion evidence',as
   }
   assert.equal(api.normalizeShadowEvent({...base,comparison_status:'UNVERIFIED',
     comparison:{status:'UNVERIFIED'}}).comparison_status,'UNVERIFIED');
+});
+
+test('HIOSKT batch rejects malformed date, monetary types and forged exact proof',()=>{
+  const sandbox={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow-batch.js'),'utf8'),sandbox);
+  const batch=sandbox.window.KTS_SETTLEMENT_SHADOW_BATCH;
+  const partners=[{id:'synthetic',name:'Synthetic'}];
+  const row={business_date:'2026-10-12',partner:'Synthetic',region:'mn',
+    totals:{xac:'1',qua_co:'1',payout:'0',final:'1'}};
+  assert.equal(batch.normalizeRow(row,partners).business_date,'2026-10-12');
+  for(const date of ['2026-02-30','2026-10-12T00:00:00Z','2025-02-29']){
+    assert.throws(()=>batch.normalizeRow({...row,business_date:date},partners),/BATCH_DATE_REQUIRED/);
+  }
+  for(const bad of [[1],[],true,{},false]){
+    assert.throws(()=>batch.normalizeRow({...row,totals:{...row.totals,xac:bad}},partners),/BATCH_TOTAL_INVALID:xac/);
+  }
+  assert.throws(()=>batch.normalizeRow({...row,totals:[1,2]},partners),/BATCH_TOTALS_OBJECT_REQUIRED/);
+  const fields=['total_xac','total_qua_co','total_payout','final_net'];
+  const proof={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+    required_totals_exact:true,compared_fields:4,
+    totals:Object.fromEntries(fields.map(f=>[f,{status:'MATCH_EXACT',local:0,reference:0}]))};
+  assert.equal(batch.exactProofUsable(proof),true);
+  assert.equal(batch.displayComparisonStatus(proof),'MATCH_EXACT');
+  for(const invalid of [
+    {...proof,safe_to_promote:false},
+    {...proof,compared_fields:1},
+    {...proof,totals:{final_net:{status:'MATCH_EXACT',local:0,reference:0}}},
+    {...proof,totals:{...proof.totals,total_xac:{status:'MATCH_EXACT',local:[],reference:0}}}
+  ]){
+    assert.equal(batch.exactProofUsable(invalid),false);
+    assert.equal(batch.displayComparisonStatus(invalid),'INCOMPLETE_REFERENCE');
+  }
 });
