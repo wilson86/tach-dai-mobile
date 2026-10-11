@@ -29,9 +29,12 @@
     const endpoint = normalizeBaseUrl(baseUrl);
     const store = storage || { get: function () { return null; }, set: function () {}, remove: function () {} };
     let sessionToken = null; // Deliberately memory-only. Never persist bearer credentials.
+    let workspaceId = null;
+    let sessionEpoch = 0;
     let sequence = 0;
+    // Cursor is session-specific. Never reuse a prior user's/workspace's cursor
+    // from generic local storage: doing so can skip new user's change events.
     let cursor = null;
-    try { cursor = store.get(CURSOR_KEY) || null; } catch (_) { cursor = null; }
     const pending = new Map();
     const listeners = new Set();
 
@@ -60,9 +63,17 @@
       return { response, body: await jsonResponse(response) };
     }
 
-    function setSessionToken(token) {
+    function setSessionToken(token, workspace = null) {
       if (typeof token !== 'string' || token.length < 32) throw new Error('SYNC_SESSION_INVALID');
+      if (workspace !== null && (typeof workspace !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workspace)))
+        throw new Error('SYNC_WORKSPACE_INVALID');
+      // Switches between people or workspaces must discard in-memory financial
+      // snapshots, including previously SYNCED rows, and start a fresh feed.
+      sessionEpoch += 1;
       sessionToken = token;
+      workspaceId = workspace;
+      pending.clear();
+      cursor = null;
       emit();
       return snapshot();
     }
@@ -71,28 +82,37 @@
       if (typeof authSubject !== 'string' || !authSubject || typeof password !== 'string' ||
           !password || typeof workspaceId !== 'string' || !workspaceId)
         throw new Error('SYNC_LOGIN_INVALID');
+      const epoch = sessionEpoch;
       const result = await request('/v1/login', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ auth_subject: authSubject, password, workspace_id: workspaceId })
       });
+      if (epoch !== sessionEpoch) throw new Error('SYNC_SESSION_CHANGED');
       if (!result.response.ok || typeof result.body.session_token !== 'string')
         throw new Error(result.body.error || 'AUTH_LOGIN_DENIED');
-      setSessionToken(result.body.session_token);
+      setSessionToken(result.body.session_token, workspaceId);
       return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
     }
 
     async function logout() {
       if (!sessionToken) return clearSession();
+      const epoch = sessionEpoch;
       try { await request('/v1/logout', { method: 'POST' }); } catch (_) {}
+      // A delayed logout response from a previous identity may not log out a
+      // newer, independently authenticated session.
+      if (epoch !== sessionEpoch) return snapshot();
       return clearSession();
     }
 
     function clearSession() {
+      sessionEpoch += 1;
       sessionToken = null;
-      for (const item of pending.values()) {
-        if (item.status !== STATUS.SYNCED) setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
-      }
+      workspaceId = null;
+      cursor = null;
+      // Prototype drafts are volatile. Do not display a previous user's data
+      // after logout or let a later login submit it under another identity.
+      pending.clear();
       emit();
       return snapshot();
     }
@@ -108,6 +128,8 @@
       if (!scope || typeof scope !== 'object' || !payload || typeof payload !== 'object' || Array.isArray(payload))
         throw new Error('SYNC_DRAFT_INVALID');
       if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) throw new Error('SYNC_REVISION_INVALID');
+      if (workspaceId !== null && scope.workspace_id !== workspaceId)
+        throw new Error('SYNC_WORKSPACE_MISMATCH');
       const id = 'local_draft_' + (++sequence);
       const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING };
       pending.set(id, item);
@@ -120,6 +142,9 @@
       if (!item) throw new Error('SYNC_DRAFT_NOT_FOUND');
       if (item.status === STATUS.CONFLICT || item.status === STATUS.BLOCKED) return Object.freeze(clone(item));
       if (!sessionToken) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
+      if (workspaceId !== null && item.scope.workspace_id !== workspaceId)
+        return setStatus(item, STATUS.BLOCKED, 'SYNC_WORKSPACE_MISMATCH');
+      const epoch = sessionEpoch;
       try {
         const result = await request('/v1/scopes/drafts', {
           method: 'POST',
@@ -127,28 +152,39 @@
           body: JSON.stringify({ scope: item.scope, expected_revision: item.base_revision,
             idempotency_key: item.id, payload: item.payload })
         });
+        if (epoch !== sessionEpoch) return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' });
         if (result.response.status === 409) return setStatus(item, STATUS.CONFLICT, result.body.error || 'TEAM_REVISION_CONFLICT');
         if (result.response.status === 401) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_INVALID');
         if (!result.response.ok) return setStatus(item, STATUS.BLOCKED, result.body.error || 'SYNC_SERVER_REJECTED');
+        // HTTP 200 alone does not prove a financial draft reached the ledger.
+        if (result.body.sync_status !== STATUS.SYNCED ||
+            typeof result.body.event_id !== 'string' || !result.body.event_id ||
+            (!Number.isSafeInteger(result.body.new_revision) && result.body.replayed !== true))
+          return setStatus(item, STATUS.BLOCKED, 'SYNC_ACK_UNVERIFIED');
         item.server_result = clone(result.body);
         item.server_revision = result.body.new_revision;
         return setStatus(item, STATUS.SYNCED);
       } catch (error) {
+        if (epoch !== sessionEpoch) return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' });
         return setStatus(item, STATUS.PENDING, errorCode(error, 'SYNC_NETWORK_UNAVAILABLE'));
       }
     }
 
     async function pullChanges(limit = 100) {
       if (!sessionToken) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED', items: [] };
+      const epoch = sessionEpoch;
       const query = '?limit=' + encodeURIComponent(String(limit)) + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
       try {
         const result = await request('/v1/changes' + query, { method: 'GET' });
+        if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
         if (result.response.status === 401) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_INVALID', items: [] };
         if (!result.response.ok) return { status: STATUS.BLOCKED, error: result.body.error || 'SYNC_SERVER_REJECTED', items: [] };
+        // Until per-user/per-workspace durable cursors are independently
+        // authenticated, keep the change cursor only in this session's memory.
         cursor = result.body.next_cursor || cursor;
-        try { if (cursor) store.set(CURSOR_KEY, cursor); } catch (_) {}
         return { status: STATUS.SYNCED, items: Array.isArray(result.body.items) ? clone(result.body.items) : [], next_cursor: cursor };
       } catch (error) {
+        if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
         return { status: STATUS.PENDING, error: errorCode(error, 'SYNC_NETWORK_UNAVAILABLE'), items: [] };
       }
     }
@@ -165,7 +201,7 @@
 
     function snapshot() {
       return Object.freeze({
-        authenticated: Boolean(sessionToken), cursor,
+        authenticated: Boolean(sessionToken), cursor, workspace_id: workspaceId,
         drafts: Object.freeze(Array.from(pending.values()).map(item => Object.freeze(clone(item))))
       });
     }

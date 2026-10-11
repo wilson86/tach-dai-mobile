@@ -37,7 +37,8 @@ test('PWA client keeps bearer token in memory and syncs a queued draft', async (
   assert.equal(calls[0].options.headers.authorization, 'Bearer ' + 'x'.repeat(43));
   assert.equal(saved.data.has('session_token'), false);
   await client.pullChanges();
-  assert.equal(saved.data.get(Sync.CURSOR_KEY), 'cursor_1');
+  assert.equal(client.snapshot().cursor, 'cursor_1');
+  assert.equal(saved.data.has(Sync.CURSOR_KEY), false); // Never reuse a prior person's cursor.
 });
 
 test('offline request stays PENDING, reconnect conflict becomes CONFLICT and is never auto-retried', async () => {
@@ -65,7 +66,7 @@ test('401 blocks drafts and logout blocks unsent drafts without persisting crede
   const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
   assert.equal((await client.syncDraft(draft.id)).status, Sync.STATUS.BLOCKED);
   assert.equal(client.clearSession().authenticated, false);
-  assert.equal(client.snapshot().drafts[0].status, Sync.STATUS.BLOCKED);
+  assert.equal(client.snapshot().drafts.length, 0); // Prior account's drafts are no longer visible.
 });
 
 test('login sends credentials once, keeps the returned bearer in memory, and logout revokes it', async () => {
@@ -89,7 +90,7 @@ test('login sends credentials once, keeps the returned bearer in memory, and log
 });
 
 test('subscription exposes state transitions for a UI without exposing credentials', async () => {
-  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', new_revision: 1 }) });
+  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', new_revision: 1, sync_status: 'SYNCED' }) });
   const states = [];
   const unsubscribe = client.subscribe(state => states.push(state));
   client.setSessionToken('s'.repeat(43));
@@ -135,4 +136,78 @@ test('PWA client integrates with synthetic localhost auth, draft and change endp
     assert.equal(client.snapshot().authenticated, false);
     assert.equal(saved.data.has('session_token'), false);
   } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('new workspace login cannot inherit prior cursor or draft data', async () => {
+  const saved = storage();
+  const client = Sync.createSyncClient({
+    storage: saved, fetchImpl: async (url) => {
+      if (url.includes('/v1/login')) return response(200, { session_token: 'b'.repeat(43), expires_at: 9999 });
+      if (url.includes('/v1/changes')) return response(200, { items: [], next_cursor: 'cursor_from_a', sync_status: 'SYNCED' });
+      return response(200, { event_id: 'event_1', new_revision: 1, sync_status: 'SYNCED' });
+    }
+  });
+  await client.login('user_a', 'synthetic-pass', 'group_a');
+  client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { customer_notes: 'synthetic-private-a' });
+  await client.pullChanges();
+  assert.equal(client.snapshot().cursor, 'cursor_from_a');
+  assert.equal(client.snapshot().drafts.length, 1);
+  assert.equal(client.clearSession().cursor, null);
+  assert.equal(client.snapshot().drafts.length, 0);
+  await client.login('user_b', 'synthetic-pass', 'group_b');
+  assert.equal(client.snapshot().workspace_id, 'group_b');
+  assert.equal(client.snapshot().cursor, null);
+  assert.deepEqual(client.snapshot().drafts, []);
+  assert.equal(saved.data.has(Sync.CURSOR_KEY), false);
+  assert.throws(() => client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, {}), /SYNC_WORKSPACE_MISMATCH/);
+});
+
+test('late previous-session draft result cannot be marked SYNCED for the next person', async () => {
+  let finish;
+  const client = Sync.createSyncClient({
+    fetchImpl: async () => new Promise(resolve => { finish = resolve; })
+  });
+  client.setSessionToken('a'.repeat(43), 'group_a');
+  const item = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { private: 'synthetic-a' });
+  const delayed = client.syncDraft(item.id);
+  client.clearSession();
+  client.setSessionToken('b'.repeat(43), 'group_b');
+  finish(response(200, { event_id: 'a_done', new_revision: 1, sync_status: 'SYNCED' }));
+  const result = await delayed;
+  assert.equal(result.status, Sync.STATUS.BLOCKED);
+  assert.equal(result.error, 'SYNC_SESSION_CHANGED');
+  assert.equal(client.snapshot().drafts.length, 0);
+  assert.equal(client.snapshot().workspace_id, 'group_b');
+});
+
+test('late previous-session change cursor cannot skip later user events', async () => {
+  let finish;
+  const client = Sync.createSyncClient({ fetchImpl: async () => new Promise(resolve => { finish = resolve; }) });
+  client.setSessionToken('a'.repeat(43), 'group_a');
+  const old = client.pullChanges();
+  client.setSessionToken('b'.repeat(43), 'group_b');
+  finish(response(200, { items: [], next_cursor: 'cursor_previous_workspace' }));
+  assert.equal((await old).status, Sync.STATUS.BLOCKED);
+  assert.equal(client.snapshot().cursor, null);
+});
+
+test('HTTP success without a verified event receipt never marks financial draft synced', async () => {
+  const client = Sync.createSyncClient({ fetchImpl: async () => response(200, { ok: true }) });
+  client.setSessionToken('a'.repeat(43), 'group_a');
+  const item = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
+  const outcome = await client.syncDraft(item.id);
+  assert.equal(outcome.status, Sync.STATUS.BLOCKED);
+  assert.equal(outcome.error, 'SYNC_ACK_UNVERIFIED');
+});
+
+test('late logout cannot clear a later session', async () => {
+  let finish;
+  const client = Sync.createSyncClient({ fetchImpl: async () => new Promise(resolve => { finish = resolve; }) });
+  client.setSessionToken('a'.repeat(43), 'group_a');
+  const old = client.logout();
+  client.setSessionToken('b'.repeat(43), 'group_b');
+  finish(response(204, {}));
+  await old;
+  assert.equal(client.snapshot().authenticated, true);
+  assert.equal(client.snapshot().workspace_id, 'group_b');
 });

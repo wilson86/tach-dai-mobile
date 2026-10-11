@@ -55,3 +55,9 @@ API payload must omit client-selected `role`, `workspace_id` from authorization 
 | M4 | Authorized non-production group pilot then separate production release approval | Security, latency, backup/restore, fresh Pages acceptance, operator signing |
 
 **Explicit blockers:** actual authenticated multi-user service, isolated live Postgres migration/test, secure hosting choice, independently authenticated monetary historical oracle and licensing. **Do not equate architecture-only CI with production readiness.**
+
+## GitHub-only safety review after bounded Codex loop
+
+The current PWA team sync adapter is an **in-memory prototype**, not durable offline storage. Because user/workspace identity is not yet durably authenticated for client-side cache keys, change cursors are scoped to the current session **in memory only**, reset on login/logout/account switch, and the pending local queue is discarded on logout/account switch to prevent exposing one person's draft data to the next login. UI must warn before intentional logout when a draft has not been acknowledged; a durable offline queue requires encrypted, user- and workspace-scoped storage plus a verified re-authentication/ownership protocol **before** M2 deployment. This is a known limitation, not a promise that every offline draft survives logout or browser restarts.
+
+HTTP 200 without `SYNCED` and a server event receipt must be treated as `BLOCKED`. An unsent local intent with matching base/server revisions is still `PENDING`, not `SYNCED`. Responses from an earlier session epoch must never modify the next session's cursor or draft status.

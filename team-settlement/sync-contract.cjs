@@ -20,7 +20,7 @@ function reconnectDecision({ base_revision, local_revision, server_revision, loc
     status: server === base ? 'SYNCED' : 'PENDING',
     action: server === base ? 'NOOP' : 'REFRESH_SERVER'
   });
-  if (server === base && local >= base) return Object.freeze({ status: 'SYNCED', action: 'RETRY_WITH_CAS' });
+  if (server === base && local >= base) return Object.freeze({ status: 'PENDING', action: 'RETRY_WITH_CAS' });
   return Object.freeze({ status: 'CONFLICT', action: 'MANUAL_REVIEW' });
 }
 
