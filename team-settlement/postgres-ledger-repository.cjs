@@ -66,6 +66,22 @@ function createPostgresLedgerRepository({ db } = {}) {
         "SELECT set_config('kts.workspace_id',$1,true), set_config('kts.actor_user_id',$2,true)",
         [trustedActor.workspace_id, trustedActor.user_id]
       );
+      // An in-memory signed-in actor is insufficient after an account/role
+      // has been revoked or changed in the authoritative database.
+      // Recheck membership and disabled identity inside EVERY ledger transaction,
+      // including read-only change-feed queries. Never trust browser role claims.
+      const membership = await tx.query(
+        `SELECT m.team_role
+           FROM kts_team.memberships m
+           JOIN kts_team.identities i ON i.user_id=m.user_id
+          WHERE m.workspace_id=$1 AND m.user_id=$2
+            AND m.revoked_at IS NULL AND i.disabled_at IS NULL`,
+        [trustedActor.workspace_id, trustedActor.user_id]
+      );
+      if (!membership || !Array.isArray(membership.rows) ||
+          membership.rows.length !== 1 ||
+          membership.rows[0].team_role !== trustedActor.role)
+        throw new Error('AUTH_SESSION_REVOKED');
       return work(tx, trustedActor);
     });
   }

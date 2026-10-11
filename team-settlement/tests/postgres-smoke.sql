@@ -57,6 +57,7 @@ CREATE ROLE team_smoke_reader NOLOGIN;
 GRANT USAGE ON SCHEMA kts_team TO team_smoke_reader;
 GRANT SELECT ON kts_team.workspaces,kts_team.memberships,kts_team.counterparties,
   kts_team.scopes,kts_team.scope_events,kts_team.idempotency_receipts TO team_smoke_reader;
+GRANT SELECT (user_id,disabled_at) ON kts_team.identities TO team_smoke_reader;
 SET ROLE team_smoke_reader;
 
 -- Fail closed without a workspace setting (zero rows).
@@ -74,6 +75,12 @@ DO $$
 BEGIN
   IF (SELECT count(*) FROM kts_team.scopes) <> 1 THEN RAISE EXCEPTION 'TENANT_A_SCOPE_NOT_EXACT'; END IF;
   IF (SELECT count(*) FROM kts_team.scope_events) <> 1 THEN RAISE EXCEPTION 'TENANT_A_EVENT_LEAK'; END IF;
+  IF (SELECT count(*) FROM kts_team.memberships m
+      JOIN kts_team.identities i ON i.user_id=m.user_id
+      WHERE m.workspace_id='group_a' AND m.user_id='user_1'
+        AND m.revoked_at IS NULL AND i.disabled_at IS NULL) <> 1 THEN
+    RAISE EXCEPTION 'ACTIVE_MEMBER_READ_VERIFY_FAILED';
+  END IF;
   IF (SELECT count(*) FROM kts_team.idempotency_receipts) <> 1 THEN RAISE EXCEPTION 'TENANT_A_RECEIPT_LEAK'; END IF;
   IF (SELECT count(*) FROM kts_team.counterparties) <> 1 THEN RAISE EXCEPTION 'TENANT_A_PARTNER_LEAK'; END IF;
   IF (SELECT count(*) FROM kts_team.workspaces) <> 1 THEN RAISE EXCEPTION 'TENANT_A_WORKSPACE_LEAK'; END IF;

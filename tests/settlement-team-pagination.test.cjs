@@ -12,12 +12,14 @@ const events=[
   { event_id:'e3', feed_seq:'3', recorded_at:'2026-10-12T01:00:01.000Z' }
 ];
 
-function fakeDb(){
+function fakeDb({ revoked = false, role = 'viewer' } = {}){
   const requests=[];
   const db={transaction: async work=>work({
     query:async(sql,args=[])=>{
       requests.push({sql,args});
       if(sql.includes("set_config('kts.workspace_id'"))return {rows:[]};
+      if(sql.includes('FROM kts_team.memberships'))
+        return { rows: revoked ? [] : [{ team_role: role }] };
       if(!sql.includes('FROM kts_team.scope_events'))throw new Error('UNEXPECTED_QUERY');
       if(args[0]!=='group_a')throw new Error('CROSS_TENANT_QUERY');
       const rows=events.filter(row=>BigInt(row.feed_seq)>BigInt(args[1]))
@@ -52,4 +54,14 @@ test('feed rejects malformed cursors and oversized limits without querying ledge
   assert.equal(encodeCursor('1','group_a').length>20,true);
   assert.throws(()=>decodeCursor(encodeCursor('2','group_a'),'group_b'),/TEAM_CURSOR_INVALID/);
   assert.throws(()=>encodeCursor('9223372036854775808','group_a'),/TEAM_CURSOR_INVALID/);
+});
+
+test('a stale in-memory actor cannot read events after DB membership revoke or role change', async()=>{
+  for(const dbOptions of [{revoked:true}, {role:'operator'}]){
+    const x=fakeDb(dbOptions);
+    const repo=createPostgresLedgerRepository({db:x.db});
+    await assert.rejects(repo.getChanges(ACTOR,{limit:2}),/AUTH_SESSION_REVOKED/);
+    assert.equal(x.requests.some(v=>v.sql.includes('FROM kts_team.scope_events')),false);
+    assert.equal(x.requests.some(v=>v.sql.includes('FROM kts_team.memberships')),true);
+  }
 });

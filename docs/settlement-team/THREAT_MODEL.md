@@ -24,3 +24,14 @@
 **Key limitations:** The M0 `core-contract.cjs` assumes caller supplies `server_verified` actor from a trusted authentication boundary; this marker **is not itself a security mechanism**. The PostgreSQL DDL candidate has not been deployed; only a disposable synthetic PostgreSQL smoke test is permitted in CI. This is not a security audit or production migration approval. Existing green KTS synthetic CI cannot authenticate real HIOSKT outcomes.
 
 **Privacy and cost:** Public GitHub contains only contracts, fake IDs, schema and synthetic tests. Production account/device data and access keys must remain private. No cloud account, billing or external runner authorized.
+
+## Read-side revocation contract (bounded candidate)
+
+The injected server session's actor is not sufficient evidence of a currently
+active PostgreSQL membership. Every ledger **read as well as write** must
+re-check the tenant-scoped membership, revoked timestamp, disabled identity
+and effective role within the same database transaction before querying
+financial events. Reject a stale role or revoked user as
+`AUTH_SESSION_REVOKED`. This is a contract/repository check using isolated
+synthetic users only; a genuine durable auth service and revocation lifecycle
+are still required before exposing a team API.
