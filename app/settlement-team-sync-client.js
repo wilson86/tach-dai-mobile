@@ -13,7 +13,8 @@
   // Financial write keys MUST use cryptographic randomness, with no Math.random fallback.
   function newDraftId() {
     let uuid = null;
-    if (root && root.crypto && typeof root.crypto.randomUUID === 'function') uuid = root.crypto.randomUUID();
+    if (typeof globalThis !== 'undefined' && globalThis.crypto &&
+        typeof globalThis.crypto.randomUUID === 'function') uuid = globalThis.crypto.randomUUID();
     else if (typeof require === 'function') uuid = require('node:crypto').randomUUID();
     if (typeof uuid !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(uuid))
       throw new Error('SYNC_SECURE_RANDOM_UNAVAILABLE');
