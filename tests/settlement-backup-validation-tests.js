@@ -10,7 +10,7 @@ function msg(id,p='a'){return {id,partner_id:p,business_date:'2026-10-06',region
 function payload(stores){const base=empty();Object.assign(base,stores||{});return {format:'kts-settlement-export',version:5,stores:base};}
 assert.strictEqual(typeof S.validateImportPayload,'function');
 {
-  const p=payload({partners:[partner('a')],configs:[cfg('a:v1','a')],messages:[msg('m1')],settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1'],config_snapshot:cfg('a:v1','a')}]});
+  const p=payload({partners:[partner('a')],configs:[cfg('a:v1','a')],messages:[msg('m1')],settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1'],scope_status:'complete_unverified',config_snapshot:cfg('a:v1','a')}]});
   const out=S.validateImportPayload(p,empty(),{replace:false});
   assert.strictEqual(out.valid,true);assert.strictEqual(out.counts.messages,1);
 }
@@ -59,7 +59,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 }
 {
   const p=payload({partners:[partner('a')],shadow_events:[{id:'se1',scope_id:'scope:b:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn'}]});
-  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_SCOPE_ID_MISMATCH/);
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/SHADOW_EVENT_SCOPE_ID_MISMATCH/);
 }
 {
   const ex=empty(); ex.partners=[partner('a')]; ex.messages=[msg('same','a')];
@@ -134,7 +134,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 {
   const core={id:'se-fp',scope_id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{a:1},reference_snapshot:{b:2},comparison:{status:'MATCH_EXACT'},evidence_fingerprint:'tampered'};
   const p=payload({partners:[partner('a')],shadow_events:[core]});
-  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_FINGERPRINT_MISMATCH/);
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
 }
 
 

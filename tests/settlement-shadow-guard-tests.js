@@ -11,6 +11,7 @@ const initialReference = {
 };
 
 const state = {
+  shadow_events: [],
   settlements: [{
     id: 'scope:p1:2026-09-22:mb', partner_id: 'p1', business_date: '2026-09-22', region: 'mb',
     scope_status: 'complete_unverified', comparison_status: 'MATCH_EXACT', blocked_reasons: [],
@@ -26,7 +27,7 @@ const state = {
 };
 
 const store = {
-  STORES: { settlements: 'settlements', messages: 'messages' },
+  STORES: { settlements: 'settlements', messages: 'messages', shadowEvents: 'shadow_events' },
   async getAll(name) { return (state[name] || []).map(x => JSON.parse(JSON.stringify(x))); },
   async get(name, id) { const row = (state[name] || []).find(x => x.id === id); return row ? JSON.parse(JSON.stringify(row)) : null; },
   async saveSettlement(row) {
@@ -34,6 +35,19 @@ const store = {
     const i = state.settlements.findIndex(x => x.id === copy.id);
     if (i >= 0) state.settlements[i] = copy; else state.settlements.push(copy);
     return JSON.parse(JSON.stringify(copy));
+  },
+  async saveSettlementIfUnchanged(row, expected) {
+    const current = state.settlements.find(x => x.id === expected.id);
+    if (JSON.stringify(current) !== JSON.stringify(expected)) return { saved: null, superseded: true };
+    const copy = JSON.parse(JSON.stringify(row));
+    const i = state.settlements.findIndex(x => x.id === copy.id);
+    if (i >= 0) state.settlements[i] = copy; else state.settlements.push(copy);
+    return { saved: JSON.parse(JSON.stringify(copy)), superseded: false };
+  },
+  async saveShadowEvent(row) {
+    const event = { id: `ev${state.shadow_events.length + 1}`, ...JSON.parse(JSON.stringify(row)) };
+    state.shadow_events.push(event);
+    return { event, changed: true, previous: state.shadow_events.length > 1 ? state.shadow_events[state.shadow_events.length - 2] : null };
   }
 };
 

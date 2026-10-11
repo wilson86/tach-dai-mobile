@@ -12,7 +12,7 @@ assert(page.indexOf('src="./settlement-shadow-batch.js"') < page.indexOf('src=".
 assert(sw.includes("'./settlement-regression-candidates.js'"));
 assert(candidates.includes('Regression candidate · chờ xác nhận'));
 assert(candidates.includes('không tự trở thành golden'));
-assert(candidates.includes('reference_confirmed !== true'));
+assert(/reference_confirmed\s*!==\s*true/.test(candidates));
 assert(candidates.includes("global.addEventListener('kts:shadow-saved'"));
 assert(candidates.includes('confirmAndPin'));
 assert(candidates.includes('dismissCandidate'));

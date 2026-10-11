@@ -47,7 +47,7 @@ assert(ui.includes('KQXS CHƯA XÁC MINH'));
 
 
 const backupUi=fs.readFileSync('app/settlement-backup-ui.js','utf8');
-assert(backupUi.includes("version: 'settlement-backup-ui-v5-recalculate-imported-scopes'"));
+assert(backupUi.includes("version: 'settlement-backup-ui-v7-verified-import-recalc-outcome'"));
 assert(backupUi.includes('let backupBusy = false'));
 assert(backupUi.includes('function') || backupUi.includes('const setBackupBusy = value =>'));
 assert(backupUi.includes("['settlementExportBackup','settlementImportBackup','settlementImportFile']"));
@@ -64,7 +64,7 @@ assert(backupUi.includes('async function recalculateImportedScopes(payload)'));
 assert(backupUi.includes('pipeline.settleScope(scope)'));
 assert(backupUi.includes('IMPORT_RECALC_FAILED:'));
 assert(backupUi.includes('total_xac:0,total_qua_co:0,total_payout:0'));
-assert(backupUi.includes("final_net:0,\n            direction:'HOA'"),'failed import recalculation must remain neutral, never display THU for zero money');
+assert(/refund_amount:0,final_net:0,\s+direction:'HOA'/.test(backupUi),'failed import recalculation must remain neutral, never display THU for zero money');
 assert(backupUi.includes('đã tính lại'));
 assert(ui.includes('Máy chủ đọc cú pháp phản hồi quá lâu'));
 assert(ui.includes('Máy chủ trả thiếu thông tin xác thực cú pháp'));

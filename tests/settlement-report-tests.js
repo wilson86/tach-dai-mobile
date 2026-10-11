@@ -25,7 +25,7 @@ const report = R.buildDailyPartnerReport({
   },
   settlements: [
     {
-      id: 's1', partner_id: 'hien', message_id: 'm1', business_date: '2026-10-04', region: 'mn',
+      id: 's1', partner_id: 'hien', message_id: 'm1', business_date: '2026-10-04', region: 'mn', scope_status: 'complete_unverified', settlement_result: { total_xac: 22, total_qua_co: 16.72, total_payout: 300, refund_amount: 0, final_net: -283.28 },
       category_rows: [
         { code: '2CB', xac: 18, qua_co: 13.68, hit_units: 2, payout: 150 },
         { code: '2CD', xac: 4, qua_co: 3.04, hit_units: 2, payout: 150 }
@@ -36,10 +36,10 @@ const report = R.buildDailyPartnerReport({
         { station: 'tg', numbers: '74', selector: 'duoi', points: 1 }
       ],
       result_snapshot: { total_xac: 22, total_qua_co: 16.72, total_payout: 300, refund_amount: 0, final_net: -283.28 },
-      comparison_status: 'MATCH_EXACT'
+      comparison_status: 'MATCH_EXACT', reference_app_snapshot: { comparison: { status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:5, totals:{ total_xac:{status:'MATCH_EXACT'}, total_qua_co:{status:'MATCH_EXACT'}, total_payout:{status:'MATCH_EXACT'}, final_net:{status:'MATCH_EXACT'} } } }
     },
     {
-      id: 's2', partner_id: 'hien', message_id: 'm2', business_date: '2026-10-04', region: 'mn',
+      id: 's2', partner_id: 'hien', message_id: 'm2', business_date: '2026-10-04', region: 'mn', scope_status: 'complete_unverified', settlement_result: { total_xac: 36, total_qua_co: 27.36, total_payout: 1125, refund_amount: 0, final_net: -1097.64 },
       category_rows: [
         { code: 'DAT', xac: 36, qua_co: 27.36, hit_units: 1.5, payout: 1125 }
       ],
@@ -47,7 +47,7 @@ const report = R.buildDailyPartnerReport({
         { station: 'tg', numbers: '32-75', selector: 'dat', points: 1.5 }
       ],
       result_snapshot: { total_xac: 36, total_qua_co: 27.36, total_payout: 1125, refund_amount: 0, final_net: -1097.64 },
-      comparison_status: 'MATCH_EXACT'
+      comparison_status: 'MATCH_EXACT', reference_app_snapshot: { comparison: { status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:5, totals:{ total_xac:{status:'MATCH_EXACT'}, total_qua_co:{status:'MATCH_EXACT'}, total_payout:{status:'MATCH_EXACT'}, final_net:{status:'MATCH_EXACT'} } } }
     }
   ]
 });
@@ -83,7 +83,7 @@ const ops = R.buildDailyOperationsReport({
     {
       id:'scope:hien', partner_id:'hien', business_date:'2026-10-04', region:'mn', message_ids:['h1'],
       scope_status:'complete_unverified', comparison_status:'MATCH_EXACT', category_rows:[{code:'2CB',xac:18,qua_co:13.68,hit_units:1,payout:75}],
-      result_snapshot:{total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32}
+      result_snapshot:{total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32}, lottery_result_snapshot:{business_date:'2026-10-04',region:'mn',verification_status:'verified',verified:true,status:'complete',complete:true,coverage_complete:true,verification_sources:['source-a','source-b'],expected_station_codes:['tg'],stations:[{code:'tg',prizes:fullPrizes('mn','ops')} ]}, reference_app_snapshot:{comparison:{status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}}}}
     },
     {
       id:'scope:truc', partner_id:'truc', business_date:'2026-10-04', region:'mb', message_ids:['t1'],
@@ -132,7 +132,7 @@ const kqxsGateReport = R.buildDailyPartnerReport({
   partner:{id:'kg',name:'KQXS Gate',role:'customer'},business_date:'2026-10-06',messages_by_id:{},
   settlements:[
     {id:'kg-mn',partner_id:'kg',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
-     lottery_result_snapshot:{business_date:'2026-10-06',region:'mn',complete:true,verification_status:'verified',verified:true,verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt',prizes:fullPrizes('mn','bt')}],verification_conflicts:[]},
+     lottery_result_snapshot:{business_date:'2026-10-06',region:'mn',complete:true,status:'complete',coverage_complete:true,verification_status:'verified',verified:true,verification_sources:['primary','secondary'],expected_station_codes:['bt'],stations:[{code:'bt',prizes:fullPrizes('mn','bt')}],verification_conflicts:[]},
      result_snapshot:{total_xac:10,total_qua_co:8,total_payout:0,refund_amount:0,final_net:8}},
     {id:'kg-mb',partner_id:'kg',business_date:'2026-10-06',region:'mb',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
      lottery_result_snapshot:{complete:true,verification_status:'unverified',verified:false},
@@ -177,7 +177,7 @@ const legacyWeakVerified={
 assert.strictEqual(R.kqxsVerificationStatus(legacyWeakVerified),'unverified','legacy one-source verified flag must not pass close gate');
 const legacyStrongVerified={
   business_date:'2026-10-06',region:'mb',
-  lottery_result_snapshot:{business_date:'2026-10-06',region:'mb',complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['mb'],stations:[{code:'mb',prizes:fullPrizes('mb','mb')}]}
+  lottery_result_snapshot:{business_date:'2026-10-06',region:'mb',complete:true,status:'complete',coverage_complete:true,verified:true,verification_status:'verified',verification_sources:['primary','secondary'],verification_conflicts:[],expected_station_codes:['mb'],stations:[{code:'mb',prizes:fullPrizes('mb','mb')}]}
 };
 assert.strictEqual(R.kqxsVerificationStatus(legacyStrongVerified),'verified');
 const legacyIncompletePrizeVerified={

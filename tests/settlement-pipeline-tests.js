@@ -48,6 +48,13 @@ function fakeStore(messages) {
       if (i >= 0) state.settlements[i] = { ...row }; else state.settlements.push({ ...row });
       return { ...row };
     },
+    async saveSettlementIfScopeUnchanged(row, expected) {
+      const current = state.settlements.find(x => x.id === row.id);
+      if (expected.settlement && current && JSON.stringify(current) !== JSON.stringify(expected.settlement)) return { saved: null, superseded: true };
+      const i = state.settlements.findIndex(x => x.id === row.id);
+      if (i >= 0) state.settlements[i] = { ...row }; else state.settlements.push({ ...row });
+      return { saved: { ...row }, superseded: false };
+    },
     async saveMessage(row) {
       const i = state.messages.findIndex(x => x.id === row.id);
       if (i >= 0) state.messages[i] = { ...row }; else state.messages.push({ ...row });
@@ -117,7 +124,7 @@ function fakeStore(messages) {
   assert.strictEqual(restored.status, 'restored');
   assert.strictEqual(restored.settlement.status, 'complete_unverified');
   assert.deepStrictEqual(Array.from(restored.settlement.settlement.message_ids), ['m2']);
-  assert.strictEqual(store.state.messages.find(x => x.id === 'm2').status, 'settled_unverified');
+  assert.strictEqual(store.state.messages.find(x => x.id === 'm2').status, 'parsed_waiting_result');
 
   store.state.messages.push({ id:'legacy-cancel', partner_id:'p1', business_date:'2026-09-22', region:'mb', status:'CANCELLED', raw_text:'legacy', canonical_payload:{region:'mb',legs:[{code:'2CB',values:['92'],stake:'1'}]} });
   const activeBeforeLegacyCheck = await P.findScopeMessages('p1', '2026-09-22', 'mb');
@@ -148,7 +155,7 @@ function fakeStore(messages) {
     };
     const raceCtx=loadContext(raceStore);
     const RP=raceCtx.KTS_SETTLEMENT_PIPELINE;
-    assert.strictEqual(RP.version,'settlement-pipeline-v8-scope-revalidate');
+    assert.strictEqual(RP.version,'settlement-pipeline-v17-kqxs-conflict-evidence');
     const background=RP.settleScope({partner_id:'p1',business_date:'2026-09-22',region:'mb'});
     await entered;
     const cancel=RP.cancelMessage('race1');
