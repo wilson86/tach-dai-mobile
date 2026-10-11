@@ -2774,7 +2774,7 @@ test('Shadow receipt exact claim requires full comparator promotion evidence',as
     await assert.rejects(api.saveShadowEvent(event),
       /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
     const payload={format:'kts-settlement-export',version:5,
-      stores:{[api.STORES.partners]:[{id:'synthetic',role:'customer'}],
+      stores:{[api.STORES.partners]:[{id:'synthetic',name:'Synthetic',role:'customer'}],
         [api.STORES.shadowEvents]:[event]}};
     assert.throws(()=>api.validateImportPayload(payload,{},{}),
       /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
