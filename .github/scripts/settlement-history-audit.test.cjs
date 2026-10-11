@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.250-batch-exact-proof'));
+  assert.ok(sw.includes('v1.0.251-shadow-display-integrity'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -3039,4 +3039,17 @@ test('HIOSKT batch rejects malformed date, monetary types and forged exact proof
     assert.equal(batch.exactProofUsable(invalid),false);
     assert.equal(batch.displayComparisonStatus(invalid),'INCOMPLETE_REFERENCE');
   }
+});
+
+test('Batch TSV widths and Shadow UI notifications must not promote unproved exact',()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-shadow-batch.js'),'utf8'),ctx);
+  const batch=ctx.window.KTS_SETTLEMENT_SHADOW_BATCH;
+  const tsv='business_date\tpartner\tregion\txac\tqua_co\tpayout\tfinal\n2026-10-12\tSynthetic\tmn\t1\t1\t0\t1\textra';
+  assert.throws(()=>batch.parseInput(tsv),/BATCH_TSV_COLUMN_COUNT_MISMATCH:2:/);
+  const ui=readFileSync(resolve(root,'settlement-test','settlement-shadow-ui.js'),'utf8');
+  assert.ok(ui.includes('const promotionSafe = exactProofUsable(result.comparison);'));
+  assert.ok(ui.includes("const savedStatus = result.comparison.status === 'MATCH_EXACT' && !promotionSafe"));
+  assert.ok(ui.includes('comparison_status: savedStatus'));
+  assert.ok(!ui.includes("status(result.comparison.safe_to_promote?"));
 });

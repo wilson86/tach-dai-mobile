@@ -188,9 +188,13 @@
         const diagnostics=await loadDiagnostics(s);
         render(result.comparison, diagnostics);
         await refreshHistory(s).catch(() => {});
-        status(result.comparison.safe_to_promote?'Đã lưu đối chiếu exact. Scope này đạt gate shadow hiện tại.':'Đã lưu đối chiếu. Chưa được promotion nếu còn thiếu/khớp hiển thị/lệch.',result.comparison.safe_to_promote?'ok':result.comparison.status==='MISMATCH'?'err':'warn');
+        const promotionSafe = exactProofUsable(result.comparison);
+        const savedStatus = result.comparison.status === 'MATCH_EXACT' && !promotionSafe
+          ? 'INCOMPLETE_REFERENCE' : result.comparison.status;
+        status(promotionSafe?'Đã lưu đối chiếu exact. Scope này đạt gate shadow hiện tại.':'Đã lưu đối chiếu. Chưa được promotion nếu còn thiếu/khớp hiển thị/lệch.',
+          promotionSafe?'ok':result.comparison.status==='MISMATCH'?'err':'warn');
         if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
-          global.dispatchEvent(new global.CustomEvent('kts:shadow-saved', { detail: Object.assign({}, s, { comparison_status: result.comparison.status }) }));
+          global.dispatchEvent(new global.CustomEvent('kts:shadow-saved', { detail: Object.assign({}, s, { comparison_status: savedStatus }) }));
         }
       }catch(e){status(String(e.message||e),'err');}
     });

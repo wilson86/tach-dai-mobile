@@ -112,6 +112,9 @@
     }
     return lines.slice(1).map((line, index) => {
       const cells = line.split('\t');
+      if (cells.length !== rawHeaders.length) {
+        throw new Error('BATCH_TSV_COLUMN_COUNT_MISMATCH:' + (index + 2) + ':' + cells.length + '/' + rawHeaders.length);
+      }
       const row = { _row: index + 2 };
       headers.forEach((header, i) => { if (header) row[header] = cells[i] == null ? '' : cells[i].trim(); });
       return row;
