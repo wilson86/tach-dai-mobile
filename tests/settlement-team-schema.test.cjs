@@ -56,6 +56,7 @@ test('approval and offline reject are called out in API',()=>{
 test('authentication boundary is explicitly synthetic and separate from settlement SQL',()=>{
   const auth=readFileSync(resolve(__dirname,'../team-settlement/auth-contract.cjs'),'utf8');
   const http=readFileSync(resolve(__dirname,'../team-settlement/auth-http-contract.cjs'),'utf8');
+  const migration=readFileSync(resolve(__dirname,'../team-settlement/migrations/003_auth_session.sql'),'utf8');
   assert(auth.includes('scrypt-v1'));
   assert(auth.includes('AUTH_SESSION_REVOKED'));
   assert(auth.includes('membershipKey'));
@@ -63,5 +64,10 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(http.includes('createAuthHttpServer'));
   assert(http.includes('AUTH_BODY_TOO_LARGE'));
   assert(http.includes('deployed service'));
+  assert(migration.includes('CREATE SCHEMA IF NOT EXISTS kts_auth'));
+  assert(migration.includes('password_hash'));
+  assert(migration.includes('session_hash'));
+  assert(migration.includes('REVOKE ALL ON kts_auth.credentials,kts_auth.sessions FROM PUBLIC'));
+  assert(!migration.includes('session_token'));
   assert(!auth.includes('kts_router.sqlite3'));
 });
