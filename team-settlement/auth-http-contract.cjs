@@ -11,6 +11,7 @@ const { URL } = require('node:url');
 const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_LOGIN_ATTEMPT_LIMIT = 5;
 const DEFAULT_LOGIN_WINDOW_MS = 60 * 1000;
+const DEFAULT_MAX_LOGIN_KEYS = 2048;
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -67,6 +68,7 @@ function createAuthHttpServer(auth, {
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   maxLoginAttempts = DEFAULT_LOGIN_ATTEMPT_LIMIT,
   loginWindowMs = DEFAULT_LOGIN_WINDOW_MS,
+  maxLoginKeys = DEFAULT_MAX_LOGIN_KEYS,
   clock = () => Date.now(),
   ledger = null
 } = {}) {
@@ -74,11 +76,14 @@ function createAuthHttpServer(auth, {
       typeof auth.revokeSession !== 'function' || typeof auth.manageMembership !== 'function' ||
       typeof auth.setIdentityDisabled !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
-      !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function' ||
+      !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 ||
+      !Number.isSafeInteger(maxLoginKeys) || maxLoginKeys < 1 || maxLoginKeys > 100000 ||
+      typeof clock !== 'function' ||
       (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' &&
         typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function'))))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
   const loginAttempts = new Map();
+  let loginWindowStart = null;
 
   function loginKey(req, input) {
     const source = typeof req.socket?.remoteAddress === 'string' ? req.socket.remoteAddress : 'unknown';
@@ -86,22 +91,27 @@ function createAuthHttpServer(auth, {
     return `${source}:${subject}`;
   }
 
+  // Reserve the attempt synchronously BEFORE awaited password verification.
+  // Otherwise many simultaneous logins can all pass a failure-only limiter.
+  // A fixed window bounds both admission and the number of attacker-selected
+  // username keys retained in memory. This is NOT a production distributed
+  // rate limiter, and must be replaced before exposing an operational server.
   function rateLimited(key) {
     const now = clock();
-    const entry = loginAttempts.get(key);
-    if (!entry || now - entry.started_at >= loginWindowMs) {
-      loginAttempts.set(key, { started_at: now, count: 0 });
+    if (!Number.isSafeInteger(now) || now < 0) return true;
+    if (loginWindowStart === null || now - loginWindowStart >= loginWindowMs) {
+      loginAttempts.clear();
+      loginWindowStart = now;
+    }
+    const count = loginAttempts.get(key);
+    if (count !== undefined) {
+      if (count >= maxLoginAttempts) return true;
+      loginAttempts.set(key, count + 1);
       return false;
     }
-    return entry.count >= maxLoginAttempts;
-  }
-
-  function recordFailedLogin(key) {
-    const now = clock();
-    const entry = loginAttempts.get(key);
-    if (!entry || now - entry.started_at >= loginWindowMs)
-      loginAttempts.set(key, { started_at: now, count: 1 });
-    else entry.count += 1;
+    if (loginAttempts.size >= maxLoginKeys) return true;
+    loginAttempts.set(key, 1);
+    return false;
   }
 
   function clearLoginFailures(key) {
@@ -124,7 +134,6 @@ function createAuthHttpServer(auth, {
           clearLoginFailures(key);
           return json(res, 200, result);
         } catch {
-          recordFailedLogin(key);
           return json(res, 401, { error: 'AUTH_LOGIN_DENIED' });
         }
       }
@@ -259,5 +268,6 @@ function createAuthHttpServer(auth, {
 
 module.exports = Object.freeze({
   DEFAULT_MAX_BODY_BYTES, DEFAULT_LOGIN_ATTEMPT_LIMIT, DEFAULT_LOGIN_WINDOW_MS,
+  DEFAULT_MAX_LOGIN_KEYS,
   createAuthHttpServer
 });
