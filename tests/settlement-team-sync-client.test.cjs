@@ -14,6 +14,15 @@ function storage() {
   return { data, get: key => data.get(key) || null, set: (key, value) => data.set(key, value), remove: key => data.delete(key) };
 }
 
+test('PWA rejects insecure remote team endpoints before credentials can be sent', () => {
+  const options = { fetchImpl: async () => response(200, {}) };
+  assert.throws(() => Sync.createSyncClient({ ...options, baseUrl: 'http://team.example.test' }), /SYNC_BASE_URL_INSECURE/);
+  assert.throws(() => Sync.createSyncClient({ ...options, baseUrl: 'ftp://team.example.test' }), /SYNC_BASE_URL_INSECURE/);
+  assert.throws(() => Sync.createSyncClient({ ...options, baseUrl: 'https://user:pass@team.example.test' }), /SYNC_BASE_URL_INVALID/);
+  assert.doesNotThrow(() => Sync.createSyncClient({ ...options, baseUrl: 'https://team.example.test/' }));
+  assert.doesNotThrow(() => Sync.createSyncClient({ ...options, baseUrl: 'http://127.0.0.1:8787' }));
+});
+
 test('PWA client keeps bearer token in memory and syncs a queued draft', async () => {
   const saved = storage(); const calls = [];
   const client = Sync.createSyncClient({ storage: saved, fetchImpl: async (url, options) => {

@@ -10,9 +10,23 @@
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
   function errorCode(error, fallback) { return error && error.code || fallback; }
 
+  function normalizeBaseUrl(value) {
+    if (value === '') return '';
+    if (typeof value !== 'string' || value !== value.trim()) throw new Error('SYNC_BASE_URL_INVALID');
+    let parsed;
+    try { parsed = new URL(value); } catch (_) { throw new Error('SYNC_BASE_URL_INVALID'); }
+    if (parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error('SYNC_BASE_URL_INVALID');
+    const host = parsed.hostname.toLowerCase();
+    const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
+      throw new Error('SYNC_BASE_URL_INSECURE');
+    return value.replace(/\/+$/, '');
+  }
+
   function createSyncClient({ fetchImpl, storage, baseUrl = '' } = {}) {
     const fetcher = fetchImpl || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
     if (typeof fetcher !== 'function') throw new Error('SYNC_FETCH_REQUIRED');
+    const endpoint = normalizeBaseUrl(baseUrl);
     const store = storage || { get: function () { return null; }, set: function () {}, remove: function () {} };
     let sessionToken = null; // Deliberately memory-only. Never persist bearer credentials.
     let sequence = 0;
@@ -42,7 +56,7 @@
     async function request(path, options) {
       const headers = Object.assign({ accept: 'application/json' }, options && options.headers || {});
       if (sessionToken) headers.authorization = 'Bearer ' + sessionToken;
-      const response = await fetcher(baseUrl + path, Object.assign({}, options, { headers }));
+      const response = await fetcher(endpoint + path, Object.assign({}, options, { headers }));
       return { response, body: await jsonResponse(response) };
     }
 
