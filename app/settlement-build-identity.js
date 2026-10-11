@@ -20,7 +20,7 @@
     'app/settlement-attention-ui.js':'b820a264e637f8531e9a30a298bb844b7720e052',
     'app/settlement-ui.js':'a3589c74493e5c58c04e762d35e01800479a7c61',
     'app/settlement-backup-ui.js':'3e61d4228153047026c1cdd783c37d56c2b8d840',
-    'app/sw.js':'8c62929041893a6374017fd068ae833aead99cbb',
+    'app/sw.js':'3d11354f19dd8aa2f5c4a69994be1f5ec6e46998',
     'app/settlement-shadow.js':'bfab15e3d1414aa76e209f01958478a1c3a35a81',
     'app/settlement-shadow-runtime.js':'8ed529e5ec9471064aa2e3ee84a5a2d8a4f1fac6',
     'app/settlement-shadow-guard.js':'254d142276066266a33c26100337ea32edb2e7a6',
