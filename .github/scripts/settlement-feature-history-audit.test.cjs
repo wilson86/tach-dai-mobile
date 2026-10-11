@@ -2092,8 +2092,9 @@ test('import preflight is one consistent snapshot and any cross-tab source drift
   assert.ok(fn.includes('const resultEventSnapshot=sourceSnapshot[STORES.resultEvents]'));
   assert.ok(fn.includes('const req=tx.objectStore(name).getAll()'));
   assert.ok(fn.includes('IMPORT_SOURCE_CHANGED_DURING_IMPORT:'));
-  assert.ok(fn.indexOf('const req=tx.objectStore(name).getAll()')<
-    fn.indexOf('if (replace) {\n          store.clear()'));
+  const snapshotRead = fn.indexOf('const req=tx.objectStore(name).getAll()');
+  const replaceClear = fn.search(/if\s*\(replace\)\s*\{\s*store\.clear\(\)/u);
+  assert.ok(snapshotRead >= 0 && replaceClear > snapshotRead);
   assert.ok(!fn.includes('await getAll(name)'));
 });
 
