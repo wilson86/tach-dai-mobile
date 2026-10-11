@@ -143,6 +143,15 @@ const W = ctx.KTS_SETTLEMENT_REPAIR_WORKFLOW;
   assert.strictEqual(exactAssessment.current_engine_version, 'settlement-current-v2');
   assert.strictEqual(exactAssessment.current_final_delta, 0);
 
+  const unsafeAssessment = W.currentReplayAssessment(candidate, event, {
+    pass: true,
+    settlement: { engine_version: 'settlement-current-v2', settlement_result: { final_net: -4431.12 } },
+    comparison: { status: 'MATCH_EXACT', safe_to_promote: false, totals: {}, categories: [] }
+  }, null);
+  assert.strictEqual(unsafeAssessment.status, 'INCOMPLETE_REFERENCE', 'unsafe raw exact must not retain exact repair status');
+  assert.strictEqual(unsafeAssessment.pass, true);
+  assert.strictEqual(unsafeAssessment.safe_to_promote, false);
+
   const loaded = await W.loadCandidatePacket(candidate);
   assert.strictEqual(loaded.source_event_id, 'ev1');
   assert.strictEqual(loaded.current_replay.status, 'MATCH_EXACT');
