@@ -79,3 +79,11 @@ CI presently verifies this probe with **synthetic Pool doubles** and proves
 the corresponding role permissions with real disposable PostgreSQL SQL tests.
 It does **not** prove a Windows deployment, actual separately credentialed
 Pool clients or an authorized live pilot. No production admission flag exists.
+
+
+The opt-in auth Pool privilege probe now requires actual SELECT rights for
+credentials/sessions, INSERT on sessions and column UPDATE on session revocation,
+in addition to rejecting any authorization to ledger events. Its SQL is
+distinct from the ledger Pool probe so the ledger role is not asked to resolve
+tables in the auth schema to which it has no USAGE grant. A positive probe does
+not authorize binding an HTTP listener or accepting production accounting.

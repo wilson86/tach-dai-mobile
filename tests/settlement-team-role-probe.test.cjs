@@ -5,6 +5,7 @@ const {createIsolatedTeamPrototype}=require('../team-settlement/team-composition
 const {qualifyIsolatedPoolRoles}=require('../team-settlement/role-probe.cjs');
 
 const auth={role:'synthetic_auth',auth_schema:true,event_read:false,
+  credential_read:true,session_read:true,session_insert:true,session_revoke:true,
   draft_execute:false,superuser:false,bypass_rls:false};
 const ledger={role:'synthetic_ledger',auth_schema:false,event_read:true,
   draft_execute:true,superuser:false,bypass_rls:false};
@@ -101,4 +102,15 @@ test('failed verification query destroys both clients without promoting role pro
   }),/SYNTHETIC_DB_DOWN/);
   assert.deepEqual(a.calls.releases,[true]);
   assert.deepEqual(l.calls.releases,[true]);
+});
+
+test('auth must have SELECT/INSERT/column revocation privileges to qualify',async()=>{
+  for(const absent of ['credential_read','session_read','session_insert','session_revoke']){
+    const a=pool({...auth,[absent]:false}),l=pool(ledger);
+    await assert.rejects(qualifyIsolatedPoolRoles({
+      authPool:a.pool,ledgerPool:l.pool,syntheticOnly:true
+    }),/TEAM_DB_EFFECTIVE_ROLES_UNQUALIFIED/);
+    assert.deepEqual(a.calls.releases,[true]);
+    assert.deepEqual(l.calls.releases,[true]);
+  }
 });

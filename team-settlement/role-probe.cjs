@@ -12,6 +12,14 @@ const PROBE_SQL = `SELECT current_user AS role,
   COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname=current_user),true) AS superuser,
   COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),true) AS bypass_rls`;
 
+const AUTH_PROBE_SQL = PROBE_SQL.replace(
+  'COALESCE((SELECT rolsuper',
+  `has_table_privilege(current_user, 'kts_auth.credentials', 'SELECT') AS credential_read,
+  has_table_privilege(current_user, 'kts_auth.sessions', 'SELECT') AS session_read,
+  has_table_privilege(current_user, 'kts_auth.sessions', 'INSERT') AS session_insert,
+  has_column_privilege(current_user, 'kts_auth.sessions', 'revoked_at', 'UPDATE') AS session_revoke,
+  COALESCE((SELECT rolsuper`);
+
 function deny(){throw new Error('TEAM_DB_EFFECTIVE_ROLES_UNQUALIFIED');}
 function requireClient(c){
   if(!c||typeof c.query!=='function'||typeof c.release!=='function')deny();
@@ -30,7 +38,7 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
     requireClient(l);
     if(a===l)deny();
     const [authResult,ledgerResult]=await Promise.all([
-      a.query(PROBE_SQL),l.query(PROBE_SQL)
+      a.query(AUTH_PROBE_SQL),l.query(PROBE_SQL)
     ]);
     const auth=authResult?.rows?.[0],ledger=ledgerResult?.rows?.[0];
     if(!auth||!ledger||authResult.rows.length!==1||ledgerResult.rows.length!==1 ||
@@ -39,8 +47,10 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
        auth.role===ledger.role ||
        auth.superuser!==false || auth.bypass_rls!==false ||
        ledger.superuser!==false || ledger.bypass_rls!==false ||
-       auth.auth_schema!==true || auth.event_read!==false ||
-       auth.draft_execute!==false ||
+       auth.auth_schema!==true ||
+       auth.credential_read!==true || auth.session_read!==true ||
+       auth.session_insert!==true || auth.session_revoke!==true ||
+       auth.event_read!==false || auth.draft_execute!==false ||
        ledger.auth_schema!==false || ledger.event_read!==true ||
        ledger.draft_execute!==true)deny();
     qualified=true;
