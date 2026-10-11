@@ -13,6 +13,7 @@ END
 $$;
 CREATE ROLE team_smoke_writer NOLOGIN;
 GRANT USAGE ON SCHEMA kts_team TO team_smoke_writer;
+GRANT SELECT (workspace_id,feed_seq), UPDATE (feed_seq) ON kts_team.workspaces TO team_smoke_writer;
 GRANT SELECT (user_id,disabled_at) ON kts_team.identities TO team_smoke_writer;
 GRANT SELECT ON kts_team.memberships,kts_team.counterparties,kts_team.scopes,
   kts_team.scope_events,kts_team.idempotency_receipts TO team_smoke_writer;
@@ -73,6 +74,12 @@ BEGIN
   IF (SELECT revision FROM kts_team.scopes
       WHERE workspace_id='group_a' AND partner_id='customer_1') <> 2 THEN
     RAISE EXCEPTION 'TEAM_DRAFT_REVISION_WRONG';
+  END IF;
+  IF (SELECT feed_seq FROM kts_team.workspaces WHERE workspace_id='group_a')<>2 THEN
+    RAISE EXCEPTION 'TEAM_FEED_SEQUENCE_WRONG';
+  END IF;
+  IF (SELECT count(DISTINCT feed_seq) FROM kts_team.scope_events WHERE workspace_id='group_a')<>2 THEN
+    RAISE EXCEPTION 'TEAM_FEED_SEQUENCE_NOT_UNIQUE';
   END IF;
   IF (SELECT count(*) FROM kts_team.scope_events WHERE workspace_id='group_a')<>2 THEN
     RAISE EXCEPTION 'TEAM_DRAFT_DOUBLE_EVENT';

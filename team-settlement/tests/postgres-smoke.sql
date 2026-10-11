@@ -11,11 +11,12 @@ VALUES ('group_a','customer_1','customer','Synthetic A'),('group_b','customer_1'
 INSERT INTO kts_team.scopes(workspace_id,partner_id,business_date,region,state,revision,submitted_by)
 VALUES ('group_a','customer_1','2026-10-12','mn','DRAFT',1,'user_1'),
        ('group_b','customer_1','2026-10-12','mn','DRAFT',1,'user_2');
+UPDATE kts_team.workspaces SET feed_seq=1 WHERE workspace_id IN ('group_a','group_b');
 INSERT INTO kts_team.scope_events
-  (workspace_id,event_id,partner_id,business_date,region,scope_revision,actor_user_id,event_kind,payload_sha256,result_snapshot)
+  (workspace_id,event_id,partner_id,business_date,region,scope_revision,feed_seq,actor_user_id,event_kind,payload_sha256,result_snapshot)
 VALUES
-  ('group_a','event_a1','customer_1','2026-10-12','mn',1,'user_1','DRAFT_CREATED',repeat('a',64),'{"synthetic":true}'),
-  ('group_b','event_b1','customer_1','2026-10-12','mn',1,'user_2','DRAFT_CREATED',repeat('b',64),'{"synthetic":true}');
+  ('group_a','event_a1','customer_1','2026-10-12','mn',1,1,'user_1','DRAFT_CREATED',repeat('a',64),'{"synthetic":true}'),
+  ('group_b','event_b1','customer_1','2026-10-12','mn',1,1,'user_2','DRAFT_CREATED',repeat('b',64),'{"synthetic":true}');
 INSERT INTO kts_team.idempotency_receipts(workspace_id,idempotency_key,request_sha256,event_id)
 VALUES('group_a','req_1',repeat('a',64),'event_a1'),
       ('group_b','req_1',repeat('b',64),'event_b1');

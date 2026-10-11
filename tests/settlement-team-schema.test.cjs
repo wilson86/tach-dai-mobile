@@ -27,6 +27,8 @@ test('tenant-scoped composite keys and server-isolated membership',()=>{
   assert(sql.includes('PRIMARY KEY (workspace_id,partner_id,business_date,region)'));
   assert(sql.includes('UNIQUE (workspace_id,partner_id,business_date,region,scope_revision)'));
   assert(sql.includes('PRIMARY KEY (workspace_id,idempotency_key)'));
+  assert(sql.includes('feed_seq bigint NOT NULL DEFAULT 0'));
+  assert(sql.includes('UNIQUE (workspace_id,feed_seq)'));
 });
 test('append-only protections and strict role contracts are present',()=>{
   assert(sql.includes('TEAM_AUDIT_APPEND_ONLY'));
@@ -42,6 +44,8 @@ test('append-only protections and strict role contracts are present',()=>{
   assert(draftMigration.includes('AND m.revoked_at IS NULL'));
   assert(draftMigration.includes('TEAM_REVISION_CONFLICT'));
   assert(draftMigration.includes('TEAM_IDEMPOTENCY_CONFLICT'));
+  assert(draftMigration.includes('SET feed_seq=feed_seq+1'));
+  assert(draftMigration.includes('RETURNING feed_seq INTO v_feed_seq'));
   assert(model.includes('Thirty-client')||model.includes('Thirty-client test'));
 });
 test('approval and offline reject are called out in API',()=>{

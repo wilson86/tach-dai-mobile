@@ -8,6 +8,7 @@ CREATE SCHEMA IF NOT EXISTS kts_team;
 CREATE TABLE IF NOT EXISTS kts_team.workspaces (
   workspace_id text PRIMARY KEY CHECK (workspace_id ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$'),
   display_name text NOT NULL CHECK (length(display_name) BETWEEN 1 AND 160),
+  feed_seq bigint NOT NULL DEFAULT 0 CHECK (feed_seq >= 0),
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE TABLE IF NOT EXISTS kts_team.identities (
@@ -59,6 +60,8 @@ CREATE TABLE IF NOT EXISTS kts_team.scope_events (
   business_date date NOT NULL,
   region text NOT NULL,
   scope_revision bigint NOT NULL CHECK (scope_revision >= 0),
+  -- Assigned while holding workspace row lock; commit-order-safe tenant feed.
+  feed_seq bigint NOT NULL CHECK (feed_seq > 0),
   actor_user_id text NOT NULL,
   event_kind text NOT NULL CHECK (event_kind IN
     ('DRAFT_CREATED','DRAFT_CHANGED','SUBMITTED','REVIEWED','CLOSED','REOPEN_REQUESTED','REOPENED','CORRECTION')),
@@ -66,6 +69,7 @@ CREATE TABLE IF NOT EXISTS kts_team.scope_events (
   result_snapshot jsonb NOT NULL,
   recorded_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (workspace_id,event_id),
+  UNIQUE (workspace_id,feed_seq),
   UNIQUE (workspace_id,partner_id,business_date,region,scope_revision),
   FOREIGN KEY (workspace_id,partner_id,business_date,region)
     REFERENCES kts_team.scopes(workspace_id,partner_id,business_date,region),

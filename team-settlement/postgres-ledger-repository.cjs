@@ -8,19 +8,34 @@
 const C = require('./core-contract.cjs');
 const HASH_RE = /^[a-f0-9]{64}$/;
 
-function encodeCursor(recordedAt, eventId) {
-  return Buffer.from(JSON.stringify({ recorded_at: new Date(recordedAt).toISOString(), event_id: String(eventId) }), 'utf8').toString('base64url');
+const MAX_FEED_SEQ = 9223372036854775807n;
+
+function normalizedFeedSeq(value) {
+  if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint')
+    throw new Error('TEAM_CURSOR_INVALID');
+  const str=String(value);
+  if (!/^(0|[1-9][0-9]{0,18})$/.test(str)) throw new Error('TEAM_CURSOR_INVALID');
+  if (BigInt(str)>MAX_FEED_SEQ) throw new Error('TEAM_CURSOR_INVALID');
+  return str;
 }
 
-function decodeCursor(cursor) {
-  if (cursor === null || cursor === undefined || cursor === '') return { recorded_at: '1970-01-01T00:00:00.000Z', event_id: '' };
-  if (typeof cursor !== 'string' || cursor.length > 512) throw new Error('TEAM_CURSOR_INVALID');
+function encodeCursor(feedSeq, workspaceId) {
+  if (typeof workspaceId !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/.test(workspaceId))
+    throw new Error('TEAM_CURSOR_INVALID');
+  return Buffer.from(JSON.stringify({
+    feed_seq: normalizedFeedSeq(feedSeq), workspace_id: workspaceId
+  }),'utf8').toString('base64url');
+}
+
+function decodeCursor(cursor, workspaceId) {
+  if (cursor === null || cursor === undefined || cursor === '') return { feed_seq: '0' };
+  if (typeof cursor !== 'string' || cursor.length > 512 || !/^[A-Za-z0-9_-]+$/.test(cursor))
+    throw new Error('TEAM_CURSOR_INVALID');
   try {
-    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (!parsed || typeof parsed.recorded_at !== 'string' || typeof parsed.event_id !== 'string' ||
-        Number.isNaN(Date.parse(parsed.recorded_at)) || parsed.event_id.length < 1 || parsed.event_id.length > 128)
-      throw new Error();
-    return { recorded_at: new Date(parsed.recorded_at).toISOString(), event_id: parsed.event_id };
+    const parsed = JSON.parse(Buffer.from(cursor,'base64url').toString('utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+        parsed.workspace_id !== workspaceId) throw new Error();
+    return { feed_seq: normalizedFeedSeq(parsed.feed_seq) };
   } catch { throw new Error('TEAM_CURSOR_INVALID'); }
 }
 
@@ -95,17 +110,17 @@ function createPostgresLedgerRepository({ db } = {}) {
 
   async function getChanges(actor, { cursor = null, limit = 100 } = {}) {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('TEAM_LIMIT_INVALID');
-    const after = decodeCursor(cursor);
-    return inActorTransaction(actor, async (tx, trustedActor) => {
+    const verifiedActor = C.actorFromServer(actor);
+    const after = decodeCursor(cursor, verifiedActor.workspace_id);
+    return inActorTransaction(verifiedActor, async (tx, trustedActor) => {
       const result = await tx.query(
         `SELECT event_id,partner_id,business_date::text AS business_date,region,
-                scope_revision,actor_user_id,event_kind,payload_sha256,result_snapshot,recorded_at
+                scope_revision,feed_seq,actor_user_id,event_kind,payload_sha256,result_snapshot,recorded_at
            FROM kts_team.scope_events
-          WHERE workspace_id=$1
-            AND (recorded_at,event_id)>($2::timestamptz,$3::text)
-          ORDER BY recorded_at,event_id
-          LIMIT $4::int`,
-        [trustedActor.workspace_id, after.recorded_at, after.event_id, limit + 1]
+          WHERE workspace_id=$1 AND feed_seq > $2::bigint
+          ORDER BY feed_seq
+          LIMIT $3::int`,
+        [trustedActor.workspace_id, after.feed_seq, limit + 1]
       );
       if (!result || !Array.isArray(result.rows)) throw new Error('TEAM_DB_RESULT_INVALID');
       const hasMore = result.rows.length > limit;
@@ -115,7 +130,7 @@ function createPostgresLedgerRepository({ db } = {}) {
         items,
         // The last full/partial page also advances the cursor. Otherwise
         // successive polls replay the terminal page forever.
-        next_cursor: last ? encodeCursor(last.recorded_at, last.event_id) : null,
+        next_cursor: last ? encodeCursor(last.feed_seq, trustedActor.workspace_id) : null,
         has_more: hasMore,
         sync_status: 'SYNCED'
       });

@@ -43,8 +43,9 @@ facts="$(psql -X -A -t -F : -v ON_ERROR_STOP=1 -c "SELECT
  (SELECT revision FROM kts_team.scopes WHERE workspace_id='group_a' AND partner_id='customer_1'
  AND business_date='2026-10-12' AND region='mn'),
  (SELECT count(*) FROM kts_team.scope_events WHERE workspace_id='group_a'),
- (SELECT count(*) FROM kts_team.idempotency_receipts WHERE workspace_id='group_a');")"
-if [[ "$facts" != "3:3:3" ]]; then
+ (SELECT count(*) FROM kts_team.idempotency_receipts WHERE workspace_id='group_a'),
+ (SELECT feed_seq FROM kts_team.workspaces WHERE workspace_id='group_a');")"
+if [[ "$facts" != "3:3:3:3" ]]; then
   echo "TEAM_CONCURRENT_LEDGER_COUNTS_FAILED"
   exit 1
 fi

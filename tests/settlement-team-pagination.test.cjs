@@ -7,9 +7,9 @@ const { createPostgresLedgerRepository, encodeCursor, decodeCursor } =
 const ACTOR={ server_verified:true, membership_active:true,
   workspace_id:'group_a', user_id:'reviewer_1', role:'viewer' };
 const events=[
-  { event_id:'e1', recorded_at:'2026-10-12T01:00:00.000Z' },
-  { event_id:'e2', recorded_at:'2026-10-12T01:00:01.000Z' },
-  { event_id:'e3', recorded_at:'2026-10-12T01:00:02.000Z' }
+  { event_id:'e1', feed_seq:'1', recorded_at:'2026-10-12T01:00:03.000Z' },
+  { event_id:'e2', feed_seq:'2', recorded_at:'2026-10-12T01:00:02.000Z' },
+  { event_id:'e3', feed_seq:'3', recorded_at:'2026-10-12T01:00:01.000Z' }
 ];
 
 function fakeDb(){
@@ -20,10 +20,8 @@ function fakeDb(){
       if(sql.includes("set_config('kts.workspace_id'"))return {rows:[]};
       if(!sql.includes('FROM kts_team.scope_events'))throw new Error('UNEXPECTED_QUERY');
       if(args[0]!=='group_a')throw new Error('CROSS_TENANT_QUERY');
-      const after={ recorded_at:new Date(args[1]).toISOString(),event_id:args[2] };
-      const rows=events.filter(row=>row.recorded_at>after.recorded_at||
-        (row.recorded_at===after.recorded_at&&row.event_id>after.event_id))
-        .slice(0,args[3]);
+      const rows=events.filter(row=>BigInt(row.feed_seq)>BigInt(args[1]))
+        .slice(0,args[2]);
       return {rows};
     }
   })};
@@ -34,11 +32,11 @@ test('change feed advances on final page and never endlessly repeats a terminal 
   const first=await repository.getChanges(ACTOR,{limit:2});
   assert.deepEqual(first.items.map(x=>x.event_id),['e1','e2']);
   assert.equal(first.has_more,true);
-  assert.deepEqual(decodeCursor(first.next_cursor),{recorded_at:events[1].recorded_at,event_id:'e2'});
+  assert.deepEqual(decodeCursor(first.next_cursor,'group_a'),{feed_seq:'2'});
   const second=await repository.getChanges(ACTOR,{limit:2,cursor:first.next_cursor});
   assert.deepEqual(second.items.map(x=>x.event_id),['e3']);
   assert.equal(second.has_more,false);
-  assert.deepEqual(decodeCursor(second.next_cursor),{recorded_at:events[2].recorded_at,event_id:'e3'});
+  assert.deepEqual(decodeCursor(second.next_cursor,'group_a'),{feed_seq:'3'});
   const empty=await repository.getChanges(ACTOR,{limit:2,cursor:second.next_cursor});
   assert.deepEqual(empty.items,[]);
   assert.equal(empty.has_more,false);
@@ -51,5 +49,7 @@ test('feed rejects malformed cursors and oversized limits without querying ledge
   await assert.rejects(repository.getChanges(ACTOR,{limit:501}),/TEAM_LIMIT_INVALID/);
   await assert.rejects(repository.getChanges(ACTOR,{cursor:'not-base64-json',limit:2}),/TEAM_CURSOR_INVALID/);
   assert.equal(x.requests.length,0);
-  assert.equal(encodeCursor('2026-10-12T01:00:00.000Z','event_1').length>20,true);
+  assert.equal(encodeCursor('1','group_a').length>20,true);
+  assert.throws(()=>decodeCursor(encodeCursor('2','group_a'),'group_b'),/TEAM_CURSOR_INVALID/);
+  assert.throws(()=>encodeCursor('9223372036854775808','group_a'),/TEAM_CURSOR_INVALID/);
 });

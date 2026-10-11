@@ -23,6 +23,7 @@ DECLARE
   v_role text;
   v_saved kts_team.idempotency_receipts%ROWTYPE;
   v_revision bigint;
+  v_feed_seq bigint;
   v_state text;
 BEGIN
   v_actor := NULLIF(current_setting('kts.actor_user_id', true),'');
@@ -82,11 +83,19 @@ BEGIN
   WHERE workspace_id=p_workspace_id AND partner_id=p_partner_id AND
         business_date=p_business_date AND region=p_region AND revision=p_expected_revision;
   IF NOT FOUND THEN RAISE EXCEPTION 'TEAM_REVISION_CONFLICT'; END IF;
+  -- Serialize workspace change-feed order in the same COMMIT as the event.
+  -- A plain BIGSERIAL/timestamp is NOT safe: IDs can be allocated before
+  -- another writer commits and a cursor would permanently miss late events.
+  UPDATE kts_team.workspaces
+     SET feed_seq=feed_seq+1
+   WHERE workspace_id=p_workspace_id
+   RETURNING feed_seq INTO v_feed_seq;
+  IF NOT FOUND THEN RAISE EXCEPTION 'TEAM_WORKSPACE_DENIED'; END IF;
   INSERT INTO kts_team.scope_events(
-    workspace_id,event_id,partner_id,business_date,region,scope_revision,
+    workspace_id,event_id,partner_id,business_date,region,scope_revision,feed_seq,
     actor_user_id,event_kind,payload_sha256,result_snapshot
   ) VALUES (
-    p_workspace_id,p_event_id,p_partner_id,p_business_date,p_region,p_expected_revision+1,
+    p_workspace_id,p_event_id,p_partner_id,p_business_date,p_region,p_expected_revision+1,v_feed_seq,
     v_actor,CASE WHEN p_expected_revision=0 THEN 'DRAFT_CREATED' ELSE 'DRAFT_CHANGED' END,
     p_request_sha256,p_snapshot
   );
@@ -95,7 +104,8 @@ BEGIN
   ) VALUES(p_workspace_id,p_idempotency_key,p_request_sha256,p_event_id);
   RETURN jsonb_build_object(
     'event_id',p_event_id,'replayed',false,
-    'new_revision',p_expected_revision+1
+    'new_revision',p_expected_revision+1,
+    'feed_seq',v_feed_seq
   );
 END;
 $$;

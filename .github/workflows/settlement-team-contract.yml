@@ -69,5 +69,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-draft.sql
       - name: Race 30 synthetic clients on one scope revision
         run: bash team-settlement/tests/concurrent-30.sh
+      - name: Prove commit-order feed for two parallel scopes in same workspace
+        run: bash team-settlement/tests/concurrent-workspace-feed.sh
       - name: Verify synthetic auth/session persistence boundaries
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-auth.sql
