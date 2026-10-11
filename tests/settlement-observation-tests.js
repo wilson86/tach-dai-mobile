@@ -104,6 +104,17 @@ function message(id, date, region, status, partner) {
   assert.strictEqual(O.comparisonStatus(scope('2026-10-01', 'mn', 'MATCH_EXACT', {
     reference_app_snapshot: { comparison: { status: 'MATCH_EXACT' } }
   })), 'UNVERIFIED');
+  assert.strictEqual(O.comparisonStatus(scope('2026-10-01', 'mn', 'MATCH_EXACT', {
+    category_rows: [{ code: 'DAT', xac: 10, qua_co: 7.6, payout: 0 }],
+    reference_app_snapshot: {
+      totals: { xac: 0, qua_co: 0, payout: 0, final: 1 },
+      categories: [{ code: 'DAT', xac: 10, qua_co: 7.6, payout: 0 }],
+      comparison: { status: 'MATCH_EXACT', safe_to_promote: true, exact: true, required_totals_exact: true, compared_fields: 4,
+        totals: { total_xac: { status: 'MATCH_EXACT', local: 0, reference: 0 }, total_qua_co: { status: 'MATCH_EXACT', local: 0, reference: 0 }, total_payout: { status: 'MATCH_EXACT', local: 0, reference: 0 }, final_net: { status: 'MATCH_EXACT', local: 1, reference: 1 } },
+        categories: [{ code: 'DAT', status: 'MISMATCH', fields: { xac: { status: 'MISMATCH', local: 10, reference: 10 } } }]
+      }
+    }
+  })), 'UNVERIFIED');
 }
 
 // KQXS/shadow guard can block via comparison_status while the accounting scope itself remains complete.
