@@ -382,16 +382,44 @@
             comparisonRows.some(row=>String(row && row.status || '').toUpperCase()!=='MATCH_EXACT'))
           throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
         const comparisonByCode=new Map(comparisonRows.map(row=>[codeOf(row),row]));
+        const localRows= input.local_snapshot && Array.isArray(input.local_snapshot.category_rows)
+          ? input.local_snapshot.category_rows : [];
+        const aggregateCategory=(rows,code)=>{
+          const matched=rows.filter(row=>codeOf(row)===code);
+          const result={};
+          for(const field of ['xac','qua_co','hit_units','payout']){
+            const supplied=matched.filter(row=>Object.prototype.hasOwnProperty.call(row||{},field));
+            if(!supplied.length) continue;
+            if(supplied.some(row=>!Number.isFinite(Number(row[field]))))
+              throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH');
+            result[field]=supplied.reduce((sum,row)=>sum+Number(row[field]),0);
+          }
+          return result;
+        };
         for(const referenceRow of referenceRows){
-          const comparisonRow=comparisonByCode.get(codeOf(referenceRow));
+          const code=codeOf(referenceRow);
+          const comparisonRow=comparisonByCode.get(code);
           const fields=comparisonRow && comparisonRow.fields;
           const suppliedFields=['xac','qua_co','hit_units','payout']
             .filter(field=>Object.prototype.hasOwnProperty.call(referenceRow||{},field));
           if(suppliedFields.some(field=>!fields || !fields[field] ||
               String(fields[field].status||'').toUpperCase()!=='MATCH_EXACT') ||
              (fields && Object.values(fields).some(field=>
-                String(field && field.status||'').toUpperCase()!=='MATCH_EXACT')))
-            throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+                 String(field && field.status||'').toUpperCase()!=='MATCH_EXACT')))
+             throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+          const localCategory=aggregateCategory(localRows,code);
+          const referenceCategory=aggregateCategory(referenceRows,code);
+          for(const field of suppliedFields){
+            if(!Object.prototype.hasOwnProperty.call(localCategory,field))
+              throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+            const proof=fields[field];
+            for(const [side,actual] of [['local',localCategory[field]],['reference',referenceCategory[field]]]){
+              if(proof[side]!=null &&
+                 (actual==null || !Number.isFinite(Number(proof[side])) ||
+                  Number(proof[side])!==Number(actual)))
+                throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH');
+            }
+          }
         }
       }
     }
