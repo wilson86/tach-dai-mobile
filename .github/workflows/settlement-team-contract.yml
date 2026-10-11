@@ -85,3 +85,5 @@ jobs:
         run: bash team-settlement/tests/concurrent-workspace-feed.sh
       - name: Verify synthetic auth/session persistence boundaries
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-auth.sql
+      - name: Verify least-privilege durable-auth SQL and revoked-session boundary
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-durable-auth-contract.sql
