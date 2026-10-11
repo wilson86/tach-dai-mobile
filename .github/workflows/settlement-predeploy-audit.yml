@@ -1,0 +1,25 @@
+name: Settlement predeploy gate audit
+on:
+  pull_request:
+    paths:
+      - "settlement-test/**"
+      - ".github/scripts/settlement-predeploy-integrity.cjs"
+      - ".github/scripts/settlement-predeploy-gate.sh"
+      - ".github/scripts/settlement-cdp-browser.cjs"
+      - ".github/scripts/settlement-history-audit.test.cjs"
+      - ".github/workflows/deploy-pages.yml"
+      - ".github/workflows/settlement-predeploy-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  predeploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exercise exact Pages predeployment gate, without deploying
+        shell: bash
+        run: bash .github/scripts/settlement-predeploy-gate.sh

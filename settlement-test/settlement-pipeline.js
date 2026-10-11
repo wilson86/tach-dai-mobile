@@ -6,8 +6,9 @@
     const evaluator = global.KTS_SETTLEMENT_EVALUATOR;
     const runtime = global.KTS_SETTLEMENT_RUNTIME;
     const engine = global.KTS_SETTLEMENT_ENGINE;
-    if (!store || !evaluator || !runtime || !engine) throw new Error('SETTLEMENT_PIPELINE_DEPENDENCY_MISSING');
-    return { store, evaluator, runtime, engine };
+    const gates = global.KTS_SETTLEMENT_FEATURE_GATES;
+    if (!store || !evaluator || !runtime || !engine || !gates || typeof gates.guardEvaluation !== 'function') throw new Error('SETTLEMENT_PIPELINE_DEPENDENCY_MISSING');
+    return { store, evaluator, runtime, engine, gates };
   }
 
   const scopeSettlementQueues = new Map();
@@ -17,32 +18,62 @@
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
   function isCancelled(message) { return String(message && message.status || '').toLowerCase() === 'cancelled'; }
+  // Revision checks must include the actual monetary inputs, not only their
+  // IDs/timestamps. Imports and same-version corrections may keep updated_at
+  // while changing a bet, a regional price, or verified lottery evidence.
   function messageRevisionSignature(messages) {
-    return (Array.isArray(messages) ? messages : []).map(message => [
-      String(message && message.id || ''),
-      String(message && message.updated_at || ''),
-      String(message && message.status || ''),
-      String(message && message.canonical_version || ''),
-      String(message && message.parser_error || '')
-    ].join('|')).sort().join('\n');
+    const rows=(Array.isArray(messages)?messages:[]).map(message=>({
+      id:message&&message.id||null,partner_id:message&&message.partner_id||null,
+      business_date:message&&message.business_date||null,region:message&&message.region||null,
+      updated_at:message&&message.updated_at||null,status:message&&message.status||null,
+      raw_text:message&&message.raw_text||null,canonical_version:message&&message.canonical_version||null,
+      parser_error:message&&message.parser_error||null,
+      canonical_payload:message&&message.canonical_payload||null
+    }));
+    rows.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+    return JSON.stringify(rows);
   }
   function configRevisionSignature(config) {
     if (!config) return '';
-    return [
-      String(config.id || ''),
-      String(config.partner_id || ''),
-      String(config.version == null ? '' : config.version),
-      String(config.effective_from_date || ''),
-      String(config.updated_at || '')
-    ].join('|');
+    return JSON.stringify({
+      id:config.id||null,partner_id:config.partner_id||null,version:config.version||null,
+      effective_from_date:config.effective_from_date||null,updated_at:config.updated_at||null,
+      region_pricing:config.region_pricing||{},region_terms:config.region_terms||{},
+      dat_hit_mode:config.dat_hit_mode||null,dax_hit_mode:config.dax_hit_mode||null,
+      mb_xien_234:config.mb_xien_234===true,tinh_ui:config.tinh_ui===true,
+      total_percent:config.total_percent,refund_percent:config.refund_percent,
+      commission_type:config.commission_type||null
+    });
   }
   function resultRevisionSignature(result) {
     if (!result) return '';
-    if (result.fingerprint) return String(result.fingerprint);
-    return JSON.stringify([
-      result.business_date || '', result.region || '', Boolean(result.complete),
-      result.verification_status || '', result.expected_station_codes || [], result.stations || []
-    ]);
+    return JSON.stringify({
+      fingerprint:result.fingerprint||null,
+      business_date:result.business_date||null,region:result.region||null,
+      status:result.status||null,complete:result.complete===true,
+      coverage_complete:result.coverage_complete===true,
+      verified:result.verified===true,verification_status:result.verification_status||null,
+      verification_sources:result.verification_sources||[],
+      verification_conflicts:result.verification_conflicts||[],
+      expected_station_codes:result.expected_station_codes||[],
+      stations:result.stations||[]
+    });
+  }
+  function partnerRevisionSignature(partner) {
+    return partner?JSON.stringify({
+      id:partner.id||null,name:partner.name||null,role:partner.role||null,active:partner.active!==false
+    }):'';
+  }
+
+  // Keep each message's category counts aligned with the rows the runtime
+  // will actually settle. Dropped unconfirmed UI rows must never shift the
+  // next message's attribution or appear in detailed reports.
+  function guardedMessageEvaluation(evaluated, config, gates) {
+    if (!evaluated || !Array.isArray(evaluated.category_inputs) || !Array.isArray(evaluated.detail_rows))
+      throw new Error('SETTLEMENT_EVALUATION_INVALID');
+    if (!gates || typeof gates.guardEvaluation !== 'function')
+      throw new Error('SETTLEMENT_FEATURE_GATES_NOT_LOADED');
+    return gates.guardEvaluation(evaluated, config);
   }
 
   function zeroResult(reason) {
@@ -65,10 +96,40 @@
     return await d.store.get(d.store.STORES.results, `${businessDate}:${String(region || '').toLowerCase()}`);
   }
 
+  async function captureScopeInputs(partnerId,businessDate,region,messages) {
+    const d=deps();
+    // Capture all four mutable inputs plus the prior settlement. The store
+    // re-reads every source in ONE cross-tab serialized commit transaction.
+    const [rawConfig,result,partner,settlement]=await Promise.all([
+      Promise.resolve().then(()=>d.store.resolveConfigForDate(partnerId,businessDate))
+        .catch(()=>null),
+      findResult(businessDate,region),
+      d.store.get(d.store.STORES.partners,partnerId),
+      d.store.get(d.store.STORES.settlements,scopeId(partnerId,businessDate,region))
+    ]);
+    return {
+      messages,rawConfig,
+      config:rawConfig && String(rawConfig.partner_id||'')===String(partnerId)
+        ? rawConfig : null,
+      result,partner,settlement
+    };
+  }
+
+  function supersededScope() {
+    return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+  }
+
   async function saveEmptyScope(input) {
     const d = deps();
+    // An old empty-scope request must not overwrite a newer active bet.
+    const current = await findScopeMessages(input.partner_id, input.business_date, input.region);
+    if (current.length) return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    const evidence=await captureScopeInputs(
+      input.partner_id,input.business_date,input.region,current);
+    if(typeof d.store.saveSettlementIfScopeUnchanged!=='function')
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED');
     const result = zeroResult(null);
-    const saved = await d.store.saveSettlement({
+    const outcome = await d.store.saveSettlementIfScopeUnchanged({
       id: scopeId(input.partner_id, input.business_date, input.region),
       partner_id: input.partner_id,
       message_id: null,
@@ -86,14 +147,54 @@
       scope_status: 'empty',
       blocked_reasons: [],
       comparison_status: 'empty'
-    });
-    return { status: 'empty', settlement: saved };
+    },evidence);
+    if(!outcome || outcome.superseded || !outcome.saved)return supersededScope();
+    return { status: 'empty', settlement: outcome.saved };
   }
 
   async function saveBlockedScope(input) {
     const d = deps();
+    // Blocking is a write too. Never let an older parser/config/KQXS error
+    // overwrite a freshly corrected scope in another tab.
+    const latest = await findScopeMessages(input.partner_id,input.business_date,input.region);
+    if (messageRevisionSignature(latest)!==messageRevisionSignature(input.messages||[]))
+      return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    if (input.config_snapshot || input.expect_config_unavailable===true) {
+      let config;
+      try { config=await d.store.resolveConfigForDate(input.partner_id,input.business_date); }
+      catch (_) { config=null; }
+      if ((input.expect_config_unavailable===true && config!==null) ||
+          (input.config_snapshot && configRevisionSignature(config)!==configRevisionSignature(input.config_snapshot)))
+        return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    }
+    if (input.result_snapshot || input.expect_result_missing===true) {
+      const result = await findResult(input.business_date,input.region);
+      if ((input.expect_result_missing===true && result!==null) ||
+          (input.result_snapshot && resultRevisionSignature(result)!==resultRevisionSignature(input.result_snapshot)))
+        return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    }
+    if (input.partner_snapshot || input.expect_partner_missing===true) {
+      const partner=await d.store.get(d.store.STORES.partners,input.partner_id);
+      if ((input.expect_partner_missing===true && partner!=null) ||
+          (input.partner_snapshot && partnerRevisionSignature(partner)!==partnerRevisionSignature(input.partner_snapshot)))
+        return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    }
+    const evidence=await captureScopeInputs(
+      input.partner_id,input.business_date,input.region,latest);
+    if((input.expect_config_unavailable===true && evidence.rawConfig!==null) ||
+       (input.config_snapshot &&
+        configRevisionSignature(evidence.rawConfig)!==configRevisionSignature(input.config_snapshot)) ||
+       (input.expect_result_missing===true && evidence.result!==null) ||
+       (input.result_snapshot &&
+        resultRevisionSignature(evidence.result)!==resultRevisionSignature(input.result_snapshot)) ||
+       (input.expect_partner_missing===true && evidence.partner!==null) ||
+       (input.partner_snapshot &&
+        partnerRevisionSignature(evidence.partner)!==partnerRevisionSignature(input.partner_snapshot)))
+      return supersededScope();
+    if(typeof d.store.saveSettlementIfScopeUnchanged!=='function')
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED');
     const result = zeroResult(input.reason);
-    const saved = await d.store.saveSettlement({
+    const outcome = await d.store.saveSettlementIfScopeUnchanged({
       id: scopeId(input.partner_id, input.business_date, input.region),
       partner_id: input.partner_id,
       message_id: null,
@@ -101,7 +202,12 @@
       business_date: input.business_date,
       region: input.region,
       engine_version: d.engine.version,
-      config_snapshot: clone(input.config_snapshot || null),
+      // A malformed config linked to ANOTHER partner is only evidence for
+      // this block, never a valid pricing snapshot for this partner. The
+      // canonical store rejects cross-partner snapshots by design.
+      config_snapshot: input.config_snapshot &&
+        String(input.config_snapshot.partner_id||'')===String(input.partner_id)
+        ? clone(input.config_snapshot) : null,
       lottery_result_snapshot: clone(input.result_snapshot || null),
       result_snapshot: result,
       settlement_result: result,
@@ -111,8 +217,9 @@
       scope_status: 'blocked',
       blocked_reasons: [String(input.reason || 'BLOCKED')],
       comparison_status: 'blocked'
-    });
-    return { status: 'blocked', reason: input.reason, settlement: saved };
+    },evidence);
+    if(!outcome || outcome.superseded || !outcome.saved)return supersededScope();
+    return { status: 'blocked', reason: input.reason, settlement: outcome.saved };
   }
 
   async function settleScopeOnce(input) {
@@ -140,12 +247,16 @@
 
     let config;
     try { config = await d.store.resolveConfigForDate(partnerId, businessDate); }
-    catch (e) { return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: String(e.message || e) }); }
+    catch (e) { return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, expect_config_unavailable:true, reason: String(e.message || e) }); }
     if (!config || String(config.partner_id || '') !== String(partnerId)) {
-      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, reason: 'CONFIG_PARTNER_MISMATCH' });
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages,
+        config_snapshot:config||null,expect_config_unavailable:!config,
+        reason: 'CONFIG_PARTNER_MISMATCH' });
     }
 
-    const pending = messages.filter(m => !m.canonical_payload || String(m.status || '').startsWith('pending') || String(m.status || '').startsWith('parser_error'));
+    // A parser_error cannot be waived by a stale canonical payload or a
+    // manually changed status. Never calculate money from failed provenance.
+    const pending = messages.filter(m => Boolean(m.parser_error) || !m.canonical_payload || String(m.status || '').startsWith('pending') || String(m.status || '').startsWith('parser_error'));
     if (pending.length) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: `PENDING_PARSER:${pending.map(m => m.id).join(',')}` });
     }
@@ -154,7 +265,7 @@
     // event metadata, but monetary settlement always rereads the persisted scope.
     const resultSnapshot = await findResult(businessDate, region);
     if (!resultSnapshot) {
-      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, reason: 'KQXS_NOT_AVAILABLE' });
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, expect_result_missing:true, reason: 'KQXS_NOT_AVAILABLE' });
     }
     const resultDate = String(resultSnapshot.business_date || '').slice(0, 10);
     const resultRegion = String(resultSnapshot.region || '').toLowerCase();
@@ -164,7 +275,11 @@
         config_snapshot: config, result_snapshot: resultSnapshot, reason: 'KQXS_SCOPE_MISMATCH'
       });
     }
-    if (String(resultSnapshot.verification_status || '').toLowerCase() === 'conflict') {
+    // Imported/restored IndexedDB may contain contradictory KQXS metadata.
+    // A nonempty conflict list is authoritative even if a stale status says
+    // "verified". Never evaluate monetary rows against contradictory sources.
+    if (String(resultSnapshot.verification_status || '').toLowerCase() === 'conflict' ||
+        (Array.isArray(resultSnapshot.verification_conflicts) && resultSnapshot.verification_conflicts.length > 0)) {
       return saveBlockedScope({
         partner_id: partnerId, business_date: businessDate, region, messages,
         config_snapshot: config, result_snapshot: resultSnapshot, reason: 'KQXS_SOURCE_CONFLICT'
@@ -172,7 +287,6 @@
     }
 
     const categoryInputs = [];
-    const rowOwners = [];
     const detailRows = [];
     const messageEval = [];
     try {
@@ -183,27 +297,44 @@
           result_snapshot: resultSnapshot,
           region
         });
+        const guarded = guardedMessageEvaluation(evaluated, config, d.gates);
         const start = categoryInputs.length;
-        for (const row of evaluated.category_inputs) {
-          categoryInputs.push(row);
-          rowOwners.push(message.id);
-        }
-        for (const detail of evaluated.detail_rows) detailRows.push(Object.assign({ message_id: message.id }, detail));
-        messageEval.push({ message_id: message.id, start, count: evaluated.category_inputs.length });
+        for (const row of guarded.category_inputs) categoryInputs.push(row);
+        for (const detail of guarded.detail_rows) detailRows.push(Object.assign({ message_id: message.id }, detail));
+        messageEval.push({ message_id: message.id, start, count: guarded.category_inputs.length });
       }
     } catch (e) {
       return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
     }
 
-    let settled;
-    try {
-      const partner = await d.store.get(d.store.STORES.partners, partnerId);
-      if (!partner) throw new Error('PARTNER_NOT_FOUND');
-      settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config, region });
-    } catch (e) {
-      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages, config_snapshot: config, result_snapshot: resultSnapshot, reason: String(e.message || e) });
+    // Regression already refuses an empty active category set. The live
+    // pipeline must also block rather than marking unsupported-only bets as
+    // complete with zero money after the unconfirmed UI row was discarded.
+    if (!categoryInputs.length) {
+      return saveBlockedScope({partner_id:partnerId,business_date:businessDate,region,messages,
+        config_snapshot:config,result_snapshot:resultSnapshot,reason:'NO_PERMITTED_SETTLEMENT_CATEGORY_INPUTS'});
     }
 
+    let settled, partner, previousSettlement;
+    try {
+      partner = await d.store.get(d.store.STORES.partners, partnerId);
+      if (!partner) throw new Error('PARTNER_NOT_FOUND');
+      previousSettlement = await d.store.get(d.store.STORES.settlements, scopeId(partnerId,businessDate,region));
+      settled = d.runtime.settleWithConfig(categoryInputs, { partner_role: partner.role, config_snapshot: config, region });
+    } catch (e) {
+      return saveBlockedScope({ partner_id: partnerId, business_date: businessDate, region, messages,
+        config_snapshot: config, result_snapshot: resultSnapshot,
+        partner_snapshot:partner||null,expect_partner_missing:!partner,
+        reason: String(e.message || e) });
+    }
+
+    // engine.settle preserves row order; count mismatch means attribution
+    // is unsafe. Block instead of assigning another message's winnings.
+    if (!settled || !Array.isArray(settled.rows) || settled.rows.length !== categoryInputs.length) {
+      return saveBlockedScope({partner_id:partnerId,business_date:businessDate,region,messages,
+        config_snapshot:config,result_snapshot:resultSnapshot,partner_snapshot:partner,
+        reason:'SETTLEMENT_CATEGORY_ROW_COUNT_MISMATCH'});
+    }
     const breakdown = messageEval.map(item => ({
       message_id: item.message_id,
       category_rows: settled.rows.slice(item.start, item.start + item.count).map(clone)
@@ -217,7 +348,9 @@
     try { latestConfig = await d.store.resolveConfigForDate(partnerId, businessDate); }
     catch (_) { latestConfig = null; }
     const latestResult = await findResult(businessDate, region);
+    const latestPartner = await d.store.get(d.store.STORES.partners, partnerId);
     if (
+      partnerRevisionSignature(latestPartner) !== partnerRevisionSignature(partner) ||
       messageRevisionSignature(latestMessages) !== messageRevisionSignature(messages) ||
       configRevisionSignature(latestConfig) !== configRevisionSignature(config) ||
       resultRevisionSignature(latestResult) !== resultRevisionSignature(resultSnapshot)
@@ -226,7 +359,9 @@
     }
 
     const scopeStatus = resultSnapshot.complete ? 'complete_unverified' : 'provisional';
-    const saved = await d.store.saveSettlement({
+    if(typeof d.store.saveSettlementIfScopeUnchanged!=='function')
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_STORE_REQUIRED');
+    const outcome=await d.store.saveSettlementIfScopeUnchanged({
       id: scopeId(partnerId, businessDate, region),
       partner_id: partnerId,
       message_id: null,
@@ -244,18 +379,10 @@
       scope_status: scopeStatus,
       blocked_reasons: [],
       comparison_status: resultSnapshot.complete ? 'unverified' : 'provisional'
-    });
-
-    for (const message of latestMessages) {
-      const current = await d.store.get(d.store.STORES.messages, message.id);
-      if (!current || isCancelled(current)) continue;
-      if (messageRevisionSignature([current]) !== messageRevisionSignature([message])) continue;
-      await d.store.saveMessage(Object.assign({}, current, {
-        config_snapshot: current.config_snapshot || config,
-        status: resultSnapshot.complete ? 'settled_unverified' : 'settled_provisional'
-      }));
-    }
-    return { status: scopeStatus, settlement: saved };
+    },{messages,config,result:resultSnapshot,partner,settlement:previousSettlement});
+    if(!outcome || outcome.superseded || !outcome.saved)
+      return {status:'superseded',reason:'SCOPE_INPUT_CHANGED_DURING_SETTLEMENT',settlement:null};
+    return { status: scopeStatus, settlement: outcome.saved };
   }
 
   function settleScope(input) {
@@ -369,9 +496,11 @@
   }
 
   global.KTS_SETTLEMENT_PIPELINE = Object.freeze({
-    version: 'settlement-pipeline-v8-scope-revalidate',
+    version: 'settlement-pipeline-v17-kqxs-conflict-evidence',
     scopeId,
     isCancelled,
+    guardedMessageEvaluation,
+    messageRevisionSignature,configRevisionSignature,resultRevisionSignature,partnerRevisionSignature,
     findScopeMessages,
     findResult,
     settleScope,

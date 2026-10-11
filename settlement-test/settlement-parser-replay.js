@@ -91,10 +91,12 @@
   function replaySummary(replay, error) {
     if (error) return { status:'REPLAY_ERROR', reference_match_exact:false, current_engine_version:null, final_exact:null, current_final_delta:null, current_issues:[], error:String(error && error.message || error) };
     const comparison = replay && replay.comparison || {};
+    const referenceMatchExact = replayExact(replay);
+    const rawStatus = String(comparison.status || (referenceMatchExact ? 'MATCH_EXACT' : 'UNVERIFIED')).toUpperCase();
     const finalRow = comparison.totals && comparison.totals.final_net || null;
     return {
-      status:String(comparison.status || (replayExact(replay) ? 'MATCH_EXACT' : 'UNVERIFIED')).toUpperCase(),
-      reference_match_exact:replayExact(replay),
+      status:rawStatus === 'MATCH_EXACT' && !referenceMatchExact ? 'INCOMPLETE_REFERENCE' : rawStatus,
+      reference_match_exact:referenceMatchExact,
       current_engine_version:replay && replay.settlement && replay.settlement.engine_version || null,
       final_exact:finalExact(replay),
       current_final_delta:finalRow && finalRow.delta != null ? finalRow.delta : null,

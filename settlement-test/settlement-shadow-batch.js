@@ -12,9 +12,34 @@
     final: ['final', 'thu_bu', 'thubu']
   });
   const REQUIRED = Object.freeze(['business_date', 'partner', 'region', 'xac', 'qua_co', 'payout', 'final']);
+  const EXACT_FIELDS = Object.freeze(['total_xac', 'total_qua_co', 'total_payout', 'final_net']);
+  function validMoney(v) {
+    return (typeof v === 'number' && Number.isFinite(v)) ||
+      (typeof v === 'string' && /^[+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?$/.test(v.trim()) && Number.isFinite(Number(v)));
+  }
+  function exactProofUsable(c) {
+    return Boolean(c && c.status === 'MATCH_EXACT' && c.safe_to_promote === true &&
+      c.exact === true && c.required_totals_exact === true &&
+      Number.isInteger(c.compared_fields) && c.compared_fields >= EXACT_FIELDS.length &&
+      EXACT_FIELDS.every(field => {
+        const item = c.totals && c.totals[field];
+        return item && item.status === 'MATCH_EXACT' && validMoney(item.local) && validMoney(item.reference);
+      }));
+  }
+  function displayComparisonStatus(c) {
+    const status = String(c && c.status || 'UNKNOWN').toUpperCase();
+    return status === 'MATCH_EXACT' && !exactProofUsable(c) ? 'INCOMPLETE_REFERENCE' : status;
+  }
 
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
-  function validDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
+  function validDate(v) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ''));
+    if (!match) return false;
+    const year = Number(match[1]), month = Number(match[2]), day = Number(match[3]);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return year > 0 && month >= 1 && month <= 12 && day >= 1 && day <= days[month - 1];
+  }
   function stableStringify(value) {
     if (value === null || typeof value !== 'object') return JSON.stringify(value);
     if (Array.isArray(value)) return '[' + value.map(stableStringify).join(',') + ']';
@@ -53,10 +78,11 @@
     throw new Error('BATCH_REGION_REQUIRED:' + String(v || ''));
   }
   function decimalString(v, field) {
-    if (v == null || String(v).trim() === '') {
+    if (v == null || (typeof v === 'string' && v.trim() === '')) {
       if (field === 'hoi') return '0';
       throw new Error('BATCH_TOTAL_REQUIRED:' + field);
     }
+    if (typeof v !== 'string' && typeof v !== 'number') throw new Error('BATCH_TOTAL_INVALID:' + field);
     const s = String(v).trim();
     if (s.includes(',')) throw new Error('BATCH_DECIMAL_COMMA_UNSUPPORTED:' + field);
     if (!/^[+-]?(?:\d+\.?\d*|\.\d+)$/.test(s)) throw new Error('BATCH_TOTAL_INVALID:' + field);
@@ -86,6 +112,9 @@
     }
     return lines.slice(1).map((line, index) => {
       const cells = line.split('\t');
+      if (cells.length !== rawHeaders.length) {
+        throw new Error('BATCH_TSV_COLUMN_COUNT_MISMATCH:' + (index + 2) + ':' + cells.length + '/' + rawHeaders.length);
+      }
       const row = { _row: index + 2 };
       headers.forEach((header, i) => { if (header) row[header] = cells[i] == null ? '' : cells[i].trim(); });
       return row;
@@ -114,11 +143,14 @@
   }
 
   function normalizeRow(row, partners) {
-    const businessDate = String(row.business_date != null ? row.business_date : row.date != null ? row.date : row.ngay || '').slice(0, 10);
+    const businessDate = String(row.business_date != null ? row.business_date : row.date != null ? row.date : row.ngay || '').trim();
     if (!validDate(businessDate)) throw new Error('BATCH_DATE_REQUIRED');
     const partner = resolvePartner(partners, partnerToken(row));
     const region = normalizeRegion(row.region != null ? row.region : row.mien);
-    const totalsIn = row.totals && typeof row.totals === 'object' ? row.totals : row;
+    if (row.totals != null && (typeof row.totals !== 'object' || Array.isArray(row.totals))) {
+      throw new Error('BATCH_TOTALS_OBJECT_REQUIRED');
+    }
+    const totalsIn = row.totals == null ? row : row.totals;
     const totals = {
       xac: decimalString(totalsIn.xac, 'xac'),
       qua_co: decimalString(totalsIn.qua_co != null ? totalsIn.qua_co : totalsIn.qua, 'qua_co'),
@@ -189,10 +221,10 @@
         total: parsed.length,
         ready: rows.length,
         errors: errors.length,
-        exact: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_EXACT').length,
+        exact: rows.filter(r => exactProofUsable(r.comparison)).length,
         display_only: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_DISPLAY_ONLY').length,
         mismatch: rows.filter(r => r.comparison && r.comparison.status === 'MISMATCH').length,
-        incomplete: rows.filter(r => r.comparison && r.comparison.status === 'INCOMPLETE_REFERENCE').length
+        incomplete: rows.filter(r => displayComparisonStatus(r.comparison) === 'INCOMPLETE_REFERENCE').length
       }
     };
   }
@@ -235,7 +267,8 @@
           partner_id: row.partner_id,
           business_date: row.business_date,
           region: row.region,
-          comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN'
+           comparison_status: displayComparisonStatus(saved && saved.comparison),
+           safe_to_promote: exactProofUsable(saved && saved.comparison)
         });
       } catch (error) {
         const e = new Error(`BATCH_APPLY_PARTIAL:${results.length}/${p.rows.length}:${String(error && error.message || error)}`);
@@ -247,7 +280,8 @@
     return {
       format: 'kts-shadow-batch-apply-v2-stale-guard',
       total: results.length,
-      exact: results.filter(x => x.comparison_status === 'MATCH_EXACT').length,
+       exact: results.filter(x => x.comparison_status === 'MATCH_EXACT' && x.safe_to_promote === true).length,
+      incomplete: results.filter(x => x.comparison_status === 'INCOMPLETE_REFERENCE').length,
       display_only: results.filter(x => x.comparison_status === 'MATCH_DISPLAY_ONLY').length,
       mismatch: results.filter(x => x.comparison_status === 'MISMATCH').length,
       results
@@ -283,9 +317,9 @@
       const host = doc.getElementById('shadowBatchOutput');
       const lines = [];
       for (const row of p.rows || []) {
-        const st = row.comparison && row.comparison.status || 'UNKNOWN';
-        const cls = st === 'MATCH_EXACT' ? 'ok' : st === 'MISMATCH' ? 'err' : 'warn';
-        lines.push(`<div class="report-message"><span class="tag ${cls}">${esc(st)}</span> <b>${esc(row.business_date)} ${esc(row.region.toUpperCase())}</b> · ${esc(row.partner_name)}</div>`);
+        const displayStatus = displayComparisonStatus(row.comparison);
+        const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
+        lines.push(`<div class="report-message"><span class="tag ${cls}">${esc(displayStatus)}</span> <b>${esc(row.business_date)} ${esc(row.region.toUpperCase())}</b> · ${esc(row.partner_name)}</div>`);
       }
       for (const err of p.errors || []) lines.push(`<div class="report-message"><span class="tag err">LỖI DÒNG ${esc(err.row_number || '?')}</span> ${esc(err.error)}</div>`);
       host.innerHTML = `<div>Scope hợp lệ <b>${p.counts.ready}</b>/${p.counts.total} · exact <b>${p.counts.exact}</b> · lệch <b>${p.counts.mismatch}</b> · chỉ khớp hiển thị <b>${p.counts.display_only}</b>.</div>${lines.join('')}`;
@@ -297,7 +331,8 @@
         lastPreview = await preview(raw);
         render(lastPreview);
         doc.getElementById('shadowBatchApply').disabled = !lastPreview.ready;
-        setStatus(lastPreview.ready ? 'Preview hợp lệ. Có thể áp dụng nếu dữ liệu scope không đổi.' : 'Có dòng lỗi; chưa ghi bất kỳ đối chiếu nào.', lastPreview.ready ? 'ok' : 'err');
+        setStatus(lastPreview.ready ? 'Preview hợp lệ. Có thể áp dụng nếu dữ liệu scope không đổi.' : 'Có dòng lỗi; chưa ghi bất kỳ đối chiếu nào.',
+          !lastPreview.ready ? 'err' : (lastPreview.counts.incomplete || lastPreview.counts.display_only || lastPreview.counts.mismatch) ? 'warn' : 'ok');
       } catch (error) {
         lastPreview = null;
         doc.getElementById('shadowBatchApply').disabled = true;
@@ -319,7 +354,8 @@
         if (!lastPreview || String(doc.getElementById('shadowBatchInput').value) !== String(lastPreview.raw)) throw new Error('BATCH_PREVIEW_STALE');
         doc.getElementById('shadowBatchApply').disabled = true;
         const result = await apply(lastPreview);
-        setStatus(`Đã lưu ${result.total} scope · exact ${result.exact} · lệch ${result.mismatch} · chỉ khớp hiển thị ${result.display_only}.`, result.mismatch ? 'err' : result.display_only ? 'warn' : 'ok');
+        setStatus(`Đã lưu ${result.total} scope · exact ${result.exact} · thiếu proof ${result.incomplete} · lệch ${result.mismatch} · chỉ khớp hiển thị ${result.display_only}.`,
+          result.mismatch ? 'err' : result.display_only || result.incomplete ? 'warn' : 'ok');
         if (typeof global.dispatchEvent === 'function' && typeof global.CustomEvent === 'function') {
           global.dispatchEvent(new global.CustomEvent('kts:shadow-saved', { detail: { batch: true, results: result.results } }));
         }
@@ -340,6 +376,8 @@
     parseInput,
     resolvePartner,
     normalizeRow,
+    exactProofUsable,
+    displayComparisonStatus,
     scopeId,
     settlementFingerprint,
     preview,

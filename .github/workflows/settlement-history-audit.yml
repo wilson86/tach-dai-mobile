@@ -1,0 +1,26 @@
+name: Settlement history fail-closed audit
+on:
+  pull_request:
+    paths:
+      - "settlement-test/settlement-qualification-history.js"
+      - "settlement-test/acceptance-smoke.html"
+      - "settlement-test/settlement-build-identity.js"
+      - "settlement-test/sw.js"
+      - ".github/scripts/settlement-history-audit.test.cjs"
+      - ".github/workflows/settlement-history-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout PR candidate
+        uses: actions/checkout@v4
+      - name: Node version
+        run: node --version
+      - name: Run actual settlement history source tests
+        run: node --test .github/scripts/settlement-history-audit.test.cjs

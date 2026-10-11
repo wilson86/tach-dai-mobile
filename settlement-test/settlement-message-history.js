@@ -30,6 +30,33 @@
       (settlements || []).find(s => scopeMatch(s, scope)) || null;
   }
 
+  // A legacy comparison_status is not monetary proof. Only a complete,
+  // promotion-safe Shadow comparison may render the strong MATCH_EXACT label.
+  function safeExactComparison(settlement) {
+    const ref = settlement && settlement.reference_app_snapshot;
+    const proof = ref && ref.comparison;
+    const fields = ['total_xac','total_qua_co','total_payout','final_net'];
+    const local = settlement && (settlement.settlement_result || settlement.result_snapshot) || {};
+    const reference = ref && (ref.totals || ref) || {};
+    const aliases = {
+      total_xac:['total_xac','xac'], total_qua_co:['total_qua_co','qua_co'],
+      total_payout:['total_payout','payout','tien_trung'], final_net:['final_net','final','thu_bu']
+    };
+    const validMoney = value =>
+      (typeof value === 'number' && Number.isFinite(value)) ||
+      (typeof value === 'string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)));
+    return String(settlement && settlement.comparison_status || '').toUpperCase() === 'MATCH_EXACT' &&
+      proof && proof.status === 'MATCH_EXACT' && proof.safe_to_promote === true &&
+      proof.exact === true && proof.required_totals_exact === true &&
+      Number.isInteger(proof.compared_fields) && proof.compared_fields >= fields.length &&
+      fields.every(field => {
+        const item = proof.totals && proof.totals[field];
+        if (!item || item.status !== 'MATCH_EXACT' || !validMoney(item.local) || !validMoney(item.reference) ||
+            !validMoney(local[field]) || Number(item.local) !== Number(local[field])) return false;
+        return (aliases[field] || []).some(alias => validMoney(reference[alias]) && Number(item.reference) === Number(reference[alias]));
+      });
+  }
+
   function friendlyReason(reason) {
     const text = String(reason || '');
     if (text.includes('NO_CONFIG_FOR_BUSINESS_DATE')) return 'Chưa có thiết lập giá cho ngày này.';
@@ -155,7 +182,7 @@
     else if (parserErrors || (settlement && settlement.scope_status === 'blocked')) state = { code: 'BLOCKED', label: 'CHƯA TÍNH', kind: 'err' };
     else if (!resultAvailable) state = { code: 'WAITING_RESULT', label: 'CHỜ KQXS', kind: 'warn' };
     else if (!resultComplete || (settlement && settlement.scope_status === 'provisional')) state = { code: 'PROVISIONAL', label: 'TẠM TÍNH', kind: 'warn' };
-    else if (comparison === 'MATCH_EXACT') state = { code: 'MATCH_EXACT', label: 'KHỚP EXACT', kind: 'ok' };
+    else if (comparison === 'MATCH_EXACT' && safeExactComparison(settlement)) state = { code: 'MATCH_EXACT', label: 'KHỚP EXACT', kind: 'ok' };
     else if (comparison === 'MISMATCH') state = { code: 'MISMATCH', label: 'LỆCH SHADOW', kind: 'err' };
     else if (comparison === 'MATCH_DISPLAY_ONLY') state = { code: 'MATCH_DISPLAY_ONLY', label: 'CHỈ KHỚP HIỂN THỊ', kind: 'warn' };
     else state = { code: 'UNVERIFIED', label: 'ĐÃ TÍNH · CHỜ ĐỐI CHIẾU', kind: 'warn' };
