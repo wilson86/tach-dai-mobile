@@ -52,3 +52,12 @@ test('approval and offline reject are called out in API',()=>{
   assert(adr.includes('ROLLBACK'));
   assert(model.includes('30 authenticated identities'));
 });
+
+test('authentication boundary is explicitly synthetic and separate from settlement SQL',()=>{
+  const auth=readFileSync(resolve(__dirname,'../team-settlement/auth-contract.cjs'),'utf8');
+  assert(auth.includes('scrypt-v1'));
+  assert(auth.includes('AUTH_SESSION_REVOKED'));
+  assert(auth.includes('membershipKey'));
+  assert(auth.includes('not a deployed server'));
+  assert(!auth.includes('kts_router.sqlite3'));
+});
