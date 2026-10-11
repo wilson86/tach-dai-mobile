@@ -27,7 +27,7 @@ test('PWA client keeps bearer token in memory and syncs a queued draft', async (
   const saved = storage(); const calls = [];
   const client = Sync.createSyncClient({ storage: saved, fetchImpl: async (url, options) => {
     calls.push({ url, options });
-    if (url.includes('/v1/scopes/drafts')) return response(200, { event_id: 'event_1', new_revision: 1, sync_status: 'SYNCED' });
+    if (url.includes('/v1/scopes/drafts')) return response(200, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, sync_status: 'SYNCED' });
     return response(200, { items: [{event_id: 'event_feed_1'}], next_cursor: 'cursor_1', sync_status: 'SYNCED' });
   }});
   client.setSessionToken('x'.repeat(43));
@@ -90,7 +90,7 @@ test('login sends credentials once, keeps the returned bearer in memory, and log
 });
 
 test('subscription exposes state transitions for a UI without exposing credentials', async () => {
-  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', new_revision: 1, sync_status: 'SYNCED' }) });
+  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', replayed: false, new_revision: 1, feed_seq: 1, sync_status: 'SYNCED' }) });
   const states = [];
   const unsubscribe = client.subscribe(state => states.push(state));
   client.setSessionToken('s'.repeat(43));
@@ -127,13 +127,16 @@ test('PWA client integrates with synthetic localhost auth, draft and change endp
     const login = await client.login('subject_operator', 'synthetic-operator-password', 'group_a');
     assert.equal(login.authenticated, true);
     const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
-    assert.equal((await client.syncDraft(draft.id)).status, Sync.STATUS.SYNCED);
+    // An in-memory contract is not a durable PostgreSQL receipt.
+    const memoryAck=await client.syncDraft(draft.id);
+    assert.equal(memoryAck.status,Sync.STATUS.BLOCKED);
+    assert.equal(memoryAck.error,'SYNC_ACK_UNVERIFIED');
     const changes = await client.pullChanges();
     assert.equal(changes.status, Sync.STATUS.SYNCED);
     assert.equal(changes.items.length, 1);
     assert.equal(client.snapshot().cursor, 'synthetic_cursor_1');
     assert.equal(saved.data.has(Sync.CURSOR_KEY), false);
-    await client.logout();
+    await client.logout({discardPending:true});
     assert.equal(client.snapshot().authenticated, false);
     assert.equal(saved.data.has('session_token'), false);
   } finally { await new Promise(resolve => server.close(resolve)); }
@@ -145,7 +148,7 @@ test('new workspace login cannot inherit prior cursor or draft data', async () =
     storage: saved, fetchImpl: async (url) => {
       if (url.includes('/v1/login')) return response(200, { session_token: 'b'.repeat(43), expires_at: 9999 });
       if (url.includes('/v1/changes')) return response(200, { items: [{ event_id: 'a_1' }], next_cursor: 'cursor_from_a', sync_status: 'SYNCED' });
-      return response(200, { event_id: 'event_1', new_revision: 1, sync_status: 'SYNCED' });
+      return response(200, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, sync_status: 'SYNCED' });
     }
   });
   await client.login('user_a', 'synthetic-pass', 'group_a');
@@ -311,7 +314,7 @@ test('unsynced financial drafts cannot silently disappear on logout or account s
 test('successful synced draft may log out without unsent-data prompt',async()=>{
   const client=Sync.createSyncClient({fetchImpl:async url=>
     url.endsWith('/v1/logout')?response(204,{}):
-      response(200,{event_id:'event_1',new_revision:1,sync_status:'SYNCED'})});
+      response(200,{event_id:'event_1',replayed:false,new_revision:1,feed_seq:1,sync_status:'SYNCED'})});
   client.setSessionToken('a'.repeat(43),'group_a');
   const draft=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
     business_date:'2026-10-12',region:'mn'}, {synthetic:true});
@@ -334,7 +337,7 @@ test('replayed HTTP acknowledgement without original server revision cannot mark
 
 test('replayed HTTP acknowledgement with exact original revision may mark draft SYNCED',async()=>{
   const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{
-    event_id:'previous_synthetic_event',replayed:true,new_revision:1,sync_status:'SYNCED'
+    event_id:'previous_synthetic_event',replayed:true,new_revision:1,feed_seq:1,sync_status:'SYNCED'
   })});
   client.setSessionToken('x'.repeat(43),'group_a');
   const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
@@ -342,4 +345,22 @@ test('replayed HTTP acknowledgement with exact original revision may mark draft 
   const result=await client.syncDraft(item.id);
   assert.equal(result.status,'SYNCED');
   assert.equal(result.server_revision,1);
+});
+
+test('fake HTTP SYNCED without valid PostgreSQL feed receipt never syncs a draft',async()=>{
+  for(const receipt of [
+    {event_id:'event_a',replayed:false,new_revision:1},
+    {event_id:'event_a',replayed:false,new_revision:1,feed_seq:0},
+    {event_id:'event_a',replayed:false,new_revision:1,feed_seq:'9223372036854775808'},
+    {event_id:'event_a',replayed:'false',new_revision:1,feed_seq:1},
+    {event_id:' ',replayed:false,new_revision:1,feed_seq:1}
+  ]){
+    const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{...receipt,sync_status:'SYNCED'})});
+    client.setSessionToken('a'.repeat(43),'group_a');
+    const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
+    const item=client.queueDraft(scope,{synthetic:true});
+    const result=await client.syncDraft(item.id);
+    assert.equal(result.status,'BLOCKED',JSON.stringify(receipt));
+    assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
+  }
 });

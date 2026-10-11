@@ -6,6 +6,12 @@
 
   const STATUS = Object.freeze({ PENDING: 'PENDING', SYNCED: 'SYNCED', CONFLICT: 'CONFLICT', BLOCKED: 'BLOCKED' });
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
+  const MAX_SIGNED_BIGINT = 9223372036854775807n;
+  function verifiedFeedSequence(value) {
+    if (typeof value === 'number') return Number.isSafeInteger(value) && value > 0;
+    if (typeof value !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value)) return false;
+    return BigInt(value) <= MAX_SIGNED_BIGINT;
+  }
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -178,9 +184,11 @@
         if (!result.response.ok) return setStatus(item, STATUS.BLOCKED, result.body.error || 'SYNC_SERVER_REJECTED');
         // HTTP 200 alone does not prove a financial draft reached the ledger.
         if (result.body.sync_status !== STATUS.SYNCED ||
-            typeof result.body.event_id !== 'string' || !result.body.event_id ||
+            typeof result.body.event_id !== 'string' ||
+            !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.body.event_id) ||
+            typeof result.body.replayed !== 'boolean' ||
+            !verifiedFeedSequence(result.body.feed_seq) ||
             !Number.isSafeInteger(result.body.new_revision) ||
-            result.body.new_revision < item.base_revision + 1 ||
             result.body.new_revision !== item.base_revision + 1)
           return setStatus(item, STATUS.BLOCKED, 'SYNC_ACK_UNVERIFIED');
         item.server_result = clone(result.body);

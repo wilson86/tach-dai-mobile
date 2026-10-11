@@ -13,10 +13,17 @@ const { stable } = require('./ledger-api-contract.cjs');
 // returned successfully. The durable draft SQL function issues these exact
 // receipt fields; idempotent replays return the original event ID.
 const EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const MAX_SIGNED_BIGINT = 9223372036854775807n;
+function verifiedFeedSequence(value) {
+  if (typeof value === 'number') return Number.isSafeInteger(value) && value > 0;
+  if (typeof value !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value)) return false;
+  return BigInt(value) <= MAX_SIGNED_BIGINT;
+}
 function requireVerifiedDraftReceipt(result, proposedEventId, expectedRevision) {
   if (!result || typeof result !== 'object' || Array.isArray(result) ||
       typeof result.event_id !== 'string' || !EVENT_ID_RE.test(result.event_id) ||
       typeof result.replayed !== 'boolean' ||
+      !verifiedFeedSequence(result.feed_seq) ||
       !Number.isSafeInteger(result.new_revision) ||
       result.new_revision !== expectedRevision + 1 ||
       (!result.replayed && result.event_id !== proposedEventId)) {

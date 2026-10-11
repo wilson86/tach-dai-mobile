@@ -49,6 +49,10 @@ test('missing or contradictory database receipts never become SYNCED',async()=>{
     {event_id:'previous_committed_event',replayed:true},
     {event_id:'previous_committed_event',replayed:true,new_revision:'1'},
     {event_id:'previous_committed_event',replayed:true,new_revision:2},
+    {event_id:'candidate_event_1',replayed:false,new_revision:1},
+    {event_id:'candidate_event_1',replayed:false,new_revision:1,feed_seq:0},
+    {event_id:'candidate_event_1',replayed:false,new_revision:1,feed_seq:1.5},
+    {event_id:'candidate_event_1',replayed:false,new_revision:1,feed_seq:'9223372036854775808'},
     [],
     {event_id:'candidate_event_1',replayed:false,new_revision:'1'}
   ]){

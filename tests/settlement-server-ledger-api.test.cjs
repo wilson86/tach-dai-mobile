@@ -8,7 +8,7 @@ const { createServerLedgerApi } = require('../team-settlement/server-ledger-api.
 
 const scope = { workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' };
 
-function setup(resultRows = [{ result: { event_id: 'event_1', replayed: false, new_revision: 1 } }]) {
+function setup(resultRows = [{ result: { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1 } }]) {
   const auth = A.createAuthService({ clock: () => 1_000, sessionTtlMs: 10_000 });
   auth.registerIdentity({ user_id: 'operator_1', auth_subject: 'subject_operator', password: 'synthetic-operator-password' });
   auth.setMembership({ workspace_id: 'group_a', user_id: 'operator_1', role: 'operator' });
@@ -25,7 +25,7 @@ function setup(resultRows = [{ result: { event_id: 'event_1', replayed: false, n
 test('server API authenticates session, canonicalizes request and delegates to repository', async () => {
   const { api, calls, token } = setup();
   const result = await api.appendDraft(token, { scope, expected_revision: 0, idempotency_key: 'request_1', payload: { synthetic: true, selector: '123' } });
-  assert.deepEqual(result, { event_id: 'event_1', replayed: false, new_revision: 1, scope_key: 'group_a:counterparty_1:2026-10-12:mn', sync_status: 'SYNCED' });
+  assert.deepEqual(result, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, scope_key: 'group_a:counterparty_1:2026-10-12:mn', sync_status: 'SYNCED' });
   assert.equal(calls.length, 3); // tenant context, active membership, draft SQL
   assert.equal(calls[1].params[0], 'group_a');
   assert.equal(calls[2].params[0], 'group_a');
