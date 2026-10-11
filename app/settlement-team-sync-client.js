@@ -8,6 +8,17 @@
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
 
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
+
+  // A per-client counter silently reuses idempotency keys across devices.
+  // Financial write keys MUST use cryptographic randomness, with no Math.random fallback.
+  function newDraftId() {
+    let uuid = null;
+    if (root && root.crypto && typeof root.crypto.randomUUID === 'function') uuid = root.crypto.randomUUID();
+    else if (typeof require === 'function') uuid = require('node:crypto').randomUUID();
+    if (typeof uuid !== 'string' || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(uuid))
+      throw new Error('SYNC_SECURE_RANDOM_UNAVAILABLE');
+    return 'draft_' + uuid.replace(/-/g, '').toLowerCase();
+  }
   function errorCode(error, fallback) { return error && error.code || fallback; }
 
   function normalizeBaseUrl(value) {
@@ -31,8 +42,7 @@
     let sessionToken = null; // Deliberately memory-only. Never persist bearer credentials.
     let workspaceId = null;
     let sessionEpoch = 0;
-    let sequence = 0;
-    // Cursor is session-specific. Never reuse a prior user's/workspace's cursor
+     // Cursor is session-specific. Never reuse a prior user's/workspace's cursor
     // from generic local storage: doing so can skip new user's change events.
     let cursor = null;
     const pending = new Map();
@@ -130,7 +140,7 @@
       if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) throw new Error('SYNC_REVISION_INVALID');
       if (workspaceId !== null && scope.workspace_id !== workspaceId)
         throw new Error('SYNC_WORKSPACE_MISMATCH');
-      const id = 'local_draft_' + (++sequence);
+      const id = newDraftId();
       const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING };
       pending.set(id, item);
       emit();
@@ -179,10 +189,17 @@
         if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
         if (result.response.status === 401) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_INVALID', items: [] };
         if (!result.response.ok) return { status: STATUS.BLOCKED, error: result.body.error || 'SYNC_SERVER_REJECTED', items: [] };
+        // Only a verified, contiguous page may advance the server change cursor.
+        // A partial/forged 200 response must not skip unconsumed financial events.
+        const page = result.body;
+        if (!page || page.sync_status !== STATUS.SYNCED || !Array.isArray(page.items) ||
+            (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
+            (page.items.length === 0 && page.next_cursor != null && page.next_cursor !== cursor))
+          return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };
         // Until per-user/per-workspace durable cursors are independently
         // authenticated, keep the change cursor only in this session's memory.
-        cursor = result.body.next_cursor || cursor;
-        return { status: STATUS.SYNCED, items: Array.isArray(result.body.items) ? clone(result.body.items) : [], next_cursor: cursor };
+        if (page.items.length > 0) cursor = page.next_cursor;
+        return { status: STATUS.SYNCED, items: clone(page.items), next_cursor: cursor, has_more: page.has_more === true };
       } catch (error) {
         if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
         return { status: STATUS.PENDING, error: errorCode(error, 'SYNC_NETWORK_UNAVAILABLE'), items: [] };

@@ -61,3 +61,12 @@ API payload must omit client-selected `role`, `workspace_id` from authorization 
 The current PWA team sync adapter is an **in-memory prototype**, not durable offline storage. Because user/workspace identity is not yet durably authenticated for client-side cache keys, change cursors are scoped to the current session **in memory only**, reset on login/logout/account switch, and the pending local queue is discarded on logout/account switch to prevent exposing one person's draft data to the next login. UI must warn before intentional logout when a draft has not been acknowledged; a durable offline queue requires encrypted, user- and workspace-scoped storage plus a verified re-authentication/ownership protocol **before** M2 deployment. This is a known limitation, not a promise that every offline draft survives logout or browser restarts.
 
 HTTP 200 without `SYNCED` and a server event receipt must be treated as `BLOCKED`. An unsent local intent with matching base/server revisions is still `PENDING`, not `SYNCED`. Responses from an earlier session epoch must never modify the next session's cursor or draft status.
+
+
+## Client idempotency and change-feed review (GitHub-only qualification)
+
+For a shared workspace, a per-device incrementing key like `local_draft_1` is **not globally unique** and can collide across two distinct users. The draft client now requires a cryptographically random UUID-derived key and **has no insecure counter/Math.random fallback**; servers must keep idempotency scoped to the tenant and compare the canonical request digest on replay.
+
+The server's change cursor must advance after a final partial page, not only while `has_more=true`; otherwise repeated polling replays already consumed financial events. HTTP 200 with missing `SYNCED` or malformed page/cursor must **not** advance the in-memory client cursor. These are safety-contract and synthetic checks only.
+
+**Outstanding critical design risk:** timestamp+event_id cursor ordering may not represent *commit order* under concurrent PostgreSQL transactions. A transaction can start before another, then commit later with an earlier recorded timestamp. Before any real multiuser ledger use, adopt a transactionally ordered workspace feed sequence (or another independently proven commit-order-safe design), and add a two-writer/concurrent transaction test. Do not claim complete lossless change-feed correctness until that test passes.

@@ -113,7 +113,10 @@ function createPostgresLedgerRepository({ db } = {}) {
       const last = items.at(-1);
       return Object.freeze({
         items,
-        next_cursor: hasMore && last ? encodeCursor(last.recorded_at, last.event_id) : null,
+        // The last full/partial page also advances the cursor. Otherwise
+        // successive polls replay the terminal page forever.
+        next_cursor: last ? encodeCursor(last.recorded_at, last.event_id) : null,
+        has_more: hasMore,
         sync_status: 'SYNCED'
       });
     });

@@ -28,7 +28,7 @@ test('PWA client keeps bearer token in memory and syncs a queued draft', async (
   const client = Sync.createSyncClient({ storage: saved, fetchImpl: async (url, options) => {
     calls.push({ url, options });
     if (url.includes('/v1/scopes/drafts')) return response(200, { event_id: 'event_1', new_revision: 1, sync_status: 'SYNCED' });
-    return response(200, { items: [], next_cursor: 'cursor_1', sync_status: 'SYNCED' });
+    return response(200, { items: [{event_id: 'event_feed_1'}], next_cursor: 'cursor_1', sync_status: 'SYNCED' });
   }});
   client.setSessionToken('x'.repeat(43));
   const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
@@ -46,7 +46,7 @@ test('offline request stays PENDING, reconnect conflict becomes CONFLICT and is 
   const client = Sync.createSyncClient({ fetchImpl: async (url) => {
     calls += 1;
     if (!online) throw Object.assign(new Error('offline'), { code: 'NETWORK_DOWN' });
-    if (url.includes('/v1/changes')) return response(200, { items: [], next_cursor: null });
+    if (url.includes('/v1/changes')) return response(200, { items: [], next_cursor: null, sync_status: 'SYNCED' });
     return response(409, { error: 'TEAM_REVISION_CONFLICT', sync_status: 'CONFLICT', resolution: 'MANUAL_REVIEW' });
   }});
   client.setSessionToken('y'.repeat(43));
@@ -144,7 +144,7 @@ test('new workspace login cannot inherit prior cursor or draft data', async () =
   const client = Sync.createSyncClient({
     storage: saved, fetchImpl: async (url) => {
       if (url.includes('/v1/login')) return response(200, { session_token: 'b'.repeat(43), expires_at: 9999 });
-      if (url.includes('/v1/changes')) return response(200, { items: [], next_cursor: 'cursor_from_a', sync_status: 'SYNCED' });
+      if (url.includes('/v1/changes')) return response(200, { items: [{ event_id: 'a_1' }], next_cursor: 'cursor_from_a', sync_status: 'SYNCED' });
       return response(200, { event_id: 'event_1', new_revision: 1, sync_status: 'SYNCED' });
     }
   });
@@ -211,4 +211,41 @@ test('late logout cannot clear a later session', async () => {
   await old;
   assert.equal(client.snapshot().authenticated, true);
   assert.equal(client.snapshot().workspace_id, 'group_b');
+});
+
+test('two independent PWA clients use distinct cryptographic idempotency keys even on the same workspace', () => {
+  const one = Sync.createSyncClient({ fetchImpl: async () => response(503, {}) });
+  const two = Sync.createSyncClient({ fetchImpl: async () => response(503, {}) });
+  const scope = { workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' };
+  one.setSessionToken('a'.repeat(43), 'group_a');
+  two.setSessionToken('b'.repeat(43), 'group_a');
+  const ids = [one.queueDraft(scope, {synthetic:1}).id, two.queueDraft(scope, {synthetic:2}).id,
+               one.queueDraft(scope, {synthetic:3}).id];
+  assert.equal(new Set(ids).size, 3);
+  ids.forEach(id => assert.match(id, /^draft_[a-f0-9]{32}$/));
+});
+
+test('partial HTTP 200 change feed cannot advance cursor or claim SYNCED', async () => {
+  let mode = 'good';
+  const client = Sync.createSyncClient({ fetchImpl: async () => {
+    if (mode === 'good') return response(200, {
+      sync_status: 'SYNCED', items: [{event_id:'a'}], next_cursor:'cursor_a', has_more:false
+    });
+    if (mode === 'missing') return response(200, {
+      sync_status: 'SYNCED', items: [{event_id:'b'}], next_cursor:null
+    });
+    if (mode === 'empty-skipping') return response(200, {
+      sync_status:'SYNCED', items:[], next_cursor:'cursor_skips_events'
+    });
+    return response(200, { items:[], next_cursor:null });
+  }});
+  client.setSessionToken('a'.repeat(43), 'group_a');
+  assert.equal((await client.pullChanges()).status, 'SYNCED');
+  assert.equal(client.snapshot().cursor, 'cursor_a');
+  for (mode of ['missing', 'empty-skipping', 'invalid']) {
+    const res = await client.pullChanges();
+    assert.equal(res.status, 'BLOCKED', mode);
+    assert.equal(res.error, 'SYNC_FEED_UNVERIFIED', mode);
+    assert.equal(client.snapshot().cursor, 'cursor_a');
+  }
 });
