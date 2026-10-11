@@ -48,7 +48,13 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
     return repository.getScope(trustedActor, C.requireScope(scope));
   }
 
-  return Object.freeze({ appendDraft, getScope });
+  async function getChanges(sessionToken, options) {
+    const trustedActor = actor(sessionToken);
+    if (typeof repository.getChanges !== 'function') throw new Error('TEAM_ROUTE_NOT_ENABLED');
+    return repository.getChanges(trustedActor, options);
+  }
+
+  return Object.freeze({ appendDraft, getScope, getChanges });
 }
 
 module.exports = Object.freeze({ digest, createServerLedgerApi });

@@ -14,6 +14,8 @@
 
 The bounded HTTP adapter exposes `POST /v1/scopes/drafts` only when an explicit server-ledger dependency is supplied. It requires a Bearer session, maps CAS/idempotency/validation failures to stable codes, and has no close/finalize or money-calculation route.
 
+`GET /v1/changes?cursor=&limit=` is the bounded sync read: it is workspace-scoped from the verified session, ordered by `(recorded_at,event_id)`, capped at 500 rows and returns `SYNCED` plus an opaque resume cursor. Invalid cursors/limits fail closed.
+
 The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated sessions with the repository seam. `team-settlement/postgres-ledger-repository.cjs` sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. These modules open no connection and are not a production deployment.
 
 ## Suggested error and evidence semantics

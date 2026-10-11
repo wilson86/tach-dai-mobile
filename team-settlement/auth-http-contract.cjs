@@ -6,6 +6,7 @@
 // rate limits, secure cookies/CSRF policy and a durable database.
 
 const http = require('node:http');
+const { URL } = require('node:url');
 
 const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_LOGIN_ATTEMPT_LIMIT = 5;
@@ -74,7 +75,7 @@ function createAuthHttpServer(auth, {
       typeof auth.setIdentityDisabled !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
       !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function' ||
-      (ledger !== null && (!ledger || typeof ledger.appendDraft !== 'function')))
+      (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' && typeof ledger.getChanges !== 'function'))))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
   const loginAttempts = new Map();
 
@@ -193,6 +194,26 @@ function createAuthHttpServer(auth, {
           if (['TEAM_ROLE_DENIED','TEAM_WORKSPACE_DENIED','TEAM_ACTOR_UNVERIFIED'].includes(code)) return json(res, 403, { error: code });
           if (['TEAM_REVISION_CONFLICT','TEAM_IDEMPOTENCY_CONFLICT'].includes(code)) return json(res, 409, { error: code });
           if (['TEAM_OFFLINE_NOT_AUTHORITATIVE','TEAM_SCOPE_INVALID','TEAM_REVISION_INVALID','TEAM_PAYLOAD_INVALID','TEAM_INTENT_ACTION_FORBIDDEN','TEAM_IDEMPOTENCY_KEY_REQUIRED'].includes(code)) return json(res, 422, { error: code });
+          return json(res, 500, { error: 'TEAM_BACKEND_UNAVAILABLE' });
+        }
+      }
+      if (req.url.startsWith('/v1/changes') && req.method === 'GET') {
+        if (!ledger || typeof ledger.getChanges !== 'function') return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
+        const token = bearer(req);
+        if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+        let parsed;
+        try { parsed = new URL(req.url, 'http://team.local'); }
+        catch { return json(res, 422, { error: 'TEAM_CURSOR_INVALID' }); }
+        const rawLimit = parsed.searchParams.get('limit');
+        const limit = rawLimit === null ? 100 : Number(rawLimit);
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
+          return json(res, 422, { error: 'TEAM_LIMIT_INVALID' });
+        try {
+          return json(res, 200, await ledger.getChanges(token, { cursor: parsed.searchParams.get('cursor'), limit }));
+        } catch (error) {
+          if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED') return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+          if (['TEAM_CURSOR_INVALID','TEAM_LIMIT_INVALID'].includes(error.message)) return json(res, 422, { error: error.message });
+          if (error.message === 'TEAM_ROUTE_NOT_ENABLED') return json(res, 404, { error: error.message });
           return json(res, 500, { error: 'TEAM_BACKEND_UNAVAILABLE' });
         }
       }

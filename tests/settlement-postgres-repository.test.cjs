@@ -51,3 +51,20 @@ test('scope reads stay workspace-scoped and reject empty result', async () => {
   assert.match(db.calls[2].text, /WHERE workspace_id=\$1/);
   await assert.rejects(() => createPostgresLedgerRepository({ db: fakeDb([]) }).getScope(actor, scope), /TEAM_SCOPE_NOT_FOUND/);
 });
+
+test('change reads use a bounded ordered cursor and return sync status', async () => {
+  const rows = [
+    { event_id: 'event_a', recorded_at: '2026-10-12T10:00:00.000Z', event_kind: 'DRAFT_CREATED' },
+    { event_id: 'event_b', recorded_at: '2026-10-12T10:01:00.000Z', event_kind: 'DRAFT_CHANGED' }
+  ];
+  const db = fakeDb(rows);
+  const repo = createPostgresLedgerRepository({ db });
+  const page = await repo.getChanges(actor, { limit: 1 });
+  assert.equal(page.items.length, 1);
+  assert.equal(page.items[0].event_id, 'event_a');
+  assert.equal(page.sync_status, 'SYNCED');
+  assert.equal(typeof page.next_cursor, 'string');
+  assert.deepEqual(db.calls[2].params, ['group_a','1970-01-01T00:00:00.000Z','',2]);
+  await assert.rejects(() => repo.getChanges(actor, { cursor: 'not-a-cursor' }), /TEAM_CURSOR_INVALID/);
+  await assert.rejects(() => repo.getChanges(actor, { limit: 501 }), /TEAM_LIMIT_INVALID/);
+});
