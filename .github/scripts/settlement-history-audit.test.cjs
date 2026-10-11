@@ -114,7 +114,7 @@ test('test deploy manifest pins exact qualification and service worker Git blobs
 });
 test('test service worker rotates cache for updated qualification module',()=>{
   const sw=readFileSync(resolve(root,'settlement-test','sw.js'),'utf8');
-  assert.ok(sw.includes('v1.0.245-exact-requires-promotion-proof'));
+  assert.ok(sw.includes('v1.0.247-daily-exact-proof'));
   assert.ok(sw.includes("'./settlement-qualification-history.js'"));
   assert.ok(sw.includes("'./settlement-build-identity.js'"));
 });
@@ -2135,7 +2135,10 @@ test('backup merge cannot silently skip another monetary event under same Shadow
    observed_at:'2026-09-22T12:00:00Z',
    local_snapshot:{settlement_result:{final_net:0}},
    reference_snapshot:{totals:{final:'0'}},
-   comparison:{status:'MATCH_EXACT'},comparison_status:'MATCH_EXACT'
+   comparison:{status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+     required_totals_exact:true,compared_fields:4,
+     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+       .map(field=>[field,{status:'MATCH_EXACT'}]))},comparison_status:'MATCH_EXACT'
  };
  const stores={[store.STORES.shadowEvents]:[shadow]};
  const snapshot={[store.STORES.partners]:[partner],[store.STORES.shadowEvents]:[shadow]};
@@ -2644,7 +2647,7 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
   assert.equal(without.counts.exact,0);
   assert.equal(without.exact_totals.xac,0);
   assert.equal(without.totals.xac,100);
-  assert.equal(without.partners[0].shadow_status,'MATCH_EXACT');
+  assert.equal(without.partners[0].shadow_status,'UNVERIFIED');
   const prizes={G8:['12'],G7:['123'],G6:['101','102','103'],
     G5:['321'],G4:['1111','2222','3333','4444','5555','6666','7777'],
     G3:['12345','54321'],G2:['12222'],G1:['11111'],DB:['123456']};
@@ -2652,13 +2655,33 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
     complete:true,verified:true,verification_status:'verified',
     expected_station_codes:['tp'],verification_sources:['primary','secondary'],
     verification_conflicts:[],stations:[{code:'tp',prizes}]};
-  const verified=report.buildDailyOperationsReport(input({
+  // A verified draw cannot legitimize a stale/forged HIOSKT exact label.
+  const noShadowProof=report.buildDailyOperationsReport(input({
     ...row,lottery_result_snapshot:draw}));
+  assert.equal(noShadowProof.status,'UNVERIFIED');
+  assert.equal(noShadowProof.counts.exact,0);
+  const exactComparison={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+    required_totals_exact:true,compared_fields:4,
+    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+  const proved={...row,reference_app_snapshot:{source:'SYNTHETIC_ONLY',
+    comparison:exactComparison}};
+  const verified=report.buildDailyOperationsReport(input({
+    ...proved,lottery_result_snapshot:draw}));
   assert.equal(verified.status,'MATCH_EXACT');
   assert.equal(verified.counts.exact,1);
   assert.equal(verified.exact_totals.xac,100);
+  const stale={...proved,reference_app_snapshot:{
+    ...proved.reference_app_snapshot,
+    comparison:{...exactComparison,safe_to_promote:false}}};
+  const invalid=report.buildDailyOperationsReport(input({
+    ...stale,lottery_result_snapshot:draw}));
+  assert.equal(invalid.status,'UNVERIFIED');
+  assert.equal(invalid.counts.exact,0);
+  assert.equal(invalid.exact_totals.xac,0);
+  assert.equal(invalid.partners[0].messages[0].comparison_status,'UNVERIFIED');
   const conflicting=report.buildDailyOperationsReport(input({
-    ...row,lottery_result_snapshot:{...draw,verification_status:'conflict',
+    ...proved,lottery_result_snapshot:{...draw,verification_status:'conflict',
       verification_conflicts:['synthetic-source-mismatch']}}));
   assert.equal(conflicting.counts.exact,0);
   assert.notEqual(conflicting.status,'MATCH_EXACT');
@@ -2824,7 +2847,10 @@ test('Shadow receipts reject cross-scope IDs and match claims without comparison
       /SHADOW_EVENT_MATCH_WITHOUT_COMPARISON/);
   }
   const good=store.normalizeShadowEvent({...source,
-    comparison_status:'MATCH_EXACT',comparison:{status:'MATCH_EXACT'}});
+    comparison_status:'MATCH_EXACT',comparison:{status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+     required_totals_exact:true,compared_fields:4,
+     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+       .map(field=>[field,{status:'MATCH_EXACT'}]))}});
   assert.equal(good.scope_id,source.scope_id);
   assert.equal(good.comparison_status,'MATCH_EXACT');
   const neutral=store.normalizeShadowEvent({...source,comparison_status:'UNVERIFIED'});
@@ -2925,4 +2951,43 @@ test('partial Shadow comparison must never publish exact monetary status',async(
  assert.equal(saved.settlement.comparison_status,'INCOMPLETE_REFERENCE');
  assert.equal(receipt.comparison_status,'INCOMPLETE_REFERENCE');
  assert.equal(count,2);
+});
+
+test('Shadow receipt exact claim requires full comparator promotion evidence',async()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'settlement-test','settlement-store.js'),'utf8'),ctx);
+  const api=ctx.window.KTS_SETTLEMENT_STORE;
+  const proof={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+    required_totals_exact:true,compared_fields:4,
+    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+  const base={id:'synthetic-promotion-evidence',partner_id:'synthetic',
+    business_date:'2026-09-22',region:'mn',
+    scope_id:'scope:synthetic:2026-09-22:mn',
+    local_snapshot:{settlement_result:{final_net:0}},
+    reference_snapshot:{totals:{final:0}},trigger:'SYNTHETIC',
+    comparison:proof,comparison_status:'MATCH_EXACT'};
+  assert.equal(api.normalizeShadowEvent(base).comparison_status,'MATCH_EXACT');
+  for(const invalid of [
+    {...proof,safe_to_promote:false},
+    {...proof,required_totals_exact:false},
+    {...proof,exact:false},
+    {...proof,compared_fields:3},
+    {...proof,totals:{final_net:{status:'MATCH_EXACT'}}},
+    {...proof,totals:{...proof.totals,total_payout:{status:'MISMATCH'}}},
+    {status:'MATCH_EXACT'}
+  ]){
+    const event={...base,comparison:invalid};
+    assert.throws(()=>api.normalizeShadowEvent(event),
+      /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+    await assert.rejects(api.saveShadowEvent(event),
+      /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+    const payload={format:'kts-settlement-export',version:5,
+      stores:{[api.STORES.partners]:[{id:'synthetic',name:'Synthetic',role:'customer'}],
+        [api.STORES.shadowEvents]:[event]}};
+    assert.throws(()=>api.validateImportPayload(payload,{},{}),
+      /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+  }
+  assert.equal(api.normalizeShadowEvent({...base,comparison_status:'UNVERIFIED',
+    comparison:{status:'UNVERIFIED'}}).comparison_status,'UNVERIFIED');
 });
