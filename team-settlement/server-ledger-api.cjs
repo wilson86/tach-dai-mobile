@@ -9,6 +9,22 @@ const crypto = require('node:crypto');
 const C = require('./core-contract.cjs');
 const { stable } = require('./ledger-api-contract.cjs');
 
+// Do not advertise a financial draft as SYNCED merely because SQL/HTTP
+// returned successfully. The durable draft SQL function issues these exact
+// receipt fields; idempotent replays return the original event ID.
+const EVENT_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+function requireVerifiedDraftReceipt(result, proposedEventId, expectedRevision) {
+  if (!result || typeof result !== 'object' || Array.isArray(result) ||
+      typeof result.event_id !== 'string' || !EVENT_ID_RE.test(result.event_id) ||
+      typeof result.replayed !== 'boolean' ||
+      (!result.replayed && (result.event_id !== proposedEventId ||
+        result.new_revision !== expectedRevision + 1))) {
+    throw new Error('TEAM_DRAFT_RECEIPT_UNVERIFIED');
+  }
+  return result;
+}
+
+
 function digest(value) {
   return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
@@ -30,17 +46,20 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
     const scope = C.requireScope(input.scope);
     if (scope.workspace_id !== trustedActor.workspace_id) throw new Error('TEAM_WORKSPACE_DENIED');
     if (!['create_draft', 'edit_draft'].includes(input.action || 'create_draft')) throw new Error('TEAM_INTENT_ACTION_FORBIDDEN');
-    if (!Number.isSafeInteger(input.expected_revision) || input.expected_revision < 0) throw new Error('TEAM_REVISION_INVALID');
+    if (!Number.isSafeInteger(input.expected_revision) || input.expected_revision < 0 ||
+        !Number.isSafeInteger(input.expected_revision + 1)) throw new Error('TEAM_REVISION_INVALID');
     if (input.offline === true) throw new Error('TEAM_OFFLINE_NOT_AUTHORITATIVE');
     if (!input.payload || typeof input.payload !== 'object' || Array.isArray(input.payload)) throw new Error('TEAM_PAYLOAD_INVALID');
     const request_sha256 = digest({
       action: input.action || 'create_draft', scope, expected_revision: input.expected_revision, payload: input.payload
     });
+    const proposedEventId = eventId();
     const result = await repository.appendDraft(trustedActor, {
-      scope, expected_revision: input.expected_revision, event_id: eventId(),
+      scope, expected_revision: input.expected_revision, event_id: proposedEventId,
       idempotency_key: input.idempotency_key, request_sha256, snapshot: stable(input.payload)
     });
-    return Object.freeze({ ...result, scope_key: C.scopeKey(scope), sync_status: 'SYNCED' });
+    const verified = requireVerifiedDraftReceipt(result, proposedEventId, input.expected_revision);
+    return Object.freeze({ ...verified, scope_key: C.scopeKey(scope), sync_status: 'SYNCED' });
   }
 
   async function getScope(sessionToken, scope) {
