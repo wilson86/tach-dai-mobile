@@ -362,6 +362,18 @@
             referenceCodes.some((code,index)=>code!==comparisonCodes[index]) ||
             comparisonRows.some(row=>String(row && row.status || '').toUpperCase()!=='MATCH_EXACT'))
           throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+        const comparisonByCode=new Map(comparisonRows.map(row=>[codeOf(row),row]));
+        for(const referenceRow of referenceRows){
+          const comparisonRow=comparisonByCode.get(codeOf(referenceRow));
+          const fields=comparisonRow && comparisonRow.fields;
+          const suppliedFields=['xac','qua_co','hit_units','payout']
+            .filter(field=>Object.prototype.hasOwnProperty.call(referenceRow||{},field));
+          if(suppliedFields.some(field=>!fields || !fields[field] ||
+              String(fields[field].status||'').toUpperCase()!=='MATCH_EXACT') ||
+             (fields && Object.values(fields).some(field=>
+                String(field && field.status||'').toUpperCase()!=='MATCH_EXACT')))
+            throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+        }
       }
     }
     const evidenceCore = {

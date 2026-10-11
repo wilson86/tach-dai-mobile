@@ -151,8 +151,10 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   const eventReference={source:'HIOSKT_MANUAL',...reference};
   settlement.reference_app_snapshot={...eventReference,comparison};
   assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:settlement.category_rows,message_ids:['m-forged']},reference_snapshot:eventReference,comparison,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
-  const validComparison={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT'}]};
+  const validComparison={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MATCH_EXACT'},qua_co:{status:'MATCH_EXACT'},payout:{status:'MATCH_EXACT'}}}]};
   assert.doesNotThrow(()=>S.normalizeShadowEvent({id:'se-valid-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}));
+  const forgedFields={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MISMATCH'}}}]};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category-field',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedFields,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
 }
 
 // The receipt's local category attribution must also be the same settlement
@@ -161,7 +163,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 {
   const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
     totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}},
-    categories:[{code:'DAT',status:'MATCH_EXACT'}]};
+    categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MATCH_EXACT'},qua_co:{status:'MATCH_EXACT'},payout:{status:'MATCH_EXACT'}}}]};
   const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
   const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
   const id='scope:a:2026-10-06:mn';
