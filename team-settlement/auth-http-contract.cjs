@@ -12,6 +12,7 @@ const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_LOGIN_ATTEMPT_LIMIT = 5;
 const DEFAULT_LOGIN_WINDOW_MS = 60 * 1000;
 const DEFAULT_MAX_LOGIN_KEYS = 2048;
+const DEFAULT_MAX_LOGIN_SOURCE_ATTEMPTS = 100;
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -69,6 +70,7 @@ function createAuthHttpServer(auth, {
   maxLoginAttempts = DEFAULT_LOGIN_ATTEMPT_LIMIT,
   loginWindowMs = DEFAULT_LOGIN_WINDOW_MS,
   maxLoginKeys = DEFAULT_MAX_LOGIN_KEYS,
+  maxLoginSourceAttempts = DEFAULT_MAX_LOGIN_SOURCE_ATTEMPTS,
   clock = () => Date.now(),
   ledger = null
 } = {}) {
@@ -78,15 +80,21 @@ function createAuthHttpServer(auth, {
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
       !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 ||
       !Number.isSafeInteger(maxLoginKeys) || maxLoginKeys < 1 || maxLoginKeys > 100000 ||
+      !Number.isSafeInteger(maxLoginSourceAttempts) || maxLoginSourceAttempts < 1 ||
+      maxLoginSourceAttempts > 100000 ||
       typeof clock !== 'function' ||
       (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' &&
         typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function'))))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
   const loginAttempts = new Map();
+  const sourceAttempts = new Map();
   let loginWindowStart = null;
 
-  function loginKey(req, input) {
-    const source = typeof req.socket?.remoteAddress === 'string' ? req.socket.remoteAddress : 'unknown';
+  function loginSource(req) {
+    return typeof req.socket?.remoteAddress === 'string' ? req.socket.remoteAddress : 'unknown';
+  }
+
+  function loginKey(source, input) {
     const subject = typeof input.auth_subject === 'string' ? input.auth_subject : 'missing';
     return `${source}:${subject}`;
   }
@@ -96,21 +104,31 @@ function createAuthHttpServer(auth, {
   // A fixed window bounds both admission and the number of attacker-selected
   // username keys retained in memory. This is NOT a production distributed
   // rate limiter, and must be replaced before exposing an operational server.
-  function rateLimited(key) {
+  function rateLimited(key, source) {
     const now = clock();
     if (!Number.isSafeInteger(now) || now < 0) return true;
-    if (loginWindowStart === null || now - loginWindowStart >= loginWindowMs) {
+    if (loginWindowStart === null || now - loginWindowStart >= loginWindowMs ||
+        now < loginWindowStart) {
       loginAttempts.clear();
+      sourceAttempts.clear();
       loginWindowStart = now;
     }
+    // Bound credential verification even if an attacker rotates usernames.
+    // Admission is reserved before awaiting an expensive password verifier.
+    const sourceCount = sourceAttempts.get(source) || 0;
+    if (sourceCount >= maxLoginSourceAttempts) return true;
     const count = loginAttempts.get(key);
     if (count !== undefined) {
       if (count >= maxLoginAttempts) return true;
       loginAttempts.set(key, count + 1);
-      return false;
+    } else {
+      // This also bounds the number of unique source keys retained per window.
+      if (loginAttempts.size >= maxLoginKeys ||
+          (!sourceAttempts.has(source) && sourceAttempts.size >= maxLoginKeys))
+        return true;
+      loginAttempts.set(key, 1);
     }
-    if (loginAttempts.size >= maxLoginKeys) return true;
-    loginAttempts.set(key, 1);
+    sourceAttempts.set(source, sourceCount + 1);
     return false;
   }
 
@@ -127,8 +145,9 @@ function createAuthHttpServer(auth, {
           if (error.code === 'AUTH_BODY_TOO_LARGE') return json(res, 413, { error: error.code });
           return json(res, 400, { error: 'AUTH_JSON_INVALID' });
         }
-        const key = loginKey(req, input);
-        if (rateLimited(key)) return json(res, 429, { error: 'AUTH_RATE_LIMITED' });
+        const source = loginSource(req);
+        const key = loginKey(source, input);
+        if (rateLimited(key, source)) return json(res, 429, { error: 'AUTH_RATE_LIMITED' });
         try {
           const result = await auth.login(input);
           clearLoginFailures(key);
@@ -268,6 +287,6 @@ function createAuthHttpServer(auth, {
 
 module.exports = Object.freeze({
   DEFAULT_MAX_BODY_BYTES, DEFAULT_LOGIN_ATTEMPT_LIMIT, DEFAULT_LOGIN_WINDOW_MS,
-  DEFAULT_MAX_LOGIN_KEYS,
+  DEFAULT_MAX_LOGIN_KEYS, DEFAULT_MAX_LOGIN_SOURCE_ATTEMPTS,
   createAuthHttpServer
 });

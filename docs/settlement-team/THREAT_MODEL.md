@@ -107,3 +107,13 @@ so a table-level INSERT privilege check is incorrect. The read-only Pool
 preflight and credentialed-TCP SQL test must require the exact five INSERT
 columns; the actual database grants remain unchanged (least privilege).
 Failed intermediate CI is not a release authority.
+
+
+## Temporary HTTP login source throttle
+
+The synthetic-only HTTP adapter now counts attempts per network source *as
+well as per username*, reserving both before asynchronous verifier execution.
+Rotating user names or succeeding at a login cannot bypass the bounded
+source budget. These counters are still volatile/in-process, not trusted proxy
+forwarded IPs and not suitable as distributed production brute-force controls;
+persistent/shared limits and operator-reviewed reverse proxy remain blockers.

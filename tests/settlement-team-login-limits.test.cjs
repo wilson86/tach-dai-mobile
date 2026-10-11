@@ -63,3 +63,32 @@ test('unknown login subjects cannot grow limiter state past configured cap',asyn
     assert.equal(entered,3);
   });
 });
+
+test('rotating synthetic usernames cannot bypass per-source attempt limit',async()=>{
+  let now=1000,verified=0;
+  const auth=fakeAuth(async()=>{verified++;throw Error('SYNTHETIC_DENIED');});
+  await listen(auth,{maxLoginAttempts:8,maxLoginKeys:20,
+    maxLoginSourceAttempts:3,loginWindowMs:100,clock:()=>now},async server=>{
+    for(let i=0;i<3;i++)
+      assert.equal((await call(server,'rotating_subject_'+i)).status,401);
+    const rejected=await call(server,'rotating_subject_3');
+    assert.equal(rejected.status,429);
+    assert.equal(rejected.body.error,'AUTH_RATE_LIMITED');
+    assert.equal(verified,3);
+    now=1100;
+    assert.equal((await call(server,'rotating_subject_3')).status,401);
+    assert.equal(verified,4);
+  });
+});
+
+test('successful logins cannot clear the aggregate source throttle',async()=>{
+  let verified=0;
+  const auth=fakeAuth(async()=>{verified++;return {session_token:'synthetic_token'};});
+  await listen(auth,{maxLoginAttempts:5,maxLoginKeys:20,maxLoginSourceAttempts:2,
+    clock:()=>1000},async server=>{
+    assert.equal((await call(server,'successful_a')).status,200);
+    assert.equal((await call(server,'successful_b')).status,200);
+    assert.equal((await call(server,'successful_c')).status,429);
+    assert.equal(verified,2);
+  });
+});
