@@ -16,8 +16,9 @@ assert(runtime.includes('raw_text'));
 assert(shadow.includes('buildMismatchDiagnostics'));
 assert(shadow.includes('messageIdsForCategory'));
 assert(ui.includes("const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;"));
-assert(ui.includes('comp.safe_to_promote === true'));
-assert(ui.includes("const safeExact = rawStatus === 'MATCH_EXACT' && comparison.safe_to_promote === true && comparison.exact === true;"));
 assert(ui.includes("labels[displayStatus]||displayStatus"));
+assert(ui.includes('function exactProofUsable(comparison)'));
+assert(ui.includes('comparison.compared_fields >= fields.length'));
+assert(ui.includes('validMoney(item.local) && validMoney(item.reference)'));
 
 console.log('settlement-shadow-ui-tests: PASS');

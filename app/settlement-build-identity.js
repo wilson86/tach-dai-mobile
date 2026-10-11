@@ -55,7 +55,7 @@
     'app/result-simple-ui.js':'03721f515e5d6b146fc16ad265834173e53492d8',
     'app/settlement-message-history.js':'b6533640f5f9ee8236d176c53cfae5c63bd1cff7',
     'app/result-audit-ui.js':'5323354e7ac24e51b174caab6bc338070a1776ad',
-    'app/settlement-shadow-ui.js':'cc031d97aea5650657dd4bf1745f37147b03812a',
+    'app/settlement-shadow-ui.js':'c9261ac059cba0e311b7804e6bae9586553d19ed',
     'app/settlement-shadow-batch.js':'08bbc25b9458d407d2ed3740870794e329a347df',
     'app/settlement-regression-candidates.js':'6c34eb77a31047d610e5a126177af76a5d4187bf',
     'app/settlement-regression-review.js':'7ee4f2c4f822e6df7b795e3008d3c2a1e7def08a',

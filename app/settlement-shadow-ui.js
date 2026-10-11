@@ -18,6 +18,19 @@
   function fieldLabel(field) {
     return ({total_xac:'XÁC',total_qua_co:'QUA CÒ',total_payout:'TRẢ TRÚNG',refund_amount:'HỒI',final_net:'THU/BÙ',xac:'XÁC',qua_co:'QUA CÒ',hit_units:'TRÚNG',payout:'TRẢ'})[field] || field;
   }
+  function exactProofUsable(comparison) {
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    const validMoney=value =>
+      (typeof value==='number' && Number.isFinite(value)) ||
+      (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)));
+    return Boolean(comparison && comparison.status === 'MATCH_EXACT' && comparison.safe_to_promote === true &&
+      comparison.exact === true && comparison.required_totals_exact === true &&
+      Number.isInteger(comparison.compared_fields) && comparison.compared_fields >= fields.length &&
+      fields.every(field => {
+        const item=comparison.totals && comparison.totals[field];
+        return item && item.status === 'MATCH_EXACT' && validMoney(item.local) && validMoney(item.reference);
+      }));
+  }
 
   function install() {
     const doc = global.document;
@@ -87,7 +100,7 @@
       const out = doc.getElementById('shadowOutput');
       if (!comparison) { out.innerHTML=''; return; }
       const rawStatus = String(comparison.status || 'UNKNOWN').toUpperCase();
-      const safeExact = rawStatus === 'MATCH_EXACT' && comparison.safe_to_promote === true && comparison.exact === true;
+      const safeExact = rawStatus === 'MATCH_EXACT' && exactProofUsable(comparison);
       const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
       const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
       const labels = {
@@ -119,7 +132,7 @@
         const ref = event.reference_snapshot && event.reference_snapshot.totals || {};
         const finalCmp = comp.totals && comp.totals.final_net || null;
         const rawStatus = String(event.comparison_status || '').toUpperCase();
-        const safeExact = rawStatus === 'MATCH_EXACT' && comp.status === 'MATCH_EXACT' && comp.safe_to_promote === true && comp.exact === true;
+        const safeExact = rawStatus === 'MATCH_EXACT' && exactProofUsable(comp);
         const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
         const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
         const verify = event.local_snapshot && event.local_snapshot.result_verification_status || 'unverified';
