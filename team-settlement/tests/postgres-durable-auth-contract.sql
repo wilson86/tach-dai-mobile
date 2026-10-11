@@ -33,7 +33,7 @@ BEGIN
   END IF;
 END
 $;
-DO $$
+DO $
 DECLARE v_user text; v_role text; v_hash text;
 BEGIN
   -- These mirror the async auth service's login + session + membership reads.
