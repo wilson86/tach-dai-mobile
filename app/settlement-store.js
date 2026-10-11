@@ -347,6 +347,25 @@
            comparison.totals[field] &&
            comparison.totals[field].status==='MATCH_EXACT'))
         throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+      const localTotals=input.local_snapshot &&
+        (input.local_snapshot.settlement_result || input.local_snapshot.result_snapshot) || {};
+      const referenceTotals=input.reference_snapshot &&
+        (input.reference_snapshot.totals || input.reference_snapshot) || {};
+      const referenceAliases={
+        total_xac:['total_xac','xac'], total_qua_co:['total_qua_co','qua_co'],
+        total_payout:['total_payout','payout','tien_trung'],
+        final_net:['final_net','final','thu_bu']
+      };
+      for(const field of mandatory){
+        const proof=comparison.totals[field];
+        if(proof.local!=null && String(proof.local)!==String(localTotals[field]))
+          throw new Error('SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH');
+        const expectedReference=(referenceAliases[field]||[])
+          .map(alias=>referenceTotals[alias]).find(value=>value!=null);
+        if(proof.reference!=null &&
+           (expectedReference==null || String(proof.reference)!==String(expectedReference)))
+          throw new Error('SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH');
+      }
       // If the independent HIOSKT reference carried category evidence, the
       // immutable receipt must carry the category-level proof too. Aggregate
       // totals alone cannot authorize an exact claim after a category-level

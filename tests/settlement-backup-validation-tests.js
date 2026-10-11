@@ -155,6 +155,8 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   assert.doesNotThrow(()=>S.normalizeShadowEvent({id:'se-valid-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}));
   const forgedFields={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MISMATCH'}}}]};
   assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category-field',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedFields,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
+  const forgedTotal={...validComparison,totals:{...validComparison.totals,total_xac:{status:'MATCH_EXACT',local:10,reference:999}}};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-total-value',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedTotal,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH/);
 }
 
 // The receipt's local category attribution must also be the same settlement
