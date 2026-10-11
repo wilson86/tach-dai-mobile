@@ -1,0 +1,24 @@
+name: Settlement IndexedDB browser safety
+on:
+  pull_request:
+    paths:
+      - "settlement-test/qualification-indexeddb-smoke.html"
+      - "settlement-test/settlement-qualification-history.js"
+      - "settlement-test/settlement-store.js"
+      - ".github/scripts/settlement-cdp-browser.cjs"
+      - ".github/workflows/settlement-indexeddb-browser.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait for executed DOM results via Chrome DevTools Protocol
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node --experimental-websocket .github/scripts/settlement-cdp-browser.cjs indexeddb

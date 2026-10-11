@@ -1,0 +1,27 @@
+name: Settlement PR cold offline browser restart
+on:
+  pull_request:
+    paths:
+      - "settlement-test/sw.js"
+      - "settlement-test/settlement.html"
+      - "settlement-test/sw-diagnostics.html"
+      - ".github/scripts/settlement-cdp-browser.cjs"
+      - ".github/workflows/settlement-pr-offline-cold-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cold_offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout isolated PR candidate
+        uses: actions/checkout@v4
+      - name: Cold browser restart with localhost stopped
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node --experimental-websocket .github/scripts/settlement-cdp-browser.cjs offline-cold

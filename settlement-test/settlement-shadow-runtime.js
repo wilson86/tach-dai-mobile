@@ -13,26 +13,99 @@
     return `scope:${partnerId}:${businessDate}:${String(region || '').toLowerCase()}`;
   }
 
+  function strictMoney(value, label) {
+    if (typeof value !== 'string' && typeof value !== 'number') throw new Error(label);
+    const s = String(value).trim();
+    if (!/^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(s) || !Number.isFinite(Number(s)))
+      throw new Error(label);
+    // Preserve decimal text instead of truncating 64-bit precision when
+    // importing reference amounts from HIOSKT into shadow exact comparison.
+    return typeof value === 'string' ? s : value;
+  }
+
   function normalizeReference(input) {
     const ref = input && typeof input === 'object' ? clone(input) : {};
-    const totals = ref.totals && typeof ref.totals === 'object' ? ref.totals : {};
+    if (Object.prototype.hasOwnProperty.call(ref,'totals') &&
+        (!ref.totals || typeof ref.totals!=='object' || Array.isArray(ref.totals)))
+      throw new Error('HIOSKT_TOTALS_INVALID');
+    const totals = ref.totals || {};
+    if (Object.prototype.hasOwnProperty.call(ref,'categories') && !Array.isArray(ref.categories))
+      throw new Error('HIOSKT_CATEGORIES_INVALID');
     const normalized = { totals: {}, categories: [] };
-    for (const key of ['xac', 'qua_co', 'payout', 'hoi', 'final']) {
-      const value = totals[key] != null ? totals[key] : ref[key];
-      if (value == null || value === '') continue;
-      const n = Number(value);
-      if (!Number.isFinite(n)) throw new Error('HIOSKT_REFERENCE_INVALID:' + key);
-      normalized.totals[key] = n;
+    const canon=global.KTS_SETTLEMENT_SHADOW && global.KTS_SETTLEMENT_SHADOW.decimalCanonical;
+    // Equal numbers may be written 0, 0.00 or 0e0; never compare their
+    // decimal evidence by IEEE-754 Number or raw string formatting.
+    const equalMoney=(left,right)=>typeof canon==='function'
+      ? canon(left)===canon(right) : String(left).trim()===String(right).trim();
+    const groups={
+      xac:['total_xac','xac'],
+      qua_co:['total_qua_co','qua_co'],
+      payout:['total_payout','payout','tien_trung'],
+      hoi:['refund_amount','refund','hoi'],
+      final:['final_net','final','thu_bu']
+    };
+    // Preserve ALL known names found in nested totals or top-level input:
+    // otherwise an imported conflicting alias can vanish before comparison.
+    for (const [group,aliases] of Object.entries(groups)) {
+      let previous=null;
+      for (const key of aliases) {
+        for (const source of [totals,ref]) {
+          if (!Object.prototype.hasOwnProperty.call(source,key)) continue;
+          const raw=source[key];
+          if (raw==null || raw==='') continue;
+          const amount=strictMoney(raw,'HIOSKT_REFERENCE_INVALID:'+key);
+          if (previous!==null && !equalMoney(previous,amount))
+            throw new Error('HIOSKT_TOTAL_ALIAS_CONFLICT:'+group);
+          if (!Object.prototype.hasOwnProperty.call(normalized.totals,key))
+            normalized.totals[key]=amount;
+          previous=amount;
+        }
+      }
+    }
+
+    // Preserve explicit oracle exact proof instead of silently stripping it.
+    // The comparison must see disagreement between displayed and exact money.
+    if (Object.prototype.hasOwnProperty.call(totals,'exact')) {
+      if (!totals.exact || typeof totals.exact!=='object' || Array.isArray(totals.exact))
+        throw new Error('HIOSKT_TOTAL_EXACT_INVALID');
+      const aliases={xac:'total_xac',total_xac:'total_xac',
+        qua_co:'total_qua_co',total_qua_co:'total_qua_co',
+        payout:'total_payout',total_payout:'total_payout',tien_trung:'total_payout',
+        hoi:'refund_amount',refund:'refund_amount',refund_amount:'refund_amount',
+        final:'final_net',final_net:'final_net',thu_bu:'final_net'};
+      normalized.totals.exact={};
+      for (const [name,value] of Object.entries(totals.exact)) {
+        const field=aliases[name];
+        if (!field) throw new Error('HIOSKT_TOTAL_EXACT_UNKNOWN:'+name);
+        const amount=strictMoney(value,'HIOSKT_TOTAL_EXACT_INVALID:'+name);
+        if (Object.prototype.hasOwnProperty.call(normalized.totals.exact,field) &&
+            !equalMoney(normalized.totals.exact[field],amount))
+          throw new Error('HIOSKT_TOTAL_EXACT_ALIAS_CONFLICT:'+field);
+        normalized.totals.exact[field]=amount;
+      }
     }
     if (Array.isArray(ref.categories)) {
       normalized.categories = ref.categories.map(row => {
-        if (!row || !row.code) throw new Error('HIOSKT_CATEGORY_CODE_REQUIRED');
-        const out = { code: String(row.code).toUpperCase() };
+        if (!row || typeof row.code!=='string' || !row.code.trim())
+          throw new Error('HIOSKT_CATEGORY_CODE_REQUIRED');
+        const code=row.code.trim().toUpperCase();
+        if (Object.prototype.hasOwnProperty.call(row,'category') &&
+            (typeof row.category!=='string' || row.category.trim().toUpperCase()!==code))
+          throw new Error('HIOSKT_CATEGORY_LABEL_CONFLICT');
+        const out = { code };
         for (const field of ['xac', 'qua_co', 'hit_units', 'payout']) {
           if (row[field] == null || row[field] === '') continue;
-          const n = Number(row[field]);
-          if (!Number.isFinite(n)) throw new Error('HIOSKT_CATEGORY_INVALID:' + field);
-          out[field] = n;
+          out[field] = strictMoney(row[field],'HIOSKT_CATEGORY_INVALID:' + field);
+        }
+        if (Object.prototype.hasOwnProperty.call(row,'exact')) {
+          if (!row.exact || typeof row.exact!=='object' || Array.isArray(row.exact))
+            throw new Error('HIOSKT_CATEGORY_EXACT_INVALID');
+          out.exact={};
+          for (const [name,value] of Object.entries(row.exact)) {
+            if (!['xac','qua_co','hit_units','payout'].includes(name))
+              throw new Error('HIOSKT_CATEGORY_EXACT_UNKNOWN:'+name);
+            out.exact[name]=strictMoney(value,'HIOSKT_CATEGORY_EXACT_INVALID:'+name);
+          }
         }
         return out;
       });
@@ -116,16 +189,69 @@
     const settlement = await d.store.get(d.store.STORES.settlements, id);
     if (!settlement) throw new Error('SETTLEMENT_SCOPE_NOT_FOUND');
     if (settlement.scope_status === 'blocked') throw new Error('SETTLEMENT_SCOPE_BLOCKED');
+    // EMPTY/unknown/corrupted statuses are not legitimate independent money
+    // comparisons. Do not mint HIOSKT receipts or MATCH_EXACT for them.
+    if (!['provisional','complete_unverified'].includes(settlement.scope_status))
+      throw new Error('SHADOW_SCOPE_NOT_COMPARABLE');
+    // Legacy IndexedDB can contain corrupted money that a new import would
+    // refuse. Reject it before updating scope comparison or Shadow evidence.
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    const validLocal=value=>{
+      if(typeof value==='number')return Number.isFinite(value);
+      return typeof value==='string' &&
+        /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+        Number.isFinite(Number(value));
+    };
+    const views=[settlement.settlement_result,settlement.result_snapshot]
+      .filter(view=>view!=null);
+    if(!views.length || views.some(view=>!view ||
+        typeof view!=='object'||Array.isArray(view) ||
+        fields.some(field=>!validLocal(view[field])) ||
+        (view.refund_amount!=null&&!validLocal(view.refund_amount))))
+      throw new Error('SHADOW_SCOPE_MONEY_INVALID');
+    if(views.length===2 && fields.concat(['refund_amount']).some(field=>
+      views[0][field]!=null || views[1][field]!=null
+        ? String(views[0][field])!==String(views[1][field])
+        : false))
+      throw new Error('SHADOW_SCOPE_MONEY_VIEW_CONFLICT');
     const reference = normalizeReference(input.reference_snapshot || {});
-    const comparison = d.shadow.compareSettlement(settlement, reference, input.options || {});
+    const rawComparison = d.shadow.compareSettlement(settlement, reference, input.options || {});
+    // A partial exact display match is not an authorized monetary match.
+    const comparison=rawComparison.status==='MATCH_EXACT' &&
+      rawComparison.safe_to_promote!==true
+      ? Object.assign({},rawComparison,{status:'INCOMPLETE_REFERENCE',exact:false,
+          safe_to_promote:false}) : rawComparison;
     const savedReference = Object.assign({}, reference, { comparison: clone(comparison) });
-    const saved = await d.store.saveSettlement(Object.assign({}, settlement, {
-      reference_app_snapshot: savedReference,
-      comparison_status: comparison.status,
-      created_at: settlement.created_at
-    }));
-    const evidence = await saveEvidence(d.store, saved, reference, comparison, input || {});
-    return { settlement: saved, reference: savedReference, comparison, evidence };
+    if(typeof d.store.saveSettlementIfUnchanged!=='function')
+      throw new Error('SHADOW_ATOMIC_SETTLEMENT_STORE_REQUIRED');
+    // A saved MATCH_EXACT without its independently committed Shadow receipt
+    // is a false authority. First put the scope in an UNVERIFIED staging state.
+    // If the receipt append fails the day/partner close cannot read MATCH_EXACT.
+    const staged=await d.store.saveSettlementIfUnchanged(Object.assign({},settlement,{
+      reference_app_snapshot:null,
+      comparison_status:'unverified',
+      created_at:settlement.created_at
+    }),settlement);
+    if(!staged || staged.superseded || !staged.saved)
+      throw new Error('SHADOW_SCOPE_CHANGED_DURING_COMPARISON');
+    // Shadow append is an independent durable transaction. Any failure
+    // leaves the staging state unverified; never publish the match first.
+    const evidence=await saveEvidence(d.store, staged.saved,
+      reference,comparison,input||{});
+    if(!evidence || !evidence.event)
+      throw new Error('SHADOW_EVIDENCE_NOT_DURABLE');
+    // A cross-tab settlement update between evidence append and promotion
+    // invalidates the old result. The CAS cannot publish stale exact money.
+    const activated=await d.store.saveSettlementIfUnchanged(
+      Object.assign({},staged.saved,{
+        reference_app_snapshot:savedReference,
+        comparison_status:comparison.status,
+        created_at:staged.saved.created_at
+      }),staged.saved);
+    if(!activated || activated.superseded || !activated.saved)
+      throw new Error('SHADOW_SCOPE_CHANGED_AFTER_EVIDENCE');
+    return { settlement: activated.saved, reference: savedReference,
+      comparison, evidence };
   }
 
   async function getComparison(input) {
@@ -220,7 +346,7 @@
   }
 
   global.KTS_SETTLEMENT_SHADOW_RUNTIME = Object.freeze({
-    version: 'settlement-shadow-runtime-v5-replay-role',
+    version: 'settlement-shadow-runtime-v11-category-label-integrity',
     scopeId,
     normalizeReference,
     localEvidence,

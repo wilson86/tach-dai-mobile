@@ -18,8 +18,15 @@
   function requiredReference(reference) {
     const totals = reference && reference.totals || {};
     for (const key of ['xac', 'qua_co', 'payout', 'final']) {
-      const n = Number(totals[key]);
-      if (!Number.isFinite(n)) throw new Error('REGRESSION_REFERENCE_REQUIRED:' + key);
+      const raw=totals[key];
+      // Number(null), Number('') and Number(false) are all zero in JS.
+      // Treating an absent/unreviewed HIOSKT total as a verified 0 could
+      // silently create a false-positive golden regression oracle.
+      const numeric=(typeof raw==='number' && Number.isFinite(raw)) ||
+        (typeof raw==='string' &&
+          /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(raw.trim()) &&
+          Number.isFinite(Number(raw)));
+      if (!numeric) throw new Error('REGRESSION_REFERENCE_REQUIRED:' + key);
     }
   }
   function normalizeCase(input) {
@@ -62,8 +69,11 @@
     const engine = global.KTS_SETTLEMENT_ENGINE;
     const evaluator = global.KTS_SETTLEMENT_EVALUATOR;
     const shadow = global.KTS_SETTLEMENT_SHADOW;
-    if (!engine || !evaluator || !shadow) throw new Error('REGRESSION_RUNTIME_DEPENDENCY_MISSING');
-    return { engine, evaluator, shadow };
+    const runtime = global.KTS_SETTLEMENT_RUNTIME;
+    const gates = global.KTS_SETTLEMENT_FEATURE_GATES;
+    if (!engine || !evaluator || !shadow || !runtime || typeof runtime.settleWithConfig !== 'function' ||
+        !gates || typeof gates.guardEvaluation !== 'function') throw new Error('REGRESSION_RUNTIME_DEPENDENCY_MISSING');
+    return { engine, evaluator, shadow, runtime, gates };
   }
 
   function ensureFeatureGates(message, config) {
@@ -90,22 +100,31 @@
         result_snapshot: c.lottery_result_snapshot,
         region: c.scope.region
       });
-      const messageRows = evaluated.category_inputs.map(row => d.engine.category(row));
-      categoryInputs.push(...evaluated.category_inputs);
-      detailRows.push(...evaluated.detail_rows.map(row => Object.assign({ message_id: String(message.id || '') }, row)));
+      const guarded = d.gates.guardEvaluation(evaluated, c.config_snapshot);
+      const start = categoryInputs.length;
+      categoryInputs.push(...guarded.category_inputs);
+      detailRows.push(...guarded.detail_rows.map(row => Object.assign({ message_id: String(message.id || '') }, row)));
       messageBreakdown.push({
         message_id: String(message.id || ''),
         raw_text: String(message.raw_text || ''),
-        category_rows: clone(messageRows),
-        detail_rows: clone(evaluated.detail_rows)
+        start,
+        count: guarded.category_inputs.length,
+        detail_rows: clone(guarded.detail_rows)
       });
     }
     if (!categoryInputs.length) throw new Error('REGRESSION_NO_ACTIVE_CATEGORY_INPUTS');
-    const settled = d.engine.settle(categoryInputs, {
-      partner_role: c.partner_role,
-      total_percent: c.config_snapshot.total_percent == null ? 100 : c.config_snapshot.total_percent,
-      refund_percent: c.config_snapshot.refund_percent == null ? 0 : c.config_snapshot.refund_percent
+    // Regression MUST take the identical runtime path as live settlement.
+    // Direct engine.settle() silently ignored per-region partner terms and
+    // skipped the common feature guard, risking a false golden PASS.
+    const settled = d.runtime.settleWithConfig(categoryInputs, {
+      partner_role: c.partner_role, config_snapshot: c.config_snapshot, region: c.scope.region
     });
+    if (!settled || !Array.isArray(settled.rows) || settled.rows.length !== categoryInputs.length)
+      throw new Error('REGRESSION_CATEGORY_ROW_COUNT_MISMATCH');
+    // Live pipeline attributes each message using the FINAL configured runtime
+    // rows, never an independent engine.category() preview that may differ.
+    const finalBreakdown = messageBreakdown.map(({ start, count, ...item }) =>
+      Object.assign({}, item, {category_rows:clone(settled.rows.slice(start, start + count))}));
     const settlement = {
       id: c.scope.scope_id,
       partner_id: c.scope.partner_id,
@@ -118,7 +137,7 @@
       result_snapshot: clone(settled),
       category_rows: clone(settled.rows),
       detail_rows: clone(detailRows),
-      message_breakdown: clone(messageBreakdown),
+      message_breakdown: clone(finalBreakdown),
       message_ids: c.messages.filter(m => String(m.status || '').toLowerCase() !== 'cancelled').map(m => String(m.id || '')),
       scope_status: 'complete_unverified'
     };
@@ -135,54 +154,110 @@
     const store = global.KTS_SETTLEMENT_STORE;
     if (!store || !store.STORES || !store.STORES.metadata || typeof store.get !== 'function') throw new Error('REGRESSION_STORE_UNAVAILABLE');
     const row = await store.get(store.STORES.metadata, META_KEY);
-    return row && Array.isArray(row.cases) ? row : { key: META_KEY, version: 1, cases: [] };
+    existingCases(row);
+    return row || { key: META_KEY, version: 1, cases: [] };
   }
 
-  function requestPromise(req) {
-    return new Promise((resolve, reject) => {
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('REGRESSION_METADATA_WRITE_FAILED'));
-    });
+  function requireAtomicStore() {
+    const store=global.KTS_SETTLEMENT_STORE;
+    if(!store||typeof store.mutateMetadataAtomically!=='function')
+      throw new Error('REGRESSION_ATOMIC_METADATA_STORE_REQUIRED');
+    return store;
   }
-  function txPromise(tx) {
-    return new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error('REGRESSION_METADATA_TX_FAILED'));
-      tx.onabort = () => reject(tx.error || new Error('REGRESSION_METADATA_TX_ABORTED'));
-    });
-  }
-  async function writeMeta(row) {
-    const store = global.KTS_SETTLEMENT_STORE;
-    if (!store || typeof store.openDb !== 'function' || !store.STORES || !store.STORES.metadata) throw new Error('REGRESSION_STORE_UNAVAILABLE');
-    const db = await store.openDb();
-    try {
-      const tx = db.transaction(store.STORES.metadata, 'readwrite');
-      const req = tx.objectStore(store.STORES.metadata).put(clone(row));
-      await requestPromise(req);
-      await txPromise(tx);
-    } finally { db.close(); }
-    return row;
+
+  function existingCases(row) {
+    if(row==null)return [];
+    if(row.key!==META_KEY||row.version!==1||!Array.isArray(row.cases))
+      throw new Error('REGRESSION_METADATA_CORRUPTED');
+    // A backup or damaged local database can contain conflicting identities.
+    // Never count duplicated golden evidence as independent verification.
+    const ids=new Set(),events=new Set();
+    for(const item of row.cases){
+      const normalized=normalizeCase(item);
+      if(ids.has(normalized.id))
+        throw new Error('REGRESSION_GOLDEN_DUPLICATE_ID');
+      ids.add(normalized.id);
+      if(normalized.source_event_id){
+        if(events.has(normalized.source_event_id))
+          throw new Error('REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT');
+        events.add(normalized.source_event_id);
+      }
+    }
+    return row.cases;
   }
 
   async function listPinnedCases() {
-    const row = await readMeta();
-    return row.cases.map(normalizeCase).sort((a, b) => String(a.pinned_at).localeCompare(String(b.pinned_at)));
+    const row=await readMeta();
+    return row.cases.map(normalizeCase)
+      .sort((a,b)=>String(a.pinned_at).localeCompare(String(b.pinned_at)));
   }
 
   async function pinCase(input) {
-    const c = normalizeCase(input);
-    const row = await readMeta();
-    const cases = row.cases.filter(existing => caseId(existing) !== c.id);
-    cases.push(c);
-    await writeMeta({ key: META_KEY, version: 1, updated_at: new Date().toISOString(), cases });
+    const c=normalizeCase(input);
+    await requireAtomicStore().mutateMetadataAtomically(META_KEY,row=>{
+      const cases=existingCases(row);
+      // One independently observed Shadow event cannot mint multiple
+      // differently named golden records. Reject BEFORE committing so a
+      // direct pin never poisons the registry for every later read.
+      if(c.source_event_id&&cases.some(item=>
+        item.source_event_id!=null&&
+        String(item.source_event_id)===c.source_event_id&&caseId(item)!==c.id))
+        throw new Error('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT');
+      const prior=cases.find(item=>caseId(item)===c.id);
+      if(prior){
+        const stored=normalizeCase(prior);
+        // Re-import of identical evidence is idempotent; a competing
+        // payload for an existing confirmed ID is never an overwrite.
+        const withoutTimestamp=x=>{
+          const stable=clone(x);
+          delete stable.pinned_at;
+          return stable;
+        };
+        if(JSON.stringify(withoutTimestamp(stored))!==
+           JSON.stringify(withoutTimestamp(c)))
+          throw new Error('REGRESSION_GOLDEN_ID_CONFLICT');
+        return row;
+      }
+      return {key:META_KEY,version:1,updated_at:new Date().toISOString(),
+        cases:cases.concat([c])};
+    });
     return c;
   }
 
   async function removePinnedCase(id) {
-    const row = await readMeta();
-    const cases = row.cases.filter(existing => caseId(existing) !== String(id));
-    await writeMeta({ key: META_KEY, version: 1, updated_at: new Date().toISOString(), cases });
-    return cases.length;
+    const wanted=String(id);
+    const store=global.KTS_SETTLEMENT_STORE;
+    const candidates=global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    if(!store||typeof store.mutateMetadataRowsAtomically!=='function'||
+       !candidates||!candidates.META_KEY)
+      throw new Error('REGRESSION_GOLDEN_DELETE_LINK_GUARD_UNAVAILABLE');
+    const candidateKey=candidates.META_KEY;
+    if(candidateKey===META_KEY)
+      throw new Error('REGRESSION_METADATA_KEY_COLLISION');
+    return store.mutateMetadataRowsAtomically([META_KEY,candidateKey],rows=>{
+      const existing=existingCases(rows[META_KEY]);
+      const candidateRow=rows[candidateKey];
+      if(candidateRow!=null&&
+         (candidateRow.key!==candidateKey||candidateRow.version!==1||
+          !Array.isArray(candidateRow.candidates)))
+        throw new Error('REGRESSION_CANDIDATE_METADATA_CORRUPTED');
+      for(const item of candidateRow&&candidateRow.candidates||[]) {
+        if(String(item&&item.state||'').toLowerCase()!=='promoted')continue;
+        // A malformed PROMOTED record is not proof that a linked golden
+        // is disposable: abort all deletion until metadata is reviewed.
+        const promoted=normalizeCase(item&&item.case);
+        if(promoted.id===wanted)
+          throw new Error('REGRESSION_GOLDEN_LINKED_TO_PROMOTED_CANDIDATE');
+      }
+      const cases=existing.filter(item=>caseId(item)!==wanted);
+      return {
+        rows:{
+          [META_KEY]:{key:META_KEY,version:1,updated_at:new Date().toISOString(),cases},
+          [candidateKey]:candidateRow||{key:candidateKey,version:1,candidates:[]}
+        },
+        result:cases.length
+      };
+    });
   }
 
   async function caseFromEvidence(event, options) {
@@ -225,7 +300,7 @@
   }
 
   global.KTS_SETTLEMENT_REGRESSION_CASES = Object.freeze({
-    version: 'settlement-regression-cases-v1',
+    version: 'settlement-regression-cases-v6-live-row-attribution',
     META_KEY,
     FORMAT,
     BUNDLE_FORMAT,

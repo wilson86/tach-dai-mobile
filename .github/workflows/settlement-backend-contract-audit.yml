@@ -1,0 +1,22 @@
+name: Settlement test backend contract audit
+on:
+  pull_request:
+    paths:
+      - ".github/scripts/settlement-backend-contract.sh"
+      - ".github/workflows/deploy-pages.yml"
+      - ".github/workflows/settlement-backend-contract-audit.yml"
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  backend_contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    steps:
+      - uses: actions/checkout@v4
+      - name: Synthetic test parser identity, CORS, negative scope and KQXS
+        shell: bash
+        env:
+          SETTLEMENT_API_BASE: https://kts-settlement-api-test.onrender.com
+          ALLOWED_ORIGIN: https://wilson86.github.io
+        run: bash .github/scripts/settlement-backend-contract.sh

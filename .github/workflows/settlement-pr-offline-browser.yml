@@ -1,0 +1,29 @@
+name: Settlement PR offline service worker
+on:
+  pull_request:
+    paths:
+      - "settlement-test/sw.js"
+      - "settlement-test/settlement.html"
+      - "settlement-test/settlement-build-identity.js"
+      - "settlement-test/settlement-qualification-history.js"
+      - "settlement-test/sw-diagnostics.html"
+      - ".github/scripts/settlement-cdp-browser.cjs"
+      - ".github/workflows/settlement-pr-offline-browser.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Checkout isolated PR candidate
+        uses: actions/checkout@v4
+      - name: Verify SW cache inventory, activation and offline navigation using CDP
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --version
+          node --experimental-websocket .github/scripts/settlement-cdp-browser.cjs offline

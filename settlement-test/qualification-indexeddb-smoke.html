@@ -1,0 +1,1090 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Settlement qualification multi-tab IndexedDB smoke</title></head>
+<body>
+<pre id="result">QUALIFICATION_INDEXEDDB_BROWSER=PENDING</pre>
+<script src="./settlement-store.js"></script>
+<script src="./settlement-build-identity.js"></script>
+<script>
+(function(global){
+  const hash='a'.repeat(64);
+  const identity={
+    api_version:'offline-synthetic-test',identity_contract:'kts-parser-identity-v1',
+    identities:{
+      mb:{parser_version:'synthetic',identity_sha256:hash},
+      mn_mt:{parser_version:'synthetic',identity_sha256:hash}
+    }
+  };
+  global.KTS_SETTLEMENT_QUALIFICATION={
+    version:'synthetic-qualification-dependency',messageInWindow:()=>false
+  };
+  global.KTS_SETTLEMENT_REGRESSION_CASES={
+    version:'synthetic-regression-dependency',listPinnedCases:async()=>[]
+  };
+  global.KTS_SETTLEMENT_REGRESSION_CANDIDATES={listCandidates:async()=>[]};
+  global.KTS_SETTLEMENT_SHADOW_RUNTIME={version:'synthetic-no-oracle'};
+  global.KTS_SETTLEMENT_PARSER_PROVIDER={
+    version:'synthetic-parser-provider',fetchIdentity:async()=>identity
+  };
+  global.KTS_QUALIFICATION_BROWSER_TEST_IDENTITY=identity;
+})(window);
+</script>
+<script src="./settlement-qualification-history.js"></script>
+<script src="./settlement-regression-cases.js"></script>
+<script src="./settlement-regression-candidates.js"></script>
+<script>
+(async()=>{
+  const query=new URLSearchParams(location.search);
+  if(query.has('worker'))return;
+  const out=document.getElementById('result');
+  const fail=message=>{throw new Error(message);};
+  const store=window.KTS_SETTLEMENT_STORE;
+  const history=window.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
+  const workerFrames=[];
+  try{
+    if(!window.isSecureContext)fail('BROWSER_NOT_SECURE_CONTEXT');
+    if(!store||!history||!window.crypto||!crypto.subtle)fail('BROWSER_APIS_MISSING');
+    // A fresh, disposable Chromium profile is required by the CI workflow.
+    const meta=await store.get(store.STORES.metadata,'qualification_history_v1');
+    if(meta&&Array.isArray(meta.events)&&meta.events.length)fail('PROFILE_NOT_ISOLATED');
+    for(let i=0;i<2;i++){
+      const frame=document.createElement('iframe');
+      frame.style.display='none';
+      const loaded=new Promise((resolve,reject)=>{
+        const timer=setTimeout(()=>reject(new Error('WORKER_IFRAME_TIMEOUT_'+i)),12000);
+        frame.addEventListener('load',()=>{clearTimeout(timer);resolve();},{once:true});
+      });
+      frame.src='./qualification-indexeddb-smoke.html?worker=1&slot='+i;
+      document.body.appendChild(frame);
+      workerFrames.push({frame,loaded});
+    }
+    await Promise.all(workerFrames.map(x=>x.loaded));
+    const workers=workerFrames.map(x=>x.frame.contentWindow);
+    if(workers.some(w=>!w||!w.KTS_SETTLEMENT_QUALIFICATION_HISTORY)){
+      fail('WORKER_HISTORY_API_MISSING');
+    }
+    // Two real browsing contexts must serialize shadow receipt dedupe.
+    const shadowInput={
+      scope_id:'scope:shadow-atomic-test:2026-09-22:mn',
+      partner_id:'shadow-atomic-test',business_date:'2026-09-22',region:'mn',
+      trigger:'SYNTHETIC_CONCURRENT_AUDIT',
+      local_snapshot:{total_xac:0},reference_snapshot:{total_xac:0},
+      comparison:{status:'UNVERIFIED'},comparison_status:'UNVERIFIED'
+    };
+    const shadowOutcomes=await Promise.all(workers.map(w=>
+      w.KTS_SETTLEMENT_STORE.saveShadowEvent(shadowInput)));
+    if(shadowOutcomes.filter(r=>r.changed===true).length!==1||
+       shadowOutcomes.filter(r=>r.changed===false).length!==1||
+       shadowOutcomes[0].event.id!==shadowOutcomes[1].event.id)
+      fail('CROSS_TAB_SHADOW_DEDUPE_FAILED');
+    let shadowPersisted=await store.listShadowEvents({scope_id:shadowInput.scope_id});
+    if(shadowPersisted.length!==1||
+       shadowPersisted[0].id!==shadowOutcomes[0].event.id)
+      fail('CROSS_TAB_SHADOW_RECEIPT_NOT_DURABLE');
+    const shadowDifferent={...shadowInput,comparison:{status:'NOT_COMPARABLE'},
+      comparison_status:'NOT_COMPARABLE'};
+    const appended=await workers[1].KTS_SETTLEMENT_STORE.saveShadowEvent(shadowDifferent);
+    if(appended.changed!==true||appended.previous.id!==shadowOutcomes[0].event.id)
+      fail('SHADOW_DIFFERENT_EVIDENCE_NOT_APPENDED');
+    let duplicateIdRejected=false;
+    try {
+      await workers[0].KTS_SETTLEMENT_STORE.saveShadowEvent({
+        ...shadowInput,id:shadowOutcomes[0].event.id,comparison:{status:'MISMATCH'},
+        comparison_status:'MISMATCH'
+      });
+    } catch (_) {duplicateIdRejected=true;}
+    shadowPersisted=await store.listShadowEvents({scope_id:shadowInput.scope_id});
+    if(!duplicateIdRejected||shadowPersisted.length!==2||
+       shadowPersisted[0].id!==shadowOutcomes[0].event.id||
+       shadowPersisted[1].id!==appended.event.id)
+      fail('SHADOW_RECEIPT_ID_OVERWRITE_NOT_REJECTED');
+    const options={from_date:'2026-09-22',to_date:'2026-09-22',required_observation_days:1};
+    const blocked={qualification_state:'BLOCKED_SHADOW_QUALIFICATION',
+      ready_for_production_review:false,blockers:['ACCEPTANCE_SYNTHETIC_BLOCKED'],
+      production_enabled:false,merge_authorized:false};
+    // Two real browsing contexts use separate IndexedDB connections.
+    const first=await Promise.all(workers.map(w=>w.KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(blocked,options)));
+    if(first.length!==2||first[0].id===first[1].id)fail('CONCURRENT_EVENT_IDS_COLLIDED');
+    const persisted=await history.listEvents();
+    if(persisted.length!==2)fail('CONCURRENT_INDEXEDDB_LOST_EVENT:'+persisted.length);
+    if(persisted[1].previous_event_id!==persisted[0].id){
+      fail('CONCURRENT_INDEXEDDB_EVENT_CHAIN_BROKEN');
+    }
+    if(!first.every(e=>persisted.some(p=>p.id===e.id))){
+      fail('CONCURRENT_INDEXEDDB_EVENT_NOT_DURABLE');
+    }
+    const identity=window.KTS_QUALIFICATION_BROWSER_TEST_IDENTITY;
+    const ready={
+      qualification_state:'READY_FOR_PRODUCTION_REVIEW',
+      ready_for_production_review:true,production_enabled:false,merge_authorized:false,
+      parser_backend:{met:true,live_identity:identity},blockers:[]
+    };
+    for(const [invalid,reason] of [
+      [{...ready,qualification_state:'BLOCKED_SHADOW_QUALIFICATION'},'READY_STATE_CONTRADICTION'],
+      [{...ready,blockers:['UNEXPLAINED_MONETARY_MISMATCH']},'READY_HAS_BLOCKERS'],
+      [{...ready,merge_authorized:true},'SNAPSHOT_AUTHORITY_ESCALATION'],
+      [{...ready,regression_gate:{met:false}},'READY_GATE_NOT_MET_REGRESSION_GATE'],
+      [{...ready,kqxs_verification:{met:false}},'READY_GATE_NOT_MET_KQXS_VERIFICATION'],
+      [{...ready,ready_for_production_review:false},'BLOCKED_STATE_CONTRADICTION']
+    ]){
+      let rejected=false;
+      try{
+        await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(invalid,options);
+      } catch(error) {
+        rejected=String(error&&error.message||error).includes('QUALIFICATION_DECISION_INVALID_'+reason);
+      }
+      if(!rejected)fail('CONTRADICTORY_READY_NOT_REFUSED:'+reason);
+      const untouched=await history.listEvents();
+      if(untouched.length!==2)fail('CONTRADICTORY_READY_APPENDED:'+reason);
+    }
+    const readySaved=await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(ready,options);
+    const current=await history.checkLastReadyValidity();
+    if(current.status!=='READY_EVIDENCE_CURRENT'||current.current!==true){
+      fail('READY_CURRENT_AFTER_QUALIFICATION:'+current.status);
+    }
+    const blockedSaved=await workers[1].KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(blocked,options);
+    const revoked=await history.checkLastReadyValidity();
+    if(revoked.status!=='READY_EVIDENCE_STALE'||revoked.current!==false||
+       revoked.invalidated_by_event_id!==blockedSaved.id){
+      fail('BLOCKED_DID_NOT_REVOKE_READY:'+revoked.status);
+    }
+    const requalified=await workers[1].KTS_SETTLEMENT_QUALIFICATION_HISTORY
+      .recordQualification(ready,options);
+    const refreshed=await history.checkLastReadyValidity();
+    if(refreshed.status!=='READY_EVIDENCE_CURRENT'||refreshed.current!==true||
+       refreshed.ready_event.id!==requalified.id){
+      fail('REQUALIFIED_READY_NOT_CURRENT:'+refreshed.status);
+    }
+    const events=await history.listEvents();
+    if(events.length!==5||events[2].id!==readySaved.id||events[4].id!==requalified.id){
+      fail('INDEXEDDB_APPEND_SEQUENCE_UNEXPECTED:'+events.length);
+    }
+    if(events.some(e=>e.production_enabled!==false||e.merge_authorized!==false)){
+      fail('QUALIFICATION_AUTHORITY_ESCALATION');
+    }
+    // Synthetic damaged history in the disposable browser profile: the
+    // most recent READY must never be considered current after chain tamper.
+    const row=await store.get(store.STORES.metadata,'qualification_history_v1');
+    if(!row||!Array.isArray(row.events)||row.events.length!==5){
+      fail('CORRUPT_JOURNAL_FIXTURE_MISSING');
+    }
+    row.events[4].previous_event_id='disconnected_parent';
+    const db=await store.openDb();
+    try {
+      const tx=db.transaction(store.STORES.metadata,'readwrite');
+      tx.objectStore(store.STORES.metadata).put(row);
+      await new Promise((resolve,reject)=>{
+        tx.oncomplete=resolve;
+        tx.onerror=()=>reject(tx.error||new Error('CORRUPT_JOURNAL_TX_FAILED'));
+        tx.onabort=()=>reject(tx.error||new Error('CORRUPT_JOURNAL_TX_ABORTED'));
+      });
+    }finally{db.close();}
+    const corrupt=await history.checkLastReadyValidity();
+    if(corrupt.current!==false||
+       corrupt.status!=='READY_EVIDENCE_UNVERIFIABLE'||
+       corrupt.history_error!=='QUALIFICATION_HISTORY_INVALID_BROKEN_EVENT_LINK'){
+      fail('CORRUPT_JOURNAL_READY_NOT_FAIL_CLOSED:'+String(corrupt&&corrupt.status));
+    }
+    let rejectedAppend=false,appendError='';
+    try{
+      await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(blocked,options);
+    }catch(error){
+      rejectedAppend=true;
+      appendError=String(error&&error.message||error);
+    }
+    if(!rejectedAppend)fail('CORRUPT_JOURNAL_APPEND_WAS_NOT_REJECTED');
+    if(!appendError.includes('QUALIFICATION_HISTORY_APPEND_REJECTED_CORRUPT_JOURNAL:BROKEN_EVENT_LINK'))
+      fail('CORRUPT_JOURNAL_REJECTION_REASON_LOST:'+appendError);
+    const after=await history.listEvents();
+    if(after.length!==5||after[4].previous_event_id!=='disconnected_parent'){
+      fail('CORRUPT_JOURNAL_WAS_OVERWRITTEN_OR_APPENDED');
+    }
+    const afterVerdict=await history.checkLastReadyValidity();
+    if(afterVerdict.status!=='READY_EVIDENCE_UNVERIFIABLE'||afterVerdict.current!==false){
+      fail('CORRUPT_JOURNAL_CHANGED_VERDICT_AFTER_FAILED_APPEND');
+    }
+    // Metadata-level corruption was previously hidden by readRow(): a
+    // present row with a non-array events field looked like new empty history.
+    // Exercise malformed version and events separately in real IndexedDB.
+    async function overwriteJournalRow(mutator){
+      const current=await store.get(store.STORES.metadata,'qualification_history_v1');
+      mutator(current);
+      const db=await store.openDb();
+      try{
+        const tx=db.transaction(store.STORES.metadata,'readwrite');
+        tx.objectStore(store.STORES.metadata).put(current);
+        await new Promise((resolve,reject)=>{
+          tx.oncomplete=resolve;
+          tx.onerror=()=>reject(tx.error||new Error('ROW_CORRUPTION_WRITE_FAILED'));
+          tx.onabort=()=>reject(tx.error||new Error('ROW_CORRUPTION_WRITE_ABORTED'));
+        });
+      } finally { db.close(); }
+    }
+    for(const [change,expected] of [
+      [r=>{r.version=999},'QUALIFICATION_HISTORY_INVALID_ROW_VERSION_MISMATCH'],
+      [r=>{r.version=1;r.events='damaged-events-field'},'QUALIFICATION_HISTORY_INVALID_ROW_EVENTS_NOT_ARRAY']
+    ]){
+      await overwriteJournalRow(change);
+      const verdict=await history.checkLastReadyValidity();
+      if(verdict.status!=='READY_EVIDENCE_UNVERIFIABLE'||verdict.current!==false||
+         verdict.history_error!==expected){
+        fail('CORRUPT_METADATA_MISCLASSIFIED:'+String(verdict&&verdict.history_error));
+      }
+      let rejected=false,rejectionMessage='';
+      try{
+        await workers[0].KTS_SETTLEMENT_QUALIFICATION_HISTORY.recordQualification(blocked,options);
+      }catch(error){
+        rejected=true;
+        rejectionMessage=String(error&&error.message||error);
+      }
+      if(!rejected)fail('CORRUPT_METADATA_APPEND_ACCEPTED:'+expected);
+      const exactReason=expected.replace('QUALIFICATION_HISTORY_INVALID_','QUALIFICATION_HISTORY_APPEND_REJECTED_');
+      if(!rejectionMessage.includes(exactReason))
+        fail('CORRUPT_METADATA_REJECTION_REASON_LOST:'+rejectionMessage);
+      const stored=await store.get(store.STORES.metadata,'qualification_history_v1');
+      if(expected.endsWith('VERSION_MISMATCH')&&stored.events.length!==5)
+        fail('CORRUPT_VERSION_APPENDED_HISTORY');
+      if(expected.endsWith('EVENTS_NOT_ARRAY')&&stored.events!=='damaged-events-field')
+        fail('CORRUPT_EVENTS_WERE_RESET');
+    }
+    // Disposable, synthetic cross-tab monetary commit fixture. This is NOT
+    // historical money qualification and never touches customer data.
+    const scopePartner='synthetic-scope-atomic',scopeDate='2026-09-22';
+    const scopeID='scope:'+scopePartner+':'+scopeDate+':mn';
+    const partner={id:scopePartner,name:'Synthetic Atomic',role:'customer',active:true};
+    const config={id:scopePartner+':v1',partner_id:scopePartner,version:1,
+      effective_from_date:'2026-09-01',region_pricing:{mn:{B:{win:80}}},
+      region_terms:{mn:{total_percent:'100'}}};
+    const message={id:'synthetic-atomic-message',partner_id:scopePartner,
+      business_date:scopeDate,region:'mn',created_at:'2026-09-22T00:00:00Z',
+      updated_at:'2026-09-22T00:00:00Z',status:'parsed_waiting_result',
+      raw_text:'11 b 1n',canonical_payload:{region:'mn',legs:[{code:'B'}]},
+      config_snapshot:config};
+    const draw={id:scopeDate+':mn',business_date:scopeDate,region:'mn',
+      complete:true,verified:true,verification_status:'verified',
+      stations:[{code:'tp',prizes:{DB:['123456']}}]};
+    async function putSynthetic(table,value) {
+      const db=await store.openDb();
+      try {
+        const tx=db.transaction(table,'readwrite');
+        tx.objectStore(table).put(value);
+        await new Promise((resolve,reject)=>{
+          tx.oncomplete=resolve;
+          tx.onerror=()=>reject(tx.error||new Error('ATOMIC_FIXTURE_WRITE_FAILED'));
+          tx.onabort=()=>reject(tx.error||new Error('ATOMIC_FIXTURE_WRITE_ABORTED'));
+        });
+      }finally{db.close();}
+    }
+    await putSynthetic(store.STORES.partners,partner);
+    await putSynthetic(store.STORES.configs,config);
+    await putSynthetic(store.STORES.messages,message);
+    await putSynthetic(store.STORES.results,draw);
+    const settle={id:scopeID,partner_id:scopePartner,business_date:scopeDate,
+      region:'mn',engine_version:'synthetic-no-financial-oracle',
+      config_snapshot:config,lottery_result_snapshot:draw,
+      settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0},
+      scope_status:'complete_unverified',comparison_status:'unverified'};
+    const initialEvidence={messages:[message],config,result:draw,partner,settlement:null};
+    const racing=await Promise.all(workers.map(w=>
+      w.KTS_SETTLEMENT_STORE.saveSettlementIfScopeUnchanged(settle,initialEvidence)));
+    if(racing.filter(x=>!x.superseded&&x.saved).length!==1||
+       racing.filter(x=>x.superseded).length!==1)
+      fail('SETTLEMENT_CROSS_TAB_ATOMIC_CAS_FAILED');
+    const currentSettlement=await store.get(store.STORES.settlements,scopeID);
+    const currentMessage=await store.get(store.STORES.messages,message.id);
+    if(!currentSettlement||currentMessage.status!=='settled_unverified')
+      fail('SETTLEMENT_MESSAGE_STATUS_NOT_ATOMICALLY_COMMITTED');
+    const currentEvidence={messages:[currentMessage],config,result:draw,partner,
+      settlement:currentSettlement};
+    for(const [table,alter,original] of [
+      [store.STORES.messages,m=>{m.canonical_payload.legs[0].code='DD'},currentMessage],
+      [store.STORES.configs,c=>{c.region_pricing.mn.B.win=1234},config],
+      [store.STORES.results,r=>{r.stations[0].prizes.DB[0]='654321'},draw],
+      [store.STORES.partners,p=>{p.role='owner'},partner]
+    ]){
+      const edited=JSON.parse(JSON.stringify(original));
+      alter(edited);
+      await putSynthetic(table,edited);
+      const stale=await workers[0].KTS_SETTLEMENT_STORE
+        .saveSettlementIfScopeUnchanged(settle,currentEvidence);
+      if(!stale.superseded||stale.saved)
+        fail('SETTLEMENT_CHANGED_INPUT_COMMITTED:'+table);
+      await putSynthetic(table,original);
+    }
+    const afterMoney=await store.get(store.STORES.settlements,scopeID);
+    if(afterMoney.id!==currentSettlement.id||afterMoney.updated_at!==currentSettlement.updated_at)
+      fail('SETTLEMENT_STALE_INPUT_CHANGED_MONEY');
+    // An invalid second message must not partially change the first
+    // message's settled status or write the monetary row.
+    const foreign={...message,id:'synthetic-foreign-config-message',
+      config_snapshot:{...config,partner_id:'another-partner'},
+      status:'parsed_waiting_result'};
+    await putSynthetic(store.STORES.messages,foreign);
+    const beforeFirst=await store.get(store.STORES.messages,message.id);
+    const guarded=await workers[0].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(settle,{
+        messages:[beforeFirst,foreign],config,result:draw,partner,
+        settlement:currentSettlement
+      });
+    if(!guarded.superseded||guarded.saved)
+      fail('FOREIGN_CONFIG_MESSAGE_WAS_COMMITTED');
+    const untouchedFirst=await store.get(store.STORES.messages,message.id);
+    const untouchedMoney=await store.get(store.STORES.settlements,scopeID);
+    if(JSON.stringify(untouchedFirst)!==JSON.stringify(beforeFirst)||
+       JSON.stringify(untouchedMoney)!==JSON.stringify(currentSettlement))
+      fail('INVALID_LATE_MESSAGE_CAUSED_PARTIAL_WRITE');
+
+    // A delayed BLOCKED or EMPTY record is also conditional on the same
+    // atomic input and previous-settlement snapshot, without touching money.
+    const beforeBlock=await store.get(store.STORES.messages,message.id);
+    const blockedScope={...settle,scope_status:'blocked',
+      comparison_status:'blocked',blocked_reasons:['SYNTHETIC_UNSUPPORTED']};
+    const blockedCommit=await workers[0].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(blockedScope,{
+        messages:[beforeBlock,foreign],config,result:draw,partner,
+        settlement:currentSettlement
+      });
+    if(blockedCommit.superseded||!blockedCommit.saved||
+       (await store.get(store.STORES.messages,message.id)).status!==beforeBlock.status)
+      fail('BLOCKED_ATOMIC_COMMIT_FAILED');
+    const staleReady=await workers[1].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(settle,{
+        messages:[beforeBlock,foreign],config,result:draw,partner,
+        settlement:currentSettlement
+      });
+    if(!staleReady.superseded||staleReady.saved)
+      fail('STALE_READY_OVERWROTE_BLOCKED');
+
+    const emptyPartner='synthetic-empty-atomic';
+    const emptyID='scope:'+emptyPartner+':'+scopeDate+':mn';
+    const emptyScope={...settle,id:emptyID,partner_id:emptyPartner,
+      config_snapshot:null,lottery_result_snapshot:null,scope_status:'empty',
+      comparison_status:'empty',message_ids:[]};
+    const emptyInputs={messages:[],config:null,result:draw,partner:null,settlement:null};
+    const emptyCommit=await workers[0].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(emptyScope,emptyInputs);
+    if(emptyCommit.superseded||!emptyCommit.saved)
+      fail('EMPTY_ATOMIC_COMMIT_FAILED');
+    await putSynthetic(store.STORES.messages,{
+      ...message,id:'synthetic-new-bet-after-empty',partner_id:emptyPartner,
+      config_snapshot:null
+    });
+    const staleEmpty=await workers[1].KTS_SETTLEMENT_STORE
+      .saveSettlementIfScopeUnchanged(emptyScope,{
+        ...emptyInputs,settlement:emptyCommit.saved
+      });
+    if(!staleEmpty.superseded||staleEmpty.saved)
+      fail('STALE_EMPTY_OVERWROTE_NEW_BET');
+    // Real browser contexts pin golden regressions using the actual
+    // regression module with ONLY synthetic zero-money fixtures.
+    const regressionCase=i=>({
+      id:'synthetic-golden-'+i,
+      scope:{partner_id:'synthetic-golden-partner',business_date:'2026-09-22',region:'mn'},
+      partner_role:'customer',
+      config_snapshot:{partner_id:'synthetic-golden-partner',version:1},
+      lottery_result_snapshot:{region:'mn',business_date:'2026-09-22'},
+      messages:[{id:'synthetic-golden-message-'+i,region:'mn',raw_text:'11 b 1n',
+        canonical_payload:{region:'mn',legs:[{code:'2CB'}]}}],
+      expected_reference:{totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}}
+    });
+    if(workers.some(w=>!w.KTS_SETTLEMENT_REGRESSION_CASES||
+       typeof w.KTS_SETTLEMENT_REGRESSION_CASES.pinCase!=='function'))
+      fail('GOLDEN_REGRESSION_WORKER_API_MISSING');
+    await Promise.all(workers.map((w,i)=>
+      w.KTS_SETTLEMENT_REGRESSION_CASES.pinCase(regressionCase(i))));
+    const golden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(golden.length!==2||!golden.some(c=>c.id==='synthetic-golden-0')||
+       !golden.some(c=>c.id==='synthetic-golden-1'))
+      fail('GOLDEN_CONCURRENT_PIN_LOST_CASE');
+    await Promise.all([
+      workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase('synthetic-golden-0'),
+      workers[1].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(regressionCase(2))
+    ]);
+    const retained=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(retained.length!==2||retained.some(c=>c.id==='synthetic-golden-0')||
+       !retained.some(c=>c.id==='synthetic-golden-1')||
+       !retained.some(c=>c.id==='synthetic-golden-2'))
+      fail('GOLDEN_CONCURRENT_REMOVE_AND_PIN_LOST_UPDATE');
+    const corruptGolden={
+      key:'shadow_regression_cases_v1',version:1,cases:'CORRUPTED'
+    };
+    await putSynthetic(store.STORES.metadata,corruptGolden);
+    let refusedCorrupt=false;
+    try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(regressionCase(3));}
+    catch(e){refusedCorrupt=String(e&&e.message||e).includes('REGRESSION_METADATA_CORRUPTED');}
+    const preservedCorrupt=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!refusedCorrupt||preservedCorrupt.cases!=='CORRUPTED')
+      fail('CORRUPT_GOLDEN_METADATA_OVERWRITTEN');
+
+    // Restoring *only synthetic fixture rows*: never imports or overwrites
+    // any genuine historical payout or unverified HIOSKT source.
+    await putSynthetic(store.STORES.metadata,{
+      key:corruptGolden.key,version:1,cases:retained
+    });
+    const candApi=window.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+    if(!candApi||typeof candApi.confirmAndPin!=='function'||
+       workers.some(w=>!w.KTS_SETTLEMENT_REGRESSION_CANDIDATES))
+      fail('CANDIDATE_BROWSER_WORKER_API_MISSING');
+    const candidateFor=i=>candApi.normalizeCandidate({
+      id:'candidate:synthetic-'+i,source_event_id:'synthetic-'+i,
+      state:'pending',source_comparison_status:'MISMATCH',
+      case:window.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase(regressionCase(i))
+    });
+    const candidateKey=candApi.META_KEY;
+    await putSynthetic(store.STORES.metadata,{
+      key:candidateKey,version:1,candidates:[candidateFor(4),candidateFor(5),candidateFor(6)]
+    });
+    // Two unrelated HIOSKT mismatch candidates promoted from separate
+    // same-origin frames must both survive and both create golden cases.
+    const dual=await Promise.all([4,5].map((i,j)=>
+      workers[j].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        'candidate:synthetic-'+i,{reference_confirmed:true,note:'SYNTHETIC_ONLY'})));
+    if(dual.some(c=>c.state!=='promoted'))
+      fail('CANDIDATE_DUAL_PROMOTION_NOT_COMMITTED');
+    const latestGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    const candidateStored=await candApi.listCandidates();
+    if(latestGolden.length!==4||candidateStored.filter(c=>c.state==='promoted').length!==2)
+      fail('CANDIDATE_GOLDEN_PROMOTION_CROSS_TAB_LOST_UPDATE');
+    // Concurrent promote vs dismiss for the SAME candidate must commit
+    // only one terminal state; loser must throw and cannot leave orphan gold.
+    const conflict=await Promise.allSettled([
+      workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        'candidate:synthetic-6',{reference_confirmed:true,note:'SYNTHETIC_ONLY'}),
+      workers[1].KTS_SETTLEMENT_REGRESSION_CANDIDATES.dismissCandidate(
+        'candidate:synthetic-6','SYNTHETIC_ONLY')
+    ]);
+    if(conflict.filter(x=>x.status==='fulfilled').length!==1||
+       conflict.filter(x=>x.status==='rejected').length!==1)
+      fail('CANDIDATE_PROMOTE_DISMISS_RACE_NOT_SERIALIZED');
+    const afterRace=(await candApi.listCandidates()).find(c=>c.id==='candidate:synthetic-6');
+    const afterRaceGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(!afterRace||!['promoted','dismissed'].includes(afterRace.state)||
+       afterRaceGolden.some(c=>c.id==='synthetic-golden-6')!==(afterRace.state==='promoted'))
+      fail('CANDIDATE_GOLDEN_STATE_NOT_ATOMIC');
+    const corruptCandidate={key:candidateKey,version:1,candidates:'CORRUPTED'};
+    await putSynthetic(store.STORES.metadata,corruptCandidate);
+    const beforeBadGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    let refusedBadCandidate=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        'candidate:synthetic-4',{reference_confirmed:true});
+    }catch(error){refusedBadCandidate=String(error&&error.message||error).includes('METADATA_CORRUPTED');}
+    const badCandidateStored=await store.get(store.STORES.metadata,candidateKey);
+    const unchangedGolden=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(!refusedBadCandidate||badCandidateStored.candidates!=='CORRUPTED'||
+       unchangedGolden.length!==beforeBadGolden.length)
+      fail('CANDIDATE_CORRUPT_METADATA_ACCEPTED_OR_PARTIAL_PIN');
+
+    // Preserve true and false money totals by identity: reusing the same
+    // golden ID with a different reference must never overwrite the source.
+    const lockOriginal=await store.get(store.STORES.metadata,corruptGolden.key);
+    const changedGolden=regressionCase(2);
+    changedGolden.expected_reference={totals:{xac:'1',qua_co:'0',payout:'0',final:'0'}};
+    let refusedGoldenCollision=false;
+    try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(changedGolden);}
+    catch(e){refusedGoldenCollision=String(e&&e.message||e).includes('REGRESSION_GOLDEN_ID_CONFLICT');}
+    const afterGoldenCollision=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!refusedGoldenCollision||
+       JSON.stringify(lockOriginal)!==JSON.stringify(afterGoldenCollision))
+      fail('GOLDEN_ID_CONFLICT_WAS_NOT_REJECTED');
+    // Restore the synthetic candidate fixture after the corruption test,
+    // then prove same mismatched event from two tabs appends exactly once.
+    await putSynthetic(store.STORES.metadata,{
+      key:candidateKey,version:1,candidates:await Promise.all([
+        candidateFor(4),candidateFor(5),candidateFor(6)
+      ])
+    });
+    for(const w of workers){
+      w.KTS_SETTLEMENT_SHADOW_RUNTIME.buildReplayCase=()=>w.KTS_SETTLEMENT_REGRESSION_CASES.normalizeCase(
+        regressionCase(7));
+    }
+    const mismatchEvent={id:'synthetic-event-7',
+      comparison_status:'MISMATCH',observed_at:'2026-09-22T00:00:00Z',
+      local_snapshot:{settlement_result:{final_net:0}},
+      reference_snapshot:{totals:{final:'0'}},
+      comparison:{totals:{final_net:{delta:'0'}}}};
+    const captured=await Promise.all(workers.map(w=>
+      w.KTS_SETTLEMENT_REGRESSION_CANDIDATES.captureEvidence(mismatchEvent,{
+        note:'synthetic concurrent duplicate event'
+      })));
+    if(captured.length!==2||captured[0].id!==captured[1].id)
+      fail('CANDIDATE_DUPLICATE_CAPTURE_NOT_STABLE');
+    const eventsAfterCapture=(await candApi.listCandidates())
+      .filter(c=>c.id===captured[0].id);
+    if(eventsAfterCapture.length!==1||eventsAfterCapture[0].state!=='pending')
+      fail('CANDIDATE_CROSS_TAB_DUPLICATE_CAPTURE_LOST_OR_DUPLICATED');
+    await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES
+      .dismissCandidate(captured[0].id,'synthetic dismissal');
+    const repeated=await workers[1].KTS_SETTLEMENT_REGRESSION_CANDIDATES
+      .captureEvidence(mismatchEvent,{note:'should not resurrect'});
+    if(repeated.state!=='dismissed'||(await candApi.listCandidates())
+       .filter(c=>c.id===captured[0].id).length!==1)
+      fail('CANDIDATE_DISMISSED_EVENT_RESURRECTED');
+
+    // A stable shadow event ID must not silently mask a different HIOSKT
+    // reference amount, even if the original was dismissed.
+    const tamperedSameId={...mismatchEvent,
+      reference_snapshot:{totals:{final:'999'}}};
+    const candidatesBeforeCollision=await candApi.listCandidates();
+    let rejectedChangedEvidence=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.captureEvidence(
+        tamperedSameId,{note:'tampered independent oracle amount'});
+    }catch(e){
+      rejectedChangedEvidence=String(e&&e.message||e)
+        .includes('REGRESSION_CANDIDATE_EVENT_ID_CONFLICT');
+    }
+    const candidatesAfterCollision=await candApi.listCandidates();
+    if(!rejectedChangedEvidence||
+       JSON.stringify(candidatesBeforeCollision)!==JSON.stringify(candidatesAfterCollision))
+      fail('CANDIDATE_SAME_ID_DIFFERENT_MONEY_WAS_SILENTLY_DEDUPED');
+    // Synthetic confirmed money must not be deleted while a promoted
+    // candidate references its golden proof. Unlinked records may be removed.
+    const beforeProtected=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    const locked=beforeProtected.find(c=>c.id==='synthetic-golden-4');
+    if(!locked)fail('PROMOTED_DELETE_FIXTURE_MISSING_GOLDEN');
+    const candidateMeta=await store.get(store.STORES.metadata,candidateKey);
+    const ix=candidateMeta.candidates.findIndex(c=>c.id==='candidate:synthetic-4');
+    if(ix<0)fail('PROMOTED_DELETE_FIXTURE_MISSING_CANDIDATE');
+    candidateMeta.candidates[ix]={...candidateMeta.candidates[ix],
+      state:'promoted',case:locked,
+      promoted_at:'2026-09-22T12:00:00.000Z',
+      updated_at:'2026-09-22T12:00:00.000Z',
+      confirmation_note:'SYNTHETIC_OPERATOR_CONFIRMED'};
+    await putSynthetic(store.STORES.metadata,candidateMeta);
+    let rejectedLinkedDeletion=false;
+    try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase(locked.id);}
+    catch(error){rejectedLinkedDeletion=String(error&&error.message||error)
+      .includes('REGRESSION_GOLDEN_LINKED_TO_PROMOTED_CANDIDATE');}
+    if(!rejectedLinkedDeletion||
+       (await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
+         .filter(c=>c.id===locked.id).length!==1)
+      fail('PROMOTED_LINKED_GOLDEN_WAS_DELETED');
+    await workers[1].KTS_SETTLEMENT_REGRESSION_CASES
+      .removePinnedCase('synthetic-golden-2');
+    if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
+       .some(c=>c.id==='synthetic-golden-2'))
+      fail('UNLINKED_GOLDEN_DELETE_BLOCKED');
+    // A corrupted import can contain the same candidate event twice.
+    // Reading its metadata must fail closed instead of counting duplicate
+    // human confirmations as two independent HIOSKT proofs.
+    const cleanCandidateRow=await store.get(store.STORES.metadata,candidateKey);
+    const duplicateCandidateRow={...cleanCandidateRow,
+      candidates:cleanCandidateRow.candidates.concat([
+        JSON.parse(JSON.stringify(cleanCandidateRow.candidates[0]))])};
+    await putSynthetic(store.STORES.metadata,duplicateCandidateRow);
+    let duplicateReadRejected=false,duplicateDiagnostic='NO_ERROR';
+    try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
+    catch(error){
+      duplicateDiagnostic=String(error&&error.message||error);
+      duplicateReadRejected=duplicateDiagnostic.includes('REGRESSION_CANDIDATE_DUPLICATE_ID');
+    }
+    if(!duplicateReadRejected)
+      fail('DUPLICATE_HIOSKT_CANDIDATE_METADATA_NOT_REJECTED:'+duplicateDiagnostic);
+    await putSynthetic(store.STORES.metadata,cleanCandidateRow);
+    if((await candApi.listCandidates()).length!==cleanCandidateRow.candidates.length)
+      fail('DUPLICATE_CANDIDATE_RECOVERY_NOT_REPRODUCIBLE');
+
+    // Synthetic imported golden records with duplicate IDs or two IDs from
+    // the same shadow event must fail closed and preserve the source row.
+    const cleanGolden=await store.get(store.STORES.metadata,corruptGolden.key);
+    const baseGolden=cleanGolden.cases[0];
+    if(!baseGolden)fail('GOLDEN_DUPLICATE_FIXTURE_MISSING');
+    for(const [corruption,code] of [
+      [{...cleanGolden,cases:cleanGolden.cases.concat([
+        JSON.parse(JSON.stringify(baseGolden))])},'REGRESSION_GOLDEN_DUPLICATE_ID'],
+      [{...cleanGolden,cases:cleanGolden.cases.concat([
+        {...baseGolden,id:'synthetic-other-id',source_event_id:'evt-identical'},
+        {...baseGolden,id:'synthetic-another-id',source_event_id:'evt-identical'}
+      ])},'REGRESSION_GOLDEN_DUPLICATE_SOURCE_EVENT']
+    ]){
+      await putSynthetic(store.STORES.metadata,corruption);
+      let blocked=false;
+      try {await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();}
+      catch(error){blocked=String(error&&error.message||error).includes(code);}
+      if(!blocked)fail('DUPLICATE_GOLDEN_NOT_BLOCKED:'+code);
+      const untouched=await store.get(store.STORES.metadata,corruptGolden.key);
+      if(JSON.stringify(untouched)!==JSON.stringify(corruption))
+        fail('GOLDEN_CORRUPTION_WAS_SILENTLY_REWRITTEN');
+    }
+    await putSynthetic(store.STORES.metadata,cleanGolden);
+    if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases()).length!==cleanGolden.cases.length)
+      fail('GOLDEN_CORRUPT_IMPORT_RECOVERY_INVALID');
+
+    // A second operator candidate must not attach to an already-confirmed
+    // golden even if it supplies the same normalized reference/case ID.
+    const candidatesBeforeAlias=await store.get(store.STORES.metadata,candidateKey);
+    const goldenBeforeAlias=await store.get(store.STORES.metadata,corruptGolden.key);
+    const originalClaim=candidatesBeforeAlias.candidates.find(c=>
+      c.id==='candidate:synthetic-4'&&c.state==='promoted');
+    if(!originalClaim)fail('PROMOTED_CLAIM_FIXTURE_MISSING');
+    const duplicateClaim=candApi.normalizeCandidate({
+      ...originalClaim,id:'candidate:synthetic-alias',
+      source_event_id:'synthetic-alias',state:'pending',
+      promoted_at:null,confirmation_note:''
+    });
+    await putSynthetic(store.STORES.metadata,{
+      ...candidatesBeforeAlias,
+      candidates:candidatesBeforeAlias.candidates.concat([duplicateClaim])
+    });
+    let aliasBlocked=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.confirmAndPin(
+        duplicateClaim.id,{reference_confirmed:true,note:'SYNTHETIC_ONLY'});
+    }catch(error){
+      aliasBlocked=String(error&&error.message||error).includes('REGRESSION_GOLDEN_ALREADY_CLAIMED');
+    }
+    const afterAlias=await store.get(store.STORES.metadata,candidateKey);
+    const goldenAfterAlias=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!aliasBlocked||afterAlias.candidates.find(c=>c.id===duplicateClaim.id).state!=='pending'||
+       JSON.stringify(goldenBeforeAlias)!==JSON.stringify(goldenAfterAlias))
+      fail('DOUBLE_HIOSKT_CONFIRMATION_CHANGED_GOLDEN_OR_CANDIDATE');
+    await putSynthetic(store.STORES.metadata,candidatesBeforeAlias);
+
+    // Reject a backup whose candidate's own ID or canonical shadow event
+    // lineage does not match the event that produced its golden evidence.
+    const soundCandidates=await store.get(store.STORES.metadata,candidateKey);
+    if(!soundCandidates||!soundCandidates.candidates.length)
+      fail('SOURCE_ID_FIXTURE_MISSING');
+    for(const [alter,reason] of [
+      [c=>{c.id='candidate:forged-id';},'REGRESSION_CANDIDATE_SOURCE_ID_MISMATCH'],
+      [c=>{c.case.source_event_id='different-shadow-event';},'REGRESSION_CANDIDATE_CASE_SOURCE_MISMATCH']
+    ]){
+      const altered=JSON.parse(JSON.stringify(soundCandidates));
+      alter(altered.candidates[0]);
+      await putSynthetic(store.STORES.metadata,altered);
+      let rejected=false;
+      try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
+      catch(error){rejected=String(error&&error.message||error).includes(reason);}
+      if(!rejected)fail('INVALID_CANDIDATE_SOURCE_ACCEPTED:'+reason);
+      if(JSON.stringify(await store.get(store.STORES.metadata,candidateKey))!==JSON.stringify(altered))
+        fail('INVALID_CANDIDATE_SOURCE_AUTOMATICALLY_MODIFIED');
+    }
+    await putSynthetic(store.STORES.metadata,soundCandidates);
+    if((await candApi.listCandidates()).length!==soundCandidates.candidates.length)
+      fail('SOURCE_ID_RESTORATION_UNREPRODUCIBLE');
+
+    // A tampered imported terminal state without its operator receipt
+    // must never be accepted as a real HIOSKT confirmation or dismissal.
+    const cleanReceipts=await store.get(store.STORES.metadata,candidateKey);
+    const terminal=(state)=>cleanReceipts.candidates.findIndex(c=>c.state===state);
+    for(const [state,damage,reason] of [
+      ['promoted',c=>{c.promoted_at=null;},'REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING'],
+      ['promoted',c=>{c.confirmation_note=' ';},'REGRESSION_CANDIDATE_PROMOTION_RECEIPT_MISSING'],
+      ['dismissed',c=>{c.dismissed_at=null;},'REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING'],
+      ['dismissed',c=>{c.dismiss_reason=' ';},'REGRESSION_CANDIDATE_DISMISS_RECEIPT_MISSING']
+    ]){
+      const copy=JSON.parse(JSON.stringify(cleanReceipts));
+      const index=terminal(state);
+      if(index<0)fail('TERMINAL_CANDIDATE_TEST_FIXTURE_MISSING:'+state);
+      damage(copy.candidates[index]);
+      await putSynthetic(store.STORES.metadata,copy);
+      let blocked=false;
+      try{await workers[0].KTS_SETTLEMENT_REGRESSION_CANDIDATES.listCandidates();}
+      catch(error){blocked=String(error&&error.message||error).includes(reason);}
+      if(!blocked)fail('FORGED_TERMINAL_RECEIPT_ACCEPTED:'+state);
+      if(JSON.stringify(await store.get(store.STORES.metadata,candidateKey))!==JSON.stringify(copy))
+        fail('FORGED_TERMINAL_RECEIPT_REWRITTEN');
+    }
+    await putSynthetic(store.STORES.metadata,cleanReceipts);
+    if((await candApi.listCandidates()).length!==cleanReceipts.candidates.length)
+      fail('TERMINAL_RECEIPT_RESTORATION_FAILED');
+
+    // Backup export covers all stores in one readonly transaction.
+    // No private history or production data exists in this browser profile.
+    const backup=await store.exportAll();
+    if(backup.format!=='kts-settlement-export'||backup.version!==5)
+      fail('ATOMIC_BACKUP_SCHEMA_CHANGED');
+    for(const name of Object.values(store.STORES)){
+      if(!Array.isArray(backup.stores[name]))
+        fail('ATOMIC_BACKUP_STORE_MISSING:'+name);
+    }
+    const snapGolden=backup.stores[store.STORES.metadata].find(
+      x=>x.key===corruptGolden.key);
+    const snapCandidates=backup.stores[store.STORES.metadata].find(
+      x=>x.key===candidateKey);
+    if(!snapGolden||!snapCandidates||
+       snapGolden.cases.length!==(await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases()).length||
+       snapCandidates.candidates.length!==(await candApi.listCandidates()).length)
+      fail('ATOMIC_BACKUP_GOLDEN_CANDIDATE_SNAPSHOT_MISSING');
+
+    // A backup from another tab/device with a conflicting confirmed golden
+    // cannot be silently skipped by merge, and cannot partially mutate DB.
+    const verifiedBeforeImport=await store.get(store.STORES.metadata,corruptGolden.key);
+    const importedConflict={format:'kts-settlement-export',version:5,stores:{
+      metadata:[{...verifiedBeforeImport,updated_at:'SYNTHETIC_FOREIGN_BACKUP_PROOF'}]}};
+    let refusedProtectedMerge=false;
+    try{await workers[0].KTS_SETTLEMENT_STORE.importAll(importedConflict,{replace:false});}
+    catch(error){refusedProtectedMerge=String(error&&error.message||error)
+      .includes('IMPORT_PROTECTED_EVIDENCE_COLLISION');}
+    const verifiedAfterImport=await store.get(store.STORES.metadata,corruptGolden.key);
+    if(!refusedProtectedMerge||
+       JSON.stringify(verifiedBeforeImport)!==JSON.stringify(verifiedAfterImport))
+      fail('CONFLICTING_HIOSKT_BACKUP_IMPORTED_OR_PROOF_CHANGED');
+
+    // A newly pinned ID cannot claim a Shadow event already used by a
+    // different golden ID, even when two same-origin tabs perform the pins.
+    const firstSourceCase={...regressionCase(12),
+      source_event_id:'synthetic-source-event-12'};
+    await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(firstSourceCase);
+    const aliasSourceCase={...firstSourceCase,id:'synthetic-golden-other-12'};
+    let sourceClaimDenied=false;
+    try{await workers[1].KTS_SETTLEMENT_REGRESSION_CASES.pinCase(aliasSourceCase);}
+    catch(error){sourceClaimDenied=String(error&&error.message||error)
+      .includes('REGRESSION_GOLDEN_SOURCE_EVENT_CONFLICT');}
+    const sourceClaimRows=await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases();
+    if(!sourceClaimDenied||
+       sourceClaimRows.filter(c=>c.source_event_id==='synthetic-source-event-12').length!==1)
+      fail('GOLDEN_SECOND_SOURCE_CLAIM_COMMITTED');
+    await workers[0].KTS_SETTLEMENT_REGRESSION_CASES.removePinnedCase(firstSourceCase.id);
+    if((await window.KTS_SETTLEMENT_REGRESSION_CASES.listPinnedCases())
+       .some(c=>c.source_event_id==='synthetic-source-event-12'))
+      fail('SYNTHETIC_GOLDEN_SOURCE_FIXTURE_NOT_CLEAN');
+    // A clean protected evidence row and an unrelated metadata row must
+    // still import successfully; the new in-transaction CAS is not a blanket
+    // refusal of backups. This profile contains synthetic data only.
+    const stableGolden=await store.get(store.STORES.metadata,corruptGolden.key);
+    const benignMetadata={key:'synthetic-unprotected-import-test',
+      version:1,purpose:'backup-cas-allow-positive'};
+    const safeBackup={format:'kts-settlement-export',version:5,stores:{
+      metadata:[stableGolden,benignMetadata]}};
+    const restored=await workers[0].KTS_SETTLEMENT_STORE.importAll(
+      safeBackup,{replace:false});
+    const inserted=await store.get(store.STORES.metadata,benignMetadata.key);
+    if(!restored.valid||inserted.purpose!==benignMetadata.purpose||
+       JSON.stringify(await store.get(store.STORES.metadata,corruptGolden.key))!==
+         JSON.stringify(stableGolden))
+      fail('PROTECTED_EVIDENCE_BACKUP_ATOMIC_CAS_REJECTED_SAFE_IMPORT');
+    await store.remove(store.STORES.metadata,benignMetadata.key);
+    // Even the internal replace:true API must not erase pre-existing
+    // independently confirmed HIOSKT evidence. The normal UI uses merge.
+    const protectedGoldenBefore=await store.get(store.STORES.metadata,corruptGolden.key);
+    const protectedCandidatesBefore=await store.get(store.STORES.metadata,candidateKey);
+    const forbiddenReplacement={format:'kts-settlement-export',version:5,
+      stores:{metadata:[]}};
+    let forbiddenReplaceRejected=false;
+    try{
+      await workers[1].KTS_SETTLEMENT_STORE.importAll(
+        forbiddenReplacement,{replace:true});
+    }catch(error){
+      forbiddenReplaceRejected=String(error&&error.message||error)
+        .includes('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED');
+    }
+    if(!forbiddenReplaceRejected||
+      JSON.stringify(await store.get(store.STORES.metadata,corruptGolden.key))!==
+        JSON.stringify(protectedGoldenBefore)||
+      JSON.stringify(await store.get(store.STORES.metadata,candidateKey))!==
+        JSON.stringify(protectedCandidatesBefore))
+      fail('REPLACE_BACKUP_ERASED_HIOSKT_EVIDENCE');
+    // An imported Shadow event that reuses an existing ID but changes
+    // its independently supplied HIOSKT amount must be rejected, not
+    // silently skipped by the backup merge's existing-key short circuit.
+    const shadowImport=await store.saveShadowEvent({
+      scope_id:scopeID,partner_id:scopePartner,business_date:scopeDate,
+      region:'mn',trigger:'SYNTHETIC_SHADOW_ID_IMPORT_CONFLICT',
+      local_snapshot:{settlement_result:{final_net:0}},
+      reference_snapshot:{totals:{final:'0'}},
+      comparison:{status:'UNVERIFIED'},comparison_status:'UNVERIFIED'
+    });
+    const originalShadow=shadowImport.event;
+    const tamperedShadow={...originalShadow,
+      reference_snapshot:{totals:{final:'500'}}};
+    delete tamperedShadow.evidence_fingerprint;
+    const shadowCollisionBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.shadowEvents]:[tamperedShadow]}};
+    let shadowCollisionRejected=false;
+    try{
+      await workers[0].KTS_SETTLEMENT_STORE.importAll(
+        shadowCollisionBackup,{replace:false});
+    }catch(error){
+      shadowCollisionRejected=String(error&&error.message||error)
+        .includes('IMPORT_SHADOW_EVENT_CONTENT_COLLISION');
+    }
+    if(!shadowCollisionRejected||
+       JSON.stringify(await store.get(store.STORES.shadowEvents,originalShadow.id))!==
+       JSON.stringify(originalShadow))
+      fail('SHADOW_IMPORT_SAME_ID_DIFFERENT_MONEY_NOT_REJECTED');
+    const safeShadowImport={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.shadowEvents]:[originalShadow]}};
+    const restoredShadow=await workers[1].KTS_SETTLEMENT_STORE.importAll(
+      safeShadowImport,{replace:false});
+    if(!restoredShadow.valid||
+       JSON.stringify(await store.get(store.STORES.shadowEvents,originalShadow.id))!==
+       JSON.stringify(originalShadow))
+      fail('SHADOW_IMPORT_SAME_ID_IDENTICAL_MERGE_REFUSED');
+    await store.remove(store.STORES.shadowEvents,originalShadow.id);
+    // A replace backup retaining the protected metadata but omitting all
+    // existing Shadow receipts must still be rejected before clearing stores.
+    const protectedKeys=new Set(['qualification_history_v1',
+      'shadow_regression_cases_v1','shadow_regression_candidates_v1']);
+    // The earlier corruption test deliberately leaves a malformed journal
+    // in this disposable profile. Isolate the Shadow replace guard with a
+    // valid synthetic EMPTY journal, then restore the exact prior fixture.
+    const originalJournal=await store.get(
+      store.STORES.metadata,'qualification_history_v1');
+    await putSynthetic(store.STORES.metadata,{
+      key:'qualification_history_v1',version:1,events:[]
+    });
+    const protectedRows=(await store.getAll(store.STORES.metadata))
+      .filter(row=>protectedKeys.has(row.key));
+    const initialShadowReceipt=await store.get(
+      store.STORES.shadowEvents,shadowOutcomes[0].event.id);
+    const destructive={format:'kts-settlement-export',version:5,stores:{
+      [store.STORES.metadata]:protectedRows,
+      [store.STORES.shadowEvents]:[]
+    }};
+    let shadowReplaceBlocked=false,shadowReplaceReason='NO_ERROR';
+    try{await workers[0].KTS_SETTLEMENT_STORE.importAll(destructive,{replace:true});}
+    catch(error){
+      shadowReplaceReason=String(error&&error.message||error);
+      shadowReplaceBlocked=shadowReplaceReason
+        .includes('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED');
+    }
+    if(!initialShadowReceipt||!shadowReplaceBlocked||
+       JSON.stringify(await store.get(
+         store.STORES.shadowEvents,initialShadowReceipt&&initialShadowReceipt.id))!==
+       JSON.stringify(initialShadowReceipt))
+      fail('REPLACE_SHADOW_SOURCE_RECEIPT_ERASED_OR_NOT_GUARDED:'+
+       shadowReplaceReason+':receipt_present='+Boolean(initialShadowReceipt));
+    if(originalJournal)await putSynthetic(store.STORES.metadata,originalJournal);
+    else await store.remove(store.STORES.metadata,'qualification_history_v1');
+    // Imported backup IDs are not allowed to hide a conflicting KQXS
+    // drawing or a different settlement amount. Nothing must be overwritten.
+    const knownDraw=await store.get(store.STORES.results,draw.id);
+    const changedDraw={...knownDraw,
+      stations:[{code:'tp',prizes:{DB:['999999']}}]};
+    delete changedDraw.fingerprint;
+    const conflictingDrawBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.results]:[changedDraw]}};
+    let drawRejected=false;
+    try{await workers[0].KTS_SETTLEMENT_STORE.importAll(
+      conflictingDrawBackup,{replace:false});}
+    catch(error){drawRejected=String(error&&error.message||error)
+      .includes('IMPORT_RESULT_CONTENT_COLLISION');}
+    if(!drawRejected||JSON.stringify(await store.get(
+        store.STORES.results,knownDraw.id))!==JSON.stringify(knownDraw))
+      fail('CONFLICTING_KQXS_IMPORT_SILENTLY_SKIPPED');
+    const knownSettlement=await store.get(store.STORES.settlements,scopeID);
+    const conflictingSettlement={...knownSettlement,
+      settlement_result:{...(knownSettlement.settlement_result||{}),final_net:500}};
+    const conflictingMoneyBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.settlements]:[conflictingSettlement]}};
+    let moneyRejected=false;
+    try{await workers[1].KTS_SETTLEMENT_STORE.importAll(
+      conflictingMoneyBackup,{replace:false});}
+    catch(error){moneyRejected=String(error&&error.message||error)
+      .includes('IMPORT_SETTLEMENT_MONETARY_COLLISION');}
+    if(!moneyRejected||JSON.stringify(await store.get(
+        store.STORES.settlements,scopeID))!==JSON.stringify(knownSettlement))
+      fail('CONFLICTING_SETTLEMENT_IMPORT_SILENTLY_SKIPPED');
+    // Positive: an identical pre-existing draw + monetary scope may merge
+    // without replacing either row; both CAS reads occur in the real IDB tx.
+    const txPartner={id:'synthetic-cas-import',name:'Synthetic CAS',role:'customer',
+      active:true};
+    const txScope='scope:'+txPartner.id+':2026-09-22:mn';
+    const txMoney={id:txScope,partner_id:txPartner.id,
+      business_date:'2026-09-22',region:'mn',scope_status:'empty',
+      comparison_status:'empty',message_ids:[],config_snapshot:null,
+      settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,
+        refund_amount:0,final_net:0}};
+    await putSynthetic(store.STORES.partners,txPartner);
+    await putSynthetic(store.STORES.settlements,txMoney);
+    const goodDraw=await store.get(store.STORES.results,draw.id);
+    const positiveMonetary={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.results]:[goodDraw],
+        [store.STORES.settlements]:[txMoney]}};
+    const accepted=await workers[1].KTS_SETTLEMENT_STORE.importAll(
+      positiveMonetary,{replace:false});
+    if(!accepted.valid||
+       JSON.stringify(await store.get(store.STORES.results,draw.id))!==
+         JSON.stringify(goodDraw)||
+       JSON.stringify(await store.get(store.STORES.settlements,txScope))!==
+         JSON.stringify(txMoney))
+      fail('IDENTICAL_KQXS_MONEY_IMPORT_ATOMIC_CAS_NOT_IDEMPOTENT');
+    await store.remove(store.STORES.settlements,txScope);
+    await store.remove(store.STORES.partners,txPartner.id);
+    // KQXS audit events are immutable receipts, separate from the
+    // latest results snapshot. An older backup cannot reuse a receipt ID
+    // with different observed_at or prizes while silently skipping it.
+    const eventRow={id:'result_event_synthetic_import_receipt',
+      result_id:draw.id,business_date:'2026-09-22',region:'mn',
+      status:'partial',complete:false,stations:[],
+      observed_at:'2026-09-22T12:00:00.000Z'};
+    await putSynthetic(store.STORES.resultEvents,eventRow);
+    const goodEventBackup={format:'kts-settlement-export',version:5,
+      stores:{[store.STORES.resultEvents]:[eventRow]}};
+    const resultEventAccepted=await workers[0].KTS_SETTLEMENT_STORE.importAll(
+      goodEventBackup,{replace:false});
+    if(!resultEventAccepted.valid)
+      fail('IDENTICAL_KQXS_EVENT_RECEIPT_BACKUP_REJECTED');
+    const alteredEvent={...eventRow,observed_at:'2026-09-23T12:00:00.000Z'};
+    let eventRejected=false;
+    try{
+      await workers[1].KTS_SETTLEMENT_STORE.importAll({
+        format:'kts-settlement-export',version:5,
+        stores:{[store.STORES.resultEvents]:[alteredEvent]}
+      },{replace:false});
+    }catch(error){eventRejected=String(error&&error.message||error)
+      .includes('IMPORT_RESULT_EVENT_CONTENT_COLLISION');}
+    if(!eventRejected||JSON.stringify(await store.get(
+       store.STORES.resultEvents,eventRow.id))!==JSON.stringify(eventRow))
+      fail('KQXS_RESULT_EVENT_AUDIT_RECEIPT_MUTATED');
+    await store.remove(store.STORES.resultEvents,eventRow.id);
+    // Deterministic REAL Chrome cross-frame import race: hold ONLY the
+    // second IDB.open completion (after atomic readonly preflight), let a
+    // different tab insert a new partner, then release the import writer.
+    // Every preflight store is checked in the writer's own transaction.
+    const racePartnerId='synthetic-import-source-drift-partner';
+    const raceMetadataId='synthetic-import-source-drift-metadata';
+    const importerFrame=workers[0];
+    const originalIDB=importerFrame.indexedDB;
+    let opens=0;
+    let releaseWriter, signalWriter;
+    const writerHeld=new Promise(resolve=>{releaseWriter=resolve;});
+    const writerEntered=new Promise(resolve=>{signalWriter=resolve;});
+    const patchedFactory={
+      open(...args){
+        const nativeRequest=originalIDB.open(...args);
+        opens++;
+        if(opens!==2)return nativeRequest;
+        return new Proxy(nativeRequest,{
+          get(target,field){return Reflect.get(target,field,target);},
+          set(target,field,handler){
+            if(field==='onsuccess'&&typeof handler==='function'){
+              target.onsuccess=event=>{
+                signalWriter();
+                writerHeld.then(()=>handler(event));
+              };
+              return true;
+            }
+            return Reflect.set(target,field,handler,target);
+          }
+        });
+      }
+    };
+    let raceResult=null;
+    try{
+      Object.defineProperty(importerFrame,'indexedDB',{
+        value:patchedFactory,configurable:true});
+      const incoming={format:'kts-settlement-export',version:5,
+        stores:{metadata:[{key:raceMetadataId,version:1,purpose:'synthetic-only'}]}};
+      const importing=importerFrame.KTS_SETTLEMENT_STORE.importAll(
+        incoming,{replace:false}).then(()=>({success:true}),
+        error=>({error:String(error&&error.message||error)}));
+      await Promise.race([
+        writerEntered,
+        new Promise((_,reject)=>setTimeout(()=>
+          reject(new Error('SYNTHETIC_IMPORT_WRITER_HOLD_TIMEOUT')),10000))
+      ]);
+      await workers[1].KTS_SETTLEMENT_STORE.savePartner({
+        id:racePartnerId,name:'Synthetic concurrent import writer',role:'customer'
+      });
+      releaseWriter();
+      raceResult=await importing;
+    } finally {
+      releaseWriter();
+      delete importerFrame.indexedDB;
+    }
+    if(!raceResult||!String(raceResult.error||'')
+      .includes('IMPORT_SOURCE_CHANGED_DURING_IMPORT:partners'))
+      fail('CROSS_TAB_IMPORT_SNAPSHOT_DRIFT_NOT_REJECTED:'+
+        JSON.stringify(raceResult));
+    if(await store.get(store.STORES.metadata,raceMetadataId))
+      fail('CROSS_TAB_IMPORT_PARTIALLY_COMMITTED_METADATA');
+    if(!(await store.get(store.STORES.partners,racePartnerId)))
+      fail('SYNTHETIC_CONCURRENT_PARTNER_WRITE_MISSING');
+    await store.remove(store.STORES.partners,racePartnerId);
+    {
+      // Real Chrome proof: a forged MATCH_EXACT backup without a matching
+      // durable Shadow receipt cannot insert even its synthetic partner.
+      const pid='synthetic-browser-exact-no-receipt';
+      const mid='synthetic-browser-exact-message';
+      const sid='scope:'+pid+':2026-09-22:mn';
+      const zero={total_xac:0,total_qua_co:0,total_payout:0,
+        refund_amount:0,final_net:0};
+      const payload={format:'kts-settlement-export',version:5,stores:{
+        [store.STORES.partners]:[{id:pid,name:'Synthetic only',role:'customer'}],
+        [store.STORES.messages]:[{id:mid,partner_id:pid,
+          business_date:'2026-09-22',region:'mn',raw_text:'SYNTHETIC ONLY',
+          status:'parsed_waiting_result'}],
+        [store.STORES.settlements]:[{id:sid,partner_id:pid,
+          business_date:'2026-09-22',region:'mn',scope_status:'complete_unverified',
+          comparison_status:'MATCH_EXACT',message_ids:[mid],
+          result_snapshot:zero,settlement_result:zero}]
+      }};
+      let blocked='';
+      try{await workers[1].KTS_SETTLEMENT_STORE.importAll(payload,
+        {replace:false});}
+      catch(err){blocked=String(err&&err.message||err);}
+      if(!blocked.includes('IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING')||
+        await store.get(store.STORES.partners,pid)||
+        await store.get(store.STORES.messages,mid)||
+        await store.get(store.STORES.settlements,sid))
+        fail('FORGED_EXACT_BACKUP_NOT_ATOMICALLY_REJECTED:'+blocked);
+    }
+  out.dataset.state='pass';
+    out.textContent=[
+      'QUALIFICATION_INDEXEDDB_BROWSER=PASS',
+      'QUALIFICATION_CROSS_IFRAME_CONCURRENT_APPEND=PASS',
+      'QUALIFICATION_EVENT_CHAIN_DURABLE=PASS',
+      'QUALIFICATION_BLOCKED_REVOKES_READY=PASS',
+      'QUALIFICATION_BROWSER_REQUALIFIED_CURRENT=PASS',
+      'QUALIFICATION_CONTRADICTORY_READY_REFUSED=PASS',
+      'QUALIFICATION_BROWSER_PRODUCTION_DISABLED=PASS',
+      'QUALIFICATION_CORRUPTED_HISTORY_FAIL_CLOSED=PASS',
+      'QUALIFICATION_CORRUPTED_HISTORY_APPEND_REFUSED=PASS',
+      'QUALIFICATION_CORRUPT_METADATA_UNVERIFIABLE=PASS',
+      'QUALIFICATION_CORRUPT_METADATA_APPEND_REFUSED=PASS',
+      'QUALIFICATION_APPEND_DIAGNOSTIC_PRESERVED=PASS',
+      'SETTLEMENT_CROSS_TAB_ATOMIC_COMMIT=PASS',
+      'SETTLEMENT_INPUT_REVISION_CAS=PASS',
+      'SETTLEMENT_MESSAGE_STATUS_TX=PASS',
+      'SETTLEMENT_ALL_MESSAGE_CONFIG_PREFLIGHT=PASS',
+      'SETTLEMENT_BLOCKED_EMPTY_ATOMIC_CAS=PASS',
+       'GOLDEN_CROSS_TAB_METADATA_ATOMIC=PASS',
+       'GOLDEN_CORRUPT_METADATA_FAIL_CLOSED=PASS',
+       'CANDIDATE_CROSS_TAB_ATOMIC_PROMOTION=PASS',
+       'CANDIDATE_PROMOTE_DISMISS_RACE_SERIAL=PASS',
+       'CANDIDATE_CORRUPT_METADATA_FAIL_CLOSED=PASS',
+       'CANDIDATE_CROSS_TAB_CAPTURE_DEDUPE=PASS',
+       'CANDIDATE_DISMISSED_CAPTURE_NO_RESURRECTION=PASS',
+       'CANDIDATE_SAME_EVENT_ID_IMMUTABLE=PASS',
+       'GOLDEN_SOURCE_ID_IMMUTABLE=PASS',
+       'PROMOTED_LINKED_GOLDEN_DELETE_REFUSED=PASS',
+       'DUPLICATE_HIOSKT_CANDIDATE_REJECTED=PASS',
+       'DUPLICATE_GOLDEN_ID_FAIL_CLOSED=PASS',
+       'DUPLICATE_GOLDEN_SOURCE_FAIL_CLOSED=PASS',
+       'SECOND_HIOSKT_GOLDEN_CLAIM_REFUSED=PASS',
+       'CANDIDATE_SOURCE_ID_FAIL_CLOSED=PASS',
+       'CANDIDATE_CASE_SOURCE_FAIL_CLOSED=PASS',
+       'CANDIDATE_TERMINAL_RECEIPT_FAIL_CLOSED=PASS',
+       'ATOMIC_CROSS_STORE_BACKUP_EXPORT=PASS',
+       'HIOSKT_BACKUP_CONFLICT_FAIL_CLOSED=PASS',
+       'GOLDEN_ATOMIC_SOURCE_CLAIM_REFUSED=PASS',
+       'PROTECTED_EVIDENCE_IMPORT_ATOMIC_CAS_POSITIVE=PASS',
+       'REPLACE_PROTECTED_HIOSKT_EVIDENCE_REJECTED=PASS',
+       'SHADOW_IMPORT_EVENT_ID_MONETARY_CONFLICT_REJECTED=PASS',
+       'SHADOW_IMPORT_SAME_ID_IDENTICAL_MERGE_PASS=YES',
+       'REPLACE_SHADOW_SOURCE_RECEIPT_PROTECTED=PASS',
+       'IMPORT_KQXS_CONTENT_CONFLICT_REJECTED=PASS',
+       'IMPORT_SETTLEMENT_MONEY_CONFLICT_REJECTED=PASS',
+       'IDENTICAL_KQXS_SETTLEMENT_IMPORT_ATOMIC_CAS=PASS',
+       'IMMUTABLE_KQXS_RESULT_EVENT_RECEIPT=PASS',
+       'IMPORT_ALL_STORES_CROSS_TAB_CAS=PASS',
+       'IMPORT_EXACT_RECEIPT_CHROME_GUARD=PASS',
+       'UNLINKED_GOLDEN_DELETE_ALLOWED=PASS',
+      'SHADOW_EVENT_CROSS_TAB_ATOMIC_DEDUPE=PASS',
+      'SHADOW_EVENT_DUPLICATE_ID_REJECTED=PASS',
+      'QUALIFICATION_INDEXEDDB_EVENT_COUNT=5'
+    ].join('\n');
+  }catch(error){
+  out.dataset.state='fail';
+    out.textContent='QUALIFICATION_INDEXEDDB_BROWSER=FAIL '+String(error&&error.stack||error);
+  }
+})();
+</script>
+</body>
+</html>
