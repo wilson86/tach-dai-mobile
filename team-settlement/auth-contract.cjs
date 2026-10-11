@@ -156,7 +156,7 @@ function createAuthService({ clock = () => Date.now(), sessionTtlMs = SESSION_TT
     if (typeof sessionToken !== 'string') return false;
     const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('base64url');
     const session = sessions.get(tokenHash);
-    if (!session) return false;
+    if (!session || session.revoked_at !== null) return false;
     session.revoked_at = clock();
     return true;
   }
