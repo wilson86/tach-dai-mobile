@@ -364,3 +364,30 @@ test('fake HTTP SYNCED without valid PostgreSQL feed receipt never syncs a draft
     assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
   }
 });
+
+test('two concurrent change polls never let a slower response roll the cursor back',async()=>{
+  const resolveRequest=[];
+  const urls=[];
+  const client=Sync.createSyncClient({fetchImpl:(url)=>new Promise(resolve=>{
+    urls.push(url);resolveRequest.push(resolve);
+  })});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const old=client.pullChanges();
+  const newer=client.pullChanges();
+  assert.equal(resolveRequest.length,2);
+  resolveRequest[1](response(200,{
+    sync_status:'SYNCED',items:[{event_id:'event_newer'}],
+    next_cursor:'cursor_newer',has_more:false
+  }));
+  assert.equal((await newer).status,'SYNCED');
+  assert.equal(client.snapshot().cursor,'cursor_newer');
+  resolveRequest[0](response(200,{
+    sync_status:'SYNCED',items:[{event_id:'event_older'}],
+    next_cursor:'cursor_older',has_more:false
+  }));
+  const stale=await old;
+  assert.equal(stale.status,'BLOCKED');
+  assert.equal(stale.error,'SYNC_STALE_FEED_RESPONSE');
+  assert.equal(client.snapshot().cursor,'cursor_newer');
+  assert.equal(urls[0],urls[1]);
+});

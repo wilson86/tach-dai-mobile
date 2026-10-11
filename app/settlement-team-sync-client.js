@@ -203,10 +203,16 @@
     async function pullChanges(limit = 100) {
       if (!sessionToken) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED', items: [] };
       const epoch = sessionEpoch;
-      const query = '?limit=' + encodeURIComponent(String(limit)) + (cursor ? '&cursor=' + encodeURIComponent(cursor) : '');
+      const requestedCursor = cursor;
+      const query = '?limit=' + encodeURIComponent(String(limit)) +
+        (requestedCursor ? '&cursor=' + encodeURIComponent(requestedCursor) : '');
       try {
         const result = await request('/v1/changes' + query, { method: 'GET' });
         if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
+        // Two parallel polls for the same session can complete out of order.
+        // A late response must never move the financial change cursor backward.
+        if (cursor !== requestedCursor)
+          return { status: STATUS.BLOCKED, error: 'SYNC_STALE_FEED_RESPONSE', items: [] };
         if (result.response.status === 401) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_INVALID', items: [] };
         if (!result.response.ok) return { status: STATUS.BLOCKED, error: result.body.error || 'SYNC_SERVER_REJECTED', items: [] };
         // Only a verified, contiguous page may advance the server change cursor.
