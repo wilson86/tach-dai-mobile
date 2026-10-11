@@ -20,5 +20,9 @@ assert(ui.includes("labels[displayStatus]||displayStatus"));
 assert(ui.includes('function exactProofUsable(comparison)'));
 assert(ui.includes('comparison.compared_fields >= fields.length'));
 assert(ui.includes('validMoney(item.local) && validMoney(item.reference)'));
+assert(ui.includes('const promotionSafe = exactProofUsable(result.comparison);'));
+assert(ui.includes("const savedStatus = result.comparison.status === 'MATCH_EXACT' && !promotionSafe"));
+assert(ui.includes('comparison_status: savedStatus'));
+assert(!ui.includes("status(result.comparison.safe_to_promote?"), 'raw promotion flag cannot enable green exact confirmation');
 
 console.log('settlement-shadow-ui-tests: PASS');

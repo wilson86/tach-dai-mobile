@@ -21,3 +21,5 @@ jobs:
         run: node --test .github/scripts/settlement-feature-history-audit.test.cjs
       - name: Batch HIOSKT input and exact-proof regression (synthetic)
         run: node tests/settlement-shadow-batch-tests.js
+      - name: Shadow UI exact-promotion display regression (synthetic)
+        run: node tests/settlement-shadow-ui-tests.js
