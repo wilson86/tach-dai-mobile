@@ -51,3 +51,15 @@ processes, audit trails and alerting for failed attempts, credential reset
 and rekey procedures, narrowly scoped auth DB roles, verified TLS/VPN,
 transaction isolation and security review. Separate `kts_auth` privileges
 from data-reader/writer permissions. Store no raw customer data in auth tables.
+
+
+## SQL role-separation gate for a disposable PostgreSQL database
+
+A dedicated GitHub Actions SQL test verifies two **non-login synthetic roles**:
+an auth candidate may access credential/session storage but must not read
+financial events, and a draft ledger writer may access workspace-scoped
+financial events but must not read credential or session material. Tests
+also demonstrate workspace RLS denying an unset tenant and limiting queries
+to the selected workspace. This does **not** prove two independent network
+connections, confidential credentials, an installed local PostgreSQL
+service or a pilot on Windows. Both roles are created in disposable CI only.

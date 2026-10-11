@@ -95,3 +95,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-auth.sql
       - name: Verify least-privilege durable-auth SQL and revoked-session boundary
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-durable-auth-contract.sql
+      - name: Prove auth versus ledger database role separation (synthetic only)
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-role-boundaries.sql
