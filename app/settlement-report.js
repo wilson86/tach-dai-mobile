@@ -173,7 +173,13 @@
       new Set(actual).size === actual.length &&
       actual.length === expected.length &&
       expected.every(code => actual.includes(code));
-    const claimedVerified = snapshot.verified === true || status === 'verified';
+    // NormalizeResultSnapshot emits these fields consistently; a legacy or
+    // tampered row with contradictory VERIFIED flags must never unlock
+    // exact day-close money, even when its prize array looks complete.
+    const claimedVerified=snapshot.verified===true &&
+      status==='verified' &&
+      snapshot.status==='complete' &&
+      snapshot.coverage_complete===true;
     const prizeDataValid = resultPrizeDataComplete(settlement && settlement.region || snapshot.region, snapshot);
     if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0 && coverageValid && prizeDataValid) return 'verified';
     return 'unverified';

@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.247-daily-exact-proof'));
+  assert.ok(source.includes('v1.0.248-kqxs-metadata-consistency'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2463,6 +2463,7 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
     G5:['321'],G4:['1111','2222','3333','4444','5555','6666','7777'],
     G3:['12345','54321'],G2:['12222'],G1:['11111'],DB:['123456']};
   const draw={business_date:'2026-09-22',region:'mn',
+    status:'complete',coverage_complete:true,
     complete:true,verified:true,verification_status:'verified',
     expected_station_codes:['tp'],verification_sources:['primary','secondary'],
     verification_conflicts:[],stations:[{code:'tp',prizes}]};
@@ -2482,6 +2483,18 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
   assert.equal(verified.status,'MATCH_EXACT');
   assert.equal(verified.counts.exact,1);
   assert.equal(verified.exact_totals.xac,100);
+  for(const contradictory of [
+    {verified:false},{verification_status:'unverified'},
+    {status:'partial'},{status:'error'},{coverage_complete:false},
+    {coverage_complete:null},{complete:false}
+  ]){
+    const corrupted=report.buildDailyOperationsReport(input({
+      ...proved,lottery_result_snapshot:{...draw,...contradictory}}));
+    assert.equal(corrupted.status,'UNVERIFIED');
+    assert.equal(corrupted.counts.exact,0);
+    assert.equal(corrupted.exact_totals.xac,0);
+    assert.equal(corrupted.partners[0].kqxs_verified,false);
+  }
   const stale={...proved,reference_app_snapshot:{
     ...proved.reference_app_snapshot,
     comparison:{...exactComparison,safe_to_promote:false}}};
