@@ -347,6 +347,95 @@
            comparison.totals[field] &&
            comparison.totals[field].status==='MATCH_EXACT'))
         throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+      const localTotals=input.local_snapshot &&
+        (input.local_snapshot.settlement_result || input.local_snapshot.result_snapshot) || {};
+      const referenceTotals=input.reference_snapshot &&
+        (input.reference_snapshot.totals || input.reference_snapshot) || {};
+      const referenceAliases={
+        total_xac:['total_xac','xac'], total_qua_co:['total_qua_co','qua_co'],
+        total_payout:['total_payout','payout','tien_trung'],
+        final_net:['final_net','final','thu_bu']
+      };
+      const validMoney=value=>
+        (typeof value==='number' && Number.isFinite(value)) ||
+        (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+         Number.isFinite(Number(value)));
+      for(const field of mandatory){
+        const proof=comparison.totals[field];
+        if(proof.local==null || proof.reference==null ||
+           !validMoney(proof.local) || !validMoney(proof.reference))
+          throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+        if(localTotals[field]==null || Number(proof.local)!==Number(localTotals[field]))
+          throw new Error('SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH');
+        const expectedReference=(referenceAliases[field]||[])
+          .map(alias=>referenceTotals[alias]).find(value=>value!=null);
+        if(expectedReference==null || !validMoney(expectedReference) ||
+           Number(proof.reference)!==Number(expectedReference))
+          throw new Error('SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH');
+      }
+      // If the independent HIOSKT reference carried category evidence, the
+      // immutable receipt must carry the category-level proof too. Aggregate
+      // totals alone cannot authorize an exact claim after a category-level
+      // mismatch has been observed.
+      const referenceRows=input.reference_snapshot &&
+        (input.reference_snapshot.categories || input.reference_snapshot.category_rows);
+      if (Array.isArray(referenceRows) && referenceRows.length) {
+        const comparisonRows=Array.isArray(comparison.categories) ? comparison.categories : [];
+        const codeOf=row=>String(row && (row.code || row.category) || '').trim().toUpperCase();
+        const referenceCodes=referenceRows.map(codeOf).sort();
+        const comparisonCodes=comparisonRows.map(codeOf).sort();
+        if (referenceCodes.length!==comparisonCodes.length ||
+            referenceCodes.some((code,index)=>code!==comparisonCodes[index]) ||
+            comparisonRows.some(row=>String(row && row.status || '').toUpperCase()!=='MATCH_EXACT'))
+          throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+        const comparisonByCode=new Map(comparisonRows.map(row=>[codeOf(row),row]));
+        const localRows= input.local_snapshot && Array.isArray(input.local_snapshot.category_rows)
+          ? input.local_snapshot.category_rows : [];
+        const validMoney=value=>
+          (typeof value==='number' && Number.isFinite(value)) ||
+          (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+           Number.isFinite(Number(value)));
+        const aggregateCategory=(rows,code)=>{
+          const matched=rows.filter(row=>codeOf(row)===code);
+          const result={};
+          for(const field of ['xac','qua_co','hit_units','payout']){
+            const supplied=matched.filter(row=>Object.prototype.hasOwnProperty.call(row||{},field));
+            if(!supplied.length) continue;
+            if(supplied.some(row=>!validMoney(row[field])))
+              throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH');
+            result[field]=supplied.reduce((sum,row)=>sum+Number(row[field]),0);
+          }
+          return result;
+        };
+        for(const referenceRow of referenceRows){
+          const code=codeOf(referenceRow);
+          const comparisonRow=comparisonByCode.get(code);
+          const fields=comparisonRow && comparisonRow.fields;
+          const suppliedFields=['xac','qua_co','hit_units','payout']
+            .filter(field=>Object.prototype.hasOwnProperty.call(referenceRow||{},field));
+          if(suppliedFields.some(field=>!fields || !fields[field] ||
+              String(fields[field].status||'').toUpperCase()!=='MATCH_EXACT') ||
+             (fields && Object.values(fields).some(field=>
+                 String(field && field.status||'').toUpperCase()!=='MATCH_EXACT')))
+             throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+          const localCategory=aggregateCategory(localRows,code);
+          const referenceCategory=aggregateCategory(referenceRows,code);
+          for(const field of suppliedFields){
+            if(!Object.prototype.hasOwnProperty.call(localCategory,field))
+              throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+            const proof=fields[field];
+            if(proof.local==null || proof.reference==null ||
+               !validMoney(proof.local) || !validMoney(proof.reference))
+              throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
+            for(const [side,actual] of [['local',localCategory[field]],['reference',referenceCategory[field]]]){
+              if(proof[side]!=null &&
+                 (actual==null || !validMoney(proof[side]) ||
+                  Number(proof[side])!==Number(actual)))
+                throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH');
+            }
+          }
+        }
+      }
     }
     const evidenceCore = {
       scope_id: scopeId,
@@ -1096,6 +1185,41 @@
         values.every(key=>expectedAmounts && actual[key]!=null &&
           expectedAmounts[key]!=null &&
           String(actual[key])===String(expectedAmounts[key]));
+      const settlementCategoryRows=Array.isArray(row.category_rows)
+        ? row.category_rows
+        : row.settlement_result && Array.isArray(row.settlement_result.category_rows)
+          ? row.settlement_result.category_rows : [];
+      const partnerRows=[...existingPartners,...incomingPartners];
+      const partner=partnerRows.find(value=>String(value && value.id||'')===String(row.partner_id));
+      const rawRole=String(partner && partner.role||'').toLowerCase();
+      const expectedPartnerRole=['customer','owner'].includes(rawRole) ? rawRole : '';
+      const localProvenanceMatches=local=>{
+        if(String(local.partner_role==null?'':local.partner_role).toLowerCase()!==expectedPartnerRole) return false;
+        if(String(local.scope_status||'')!==String(row.scope_status||'')) return false;
+        if(String(local.engine_version||'')!==String(row.engine_version||'')) return false;
+        if(stableStringify(local.config_snapshot||null)!==
+           stableStringify(row.config_snapshot||null)) return false;
+        if(stableStringify(local.lottery_result_snapshot||null)!==
+           stableStringify(row.lottery_result_snapshot||null)) return false;
+        const lottery=row.lottery_result_snapshot||{};
+        if(String(local.result_fingerprint||'')!==String(lottery.fingerprint||'')) return false;
+        if(String(local.result_verification_status||'')!==
+           String(lottery.verification_status||'')) return false;
+        return true;
+      };
+      const expectedMessageEvidence=(row.message_ids||[]).map(messageId=>{
+        const message=combinedMessages.get(String(messageId));
+        if(!message) return null;
+        return {
+          id:String(message.id||''),
+          raw_text:String(message.raw_text||''),
+          region:String(message.region||''),
+          status:String(message.status||''),
+          canonical_version:message.canonical_version==null ? null : String(message.canonical_version),
+          canonical_payload:clone(message.canonical_payload||null),
+          parser_error:message.parser_error==null ? null : String(message.parser_error)
+        };
+      });
       return knownShadowReceipts.some(event=>
         event && String(event.scope_id||'')===String(row.id) &&
         String(event.partner_id||'')===String(row.partner_id) &&
@@ -1106,6 +1230,11 @@
         stableStringify(event.comparison)===stableStringify(ref.comparison) &&
         stableStringify(event.reference_snapshot||null)===stableStringify(reference) &&
         event.local_snapshot && monetaryMatch(event.local_snapshot.settlement_result) &&
+        localProvenanceMatches(event.local_snapshot) &&
+        Array.isArray(event.local_snapshot.category_rows) &&
+        stableStringify(event.local_snapshot.category_rows)===stableStringify(settlementCategoryRows) &&
+        Array.isArray(event.local_snapshot.messages) &&
+        stableStringify(event.local_snapshot.messages)===stableStringify(expectedMessageEvidence) &&
         stableStringify((event.local_snapshot.message_ids||[]).map(String).sort())===
           stableStringify((row.message_ids||[]).map(String).sort()) &&
         (!event.evidence_fingerprint ||

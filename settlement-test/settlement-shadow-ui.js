@@ -18,6 +18,19 @@
   function fieldLabel(field) {
     return ({total_xac:'XÁC',total_qua_co:'QUA CÒ',total_payout:'TRẢ TRÚNG',refund_amount:'HỒI',final_net:'THU/BÙ',xac:'XÁC',qua_co:'QUA CÒ',hit_units:'TRÚNG',payout:'TRẢ'})[field] || field;
   }
+  function exactProofUsable(comparison) {
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    const validMoney=value =>
+      (typeof value==='number' && Number.isFinite(value)) ||
+      (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)));
+    return Boolean(comparison && comparison.status === 'MATCH_EXACT' && comparison.safe_to_promote === true &&
+      comparison.exact === true && comparison.required_totals_exact === true &&
+      Number.isInteger(comparison.compared_fields) && comparison.compared_fields >= fields.length &&
+      fields.every(field => {
+        const item=comparison.totals && comparison.totals[field];
+        return item && item.status === 'MATCH_EXACT' && validMoney(item.local) && validMoney(item.reference);
+      }));
+  }
 
   function install() {
     const doc = global.document;
@@ -86,7 +99,10 @@
     function render(comparison, diagnostics) {
       const out = doc.getElementById('shadowOutput');
       if (!comparison) { out.innerHTML=''; return; }
-      const cls = comparison.status === 'MATCH_EXACT' ? 'ok' : comparison.status === 'MISMATCH' ? 'err' : 'warn';
+      const rawStatus = String(comparison.status || 'UNKNOWN').toUpperCase();
+      const safeExact = rawStatus === 'MATCH_EXACT' && exactProofUsable(comparison);
+      const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
+      const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
       const labels = {
         MATCH_EXACT:'KHỚP CHÍNH XÁC', MATCH_DISPLAY_ONLY:'CHỈ KHỚP SỐ HIỂN THỊ', MISMATCH:'LỆCH TIỀN', INCOMPLETE_REFERENCE:'THIẾU SỐ HIOSKT'
       };
@@ -96,7 +112,7 @@
         const bad=Object.entries(c.fields||{}).filter(([,r])=>r.status!=='MATCH_EXACT').map(([field,r])=>`${esc(fieldLabel(field))}: ${money(r.local)} / ${money(r.reference)} (${money(r.delta)})`).join('<br>');
         return `<tr><td>${esc(c.code)}</td><td>${esc(c.status)}</td><td>${bad||'—'}</td></tr>`;
       }).join('');
-      out.innerHTML=`<div class="status ${cls}">${esc(labels[comparison.status]||comparison.status)}${comparison.safe_to_promote?' · ĐỦ ĐIỀU KIỆN SHADOW':' · CHƯA ĐỦ ĐIỀU KIỆN'}</div>`+
+      out.innerHTML=`<div class="status ${cls}">${esc(labels[displayStatus]||displayStatus)}${safeExact?' · ĐỦ ĐIỀU KIỆN SHADOW':' · CHƯA ĐỦ ĐIỀU KIỆN'}</div>`+
         `<div class="result-grid"><table><thead><tr><th>Trường</th><th>KTS</th><th>HIOSKT</th><th>Lệch</th><th>Trạng thái</th></tr></thead><tbody>${rows.join('')}</tbody></table></div>`+
         (categoryRows ? `<details open style="margin-top:7px"><summary class="hint"><b>So category</b></summary><div class="result-grid"><table><thead><tr><th>Loại</th><th>Trạng thái</th><th>Trường lệch</th></tr></thead><tbody>${categoryRows}</tbody></table></div></details>` : '')+
         renderDiagnostics(diagnostics);
@@ -115,9 +131,12 @@
         const local = event.local_snapshot && event.local_snapshot.settlement_result || {};
         const ref = event.reference_snapshot && event.reference_snapshot.totals || {};
         const finalCmp = comp.totals && comp.totals.final_net || null;
-        const cls = event.comparison_status === 'MATCH_EXACT' ? 'ok' : event.comparison_status === 'MISMATCH' ? 'err' : 'warn';
+        const rawStatus = String(event.comparison_status || '').toUpperCase();
+        const safeExact = rawStatus === 'MATCH_EXACT' && exactProofUsable(comp);
+        const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
+        const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
         const verify = event.local_snapshot && event.local_snapshot.result_verification_status || 'unverified';
-        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>#${rows.length-index}</b> <span class="tag ${cls}">${esc(event.comparison_status)}</span> <span class="tag">${esc(event.trigger || 'UNKNOWN')}</span></div><span class="hint">${esc(when(event.observed_at))}</span></div>`+
+        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>#${rows.length-index}</b> <span class="tag ${cls}">${esc(displayStatus)}</span> <span class="tag">${esc(event.trigger || 'UNKNOWN')}</span></div><span class="hint">${esc(when(event.observed_at))}</span></div>`+
           `<div class="hint" style="margin-top:4px">THU/BÙ KTS <b>${money(local.final_net)}</b> · HIOSKT <b>${money(ref.final)}</b> · lệch <b>${money(finalCmp && finalCmp.delta)}</b> · KQXS ${esc(verify)} · engine ${esc(event.local_snapshot && event.local_snapshot.engine_version || '—')} · config v${esc(event.local_snapshot && event.local_snapshot.config_version == null ? '—' : event.local_snapshot.config_version)}</div>`+
           `${event.reason ? `<div class="hint">Lý do: ${esc(event.reason)}</div>` : ''}</div>`;
       }).join('');

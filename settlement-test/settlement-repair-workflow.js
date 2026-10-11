@@ -129,7 +129,9 @@
     const resolved = [...originalKeys].filter(key => !currentKeys.has(key)).sort();
     const remaining = [...originalKeys].filter(key => currentKeys.has(key)).sort();
     const added = [...currentKeys].filter(key => !originalKeys.has(key)).sort();
-    const status = String(comparison.status || (replayResult && replayResult.pass ? 'MATCH_EXACT' : 'UNVERIFIED')).toUpperCase();
+    const safeExact = Boolean(replayResult && replayResult.pass === true && comparison.safe_to_promote === true);
+    const rawStatus = String(comparison.status || (safeExact ? 'MATCH_EXACT' : 'UNVERIFIED')).toUpperCase();
+    const status = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
     const finalRow = comparison.totals && comparison.totals.final_net || null;
     return {
       basis: 'CAPTURED_CANONICAL',

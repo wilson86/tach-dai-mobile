@@ -189,7 +189,7 @@
         total: parsed.length,
         ready: rows.length,
         errors: errors.length,
-        exact: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_EXACT').length,
+        exact: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_EXACT' && r.comparison.safe_to_promote === true).length,
         display_only: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_DISPLAY_ONLY').length,
         mismatch: rows.filter(r => r.comparison && r.comparison.status === 'MISMATCH').length,
         incomplete: rows.filter(r => r.comparison && r.comparison.status === 'INCOMPLETE_REFERENCE').length
@@ -235,7 +235,8 @@
           partner_id: row.partner_id,
           business_date: row.business_date,
           region: row.region,
-          comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN'
+           comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN',
+           safe_to_promote: saved && saved.comparison && saved.comparison.safe_to_promote === true
         });
       } catch (error) {
         const e = new Error(`BATCH_APPLY_PARTIAL:${results.length}/${p.rows.length}:${String(error && error.message || error)}`);
@@ -247,7 +248,7 @@
     return {
       format: 'kts-shadow-batch-apply-v2-stale-guard',
       total: results.length,
-      exact: results.filter(x => x.comparison_status === 'MATCH_EXACT').length,
+       exact: results.filter(x => x.comparison_status === 'MATCH_EXACT' && x.safe_to_promote === true).length,
       display_only: results.filter(x => x.comparison_status === 'MATCH_DISPLAY_ONLY').length,
       mismatch: results.filter(x => x.comparison_status === 'MISMATCH').length,
       results
@@ -284,8 +285,10 @@
       const lines = [];
       for (const row of p.rows || []) {
         const st = row.comparison && row.comparison.status || 'UNKNOWN';
-        const cls = st === 'MATCH_EXACT' ? 'ok' : st === 'MISMATCH' ? 'err' : 'warn';
-        lines.push(`<div class="report-message"><span class="tag ${cls}">${esc(st)}</span> <b>${esc(row.business_date)} ${esc(row.region.toUpperCase())}</b> · ${esc(row.partner_name)}</div>`);
+        const safe = row.comparison && row.comparison.safe_to_promote === true;
+        const displayStatus = st === 'MATCH_EXACT' && !safe ? 'INCOMPLETE_REFERENCE' : st;
+        const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
+        lines.push(`<div class="report-message"><span class="tag ${cls}">${esc(displayStatus)}</span> <b>${esc(row.business_date)} ${esc(row.region.toUpperCase())}</b> · ${esc(row.partner_name)}</div>`);
       }
       for (const err of p.errors || []) lines.push(`<div class="report-message"><span class="tag err">LỖI DÒNG ${esc(err.row_number || '?')}</span> ${esc(err.error)}</div>`);
       host.innerHTML = `<div>Scope hợp lệ <b>${p.counts.ready}</b>/${p.counts.total} · exact <b>${p.counts.exact}</b> · lệch <b>${p.counts.mismatch}</b> · chỉ khớp hiển thị <b>${p.counts.display_only}</b>.</div>${lines.join('')}`;

@@ -55,6 +55,78 @@
   function clone(v) { return v == null ? v : JSON.parse(JSON.stringify(v)); }
   function validDate(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')); }
 
+  function exactComparisonProofValid(settlement) {
+    const ref=settlement && settlement.reference_app_snapshot;
+    const proof=ref && ref.comparison;
+    const local=settlement && (settlement.settlement_result || settlement.result_snapshot) || {};
+    const reference=ref && (ref.totals || ref) || {};
+    const aliases={
+      total_xac:['total_xac','xac'], total_qua_co:['total_qua_co','qua_co'],
+      total_payout:['total_payout','payout','tien_trung'],
+      final_net:['final_net','final','thu_bu']
+    };
+    const validMoney=value=>
+      (typeof value==='number' && Number.isFinite(value)) ||
+      (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+       Number.isFinite(Number(value)));
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    const totalsValid=Boolean(proof && proof.status==='MATCH_EXACT' && proof.safe_to_promote===true &&
+      proof.exact===true && proof.required_totals_exact===true &&
+      Number.isInteger(proof.compared_fields) && proof.compared_fields>=fields.length &&
+      fields.every(field=>{
+        const item=proof.totals && proof.totals[field];
+        if(!item || item.status!=='MATCH_EXACT' || !validMoney(item.local) ||
+           !validMoney(item.reference) || !validMoney(local[field]) ||
+           Number(item.local)!==Number(local[field])) return false;
+        return (aliases[field]||[]).some(alias=>validMoney(reference[alias]) &&
+          Number(item.reference)===Number(reference[alias]));
+      }));
+    if(!totalsValid) return false;
+    const referenceRows=ref && (ref.categories || ref.category_rows);
+    if(referenceRows==null) return true;
+    if(!Array.isArray(referenceRows)) return false;
+    if(referenceRows.length===0) return true;
+    const localRows=Array.isArray(settlement.category_rows)
+      ? settlement.category_rows
+      : local && Array.isArray(local.category_rows) ? local.category_rows : [];
+    const codeOf=row=>String(row && (row.code || row.category) || '').trim().toUpperCase();
+    const aggregate=(rows,code)=>{
+      const result={};
+      for(const row of rows.filter(value=>codeOf(value)===code)){
+        for(const field of ['xac','qua_co','hit_units','payout']){
+          if(!Object.prototype.hasOwnProperty.call(row||{},field)) continue;
+          if(!validMoney(row[field])) return null;
+          result[field]=(result[field]||0)+Number(row[field]);
+        }
+      }
+      return result;
+    };
+    const comparisonRows=Array.isArray(proof.categories) ? proof.categories : [];
+    const referenceCodes=referenceRows.map(codeOf).sort();
+    const comparisonCodes=comparisonRows.map(codeOf).sort();
+    if(referenceCodes.length!==comparisonCodes.length ||
+       referenceCodes.some((code,index)=>code!==comparisonCodes[index])) return false;
+    const byCode=new Map(comparisonRows.map(row=>[codeOf(row),row]));
+    return referenceRows.every(referenceRow=>{
+      const code=codeOf(referenceRow);
+      const comparisonRow=byCode.get(code);
+      if(!comparisonRow || comparisonRow.status!=='MATCH_EXACT') return false;
+      const fieldsProof=comparisonRow.fields;
+      const localCategory=aggregate(localRows,code);
+      const referenceCategory=aggregate(referenceRows,code);
+      if(!localCategory || !referenceCategory) return false;
+      return ['xac','qua_co','hit_units','payout']
+        .filter(field=>Object.prototype.hasOwnProperty.call(referenceRow||{},field))
+        .every(field=>{
+          const item=fieldsProof && fieldsProof[field];
+          return item && item.status==='MATCH_EXACT' && validMoney(item.local) &&
+            validMoney(item.reference) && localCategory[field]!=null &&
+            referenceCategory[field]!=null && Number(item.local)===Number(localCategory[field]) &&
+            Number(item.reference)===Number(referenceCategory[field]);
+        });
+    });
+  }
+
   function comparisonStatus(settlement) {
     if (!settlement || typeof settlement !== 'object') return STATUS.UNVERIFIED;
     const scope = String(settlement.scope_status || '').toLowerCase();
@@ -70,7 +142,7 @@
     const status = direct || nested;
     if (status === STATUS.BLOCKED) return STATUS.BLOCKED;
     if (status === STATUS.PROVISIONAL) return STATUS.PROVISIONAL;
-    if (status === STATUS.EXACT) return STATUS.EXACT;
+    if (status === STATUS.EXACT) return exactComparisonProofValid(settlement) ? STATUS.EXACT : STATUS.UNVERIFIED;
     if (status === STATUS.DISPLAY) return STATUS.DISPLAY;
     if (status === STATUS.MISMATCH) return STATUS.MISMATCH;
     return STATUS.UNVERIFIED;
