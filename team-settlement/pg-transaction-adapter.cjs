@@ -11,8 +11,12 @@ function createPgTransactionAdapter({ pool } = {}) {
     if (typeof work !== 'function') throw new Error('TEAM_DB_WORK_REQUIRED');
     const client = await pool.connect();
     if (!client || typeof client.query !== 'function' ||
-        typeof client.release !== 'function')
+        typeof client.release !== 'function') {
+      // A pool may return a malformed client; if it can be released, destroy
+      // it immediately rather than leaking a checked-out connection.
+      try { client?.release?.(true); } catch { /* preserve invalid-client error */ }
       throw new Error('TEAM_PG_CLIENT_INVALID');
+    }
     let began = false;
     let commitAttempted = false;
     let committed = false;

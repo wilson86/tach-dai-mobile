@@ -71,3 +71,18 @@ test('PostgreSQL repository uses the same transaction for tenant, DB role valida
   assert.equal(queries[4],'COMMIT');
   assert.deepEqual(q.releases,[false]);
 });
+
+test('malformed pooled client is destroyed instead of leaking an acquired slot',async()=>{
+  const releases=[];
+  const malformed={release:destroy=>releases.push(destroy)};
+  const adapter=createPgTransactionAdapter({pool:{connect:async()=>malformed}});
+  await assert.rejects(adapter.transaction(async()=>{throw Error('SHOULD_NOT_RUN');}),
+    /TEAM_PG_CLIENT_INVALID/);
+  assert.deepEqual(releases,[true]);
+});
+
+test('malformed client with throwing release still fails closed without hiding cause',async()=>{
+  const malformed={release:()=>{throw Error('RELEASE_FAILED');}};
+  const adapter=createPgTransactionAdapter({pool:{connect:async()=>malformed}});
+  await assert.rejects(adapter.transaction(async()=>0),/TEAM_PG_CLIENT_INVALID/);
+});
