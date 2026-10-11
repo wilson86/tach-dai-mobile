@@ -66,13 +66,15 @@ function createAuthHttpServer(auth, {
   maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
   maxLoginAttempts = DEFAULT_LOGIN_ATTEMPT_LIMIT,
   loginWindowMs = DEFAULT_LOGIN_WINDOW_MS,
-  clock = () => Date.now()
+  clock = () => Date.now(),
+  ledger = null
 } = {}) {
   if (!auth || typeof auth.login !== 'function' || typeof auth.verifySession !== 'function' ||
       typeof auth.revokeSession !== 'function' || typeof auth.manageMembership !== 'function' ||
       typeof auth.setIdentityDisabled !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
-      !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function')
+      !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function' ||
+      (ledger !== null && (!ledger || typeof ledger.appendDraft !== 'function')))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
   const loginAttempts = new Map();
 
@@ -171,6 +173,27 @@ function createAuthHttpServer(auth, {
           if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
             return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
           return json(res, 400, { error: error.message === 'AUTH_SELF_DISABLE_DENIED' ? error.message : 'AUTH_IDENTITY_INVALID' });
+        }
+      }
+      if (req.url === '/v1/scopes/drafts' && req.method === 'POST') {
+        if (!ledger) return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
+        const token = bearer(req);
+        if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+        let input;
+        try { input = await readJson(req, maxBodyBytes); }
+        catch (error) {
+          if (error.code === 'AUTH_BODY_TOO_LARGE') return json(res, 413, { error: error.code });
+          return json(res, 400, { error: 'AUTH_JSON_INVALID' });
+        }
+        try {
+          return json(res, 200, await ledger.appendDraft(token, input));
+        } catch (error) {
+          const code = error.message;
+          if (code === 'AUTH_SESSION_INVALID' || code === 'AUTH_SESSION_REVOKED') return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+          if (['TEAM_ROLE_DENIED','TEAM_WORKSPACE_DENIED','TEAM_ACTOR_UNVERIFIED'].includes(code)) return json(res, 403, { error: code });
+          if (['TEAM_REVISION_CONFLICT','TEAM_IDEMPOTENCY_CONFLICT'].includes(code)) return json(res, 409, { error: code });
+          if (['TEAM_OFFLINE_NOT_AUTHORITATIVE','TEAM_SCOPE_INVALID','TEAM_REVISION_INVALID','TEAM_PAYLOAD_INVALID','TEAM_INTENT_ACTION_FORBIDDEN','TEAM_IDEMPOTENCY_KEY_REQUIRED'].includes(code)) return json(res, 422, { error: code });
+          return json(res, 500, { error: 'TEAM_BACKEND_UNAVAILABLE' });
         }
       }
       return json(res, 404, { error: 'AUTH_ROUTE_NOT_FOUND' });

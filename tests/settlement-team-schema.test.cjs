@@ -87,4 +87,7 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(serverApi.includes('verifySession'));
   assert(serverApi.includes('repository.appendDraft'));
   assert(serverApi.includes('TEAM_OFFLINE_NOT_AUTHORITATIVE'));
+  const httpRoute=readFileSync(resolve(__dirname,'../team-settlement/auth-http-contract.cjs'),'utf8');
+  assert(httpRoute.includes('/v1/scopes/drafts'));
+  assert(httpRoute.includes('TEAM_BACKEND_UNAVAILABLE'));
 });

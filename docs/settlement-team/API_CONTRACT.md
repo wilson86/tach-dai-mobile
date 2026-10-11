@@ -12,6 +12,8 @@
 7. Response includes `workspace`, `scope`, `new_revision`, `event_id`, `sync_status` and change cursor. No PII/full raw messages in default logs.
 8. A client with dropped response resends same idempotency key: never creates second event. Reactivation after offline must revalidate member rights and state.
 
+The bounded HTTP adapter exposes `POST /v1/scopes/drafts` only when an explicit server-ledger dependency is supplied. It requires a Bearer session, maps CAS/idempotency/validation failures to stable codes, and has no close/finalize or money-calculation route.
+
 The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated sessions with the repository seam. `team-settlement/postgres-ledger-repository.cjs` sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. These modules open no connection and are not a production deployment.
 
 ## Suggested error and evidence semantics
