@@ -74,4 +74,8 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(migration.includes('REVOKE ALL ON kts_auth.credentials,kts_auth.sessions FROM PUBLIC'));
   assert(!migration.includes('session_token'));
   assert(!auth.includes('kts_router.sqlite3'));
+  const ledger=readFileSync(resolve(__dirname,'../team-settlement/ledger-api-contract.cjs'),'utf8');
+  assert(ledger.includes('TEAM_IDEMPOTENCY_CONFLICT'));
+  assert(ledger.includes('checkMutationIntent'));
+  assert(ledger.includes('append-only')||ledger.includes('events.set'));
 });
