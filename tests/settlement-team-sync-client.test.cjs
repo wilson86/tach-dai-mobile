@@ -131,7 +131,8 @@ test('PWA client integrates with synthetic localhost auth, draft and change endp
     const changes = await client.pullChanges();
     assert.equal(changes.status, Sync.STATUS.SYNCED);
     assert.equal(changes.items.length, 1);
-    assert.equal(saved.data.get(Sync.CURSOR_KEY), 'synthetic_cursor_1');
+    assert.equal(client.snapshot().cursor, 'synthetic_cursor_1');
+    assert.equal(saved.data.has(Sync.CURSOR_KEY), false);
     await client.logout();
     assert.equal(client.snapshot().authenticated, false);
     assert.equal(saved.data.has('session_token'), false);
