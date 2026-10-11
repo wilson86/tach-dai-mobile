@@ -86,3 +86,24 @@ test('malformed client with throwing release still fails closed without hiding c
   const adapter=createPgTransactionAdapter({pool:{connect:async()=>malformed}});
   await assert.rejects(adapter.transaction(async()=>0),/TEAM_PG_CLIENT_INVALID/);
 });
+
+test('unawaited SQL query blocks COMMIT and destroys pooled connection',async()=>{
+  let finish;
+  const statements=[],released=[];
+  const client={
+    query(sql){
+      statements.push(sql);
+      if(sql==='SELECT pending')return new Promise(resolve=>{finish=resolve;});
+      return Promise.resolve({rows:[]});
+    },
+    release:destroy=>released.push(destroy)
+  };
+  const adapter=createPgTransactionAdapter({pool:{connect:async()=>client}});
+  await assert.rejects(adapter.transaction(async tx=>{
+    void tx.query('SELECT pending');
+    return 'MUST_NOT_COMMIT';
+  }),/TEAM_DB_UNAWAITED_QUERY/);
+  assert.deepEqual(statements,['BEGIN','SELECT pending','ROLLBACK']);
+  assert.deepEqual(released,[true]);
+  finish({rows:[]});
+});

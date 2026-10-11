@@ -22,6 +22,7 @@ function createPgTransactionAdapter({ pool } = {}) {
     let committed = false;
     let poisoned = false;
     let active = false;
+    const pending = new Set();
     try {
       await client.query('BEGIN');
       began = true;
@@ -31,11 +32,25 @@ function createPgTransactionAdapter({ pool } = {}) {
           if (!active) throw new Error('TEAM_DB_TRANSACTION_CLOSED');
           if (typeof sql !== 'string' || !sql.trim()) throw new Error('TEAM_DB_QUERY_INVALID');
           if (args !== undefined && !Array.isArray(args)) throw new Error('TEAM_DB_PARAMS_INVALID');
-          return client.query(sql, args);
+          const result = client.query(sql, args);
+          if (result && typeof result.then === 'function') {
+            pending.add(result);
+            // Observe settle without replacing/rejecting the caller's promise.
+            // Detached SQL must never allow a premature financial COMMIT.
+            void result.then(() => pending.delete(result),
+              () => pending.delete(result));
+          }
+          return result;
         }
       });
       const result = await work(tx);
       active = false;
+      if (pending.size > 0) {
+        // A caller returned while SQL was still running. Roll back and
+        // destroy the connection instead of committing a partial operation.
+        poisoned = true;
+        throw new Error('TEAM_DB_UNAWAITED_QUERY');
+      }
       commitAttempted = true;
       await client.query('COMMIT');
       committed = true;
