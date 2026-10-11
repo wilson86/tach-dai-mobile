@@ -179,8 +179,29 @@
     return 'unverified';
   }
 
+  // A stored label is not itself an authenticated financial comparison.
+  // Old/partial rows may say MATCH_EXACT without the actual promotion proof.
+  function confirmedExactComparison(settlement) {
+    const ref=settlement && settlement.reference_app_snapshot;
+    const proof=ref && ref.comparison;
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    return Boolean(proof && proof.status==='MATCH_EXACT' &&
+      proof.safe_to_promote===true && proof.exact===true &&
+      proof.required_totals_exact===true &&
+      Number.isInteger(proof.compared_fields) &&
+      proof.compared_fields>=fields.length &&
+      fields.every(field=>proof.totals && proof.totals[field] &&
+        proof.totals[field].status==='MATCH_EXACT'));
+  }
+
+  function effectiveShadowStatus(settlement) {
+    const raw=String(settlement && settlement.comparison_status||'unverified').toUpperCase();
+    return raw==='MATCH_EXACT' && !confirmedExactComparison(settlement)
+      ? 'UNVERIFIED' : raw;
+  }
+
   function shadowStatusFromSettlements(settlements) {
-    const statuses = (settlements || []).map(s => String(s.comparison_status || 'unverified').toUpperCase());
+    const statuses = (settlements || []).map(effectiveShadowStatus);
     if (!statuses.length) return 'NO_DATA';
     if (statuses.some(x => x === 'BLOCKED')) return 'BLOCKED';
     if (statuses.some(x => x === 'MISMATCH')) return 'MISMATCH';
@@ -328,7 +349,7 @@
           // Never show an old MATCH_EXACT badge for a scope whose money
           // or category integrity just failed the fail-closed checks.
           comparison_status: scopeStatus==='blocked' ? 'BLOCKED' :
-            settlement.comparison_status || 'unverified'
+            effectiveShadowStatus(settlement)
         };
         regionReport.messages.push(messageReport);
         messageReports.push(messageReport);

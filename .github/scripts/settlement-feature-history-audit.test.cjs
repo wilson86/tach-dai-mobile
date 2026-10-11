@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.246-shadow-proof-at-ingress'));
+  assert.ok(source.includes('v1.0.247-daily-exact-proof'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -2458,7 +2458,7 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
   assert.equal(without.counts.exact,0);
   assert.equal(without.exact_totals.xac,0);
   assert.equal(without.totals.xac,100);
-  assert.equal(without.partners[0].shadow_status,'MATCH_EXACT');
+  assert.equal(without.partners[0].shadow_status,'UNVERIFIED');
   const prizes={G8:['12'],G7:['123'],G6:['101','102','103'],
     G5:['321'],G4:['1111','2222','3333','4444','5555','6666','7777'],
     G3:['12345','54321'],G2:['12222'],G1:['11111'],DB:['123456']};
@@ -2466,13 +2466,33 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
     complete:true,verified:true,verification_status:'verified',
     expected_station_codes:['tp'],verification_sources:['primary','secondary'],
     verification_conflicts:[],stations:[{code:'tp',prizes}]};
-  const verified=report.buildDailyOperationsReport(input({
+  // A verified draw cannot legitimize a stale/forged HIOSKT exact label.
+  const noShadowProof=report.buildDailyOperationsReport(input({
     ...row,lottery_result_snapshot:draw}));
+  assert.equal(noShadowProof.status,'UNVERIFIED');
+  assert.equal(noShadowProof.counts.exact,0);
+  const exactComparison={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+    required_totals_exact:true,compared_fields:4,
+    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+  const proved={...row,reference_app_snapshot:{source:'SYNTHETIC_ONLY',
+    comparison:exactComparison}};
+  const verified=report.buildDailyOperationsReport(input({
+    ...proved,lottery_result_snapshot:draw}));
   assert.equal(verified.status,'MATCH_EXACT');
   assert.equal(verified.counts.exact,1);
   assert.equal(verified.exact_totals.xac,100);
+  const stale={...proved,reference_app_snapshot:{
+    ...proved.reference_app_snapshot,
+    comparison:{...exactComparison,safe_to_promote:false}}};
+  const invalid=report.buildDailyOperationsReport(input({
+    ...stale,lottery_result_snapshot:draw}));
+  assert.equal(invalid.status,'UNVERIFIED');
+  assert.equal(invalid.counts.exact,0);
+  assert.equal(invalid.exact_totals.xac,0);
+  assert.equal(invalid.partners[0].messages[0].comparison_status,'UNVERIFIED');
   const conflicting=report.buildDailyOperationsReport(input({
-    ...row,lottery_result_snapshot:{...draw,verification_status:'conflict',
+    ...proved,lottery_result_snapshot:{...draw,verification_status:'conflict',
       verification_conflicts:['synthetic-source-mismatch']}}));
   assert.equal(conflicting.counts.exact,0);
   assert.notEqual(conflicting.status,'MATCH_EXACT');
