@@ -58,5 +58,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Apply isolated schema to disposable synthetic PostgreSQL
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/001_team_ledger.sql
+      - name: Apply draft-only transactional SQL function in isolated database
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/002_draft_transaction.sql
       - name: Verify RLS tenant isolation, immutable events and idempotency constraints
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-smoke.sql
+      - name: Verify atomic draft idempotency, CAS and role denied
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-draft.sql
+      - name: Race 30 synthetic clients on one scope revision
+        run: bash team-settlement/tests/concurrent-30.sh
