@@ -53,7 +53,7 @@
     'app/result-auto.js':'afde9dcec3ec27d2ac1fefdfd1ea2eefcb190618',
     'app/settlement-research-defaults.js':'f65f05d9efa2216f713e4c86c2656a073d7d6278',
     'app/result-simple-ui.js':'03721f515e5d6b146fc16ad265834173e53492d8',
-    'app/settlement-message-history.js':'e3cbc9172d0790b902fca40aae1a1f070af73beb',
+    'app/settlement-message-history.js':'b6533640f5f9ee8236d176c53cfae5c63bd1cff7',
     'app/result-audit-ui.js':'5323354e7ac24e51b174caab6bc338070a1776ad',
     'app/settlement-shadow-ui.js':'cc031d97aea5650657dd4bf1745f37147b03812a',
     'app/settlement-shadow-batch.js':'08bbc25b9458d407d2ed3740870794e329a347df',

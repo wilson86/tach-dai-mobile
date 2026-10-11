@@ -33,12 +33,28 @@
   // A legacy comparison_status is not monetary proof. Only a complete,
   // promotion-safe Shadow comparison may render the strong MATCH_EXACT label.
   function safeExactComparison(settlement) {
-    const proof = settlement && settlement.reference_app_snapshot && settlement.reference_app_snapshot.comparison;
+    const ref = settlement && settlement.reference_app_snapshot;
+    const proof = ref && ref.comparison;
     const fields = ['total_xac','total_qua_co','total_payout','final_net'];
+    const local = settlement && (settlement.settlement_result || settlement.result_snapshot) || {};
+    const reference = ref && (ref.totals || ref) || {};
+    const aliases = {
+      total_xac:['total_xac','xac'], total_qua_co:['total_qua_co','qua_co'],
+      total_payout:['total_payout','payout','tien_trung'], final_net:['final_net','final','thu_bu']
+    };
+    const validMoney = value =>
+      (typeof value === 'number' && Number.isFinite(value)) ||
+      (typeof value === 'string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) && Number.isFinite(Number(value)));
     return String(settlement && settlement.comparison_status || '').toUpperCase() === 'MATCH_EXACT' &&
       proof && proof.status === 'MATCH_EXACT' && proof.safe_to_promote === true &&
       proof.exact === true && proof.required_totals_exact === true &&
-      fields.every(field => proof.totals && proof.totals[field] && proof.totals[field].status === 'MATCH_EXACT');
+      Number.isInteger(proof.compared_fields) && proof.compared_fields >= fields.length &&
+      fields.every(field => {
+        const item = proof.totals && proof.totals[field];
+        if (!item || item.status !== 'MATCH_EXACT' || !validMoney(item.local) || !validMoney(item.reference) ||
+            !validMoney(local[field]) || Number(item.local) !== Number(local[field])) return false;
+        return (aliases[field] || []).some(alias => validMoney(reference[alias]) && Number(item.reference) === Number(reference[alias]));
+      });
   }
 
   function friendlyReason(reason) {
