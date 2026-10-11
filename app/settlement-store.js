@@ -314,7 +314,40 @@
     const region = String(input && input.region || '').toLowerCase();
     if (!partnerId || !validDateOnly(businessDate)) throw new Error('SHADOW_EVENT_SCOPE_REQUIRED');
     if (!['mn', 'mt', 'mb'].includes(region)) throw new Error('SHADOW_EVENT_REGION_REQUIRED');
-    const scopeId = String(input.scope_id || `scope:${partnerId}:${businessDate}:${region}`);
+    const canonicalScopeId=`scope:${partnerId}:${businessDate}:${region}`;
+    const scopeId = input.scope_id == null ? canonicalScopeId : String(input.scope_id);
+    if(scopeId!==canonicalScopeId)
+      throw new Error('SHADOW_EVENT_SCOPE_ID_MISMATCH');
+    // A caller-supplied comparison_status must never contradict the
+    // actual normalized comparison held by the immutable Shadow receipt.
+    // Otherwise backup/diagnostics could display a forged MATCH_EXACT label.
+    const expectedComparisonStatus=String(
+      input.comparison&&input.comparison.status||'').toUpperCase();
+    if(input.comparison_status!=null && expectedComparisonStatus &&
+       String(input.comparison_status).toUpperCase()!==expectedComparisonStatus)
+      throw new Error('SHADOW_EVENT_COMPARISON_STATUS_MISMATCH');
+    // A claim of matching money without a comparison object is not evidence.
+    if((String(input.comparison_status||'').toUpperCase()==='MATCH_EXACT' ||
+        String(input.comparison_status||'').toUpperCase()==='MATCH_DISPLAY_ONLY') &&
+       !expectedComparisonStatus)
+      throw new Error('SHADOW_EVENT_MATCH_WITHOUT_COMPARISON');
+    // A raw exact match may cover only selected fields: the immutable
+    // money receipt needs full comparator promotion proof, not its label.
+    const effectiveComparisonStatus=String(
+      input.comparison_status||expectedComparisonStatus||'UNVERIFIED').toUpperCase();
+    if(effectiveComparisonStatus==='MATCH_EXACT'){
+      const comparison=input.comparison;
+      const mandatory=['total_xac','total_qua_co','total_payout','final_net'];
+      if(!comparison || comparison.safe_to_promote!==true ||
+         comparison.required_totals_exact!==true ||
+         comparison.exact!==true ||
+         !Number.isInteger(comparison.compared_fields) ||
+         comparison.compared_fields<mandatory.length ||
+         !mandatory.every(field=>comparison.totals &&
+           comparison.totals[field] &&
+           comparison.totals[field].status==='MATCH_EXACT'))
+        throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+    }
     const evidenceCore = {
       scope_id: scopeId,
       trigger: String(input.trigger || 'UNKNOWN'),
@@ -372,6 +405,88 @@
       tx.objectStore(storeName).delete(key);
       await txDone(tx);
     } finally { db.close(); }
+  }
+
+  // Metadata updates from two same-origin tabs must never use a detached
+  // read -> put sequence. The caller mutator is synchronous and executes
+  // while the metadata readwrite transaction remains active.
+  async function mutateMetadataAtomically(key,mutator) {
+    if(typeof key!=='string'||!key.trim()||typeof mutator!=='function')
+      throw new Error('METADATA_ATOMIC_ARGUMENTS_REQUIRED');
+    const db=await openDb();
+    let failure=null,result=null;
+    try {
+      const tx=db.transaction(STORES.metadata,'readwrite');
+      const bucket=tx.objectStore(STORES.metadata);
+      const req=bucket.get(key);
+      req.onsuccess=()=>{
+        try {
+          const previous=req.result==null?null:clone(req.result);
+          const updated=mutator(previous);
+          if(updated&&typeof updated.then==='function')
+            throw new Error('METADATA_ATOMIC_MUTATOR_MUST_BE_SYNC');
+          if(!updated||typeof updated!=='object'||Array.isArray(updated)||
+             updated.key!==key)
+            throw new Error('METADATA_ATOMIC_RESULT_INVALID');
+          result=clone(updated);
+          bucket.put(clone(result));
+        } catch(error) {
+          failure=error;
+          tx.abort();
+        }
+      };
+      try{await txDone(tx);}catch(error){throw failure||error;}
+      if(!result)throw new Error('METADATA_ATOMIC_COMMIT_MISSING');
+      return result;
+    }finally{db.close();}
+  }
+
+
+  // Make linked metadata edits (candidate state + golden pin) a single
+  // all-or-nothing IndexedDB transaction across multiple browser tabs.
+  // All IndexedDB requests are scheduled from active request callbacks;
+  // the mutator must be synchronous to avoid transaction auto-close.
+  async function mutateMetadataRowsAtomically(keys,mutator) {
+    if(!Array.isArray(keys)||!keys.length||new Set(keys).size!==keys.length||
+      keys.some(key=>typeof key!=='string'||!key.trim())||
+      typeof mutator!=='function')
+      throw new Error('METADATA_ROWS_ATOMIC_ARGUMENTS_REQUIRED');
+    const db=await openDb();
+    let failure=null,outcome=null,completed=false;
+    try {
+      const tx=db.transaction(STORES.metadata,'readwrite');
+      const bucket=tx.objectStore(STORES.metadata);
+      const rows=Object.create(null);
+      let pending=keys.length;
+      for(const key of keys){
+        const request=bucket.get(key);
+        request.onsuccess=()=>{
+          try {
+            rows[key]=request.result==null?null:clone(request.result);
+            if(--pending!==0)return;
+            const edited=mutator(rows);
+            if(edited&&typeof edited.then==='function')
+              throw new Error('METADATA_ROWS_ATOMIC_MUTATOR_MUST_BE_SYNC');
+            if(!edited||typeof edited!=='object'||!edited.rows||
+               typeof edited.rows!=='object')
+              throw new Error('METADATA_ROWS_ATOMIC_RESULT_INVALID');
+            for(const name of keys){
+              if(!Object.prototype.hasOwnProperty.call(edited.rows,name))
+                throw new Error('METADATA_ROWS_ATOMIC_ROW_MISSING:'+name);
+              const value=edited.rows[name];
+              if(!value||typeof value!=='object'||Array.isArray(value)||value.key!==name)
+                throw new Error('METADATA_ROWS_ATOMIC_ROW_INVALID:'+name);
+            }
+            for(const name of keys)bucket.put(clone(edited.rows[name]));
+            outcome=clone(edited.result);
+            completed=true;
+          } catch(error){failure=error;tx.abort();}
+        };
+      }
+      try{await txDone(tx);}catch(error){throw failure||error;}
+      if(!completed)throw new Error('METADATA_ROWS_ATOMIC_COMMIT_MISSING');
+      return outcome;
+    }finally{db.close();}
   }
 
   async function savePartner(input) {
@@ -482,7 +597,7 @@
     return v;
   }
 
-  async function saveSettlement(input) {
+  function normalizeSettlement(input) {
     if (!input.partner_id || !validDateOnly(input.business_date)) throw new Error('SETTLEMENT_SCOPE_REQUIRED');
     assertConfigPartner(input.config_snapshot || null, input.partner_id);
     const now = nowIso();
@@ -508,8 +623,136 @@
       created_at: input.created_at || now,
       updated_at: now
     };
-    await put(STORES.settlements, v);
     return v;
+  }
+
+  async function saveSettlement(input) {
+    const v=normalizeSettlement(input);
+    await put(STORES.settlements,v);
+    return v;
+  }
+
+  // Atomic compare-and-set: ensures stale HIOSKT shadow updates from another
+  // tab cannot overwrite a newer settlement/recalculation. Both validation
+  // of expected snapshot and the write run in one serialized IDB transaction.
+  async function saveSettlementIfUnchanged(input,expectedSnapshot) {
+    const v=normalizeSettlement(input);
+    if(!expectedSnapshot || String(expectedSnapshot.id||'')!==String(v.id))
+      throw new Error('SETTLEMENT_CAS_EXPECTED_SCOPE_REQUIRED');
+    const db=await openDb();
+    try {
+      const tx=db.transaction(STORES.settlements,'readwrite');
+      const bucket=tx.objectStore(STORES.settlements);
+      let outcome=null;
+      const req=bucket.get(v.id);
+      req.onsuccess=()=>{
+        const previous=req.result||null;
+        if(!previous||stableStringify(previous)!==stableStringify(expectedSnapshot)){
+          outcome={saved:null,superseded:true};
+          return;
+        }
+        bucket.put(clone(v));
+        outcome={saved:v,superseded:false};
+      };
+      await txDone(tx);
+      if(!outcome)throw new Error('SETTLEMENT_CAS_FAILED');
+      return outcome;
+    } finally {db.close();}
+  }
+
+  // Monetary settlement + message statuses must commit only when every
+  // input observed by the evaluator still matches in ONE IndexedDB transaction.
+  // This closes the cross-tab gap between pipeline's read/recheck and write.
+  // Reads and writes span the SAME five object stores; no async awaits occur
+  // inside onsuccess handlers, preserving transaction activity.
+  async function saveSettlementIfScopeUnchanged(input, expected) {
+    const v=normalizeSettlement(input);
+    const scope=`scope:${v.partner_id}:${v.business_date}:${String(v.region||'').toLowerCase()}`;
+    const monetary=['complete_unverified','provisional'].includes(v.scope_status);
+    if (v.id!==scope || !['mn','mt','mb'].includes(String(v.region||'')) ||
+        !(monetary || ['blocked','empty'].includes(v.scope_status)))
+      throw new Error('SETTLEMENT_ATOMIC_SCOPE_INVALID');
+    if (!expected || !Array.isArray(expected.messages) ||
+        !Object.prototype.hasOwnProperty.call(expected,'config') ||
+        !Object.prototype.hasOwnProperty.call(expected,'result') ||
+        !Object.prototype.hasOwnProperty.call(expected,'partner') ||
+        !Object.prototype.hasOwnProperty.call(expected,'settlement') ||
+        (monetary && (!expected.config || !expected.result || !expected.partner)))
+      throw new Error('SETTLEMENT_ATOMIC_EVIDENCE_REQUIRED');
+    const db=await openDb();
+    try {
+      const tx=db.transaction(
+        [STORES.messages,STORES.configs,STORES.results,STORES.partners,STORES.settlements],
+        'readwrite');
+      const messages=tx.objectStore(STORES.messages);
+      const settlementBucket=tx.objectStore(STORES.settlements);
+      const requests=[
+        messages.index('by_partner_date').getAll([v.partner_id,v.business_date]),
+        tx.objectStore(STORES.configs).index('by_partner').getAll(v.partner_id),
+        tx.objectStore(STORES.results).get(`${v.business_date}:${v.region}`),
+        tx.objectStore(STORES.partners).get(v.partner_id),
+        settlementBucket.get(v.id)
+      ];
+      const rows=new Array(requests.length);
+      let completed=0,outcome=null;
+      requests.forEach((request,index)=>{
+        request.onsuccess=()=>{
+          rows[index]=request.result;
+          completed++;
+          if(completed!==requests.length)return;
+          const liveMessages=(rows[0]||[])
+            .filter(x=>String(x.region||'').toLowerCase()===v.region &&
+              String(x.status||'').toLowerCase()!=='cancelled')
+            .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+          const seenMessages=expected.messages.slice()
+            .sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+          let liveConfig=null;
+          try {
+            liveConfig=resolveConfigFromRows(rows[1]||[],v.partner_id,v.business_date);
+          } catch (_) { /* Missing/invalid config cannot authorize money. */ }
+          const same=(a,b)=>stableStringify(a==null?null:a)===
+            stableStringify(b==null?null:b);
+          if(!same(liveMessages,seenMessages) ||
+              !same(liveConfig,expected.config) ||
+              !same(rows[2],expected.result) ||
+              !same(rows[3],expected.partner) ||
+              !same(rows[4],expected.settlement)) {
+            outcome={saved:null,superseded:true};
+            return;
+          }
+          // Keep each message's settled status and monetary result in the
+          // same atomic transaction; never mutate a newer edited bet afterward.
+          // EMPTY/BLOCKED must never rewrite message statuses; their scope
+          // record still requires atomic input and prior-settlement validation.
+          if(!monetary) {
+            settlementBucket.put(clone(v));
+            outcome={saved:v,superseded:false};
+            return;
+          }
+          // Verify every message's config BEFORE issuing any writes.
+          const messageConfigs=liveMessages.map(message=>
+            message.config_snapshot||liveConfig);
+          if(messageConfigs.some(c=>c &&
+              String(c.partner_id||'')!==String(v.partner_id))) {
+            outcome={saved:null,superseded:true};
+            return;
+          }
+          const status=v.scope_status==='complete_unverified'
+            ? 'settled_unverified':'settled_provisional';
+          const timestamp=nowIso();
+          liveMessages.forEach((message,index)=>{
+            messages.put(Object.assign({},message,{
+              status,config_snapshot:clone(messageConfigs[index]),updated_at:timestamp
+            }));
+          });
+          settlementBucket.put(clone(v));
+          outcome={saved:v,superseded:false};
+        };
+      });
+      await txDone(tx);
+      if(!outcome)throw new Error('SETTLEMENT_ATOMIC_COMMIT_FAILED');
+      return outcome;
+    } finally {db.close();}
   }
 
   function resultSnapshotIsOlder(candidate, previous) {
@@ -571,19 +814,62 @@
 
   async function saveShadowEvent(input) {
     const event = normalizeShadowEvent(input || {});
-    const existing = await listShadowEvents({ scope_id: event.scope_id });
-    const previous = existing.length ? existing[existing.length - 1] : null;
-    if (previous && previous.evidence_fingerprint === event.evidence_fingerprint) {
-      return { event: clone(previous), changed: false, previous: clone(previous) };
-    }
-    await put(STORES.shadowEvents, event);
-    return { event, changed: true, previous: previous ? clone(previous) : null };
+    // Hash metadata is derived from the event core. Refuse a caller-provided
+    // different fingerprint BEFORE opening any write transaction; it could
+    // bypass cross-tab duplicate suppression for an identical money receipt.
+    const computed=normalizeShadowEvent(
+      Object.assign({},input||{},{evidence_fingerprint:null}));
+    if(event.evidence_fingerprint!==computed.evidence_fingerprint)
+      throw new Error('SHADOW_EVENT_FINGERPRINT_MISMATCH');
+    const db = await openDb();
+    try {
+      // The last-event check and append MUST share one readwrite transaction.
+      // IndexedDB serializes overlapping scope journal writers across tabs:
+      // separate listShadowEvents() / put() transactions could both pass the
+      // duplicate test and silently append the same financial evidence twice.
+      const tx = db.transaction(STORES.shadowEvents, 'readwrite');
+      const bucket = tx.objectStore(STORES.shadowEvents);
+      const request = bucket.index('by_scope_id').getAll(event.scope_id);
+      let outcome = null;
+      request.onsuccess = () => {
+        const rows = (request.result || []).slice().sort((a, b) =>
+          String(a.observed_at || '').localeCompare(String(b.observed_at || '')) ||
+          String(a.id || '').localeCompare(String(b.id || '')));
+        const previous = rows.length ? rows[rows.length - 1] : null;
+        if (previous && previous.evidence_fingerprint === event.evidence_fingerprint) {
+          outcome = { event: clone(previous), changed: false, previous: clone(previous) };
+          return;
+        }
+        // add, not put: duplicate caller-supplied event IDs must abort rather
+        // than overwriting a prior audit receipt, even across browsing tabs.
+        bucket.add(clone(event));
+        outcome = { event, changed: true, previous: previous ? clone(previous) : null };
+      };
+      await txDone(tx);
+      if (!outcome) throw new Error('SHADOW_EVENT_ATOMIC_APPEND_FAILED');
+      return outcome;
+    } finally { db.close(); }
   }
 
   async function exportAll() {
-    const payload = { format: 'kts-settlement-export', version: 5, exported_at: nowIso(), stores: {} };
-    for (const name of Object.values(STORES)) payload.stores[name] = await getAll(name);
-    return payload;
+    // All store snapshots must come from the SAME IndexedDB transaction.
+    // Independent getAll() calls can interleave with another tab's commits
+    // and export a mismatched message/config/settlement/evidence backup.
+    const db=await openDb();
+    try {
+      const names=Object.values(STORES);
+      const payload={format:'kts-settlement-export',version:5,
+        exported_at:nowIso(),stores:{}};
+      const tx=db.transaction(names,'readonly');
+      for(const name of names){
+        const request=tx.objectStore(name).getAll();
+        request.onsuccess=()=>{payload.stores[name]=clone(request.result||[]);};
+      }
+      await txDone(tx);
+      if(names.some(name=>!Object.prototype.hasOwnProperty.call(payload.stores,name)))
+        throw new Error('EXPORT_ATOMIC_SNAPSHOT_INCOMPLETE');
+      return payload;
+    }finally{db.close();}
   }
 
   function validateImportPayload(payload, existingByStore, options) {
@@ -607,6 +893,107 @@
         seen.add(key);
         return row;
       });
+    }
+
+    // Imported financial evidence is NOT ordinary mergeable metadata. The
+    // old merge path silently skipped same-key rows, including a different
+    // operator-confirmed HIOSKT oracle or a different READY history.
+    const protectedKeys=[
+      'qualification_history_v1',
+      'shadow_regression_cases_v1',
+      'shadow_regression_candidates_v1'
+    ];
+    const priorMeta=new Map((replace?[]:(existing[STORES.metadata]||[]))
+      .map(row=>[String(row&&row.key||''),row]));
+    const importedMeta=new Map(incoming[STORES.metadata]
+      .map(row=>[String(row.key),row]));
+    for(const key of protectedKeys){
+      const row=importedMeta.get(key);
+      if(!row)continue;
+      const prior=priorMeta.get(key);
+      if(prior&&stableStringify(prior)!==stableStringify(row))
+        throw new Error('IMPORT_PROTECTED_EVIDENCE_COLLISION:'+key);
+      if(row.version!==1)
+        throw new Error('IMPORT_PROTECTED_EVIDENCE_VERSION_INVALID:'+key);
+      if(key==='qualification_history_v1'){
+        const history=global.KTS_SETTLEMENT_QUALIFICATION_HISTORY;
+        if(!history||typeof history.validateJournalRow!=='function'||
+           typeof history.validateHistoryEvents!=='function')
+          throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:'+key);
+        const shape=history.validateJournalRow(row);
+        const events=shape.valid?history.validateHistoryEvents(row.events):shape;
+        if(!events.valid)
+          throw new Error('IMPORT_QUALIFICATION_EVIDENCE_INVALID:'+events.reason);
+        continue;
+      }
+      const golden=global.KTS_SETTLEMENT_REGRESSION_CASES;
+      if(!golden||typeof golden.normalizeCase!=='function')
+        throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:'+key);
+      if(key==='shadow_regression_cases_v1'){
+        if(!Array.isArray(row.cases))throw new Error('IMPORT_GOLDEN_NOT_ARRAY');
+        const ids=new Set(),events=new Set();
+        for(const source of row.cases){
+          const checked=golden.normalizeCase(source);
+          if(ids.has(checked.id))throw new Error('IMPORT_GOLDEN_DUPLICATE_ID');
+          ids.add(checked.id);
+          if(checked.source_event_id){
+            if(events.has(checked.source_event_id))
+              throw new Error('IMPORT_GOLDEN_DUPLICATE_SOURCE');
+            events.add(checked.source_event_id);
+          }
+        }
+      }else{
+        const candidates=global.KTS_SETTLEMENT_REGRESSION_CANDIDATES;
+        if(!candidates||typeof candidates.normalizeCandidate!=='function')
+          throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:'+key);
+        if(!Array.isArray(row.candidates))
+          throw new Error('IMPORT_CANDIDATES_NOT_ARRAY');
+        const ids=new Set(),events=new Set();
+        for(const source of row.candidates){
+          const c=candidates.normalizeCandidate(source);
+          if(c.id!=='candidate:'+c.source_event_id)
+            throw new Error('IMPORT_CANDIDATE_SOURCE_ID_MISMATCH');
+          if(c.case.source_event_id!=null&&
+             String(c.case.source_event_id)!==c.source_event_id)
+            throw new Error('IMPORT_CANDIDATE_CASE_SOURCE_MISMATCH');
+          golden.normalizeCase(c.case);
+          if(ids.has(c.id)||events.has(c.source_event_id))
+            throw new Error('IMPORT_CANDIDATE_DUPLICATE_SOURCE');
+          ids.add(c.id);events.add(c.source_event_id);
+          const date=value=>typeof value==='string'&&
+            /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/.test(value)&&
+            Number.isFinite(Date.parse(value));
+          if(c.state==='promoted'&&
+             (!date(c.promoted_at)||!c.confirmation_note.trim()||c.dismissed_at!=null))
+            throw new Error('IMPORT_CANDIDATE_PROMOTION_RECEIPT_MISSING');
+          if(c.state==='dismissed'&&
+             (!date(c.dismissed_at)||!c.dismiss_reason.trim()||c.promoted_at!=null))
+            throw new Error('IMPORT_CANDIDATE_DISMISS_RECEIPT_MISSING');
+        }
+      }
+    }
+    // Cross-check the *effective* metadata after merging; a promoted
+    // candidate may never be restored without its exact confirmed golden.
+    const candidateRow=importedMeta.get('shadow_regression_candidates_v1')||
+      priorMeta.get('shadow_regression_candidates_v1');
+    const goldenRow=importedMeta.get('shadow_regression_cases_v1')||
+      priorMeta.get('shadow_regression_cases_v1');
+    if(candidateRow&&(importedMeta.has('shadow_regression_candidates_v1')||
+       importedMeta.has('shadow_regression_cases_v1'))){
+      const golden=global.KTS_SETTLEMENT_REGRESSION_CASES;
+      if(!golden||typeof golden.normalizeCase!=='function')
+        throw new Error('IMPORT_EVIDENCE_VALIDATOR_UNAVAILABLE:golden');
+      const cases=goldenRow&&Array.isArray(goldenRow.cases)?goldenRow.cases:[];
+      const claimed=new Set();
+      for(const source of candidateRow.candidates||[]){
+        if(String(source&&source.state||'').toLowerCase()!=='promoted')continue;
+        const c=golden.normalizeCase(source.case);
+        const actual=cases.filter(g=>g&&g.id===c.id);
+        if(actual.length!==1||stableStringify(actual[0])!==stableStringify(c))
+          throw new Error('IMPORT_PROMOTED_GOLDEN_LINK_INVALID');
+        if(claimed.has(c.id))throw new Error('IMPORT_GOLDEN_CLAIM_DUPLICATE');
+        claimed.add(c.id);
+      }
     }
 
     const incomingPartners = incoming[STORES.partners];
@@ -680,6 +1067,53 @@
       combinedMessages.set(String(row.id), prior || row);
     }
 
+
+    // A restored MATCH_EXACT money claim must have the same durable Shadow
+    // receipt which the live HIOSKT workflow requires before promotion.
+    // Validate its full reference/comparison, not only a forged status text.
+    const knownShadowReceipts=[
+      ...(replace?[]:(existing[STORES.shadowEvents]||[])),
+      ...incoming[STORES.shadowEvents]
+    ];
+    const exactReceiptFor=row=>{
+      const ref=row.reference_app_snapshot;
+      if(!ref||typeof ref!=='object'||Array.isArray(ref)||
+          !ref.comparison||String(ref.comparison.status||'').toUpperCase()!=='MATCH_EXACT'||
+          ref.comparison.safe_to_promote!==true ||
+          ref.comparison.required_totals_exact!==true ||
+          ref.comparison.exact!==true ||
+          !Number.isInteger(ref.comparison.compared_fields) ||
+          ref.comparison.compared_fields<4 ||
+          !['total_xac','total_qua_co','total_payout','final_net'].every(
+            field=>ref.comparison.totals&&ref.comparison.totals[field]&&
+              ref.comparison.totals[field].status==='MATCH_EXACT'))
+        return false;
+      const reference=clone(ref);
+      delete reference.comparison;
+      const expectedAmounts=row.settlement_result||row.result_snapshot;
+      const values=['total_xac','total_qua_co','total_payout','refund_amount','final_net'];
+      const monetaryMatch=actual=>actual&&typeof actual==='object'&&
+        values.every(key=>expectedAmounts && actual[key]!=null &&
+          expectedAmounts[key]!=null &&
+          String(actual[key])===String(expectedAmounts[key]));
+      return knownShadowReceipts.some(event=>
+        event && String(event.scope_id||'')===String(row.id) &&
+        String(event.partner_id||'')===String(row.partner_id) &&
+        String(event.business_date||'')===String(row.business_date) &&
+        String(event.region||'').toLowerCase()===String(row.region||'').toLowerCase() &&
+        String(event.comparison_status||'').toUpperCase()==='MATCH_EXACT' &&
+        event.comparison && String(event.comparison.status||'').toUpperCase()==='MATCH_EXACT' &&
+        stableStringify(event.comparison)===stableStringify(ref.comparison) &&
+        stableStringify(event.reference_snapshot||null)===stableStringify(reference) &&
+        event.local_snapshot && monetaryMatch(event.local_snapshot.settlement_result) &&
+        stableStringify((event.local_snapshot.message_ids||[]).map(String).sort())===
+          stableStringify((row.message_ids||[]).map(String).sort()) &&
+        (!event.evidence_fingerprint ||
+          String(event.evidence_fingerprint)===
+            normalizeShadowEvent({...event,evidence_fingerprint:null}).evidence_fingerprint)
+      );
+    };
+
     for (const row of incoming[STORES.settlements]) {
       const partnerId = requirePartner(row, STORES.settlements);
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_SETTLEMENT_SCOPE_INVALID:' + String(row.id));
@@ -688,6 +1122,28 @@
       assertConfigPartner(row.config_snapshot || null, partnerId);
       const prior = existingMap(STORES.settlements).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.settlements + ':' + String(row.id));
+      if(prior){
+        // A backup can contain an older (or foreign) money calculation
+        // under the same scope ID. Silently skipping it hides a material
+        // discrepancy from the operator.
+        const monetaryCore=value=>({
+          partner_id:String(value.partner_id||''),
+          business_date:String(value.business_date||''),
+          region:String(value.region||'').toLowerCase(),
+          scope_status:value.scope_status||null,
+          comparison_status:value.comparison_status||null,
+          message_ids:Array.isArray(value.message_ids)?
+            value.message_ids.map(String).sort():
+            (value.message_id?[String(value.message_id)]:[]),
+          config_snapshot:value.config_snapshot||null,
+          lottery_result_snapshot:value.lottery_result_snapshot||null,
+          result_snapshot:value.result_snapshot||null,
+          settlement_result:value.settlement_result||null
+        });
+        if(stableStringify(monetaryCore(prior))!==
+           stableStringify(monetaryCore(row)))
+          throw new Error('IMPORT_SETTLEMENT_MONETARY_COLLISION:'+String(row.id));
+      }
       const messageIds = Array.isArray(row.message_ids) ? row.message_ids.map(String) : (row.message_id ? [String(row.message_id)] : []);
       if (new Set(messageIds).size !== messageIds.length) throw new Error('IMPORT_SETTLEMENT_MESSAGE_DUPLICATE:' + String(row.id));
       for (const messageId of messageIds) {
@@ -710,6 +1166,29 @@
         .sort();
       const settlementMessageIds = messageIds.slice().sort();
       const scopeStatus = String(row.scope_status || '').toLowerCase();
+      // Preserve canonical case: older report readers and close gates use
+      // literal status comparisons. Do not import a differently cased
+      // BLOCKED or PROVISIONAL label that bypasses those safety checks.
+      if (typeof row.scope_status!=='string' || row.scope_status!==scopeStatus ||
+          !['empty','blocked','provisional','complete_unverified'].includes(scopeStatus))
+        throw new Error('IMPORT_SETTLEMENT_STATUS_INVALID:' + String(row.id));
+      // Two saved views of the SAME monetary calculation must not disagree.
+      // Otherwise a restored source can report one amount while a downstream
+      // audit or replay reads another from the same scope ID. Do not silently
+      // choose whichever value happens to be first in a fallback chain.
+      if (['provisional','complete_unverified'].includes(scopeStatus) &&
+          row.result_snapshot != null && row.settlement_result != null) {
+        for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']){
+          const a=row.result_snapshot[field], b=row.settlement_result[field];
+          if(a==null || b==null || String(a)!==String(b))
+            throw new Error('IMPORT_SETTLEMENT_MONEY_VIEW_CONFLICT:'+
+              String(row.id)+':'+field);
+        }
+      }
+      if (['provisional','complete_unverified'].includes(scopeStatus) &&
+          String(row.comparison_status||'').toUpperCase()==='MATCH_EXACT' &&
+          !exactReceiptFor(row))
+        throw new Error('IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING:'+String(row.id));
       if (scopeStatus === 'empty' && activeScopeMessageIds.length) {
         throw new Error('IMPORT_EMPTY_SETTLEMENT_HAS_ACTIVE_MESSAGES:' + String(row.id));
       }
@@ -719,10 +1198,42 @@
       if (stableStringify(activeScopeMessageIds) !== stableStringify(settlementMessageIds)) {
         throw new Error('IMPORT_SETTLEMENT_ACTIVE_MESSAGE_SET_MISMATCH:' + String(row.id));
       }
-      if (scopeStatus === 'empty') {
-        const totals = row.result_snapshot || row.settlement_result || {};
-        for (const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']) {
-          if (Number(totals[field] || 0) !== 0) throw new Error('IMPORT_EMPTY_SETTLEMENT_NONZERO:' + String(row.id) + ':' + field);
+      if (scopeStatus === 'empty' || scopeStatus === 'blocked') {
+        // BLOCKED, like EMPTY, is not a money-bearing settlement. Backups
+        // cannot hide payable totals/attribution under a nominally safe
+        // scope_status, nor claim a made-up status such as "verified".
+        const code='IMPORT_'+scopeStatus.toUpperCase()+'_SETTLEMENT_';
+        const snapshots=['result_snapshot','settlement_result']
+          .filter(name=>row[name]!=null);
+        if(!snapshots.length)
+          throw new Error(code+'TOTALS_MISSING:'+String(row.id));
+        for(const name of snapshots) {
+          const totals=row[name];
+          if(!totals||typeof totals!=='object'||Array.isArray(totals))
+            throw new Error(code+'TOTALS_INVALID:'+String(row.id)+':'+name);
+          for(const field of ['total_xac','total_qua_co','total_payout','refund_amount','final_net']) {
+            if(!Object.prototype.hasOwnProperty.call(totals,field))continue;
+            const value=totals[field];
+            const decimal=typeof value==='string'&&
+              /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim());
+            const valid=(typeof value==='number'&&Number.isFinite(value))||
+              (decimal&&Number.isFinite(Number(value)));
+            if(!valid||Number(value)!==0)
+              throw new Error(code+'NONZERO:'+String(row.id)+':'+name+':'+field);
+          }
+        }
+        // An empty/blocked scope cannot contain monetary breakdown rows
+        // even if its five top-level totals happen to be zero.
+        for(const [name,value] of [
+          ['row',row],...snapshots.map(name=>[name,row[name]])
+        ]) {
+          for(const field of ['detail_rows','category_rows','message_breakdown']) {
+            const entries=value[field];
+            if(entries==null)continue;
+            if(!Array.isArray(entries)||entries.length)
+              throw new Error(code+'ATTRIBUTION_NONEMPTY:'+
+                String(row.id)+':'+name+':'+field);
+          }
         }
       }
     }
@@ -741,9 +1252,20 @@
           throw new Error('IMPORT_RESULT_FINGERPRINT_MISMATCH:' + String(row.id));
         }
       }
-      combinedResults.set(String(row.id), row);
+      const prior=combinedResults.get(String(row.id));
+      if(prior){
+        const previous=normalizeResultSnapshot(Object.assign({},prior,
+          {fingerprint:null}));
+        if(previous.fingerprint!==recomputed.fingerprint)
+          throw new Error('IMPORT_RESULT_CONTENT_COLLISION:'+String(row.id));
+      }
+      combinedResults.set(String(row.id), prior||row);
     }
+    const existingResultEvents=existingMap(STORES.resultEvents);
     for (const row of incoming[STORES.resultEvents]) {
+      const sameId=existingResultEvents.get(String(row.id));
+      if(sameId&&stableStringify(sameId)!==stableStringify(row))
+        throw new Error('IMPORT_RESULT_EVENT_CONTENT_COLLISION:'+String(row.id));
       if (!validDateOnly(String(row.business_date || '')) || !validRegion(row.region)) throw new Error('IMPORT_RESULT_EVENT_SCOPE_INVALID:' + String(row.id));
       const expectedResultId = `${String(row.business_date)}:${String(row.region).toLowerCase()}`;
       if (row.result_id != null && String(row.result_id) !== expectedResultId) throw new Error('IMPORT_RESULT_EVENT_ID_SCOPE_MISMATCH:' + String(row.id));
@@ -769,6 +1291,26 @@
       }
       const prior = existingMap(STORES.shadowEvents).get(String(row.id));
       if (prior && String(prior.partner_id || '') !== partnerId) throw new Error('IMPORT_ID_SCOPE_COLLISION:' + STORES.shadowEvents + ':' + String(row.id));
+      if(prior){
+        // An existing Shadow event ID is an immutable monetary witness.
+        // Compare recomputed fingerprints, not caller-supplied fingerprint
+        // metadata. Do not silently skip two events with one ID but
+        // different local/reference money, operator reason or observation.
+        const signature=value=>{
+          const fresh=normalizeShadowEvent(Object.assign({},value,
+            {evidence_fingerprint:null}));
+          return {
+            id:String(fresh.id),scope_id:fresh.scope_id,
+            partner_id:fresh.partner_id,business_date:fresh.business_date,
+            region:fresh.region,trigger:fresh.trigger,reason:fresh.reason,
+            comparison_status:fresh.comparison_status,
+            observed_at:value.observed_at==null?null:String(value.observed_at),
+            evidence_fingerprint:fresh.evidence_fingerprint
+          };
+        };
+        if(stableStringify(signature(prior))!==stableStringify(signature(row)))
+          throw new Error('IMPORT_SHADOW_EVENT_CONTENT_COLLISION:'+String(row.id));
+      }
     }
 
     const counts = {};
@@ -785,15 +1327,200 @@
 
   async function importAll(payload, options) {
     const replace = Boolean(options && options.replace);
+    // Source rows must be captured in ONE readonly IndexedDB snapshot.
+    // Sequential getAll calls across transactions permit a cross-tab write
+    // to produce a hybrid preflight that never existed at one instant.
+    const sourceSnapshot = (await exportAll()).stores;
     const existing = {};
-    for (const name of Object.values(STORES)) existing[name] = replace ? [] : await getAll(name);
+    for (const name of Object.values(STORES))
+      existing[name] = replace ? [] : sourceSnapshot[name];
     const validation = validateImportPayload(payload, existing, { replace });
+    // replace:true is not a license to erase a confirmed HIOSKT golden,
+    // operator decision, or immutable qualification journal. This is an API
+    // boundary even though the regular UI only requests merge (replace:false).
+    const protectedKeys=[
+      'qualification_history_v1',
+      'shadow_regression_cases_v1',
+      'shadow_regression_candidates_v1'
+    ];
+    const evidenceSnapshot=sourceSnapshot[STORES.metadata]||[];
+    const shadowSnapshot=sourceSnapshot[STORES.shadowEvents]||[];
+    const resultEventSnapshot=sourceSnapshot[STORES.resultEvents]||[];
+    if(replace){
+      const persisted=new Map(evidenceSnapshot.map(row=>[String(row&&row.key||''),row]));
+      const incoming=new Map(((payload.stores&&payload.stores[STORES.metadata])||[])
+        .map(row=>[String(row&&row.key||''),row]));
+      for(const key of protectedKeys){
+        const old=persisted.get(key);
+        if(old&&(!incoming.has(key)||
+           stableStringify(old)!==stableStringify(incoming.get(key))))
+          throw new Error('IMPORT_REPLACE_PROTECTED_EVIDENCE_DENIED:'+key);
+      }
+      // Shadow event receipts are source evidence in a separate store,
+      // not metadata. Replacing the database must preserve existing
+      // receipts byte-for-byte, even when the incoming backup omits them.
+      const incomingShadow=new Map(((payload.stores&&
+        payload.stores[STORES.shadowEvents])||[])
+        .map(row=>[String(row.id),row]));
+      for(const old of shadowSnapshot){
+        const id=String(old.id);
+        const incoming=incomingShadow.get(id);
+        if(!incoming||stableStringify(incoming)!==stableStringify(old))
+          throw new Error('IMPORT_REPLACE_SHADOW_EVIDENCE_DENIED:'+id);
+      }
+      const incomingResultEvents=new Map(((payload.stores&&
+        payload.stores[STORES.resultEvents])||[])
+        .map(row=>[String(row.id),row]));
+      for(const old of resultEventSnapshot){
+        const id=String(old.id);
+        const incoming=incomingResultEvents.get(id);
+        if(!incoming||stableStringify(incoming)!==stableStringify(old))
+          throw new Error('IMPORT_REPLACE_RESULT_EVENT_DENIED:'+id);
+      }
+    }
 
     const db = await openDb();
     try {
       const names = Object.values(STORES);
       const tx = db.transaction(names, 'readwrite');
       const keyForStore = name => name === STORES.metadata ? 'key' : 'id';
+      // Cross-tab protection must be checked INSIDE the write transaction.
+      // The earlier preflight alone cannot prove that an operator's HIOSKT
+      // candidate, pinned golden or READY journal remained unchanged while
+      // another browser tab was writing to the same IndexedDB database.
+      let evidenceRace=null;
+      // Protect ALL preflight dependencies, not only overlapping monetary
+      // IDs or the three protected metadata keys. A concurrent new message,
+      // config, draw or receipt must NEVER turn a validated import into an
+      // inconsistent merge or disappear under replace:true store.clear().
+      // Queue every read before mutations; abort rolls back the ENTIRE tx.
+      for (const name of names) {
+        const req=tx.objectStore(name).getAll();
+        req.onsuccess=()=>{
+          try {
+            if(stableStringify(req.result||[])!==stableStringify(sourceSnapshot[name]||[]))
+              throw new Error('IMPORT_SOURCE_CHANGED_DURING_IMPORT:'+name);
+          } catch(error) {
+            evidenceRace=error;
+            try{tx.abort();}catch(_){/* already aborted */ }
+          }
+        };
+      }
+      // The same cross-tab CAS also protects a replace import; an earlier
+      // snapshot may have changed while any ordinary store was being read.
+      {
+        const readSnapshot=new Map(evidenceSnapshot
+          .map(row=>[String(row&&row.key||''),row]));
+        const metadata=tx.objectStore(STORES.metadata);
+        for(const key of protectedKeys){
+          const req=metadata.get(key);
+          req.onsuccess=()=>{
+            try{
+              const previous=readSnapshot.get(key)||null;
+              const current=req.result||null;
+              if(stableStringify(current)!==stableStringify(previous))
+                throw new Error('IMPORT_PROTECTED_EVIDENCE_CHANGED_DURING_IMPORT:'+key);
+            }catch(error){
+              evidenceRace=error;
+              try{tx.abort();}catch(_){/* already aborted */ }
+            }
+          };
+        }
+      }
+      // Existing Shadow receipts also require compare-and-swap INSIDE
+      // the same readwrite transaction. A valid preflight outside the
+      // transaction cannot protect another tab's late monetary update.
+      const shadowBefore=new Map(shadowSnapshot.map(row=>
+        [String(row&&row.id||''),row]));
+      const incomingShadowKeys=(replace?shadowSnapshot:
+        ((payload.stores&&payload.stores[STORES.shadowEvents])||[])
+          .filter(row=>shadowBefore.has(String(row.id))))
+        .map(row=>String(row.id));
+      // For replace, check the ENTIRE append-only event stores, including
+      // records created by another tab AFTER the preflight snapshots.
+      // Checking only previously known IDs misses late append and would
+      // silently erase new Shadow/KQXS evidence during store.clear().
+      if(replace){
+        const snapshots=[
+          [STORES.shadowEvents,shadowSnapshot],
+          [STORES.resultEvents,resultEventSnapshot]
+        ];
+        for(const [name,before] of snapshots){
+          const req=tx.objectStore(name).getAll();
+          req.onsuccess=()=>{
+            try{
+              if(stableStringify(req.result||[])!==stableStringify(before))
+                throw new Error('IMPORT_APPEND_ONLY_LOG_CHANGED_DURING_REPLACE:'+name);
+            }catch(error){
+              evidenceRace=error;
+              try{tx.abort();}catch(_){/* already aborted */ }
+            }
+          };
+        }
+      }
+      const shadowStore=tx.objectStore(STORES.shadowEvents);
+      for(const id of new Set(incomingShadowKeys)){
+        const req=shadowStore.get(id);
+        req.onsuccess=()=>{
+          try{
+            const prior=shadowBefore.get(id)||null;
+            const current=req.result||null;
+            if(stableStringify(prior)!==stableStringify(current))
+              throw new Error('IMPORT_SHADOW_EVENT_CHANGED_DURING_IMPORT:'+id);
+          }catch(error){
+            evidenceRace=error;
+            try{tx.abort();}catch(_){/* already aborted */ }
+          }
+        };
+      }
+      // When an import overlaps an existing result or settlement ID, the
+      // monetary evidence validated before opening this transaction must
+      // STILL be the current row when the write transaction starts.
+      if(!replace){
+        for(const name of [STORES.results,STORES.settlements]){
+          const currentRows=new Map((existing[name]||[]).map(row=>
+            [String(row&&row.id||''),row]));
+          const incomingRows=(payload.stores&&payload.stores[name])||[];
+          const bucket=tx.objectStore(name);
+          for(const row of incomingRows){
+            const id=String(row&&row.id||'');
+            if(!currentRows.has(id))continue;
+            const expected=currentRows.get(id);
+            const req=bucket.get(id);
+            req.onsuccess=()=>{
+              try{
+                if(stableStringify(req.result||null)!==stableStringify(expected))
+                  throw new Error('IMPORT_MONETARY_ROW_CHANGED_DURING_IMPORT:'+
+                    name+':'+id);
+              }catch(error){
+                evidenceRace=error;
+                try{tx.abort();}catch(_){/* already aborted */ }
+              }
+            };
+          }
+        }
+      }
+      if(!replace){
+        const priorEvents=new Map(resultEventSnapshot.map(row=>
+          [String(row&&row.id||''),row]));
+        const resultEvents=tx.objectStore(STORES.resultEvents);
+        for(const incoming of ((payload.stores&&
+          payload.stores[STORES.resultEvents])||[])){
+          const id=String(incoming.id);
+          if(!priorEvents.has(id))continue;
+          const expected=priorEvents.get(id);
+          const req=resultEvents.get(id);
+          req.onsuccess=()=>{
+            try{
+              if(stableStringify(req.result||null)!==stableStringify(expected))
+                throw new Error('IMPORT_RESULT_EVENT_CHANGED_DURING_IMPORT:'+id);
+            }catch(error){
+              evidenceRace=error;
+              try{tx.abort();}catch(_){/* already aborted */ }
+            }
+          };
+        }
+      }
       for (const name of names) {
         const store = tx.objectStore(name);
         if (replace) {
@@ -814,15 +1541,15 @@
           store.add(value);
         }
       }
-      await txDone(tx);
+      try {await txDone(tx);}catch(error){throw evidenceRace||error;}
     } finally { db.close(); }
     return validation;
   }
 
   global.KTS_SETTLEMENT_STORE = Object.freeze({
-    DB_NAME, DB_VERSION, STORES, openDb,
+    DB_NAME, DB_VERSION, STORES, openDb, mutateMetadataAtomically, mutateMetadataRowsAtomically,
     savePartner, saveConfig, listConfigsForPartner, resolveConfigForDate,
-    saveMessage, saveSettlement, saveResultSnapshot, saveShadowEvent, listShadowEvents,
+    saveMessage, saveSettlement, saveSettlementIfUnchanged, saveSettlementIfScopeUnchanged, saveResultSnapshot, saveShadowEvent, listShadowEvents,
     get, getAll, remove, exportAll, importAll,
     normalizePartner, normalizeConfig, normalizeResultSnapshot, normalizeShadowEvent, assertConfigPartner, resolveConfigFromRows, nextConfigVersionFromRows, validateImportPayload, resultSnapshotIsOlder, stableStringify
   });

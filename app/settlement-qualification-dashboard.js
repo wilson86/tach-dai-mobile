@@ -179,13 +179,48 @@
     }
     return { met:unsafe.length === 0, unsafe_scopes:unsafe, unsafe_count:unsafe.length };
   }
-  function candidateSummary(rows) {
-    const list = Array.isArray(rows) ? rows : [];
-    return {
-      pending:list.filter(x=>String(x && x.state || '').toLowerCase()==='pending').length,
-      promoted:list.filter(x=>String(x && x.state || '').toLowerCase()==='promoted').length,
-      dismissed:list.filter(x=>String(x && x.state || '').toLowerCase()==='dismissed').length
-    };
+  // Confirming HIOSKT once does not grant authority to silently delete
+  // or rewrite the linked golden case. Every PROMOTED candidate must still
+  // have exactly one matching, pinned regression case at qualification time.
+  function candidateSummary(rows, goldenCases) {
+    const list=Array.isArray(rows)?rows:[];
+    const golden=Array.isArray(goldenCases)?goldenCases:[];
+    const counts={pending:0,promoted:0,dismissed:0,invalid:0,
+      promoted_linked:0,promoted_missing:0,promoted_conflicting:0,
+      promoted_duplicate:0,duplicate_candidate_ids:0,duplicate_golden_links:0};
+    const byId=new Map();
+    for(const item of golden) {
+      const id=item&&typeof item.id==='string'?item.id:'';
+      if(!id)continue;
+      const all=byId.get(id)||[];
+      all.push(item);
+      byId.set(id,all);
+    }
+    const candidateIds=new Set(),goldenLinks=new Set();
+    for(const item of list) {
+      const candidateId=item&&typeof item.id==='string'?item.id:'';
+      if(!candidateId||candidateIds.has(candidateId))counts.duplicate_candidate_ids++;
+      else candidateIds.add(candidateId);
+      const state=String(item&&item.state||'').toLowerCase();
+      if(state==='pending')counts.pending++;
+      else if(state==='dismissed')counts.dismissed++;
+      else if(state==='promoted') {
+        counts.promoted++;
+        const caseInput=item&&item.case;
+        const id=caseInput&&typeof caseInput.id==='string'?caseInput.id:'';
+        if(id) {
+          if(goldenLinks.has(id))counts.duplicate_golden_links++;
+          else goldenLinks.add(id);
+        }
+        const matches=id?byId.get(id)||[]:[];
+        if(!matches.length)counts.promoted_missing++;
+        else if(matches.length!==1)counts.promoted_duplicate++;
+        else if(JSON.stringify(matches[0])!==JSON.stringify(caseInput))
+          counts.promoted_conflicting++;
+        else counts.promoted_linked++;
+      } else counts.invalid++;
+    }
+    return counts;
   }
   function combineQualification(input) {
     const x = input || {}, observation = x.observation || {}, regression = x.regression || {total:0,passed:0,failed:0}, candidates = x.candidates || {pending:0,promoted:0,dismissed:0};
@@ -195,8 +230,25 @@
     const features = x.feature_safety || {met:true,unsafe_count:0};
     const readiness = x.repair_readiness || {summary:{total:0,ready:0,blocked:0,all_ready:false},items:[]};
     const blockers = new Set(Array.isArray(observation.blockers) ? observation.blockers : []);
+    // Every golden case must PASS. A zero failure counter with missing/unrun
+    // cases is not evidence that the full regression suite succeeded.
+    const regressionExact = Number.isInteger(regression.total) && regression.total > 0 &&
+      Number.isInteger(regression.passed) && regression.passed === regression.total &&
+      Number.isInteger(regression.failed) && regression.failed === 0;
     if (!(regression.total > 0)) blockers.add('NO_PINNED_REGRESSION_CASES');
     if (regression.failed > 0) blockers.add(`REGRESSION_FAILED:${regression.failed}/${regression.total}`);
+    if (regression.total > 0 && !regressionExact) blockers.add(`REGRESSION_NOT_ALL_PASSED:${Number(regression.passed||0)}/${Number(regression.total||0)}`);
+    const promoted=candidates.promoted==null?0:candidates.promoted;
+    const linked=candidates.promoted_linked==null?0:candidates.promoted_linked;
+    const linkIssues=[candidates.promoted_missing,candidates.promoted_conflicting,
+      candidates.promoted_duplicate,candidates.invalid,
+      candidates.duplicate_candidate_ids,candidates.duplicate_golden_links];
+    const linkedCandidateProof=Number.isInteger(promoted)&&promoted>=0&&
+      Number.isInteger(linked)&&linked===promoted&&
+      linkIssues.every(n=>n==null||n===0)&&
+      (promoted===0||linkIssues.every(n=>Number.isInteger(n)&&n===0));
+    if (!linkedCandidateProof)
+      blockers.add('PROMOTED_GOLDEN_EVIDENCE_UNLINKED');
     if (candidates.pending > 0) {
       const rs = readiness.summary || {};
       if (rs.total > 0 && rs.ready === rs.total) blockers.add(`OPERATOR_CONFIRMATION_PENDING:${candidates.pending}`);
@@ -209,7 +261,28 @@
       else blockers.add(`PARSER_BACKEND_IDENTITY_MISMATCH:${Number(parserBackend.matched||0)}/${Number(parserBackend.total||0)}`);
     }
     if (!features.met) blockers.add(`UNVERIFIED_UI_FEATURE_ACTIVE:${Number(features.unsafe_count||0)}`);
-    const ready = observation.promotion_ready === true && regression.total > 0 && regression.failed === 0 && candidates.pending === 0 && kqxs.met === true && provenance.met === true && parserBackend.met === true && features.met === true;
+    // Mirror the canonical journal evidence invariants before displaying
+    // READY. Green boolean flags cannot override missing/contradictory counts.
+    const pos=n=>Number.isInteger(n)&&n>0;
+    const zero=n=>Number.isInteger(n)&&n===0;
+    const exact=(total,good)=>pos(total)&&Number.isInteger(good)&&good===total;
+    const oc=observation.counts||{};
+    const checks=[
+      ['observation',exact(oc.total,oc.exact)&&zero(oc.missing_scopes)&&(!Array.isArray(observation.blockers)||observation.blockers.length===0)],
+      ['kqxs_verification',exact(kqxs.total,kqxs.verified)&&zero(kqxs.conflict)&&zero(kqxs.unverified)],
+      ['parser_provenance',exact(provenance.total,provenance.known)&&zero(provenance.unknown)&&zero(provenance.invalid)&&zero(provenance.parser_errors)&&zero(provenance.missing_canonical)],
+      ['parser_backend',exact(parserBackend.total,parserBackend.matched)&&zero(parserBackend.mismatched)&&parserBackend.unreachable===false],
+      ['regression_gate',regressionExact],
+      ['candidate_gate',zero(candidates.pending)&&linkedCandidateProof],
+      ['feature_safety',zero(features.unsafe_count)]
+    ];
+    for(const [name,valid] of checks){
+      if(!valid) blockers.add('READY_GATE_EVIDENCE_CONTRADICTION_'+name.toUpperCase());
+    }
+    const ready=observation.promotion_ready===true && regressionExact &&
+      candidates.pending===0 && kqxs.met===true && provenance.met===true &&
+      parserBackend.met===true && features.met===true && blockers.size===0 &&
+      checks.every(([,valid])=>valid);
     return {
       format:'kts-final-qualification-v2-live-parser',
       generated_at:new Date().toISOString(),
@@ -221,8 +294,8 @@
       kqxs_verification:clone(kqxs),
       parser_provenance:clone(provenance),
       parser_backend:clone(parserBackend),
-      regression_gate:{ total:Number(regression.total||0), passed:Number(regression.passed||0), failed:Number(regression.failed||0), met:regression.total>0&&regression.failed===0 },
-      candidate_gate:Object.assign({}, clone(candidates), { met:candidates.pending===0 }),
+      regression_gate:{ total:Number(regression.total||0), passed:Number(regression.passed||0), failed:Number(regression.failed||0), met:regressionExact },
+      candidate_gate:Object.assign({}, clone(candidates), { met:candidates.pending===0&&linkedCandidateProof }),
       repair_readiness:clone(readiness),
       feature_safety:clone(features),
       blockers:[...blockers]
@@ -237,7 +310,9 @@
       d.regression.runPinnedCases(),
       d.candidates.listCandidates()
     ]);
-    const cs = candidateSummary(candidateRows);
+    const pinnedCases = Array.isArray(regressionSummary.results)
+      ? regressionSummary.results.map(row=>row&&row.case).filter(Boolean) : [];
+    const cs = candidateSummary(candidateRows,pinnedCases);
     const observationSummary = d.observation.buildObservation(settlements, {
       from_date:o.from_date,
       to_date:o.to_date,

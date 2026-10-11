@@ -36,10 +36,17 @@
     return Object.assign({}, row);
   }
 
+  function checkedCode(row, kind) {
+    if (!row || typeof row !== 'object' || Array.isArray(row) ||
+        typeof row.code !== 'string' || !row.code.trim())
+      throw new Error('SETTLEMENT_'+kind+'_CODE_INVALID');
+    return row.code.trim().toUpperCase();
+  }
+
   function guardCategoryRows(rows, config) {
     const out = [];
     for (const row of (rows || [])) {
-      const code = String(row && row.code || '').toUpperCase();
+      const code = checkedCode(row, 'CATEGORY');
       if (code === 'UI') {
         const ui = materializeUiRow(row, config);
         if (ui) out.push(ui);
@@ -51,14 +58,37 @@
     return out;
   }
 
+  // Use identical category and detail filtering in live settlement and
+  // golden regression. Invisible/unconfirmed UI money must not survive in
+  // a printable message breakdown after its category has been rejected.
+  function guardEvaluation(evaluated, config) {
+    if (!evaluated || !Array.isArray(evaluated.category_inputs) || !Array.isArray(evaluated.detail_rows)) {
+      throw new Error('SETTLEMENT_EVALUATION_INVALID');
+    }
+    return {
+      category_inputs: guardCategoryRows(evaluated.category_inputs, config),
+      detail_rows: evaluated.detail_rows
+        .filter(row => {
+          const code = checkedCode(row, 'DETAIL');
+          // Hidden or whitespace-padded unconfirmed Ủi detail must never
+          // remain in the evidence or message breakdown.
+          if (code === 'UI') return uiEnabled(config);
+          assertCategoryAllowed(code, config);
+          return true;
+        })
+        .map(row => Object.assign({}, row))
+    };
+  }
+
   global.KTS_SETTLEMENT_FEATURE_GATES = Object.freeze({
-    version: 'feature-gates-v1',
+    version: 'feature-gates-v3-validated-codes',
     FEATURES,
     UI_CONFIRMED,
     isMbXienCode,
     assertCategoryAllowed,
     uiEnabled,
     materializeUiRow,
-    guardCategoryRows
+    guardCategoryRows,
+    guardEvaluation
   });
 })(typeof window !== 'undefined' ? window : globalThis);

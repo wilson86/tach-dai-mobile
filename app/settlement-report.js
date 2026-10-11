@@ -32,6 +32,88 @@
     return stations.length>0 && stations.every(station=>resultStationComplete(region,station));
   }
 
+  const MONEY_FIELDS=['total_xac','total_qua_co','total_payout','refund_amount','final_net'];
+  function verifiedMonetaryTotals(result) {
+    if(!result||typeof result!=='object'||Array.isArray(result))return false;
+    return MONEY_FIELDS.every(field=>{
+      if(!Object.prototype.hasOwnProperty.call(result,field))return false;
+      const value=result[field];
+      if(typeof value==='number')return Number.isFinite(value);
+      if(typeof value!=='string')return false;
+      const decimal=/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+      return decimal.test(value.trim()) && Number.isFinite(Number(value));
+    });
+  }
+
+  // Category breakdown amounts are financial evidence. A corrupt row must
+  // never be coerced to zero while the main money totals remain MATCH_EXACT.
+  function verifiedCategoryMoney(settlement) {
+    const isAmount=value=>{
+      if(typeof value==='number')return Number.isFinite(value);
+      return typeof value==='string' &&
+        /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+        Number.isFinite(Number(value));
+    };
+    const numericFields=['xac','qua_co','hit_units','payout'];
+    const rowsValid=value=>Array.isArray(value) && value.every(row=>
+      row&&typeof row==='object'&&!Array.isArray(row) &&
+      numericFields.every(field=>!Object.prototype.hasOwnProperty.call(row,field) ||
+        isAmount(row[field])));
+    const sources=[settlement];
+    for(const key of ['settlement_result','result_snapshot']){
+      const value=settlement[key];
+      if(value!=null) {
+        if(!value||typeof value!=='object'||Array.isArray(value))return false;
+        sources.push(value);
+      }
+    }
+    for(const obj of sources)
+      for(const key of ['category_rows','rows']){
+        if(obj[key]!=null && !rowsValid(obj[key]))return false;
+      }
+    if(settlement.message_breakdown!=null){
+      if(!Array.isArray(settlement.message_breakdown))return false;
+      for(const group of settlement.message_breakdown){
+        if(!group||typeof group!=='object'||Array.isArray(group) ||
+           (group.category_rows!=null&&!rowsValid(group.category_rows)))
+          return false;
+      }
+    }
+    return true;
+  }
+
+  // Only genuinely empty, zero-valued scopes may disappear from the daily
+  // close view. A corrupted EMPTY label hiding bets or money is a blocker.
+  function isCleanEmptyScope(settlement, messagesById) {
+    if(settlement.scope_status!=='empty' ||
+       !Array.isArray(settlement.message_ids) || settlement.message_ids.length ||
+       settlement.message_id)return false;
+    const liveMessages=Object.values(messagesById||{}).some(message=>
+      String(message&&message.partner_id||'')===String(settlement.partner_id||'') &&
+      String(message&&message.business_date||'')===String(settlement.business_date||'') &&
+      String(message&&message.region||'').toLowerCase()===
+        String(settlement.region||'').toLowerCase() &&
+      String(message&&message.status||'').toLowerCase()!=='cancelled');
+    if(liveMessages)return false;
+    const views=['result_snapshot','settlement_result']
+      .map(field=>settlement[field]).filter(view=>view!=null);
+    if(!views.length)return false;
+    for(const record of [settlement,...views]){
+      if(record!==settlement &&
+        (!verifiedMonetaryTotals(record)||
+         MONEY_FIELDS.some(field=>Number(record[field])!==0)))return false;
+      for(const field of ['rows','detail_rows','category_rows','message_breakdown']){
+        const rows=record[field];
+        if(rows!=null && (!Array.isArray(rows)||rows.length))return false;
+      }
+      const categoryTotals=record.category_totals;
+      if(categoryTotals!=null &&
+        (typeof categoryTotals!=='object'||Array.isArray(categoryTotals)||
+         Object.keys(categoryTotals).length))return false;
+    }
+    return true;
+  }
+
   function categoryLabel(code) { return CATEGORY_LABELS[String(code || '').toUpperCase()] || String(code || 'UNKNOWN'); }
 
   function addCategory(target, row) {
@@ -91,14 +173,41 @@
       new Set(actual).size === actual.length &&
       actual.length === expected.length &&
       expected.every(code => actual.includes(code));
-    const claimedVerified = snapshot.verified === true || status === 'verified';
+    // NormalizeResultSnapshot emits these fields consistently; a legacy or
+    // tampered row with contradictory VERIFIED flags must never unlock
+    // exact day-close money, even when its prize array looks complete.
+    const claimedVerified=snapshot.verified===true &&
+      status==='verified' &&
+      snapshot.status==='complete' &&
+      snapshot.coverage_complete===true;
     const prizeDataValid = resultPrizeDataComplete(settlement && settlement.region || snapshot.region, snapshot);
     if (claimedVerified && snapshot.complete === true && sources.size >= 2 && conflicts.length === 0 && coverageValid && prizeDataValid) return 'verified';
     return 'unverified';
   }
 
+  // A stored label is not itself an authenticated financial comparison.
+  // Old/partial rows may say MATCH_EXACT without the actual promotion proof.
+  function confirmedExactComparison(settlement) {
+    const ref=settlement && settlement.reference_app_snapshot;
+    const proof=ref && ref.comparison;
+    const fields=['total_xac','total_qua_co','total_payout','final_net'];
+    return Boolean(proof && proof.status==='MATCH_EXACT' &&
+      proof.safe_to_promote===true && proof.exact===true &&
+      proof.required_totals_exact===true &&
+      Number.isInteger(proof.compared_fields) &&
+      proof.compared_fields>=fields.length &&
+      fields.every(field=>proof.totals && proof.totals[field] &&
+        proof.totals[field].status==='MATCH_EXACT'));
+  }
+
+  function effectiveShadowStatus(settlement) {
+    const raw=String(settlement && settlement.comparison_status||'unverified').toUpperCase();
+    return raw==='MATCH_EXACT' && !confirmedExactComparison(settlement)
+      ? 'UNVERIFIED' : raw;
+  }
+
   function shadowStatusFromSettlements(settlements) {
-    const statuses = (settlements || []).map(s => String(s.comparison_status || 'unverified').toUpperCase());
+    const statuses = (settlements || []).map(effectiveShadowStatus);
     if (!statuses.length) return 'NO_DATA';
     if (statuses.some(x => x === 'BLOCKED')) return 'BLOCKED';
     if (statuses.some(x => x === 'MISMATCH')) return 'MISMATCH';
@@ -146,7 +255,10 @@
       // An empty scope means every message in that scope was cancelled/removed from calculation.
       // Keep the durable settlement for audit, but do not let it create a ghost partner/region
       // in money reports or end-of-day close gates.
-      if (settlementScopeStatus === 'empty') continue;
+      // Only canonical lowercase EMPTY may be skipped. A corrupted
+      // "Empty" label must not hide an active scope from close controls.
+      if (settlement.scope_status === 'empty' &&
+          isCleanEmptyScope(settlement,messagesById)) continue;
       partnerSettlements.push(settlement);
 
       const region = String(settlement.region || 'unknown').toLowerCase();
@@ -158,17 +270,52 @@
       }
       const regionReport = byRegion[region];
       regionReport.settlements.push(settlement);
-      const result = settlement.settlement_result || settlement.result_snapshot || {};
-      const categories = settlementCategories(settlement);
-      const scopeStatus = settlement.scope_status || settlement.comparison_status || 'unverified';
+      // A BLOCKED or corrupted scope is NOT a source of payable money.
+      // Legacy databases can contain malformed monetary rows even when
+      // backup-import validation would reject them today. Preserve their
+      // diagnostic message and blocker, but do not aggregate their money.
+      const declaredMonetary = ['provisional','complete_unverified']
+        .includes(settlement.scope_status);
+      const untrustedResult =
+        settlement.settlement_result || settlement.result_snapshot || null;
+      const moneyViewsAgree = !declaredMonetary ||
+        !settlement.result_snapshot || !settlement.settlement_result ||
+        (verifiedMonetaryTotals(settlement.result_snapshot) &&
+         verifiedMonetaryTotals(settlement.settlement_result) &&
+         MONEY_FIELDS.every(field=>String(settlement.result_snapshot[field])===
+           String(settlement.settlement_result[field])));
+      const validCategories=!declaredMonetary ||
+        verifiedCategoryMoney(settlement);
+      const monetaryScope = declaredMonetary &&
+        verifiedMonetaryTotals(untrustedResult) && moneyViewsAgree &&
+        validCategories;
+      const result = monetaryScope ? untrustedResult : {};
+      const categories = monetaryScope ? settlementCategories(settlement) : [];
+      // Treat legacy/corrupted labels case-insensitively and fail closed
+      // on unknown/missing states. A raw "BLOCKED" label must never turn
+      // into a seemingly valid or exact end-of-day money report.
+      const knownStatus=settlement.scope_status===settlementScopeStatus &&
+        ['blocked','provisional','complete_unverified']
+          .includes(settlementScopeStatus) &&
+        (!declaredMonetary || monetaryScope);
+      const scopeStatus=knownStatus?settlementScopeStatus:'blocked';
       regionReport.scope_statuses.push(scopeStatus);
       regionReport.kqxs_statuses.push(kqxsVerificationStatus(settlement));
 
-      if (scopeStatus === 'blocked' || settlement.comparison_status === 'blocked') {
+      if (scopeStatus === 'blocked' ||
+          String(settlement.comparison_status || '').toLowerCase()==='blocked') {
+        const reasons=Array.isArray(settlement.blocked_reasons)
+          ? settlement.blocked_reasons.slice():[];
+        if(!knownStatus)reasons.push(settlement.scope_status==='empty'
+          ? 'SETTLEMENT_EMPTY_SCOPE_INTEGRITY_INVALID'
+          : declaredMonetary && !validCategories
+          ? 'SETTLEMENT_CATEGORY_MONEY_INVALID'
+          : !monetaryScope && declaredMonetary
+          ? 'SETTLEMENT_MONETARY_TOTALS_INVALID'
+          : 'UNRECOGNIZED_SETTLEMENT_SCOPE_STATUS');
         blockedScopes.push({
           settlement_id: settlement.id,
-          region,
-          reasons: Array.isArray(settlement.blocked_reasons) ? settlement.blocked_reasons.slice() : [],
+          region,reasons,
           message_ids: messageIds(settlement)
         });
       }
@@ -191,7 +338,8 @@
       finalNet += num(result.final_net);
 
       const ids = messageIds(settlement);
-      const detailRows = Array.isArray(settlement.detail_rows) ? settlement.detail_rows : [];
+      const detailRows = monetaryScope && Array.isArray(settlement.detail_rows)
+        ? settlement.detail_rows : [];
       for (const id of ids) {
         const msg = messagesById[id] || null;
         const messageReport = {
@@ -200,11 +348,14 @@
           region,
           raw_text: msg ? String(msg.raw_text || '') : '',
           message_status: msg ? String(msg.status || '') : '',
-          categories: messageBreakdown(settlement, id),
+          categories: monetaryScope ? messageBreakdown(settlement, id) : [],
           detail_rows: detailRows.filter(x => !x.message_id || x.message_id === id).map(x => Object.assign({}, x)),
           result: Object.assign({}, result),
           scope_status: scopeStatus,
-          comparison_status: settlement.comparison_status || 'unverified'
+          // Never show an old MATCH_EXACT badge for a scope whose money
+          // or category integrity just failed the fail-closed checks.
+          comparison_status: scopeStatus==='blocked' ? 'BLOCKED' :
+            effectiveShadowStatus(settlement)
         };
         regionReport.messages.push(messageReport);
         messageReports.push(messageReport);
@@ -216,9 +367,12 @@
         .filter(x => x.xac !== 0 || x.qua_co !== 0 || x.hit_units !== 0 || x.payout !== 0)
         .sort((a, b) => a.code.localeCompare(b.code));
       regionReport.direction = regionReport.final_net > 0 ? 'THU' : regionReport.final_net < 0 ? 'BU' : 'HOA';
-      regionReport.blocked = regionReport.scope_statuses.includes('blocked');
+      regionReport.blocked = regionReport.scope_statuses.includes('blocked') ||
+        regionReport.settlements.some(s=>
+          String(s.comparison_status||'').toLowerCase()==='blocked');
       regionReport.provisional = regionReport.scope_statuses.includes('provisional');
-      regionReport.shadow_status = shadowStatusFromSettlements(regionReport.settlements);
+      regionReport.shadow_status = regionReport.blocked ? 'BLOCKED' :
+        shadowStatusFromSettlements(regionReport.settlements);
       regionReport.kqxs_conflict = regionReport.kqxs_statuses.includes('conflict');
       regionReport.kqxs_verified = regionReport.kqxs_statuses.length > 0 && regionReport.kqxs_statuses.every(x => x === 'verified');
       regionReport.kqxs_verification_status = regionReport.kqxs_conflict ? 'conflict' : regionReport.kqxs_verified ? 'verified' : 'unverified';
@@ -241,7 +395,8 @@
       blocked_scopes: blockedScopes,
       provisional: regions.some(x => x.provisional),
       blocked: blockedScopes.length > 0,
-      shadow_status: shadowStatusFromSettlements(partnerSettlements),
+      shadow_status: blockedScopes.length ? 'BLOCKED' :
+        shadowStatusFromSettlements(partnerSettlements),
       kqxs_conflict: regions.some(x => x.kqxs_conflict),
       kqxs_verified: regions.length > 0 && regions.every(x => x.kqxs_verified),
       totals: {
@@ -280,7 +435,11 @@
       addTotals(totals, report.totals);
       if (report.blocked) counts.blocked += 1;
       if (report.provisional) counts.provisional += 1;
-      if (report.shadow_status === 'MATCH_EXACT' && !report.blocked && !report.provisional) {
+      // Shadow exactness proves HIOSKT comparison only. An unverified
+      // lottery result is a separate authority; the end-of-day close must
+      // not display MATCH_EXACT or count exact monetary totals without it.
+      if (report.shadow_status === 'MATCH_EXACT' && !report.blocked &&
+          !report.provisional && report.kqxs_verified) {
         counts.exact += 1;
         addTotals(exactTotals, report.totals);
       } else if (report.shadow_status === 'MISMATCH') counts.mismatch += 1;
