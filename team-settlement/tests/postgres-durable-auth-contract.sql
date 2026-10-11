@@ -20,7 +20,7 @@ BEGIN;
 SELECT set_config('kts.workspace_id','group_a',true);
 -- Validate *denied* privileges as well as the granted auth read paths.
 -- A login/session role must never mutate member roles or financial events.
-DO $
+DO $$
 BEGIN
   IF has_table_privilege(current_user,'kts_auth.credentials','UPDATE')
       OR has_table_privilege(current_user,'kts_auth.sessions','DELETE')
@@ -32,8 +32,8 @@ BEGIN
     RAISE EXCEPTION 'TEAM_AUTH_DB_ROLE_OVERPRIVILEGED';
   END IF;
 END
-$;
-DO $
+$$;
+DO $$
 DECLARE v_user text; v_role text; v_hash text;
 BEGIN
   -- These mirror the async auth service's login + session + membership reads.
