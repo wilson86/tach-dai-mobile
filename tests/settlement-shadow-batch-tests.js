@@ -23,7 +23,8 @@ const state = {
     }
   },
   writes: [],
-  failScope: null
+  failScope: null,
+  unsafe: false
 };
 
 function refNumber(ref, key) {
@@ -41,7 +42,7 @@ const shadow = {
       if (rv == null) continue;
       if (Math.abs(Number(local[lk]) - rv) > 1e-9) mismatch = true;
     }
-    return { status: mismatch ? 'MISMATCH' : 'MATCH_EXACT', safe_to_promote: !mismatch, totals: {}, categories: [] };
+    return { status: mismatch ? 'MISMATCH' : 'MATCH_EXACT', safe_to_promote: !mismatch && !state.unsafe, totals: {}, categories: [] };
   }
 };
 const store = {
@@ -91,6 +92,13 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(preview.rows[1].comparison.status, 'MISMATCH');
   assert(preview.rows[0].settlement_fingerprint);
   assert.strictEqual(state.writes.length, 0, 'preview must not persist comparisons');
+
+  state.unsafe = true;
+  const unsafePreview = await B.preview(tsv);
+  assert.strictEqual(unsafePreview.rows[0].comparison.status, 'MATCH_EXACT');
+  assert.strictEqual(unsafePreview.rows[0].comparison.safe_to_promote, false);
+  assert.strictEqual(unsafePreview.counts.exact, 0, 'unsafe exact status must not count as exact');
+  state.unsafe = false;
 
   const applied = await B.apply(preview);
   assert.strictEqual(applied.format, 'kts-shadow-batch-apply-v2-stale-guard');

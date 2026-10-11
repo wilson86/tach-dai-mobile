@@ -189,7 +189,7 @@
         total: parsed.length,
         ready: rows.length,
         errors: errors.length,
-        exact: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_EXACT').length,
+        exact: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_EXACT' && r.comparison.safe_to_promote === true).length,
         display_only: rows.filter(r => r.comparison && r.comparison.status === 'MATCH_DISPLAY_ONLY').length,
         mismatch: rows.filter(r => r.comparison && r.comparison.status === 'MISMATCH').length,
         incomplete: rows.filter(r => r.comparison && r.comparison.status === 'INCOMPLETE_REFERENCE').length
@@ -235,7 +235,8 @@
           partner_id: row.partner_id,
           business_date: row.business_date,
           region: row.region,
-          comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN'
+           comparison_status: saved && saved.comparison && saved.comparison.status || 'UNKNOWN',
+           safe_to_promote: saved && saved.comparison && saved.comparison.safe_to_promote === true
         });
       } catch (error) {
         const e = new Error(`BATCH_APPLY_PARTIAL:${results.length}/${p.rows.length}:${String(error && error.message || error)}`);
@@ -247,7 +248,7 @@
     return {
       format: 'kts-shadow-batch-apply-v2-stale-guard',
       total: results.length,
-      exact: results.filter(x => x.comparison_status === 'MATCH_EXACT').length,
+       exact: results.filter(x => x.comparison_status === 'MATCH_EXACT' && x.safe_to_promote === true).length,
       display_only: results.filter(x => x.comparison_status === 'MATCH_DISPLAY_ONLY').length,
       mismatch: results.filter(x => x.comparison_status === 'MISMATCH').length,
       results
