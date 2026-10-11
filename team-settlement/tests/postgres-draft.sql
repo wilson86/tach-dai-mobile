@@ -93,6 +93,43 @@ END
 $$;
 COMMIT;
 
+-- Later transactions must not change the revision/feed of an already
+-- committed idempotency receipt. Roll back the synthetic future edit.
+SET ROLE team_smoke_writer;
+BEGIN;
+SELECT set_config('kts.workspace_id','group_a',true);
+SELECT set_config('kts.actor_user_id','user_1',true);
+DO $$
+DECLARE newer jsonb; replayed jsonb;
+BEGIN
+  newer := kts_team.append_draft(
+    'group_a','customer_1','2026-10-12','mn',2,
+    'event_later_3','req_later_3',repeat('e',64),'{"synthetic":"later"}'::jsonb);
+  IF newer->>'new_revision'<>'3' OR newer->>'feed_seq'<>'3' THEN
+    RAISE EXCEPTION 'TEAM_LATER_EDIT_PROOF_FAILED';
+  END IF;
+  replayed := kts_team.append_draft(
+    'group_a','customer_1','2026-10-12','mn',1,
+    'event_unused','req_2',repeat('c',64),'{"fake_test":true}'::jsonb);
+  IF replayed->>'replayed'<>'true' OR replayed->>'event_id'<>'event_a2'
+     OR replayed->>'new_revision'<>'2' OR replayed->>'feed_seq'<>'2' THEN
+    RAISE EXCEPTION 'TEAM_DELAYED_REPLAY_RETURNED_CURRENT_STATE';
+  END IF;
+END
+$$;
+ROLLBACK;
+RESET ROLE;
+DO $$
+BEGIN
+  IF (SELECT revision FROM kts_team.scopes WHERE workspace_id='group_a'
+      AND partner_id='customer_1')<>2 OR
+     (SELECT feed_seq FROM kts_team.workspaces WHERE workspace_id='group_a')<>2 OR
+     EXISTS (SELECT 1 FROM kts_team.scope_events WHERE event_id='event_later_3')
+    THEN RAISE EXCEPTION 'TEAM_DELAYED_REPLAY_TEST_LEAKED_STATE';
+  END IF;
+END
+$$;
+
 BEGIN;
 SELECT set_config('kts.workspace_id','group_a',true);
 SELECT set_config('kts.actor_user_id','user_2',true);
