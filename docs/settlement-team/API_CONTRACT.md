@@ -53,3 +53,23 @@ a response from a superseded login session is discarded. A successful
 **transport read** is not authorization to finalize money or proof of HIOSKT
 accuracy. There is no live hosting, production approval or shared-finance
 release yet.
+
+
+## Isolated PostgreSQL Pool transaction adapter (M1 contract)
+
+`team-settlement/pg-transaction-adapter.cjs` offers a minimal
+`db.transaction(async tx => ...)` wrapper around an **injected, reviewed**
+PostgreSQL Pool. It opens `BEGIN`, only accepts parameterized `tx.query`
+calls from the trusted repository, commits atomically on success, rolls back
+on failure, and releases/destroys connections depending on failure safety.
+The `tx` object is invalid after the callback finishes. This protects
+workspace-scoped `SET LOCAL` tenant/actor settings from accidental
+cross-session reuse in a connection pool.
+
+**Important:** The adapter neither creates a Pool nor authenticates it to a
+database; tests inject a synthetic Pool to validate lifecycle and repository
+composition. A real connection configuration, TLS/VPN, least-privilege DB
+role, timeouts, secure secret storage, durable user identity and real
+PostgreSQL end-to-end integration still require separate qualification
+and explicit human authorization before network exposure. Do not treat
+adapter unit tests as proof that group accounting is deployed.
