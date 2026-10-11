@@ -143,3 +143,11 @@ test('async persisted auth interoperates with read-only HTTP route and session r
     assert.equal((await httpCall(server,{path:'/v1/scopes/customer_1/2026-10-12/mn',token})).status,401);
   }finally{await new Promise(resolve=>server.close(resolve));}
 });
+
+test('async scrypt verifier matches approved policy without synchronous per-login event-loop blocking',async()=>{
+  const {hashPassword,verifyPasswordAsync}=require('../team-settlement/auth-contract.cjs');
+  const encoded=hashPassword('synthetic-safe-password',Buffer.alloc(16,0x63));
+  assert.equal(await verifyPasswordAsync('synthetic-safe-password',encoded),true);
+  assert.equal(await verifyPasswordAsync('synthetic-incorrect-password',encoded),false);
+  assert.equal(await verifyPasswordAsync('synthetic-safe-password','scrypt-v1$1,8,1$bad$bad'),false);
+});

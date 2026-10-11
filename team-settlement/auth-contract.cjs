@@ -66,6 +66,25 @@ function verifyPassword(password, encoded) {
   return crypto.timingSafeEqual(actual, expected);
 }
 
+// Durable login must avoid blocking Node's event loop with scryptSync.
+async function verifyPasswordAsync(password, encoded) {
+  if (typeof password !== 'string' || typeof encoded !== 'string') return false;
+  const parts = encoded.split('$');
+  if (parts.length !== 4 || parts[0] !== 'scrypt-v1') return false;
+  const params = parts[1].split(',').map(Number);
+  const salt = decode(parts[2]), expected = decode(parts[3]);
+  if (params.length !== 3 || params.some(Number.isNaN) || !salt || !expected ||
+      params[0] !== SCRYPT.N || params[1] !== SCRYPT.r || params[2] !== SCRYPT.p ||
+      salt.length < 16 || expected.length !== SCRYPT.keylen) return false;
+  try {
+    const actual = await new Promise((resolve, reject) =>
+      crypto.scrypt(password, salt, SCRYPT.keylen, {
+        N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: 32 * 1024 * 1024
+      }, (err, buffer) => err ? reject(err) : resolve(buffer)));
+    return crypto.timingSafeEqual(actual, expected);
+  } catch { return false; }
+}
+
 function createAuthService({ clock = () => Date.now(), sessionTtlMs = SESSION_TTL_MS } = {}) {
   if (typeof clock !== 'function' || !Number.isSafeInteger(sessionTtlMs) || sessionTtlMs <= 0)
     fail('AUTH_SERVICE_CONFIG_INVALID');
@@ -180,5 +199,5 @@ function createAuthService({ clock = () => Date.now(), sessionTtlMs = SESSION_TT
 
 module.exports = Object.freeze({
   ROLES, PASSWORD_MIN, PASSWORD_MAX, SESSION_TTL_MS, SCRYPT,
-  hashPassword, verifyPassword, createAuthService
+  hashPassword, verifyPassword, verifyPasswordAsync, createAuthService
 });

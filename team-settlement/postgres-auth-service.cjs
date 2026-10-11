@@ -4,7 +4,7 @@
 // exposes Router/Telegram/production data. Requires reviewed auth DB privileges.
 // Verify DB membership on every request, including after restart/role changes.
 const crypto=require('node:crypto');
-const {hashPassword,verifyPassword,PASSWORD_MIN,SESSION_TTL_MS}=require('./auth-contract.cjs');
+const {hashPassword,verifyPasswordAsync,PASSWORD_MIN,SESSION_TTL_MS}=require('./auth-contract.cjs');
 const {actorFromServer}=require('./core-contract.cjs');
 const KEY=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 function error(code){throw new Error(code);}
@@ -44,7 +44,7 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
           WHERE i.auth_subject=$1 AND m.workspace_id=$2
             AND m.revoked_at IS NULL`,[auth_subject,workspace_id]));
       const account=result.length===1?result[0]:null;
-      const valid=verifyPassword(password,account?account.password_hash:dummyHash);
+      const valid=await verifyPasswordAsync(password,account?account.password_hash:dummyHash);
       if(!account||account.disabled_at!==null||!valid)error('AUTH_LOGIN_DENIED');
       const now=clock();
       if(!Number.isSafeInteger(now)||now<0||!Number.isSafeInteger(now+sessionTtlMs))
