@@ -97,3 +97,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-durable-auth-contract.sql
       - name: Prove auth versus ledger database role separation (synthetic only)
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-role-boundaries.sql
+      - name: Prove separate credentialed PostgreSQL TCP login roles in disposable CI
+        run: bash team-settlement/tests/postgres-ci-tcp-role-proof.sh

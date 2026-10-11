@@ -87,3 +87,15 @@ in addition to rejecting any authorization to ledger events. Its SQL is
 distinct from the ledger Pool probe so the ledger role is not asked to resolve
 tables in the auth schema to which it has no USAGE grant. A positive probe does
 not authorize binding an HTTP listener or accepting production accounting.
+
+
+## Actual independent credentialed TCP role checks in disposable CI
+
+Two fresh synthetic `LOGIN` roles inherit the auth and ledger privilege profiles
+using separate, ephemeral passwords (generated inside a GitHub Actions step).
+Independent `psql` TCP sessions attest to `session_user=current_user`, no
+superuser/BYPASSRLS, negative cross-domain SQL access, and finance tenant RLS.
+These checks are **strictly guarded** to the named disposable CI database and
+`GITHUB_ACTIONS=true`; they create no real Windows connection, app server,
+production credentials or real-money authority. The user machine still has no
+PostgreSQL server installed, so local two-device pilot remains blocked.
