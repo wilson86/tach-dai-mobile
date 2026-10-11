@@ -69,7 +69,7 @@
       partner_id:'shadow-atomic-test',business_date:'2026-09-22',region:'mn',
       trigger:'SYNTHETIC_CONCURRENT_AUDIT',
       local_snapshot:{total_xac:0},reference_snapshot:{total_xac:0},
-      comparison:{status:'MATCH_EXACT'},comparison_status:'MATCH_EXACT'
+      comparison:{status:'UNVERIFIED'},comparison_status:'UNVERIFIED'
     };
     const shadowOutcomes=await Promise.all(workers.map(w=>
       w.KTS_SETTLEMENT_STORE.saveShadowEvent(shadowInput)));
@@ -787,7 +787,7 @@
       region:'mn',trigger:'SYNTHETIC_SHADOW_ID_IMPORT_CONFLICT',
       local_snapshot:{settlement_result:{final_net:0}},
       reference_snapshot:{totals:{final:'0'}},
-      comparison:{status:'MATCH_EXACT'},comparison_status:'MATCH_EXACT'
+      comparison:{status:'UNVERIFIED'},comparison_status:'UNVERIFIED'
     });
     const originalShadow=shadowImport.event;
     const tamperedShadow={...originalShadow,
