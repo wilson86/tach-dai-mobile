@@ -117,3 +117,15 @@ Rotating user names or succeeding at a login cannot bypass the bounded
 source budget. These counters are still volatile/in-process, not trusted proxy
 forwarded IPs and not suitable as distributed production brute-force controls;
 persistent/shared limits and operator-reviewed reverse proxy remain blockers.
+
+
+## Disposable CI PostgreSQL durable retry across connections
+
+In addition to the two separate credentialed auth/ledger TCP roles, the CI
+ledger login now commits a synthetic DRAFT on one PostgreSQL TCP connection,
+closes that connection and retries the same idempotency key on a second TCP
+connection. The replay must return the *original* event, revision, feed
+sequence and leave exactly one immutable event. The test is protected by a
+strict database/CI environment check and uses no HIOSKT/customer data.
+This is not a demonstrated Windows device reboot, server crash, customer
+money proof, encrypted backup or operational service qualification.
