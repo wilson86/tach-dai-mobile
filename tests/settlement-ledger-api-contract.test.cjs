@@ -55,3 +55,14 @@ test('submit requires the operator session and yields an auditable pending-revie
   assert.equal(api.getEvents(reviewer, scope).map(x => x.event_kind).join(','), 'DRAFT_CREATED,SUBMITTED');
   assert.throws(() => api.submit(operator, { scope, expected_revision: 2, idempotency_key: 'submit_2' }), /TEAM_TRANSITION_DENIED/);
 });
+
+test('two clients on one scope never silently overwrite; reconnect refreshes then retries CAS', () => {
+  const { api, operator } = setup();
+  api.mutateDraft(operator, { scope, expected_revision: 0, idempotency_key: 'client_a', payload: { synthetic: true, client: 'a' } });
+  assert.throws(() => api.mutateDraft(operator, { scope, expected_revision: 0, idempotency_key: 'client_b', payload: { synthetic: true, client: 'b' } }), /TEAM_REVISION_CONFLICT/);
+  const refreshed = api.getScope(operator, scope);
+  assert.equal(refreshed.revision, 1);
+  const retried = api.mutateDraft(operator, { scope, expected_revision: refreshed.revision, idempotency_key: 'client_b_retry', payload: { synthetic: true, client: 'b' } });
+  assert.equal(retried.new_revision, 2);
+  assert.equal(api.getEvents(operator, scope).length, 2);
+});
