@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'team-settlement/**'
+      - 'app/settlement-team-sync-client.js'
       - 'docs/settlement-team/**'
       - 'tests/settlement-team-*.test.cjs'
       - 'tests/settlement-sync-contract.test.cjs'
@@ -24,11 +25,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Node contract and schema source tests (synthetic only)
         run: node --test tests/settlement-team-*.test.cjs tests/settlement-sync-contract.test.cjs
+      - name: Existing Mobile + settlement engine regression
+        run: |
+          node tests/regression-tests.js
+          node tests/settlement-engine-tests.js
+          node tests/settlement-feature-gates-tests.js
+      - name: Canonical settlement history regression (synthetic)
+        run: node --test .github/scripts/settlement-feature-history-audit.test.cjs
+      - name: HIOSKT batch and Shadow exact-proof regressions (synthetic)
+        run: |
+          node tests/settlement-shadow-batch-tests.js
+          node tests/settlement-shadow-ui-tests.js
       - name: No production or paid deploy tasks
         run: |
           echo "TEAM_CONTRACT_QA_ONLY=PASS"
           echo "POSTGRES_DATABASE_TEST=SEE_SEPARATE_POSTGRES_JOB"
-          echo "AUTH_HTTP_TEST=NOT_RUN"
+          echo "AUTH_HTTP_TEST=SYNTHETIC_ONLY"
           echo "REAL_HIOSKT_ORACLE=BLOCKED"
           echo "RELEASE_READINESS=BLOCKED"
 
