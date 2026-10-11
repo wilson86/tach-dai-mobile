@@ -424,6 +424,9 @@
             if(!Object.prototype.hasOwnProperty.call(localCategory,field))
               throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
             const proof=fields[field];
+            if(proof.local==null || proof.reference==null ||
+               !validMoney(proof.local) || !validMoney(proof.reference))
+              throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING');
             for(const [side,actual] of [['local',localCategory[field]],['reference',referenceCategory[field]]]){
               if(proof[side]!=null &&
                  (actual==null || !validMoney(proof[side]) ||
