@@ -54,3 +54,23 @@ test('401 blocks drafts and logout blocks unsent drafts without persisting crede
   assert.equal(client.clearSession().authenticated, false);
   assert.equal(client.snapshot().drafts[0].status, Sync.STATUS.BLOCKED);
 });
+
+test('login sends credentials once, keeps the returned bearer in memory, and logout revokes it', async () => {
+  const saved = storage(); const calls = [];
+  const token = 'a'.repeat(43);
+  const client = Sync.createSyncClient({ storage: saved, fetchImpl: async (url, options) => {
+    calls.push({ url, options });
+    if (url.endsWith('/v1/login')) return response(200, { session_token: token, expires_at: 123 });
+    if (url.endsWith('/v1/logout')) return response(204, {});
+    throw new Error('unexpected route');
+  }});
+  const result = await client.login('operator_1', 'synthetic-password', 'group_a');
+  assert.equal(result.authenticated, true);
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    auth_subject: 'operator_1', password: 'synthetic-password', workspace_id: 'group_a'
+  });
+  assert.equal(saved.data.size, 0);
+  await client.logout();
+  assert.equal(calls[1].options.headers.authorization, 'Bearer ' + token);
+  assert.equal(client.snapshot().authenticated, false);
+});

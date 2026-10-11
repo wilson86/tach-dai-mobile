@@ -20,6 +20,8 @@ Reconnect policy is explicit: unchanged server base may retry with CAS; a change
 
 The PWA `app/settlement-team-sync-client.js` keeps bearer credentials memory-only, stores only the opaque change cursor, labels unsent drafts `PENDING`, stops on `CONFLICT`/`BLOCKED`, and never retries a conflict automatically.
 
+The same client exposes `login(auth_subject, password, workspace_id)` and `logout()` as thin adapters for the synthetic `/v1/login` and `/v1/logout` contract. It does not persist the password or returned bearer token; TLS and an approved deployed identity service remain prerequisites before any real account is used.
+
 The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated sessions with the repository seam. `team-settlement/postgres-ledger-repository.cjs` sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. These modules open no connection and are not a production deployment.
 
 ## Suggested error and evidence semantics

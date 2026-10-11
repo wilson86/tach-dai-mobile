@@ -43,6 +43,27 @@
       return snapshot();
     }
 
+    async function login(authSubject, password, workspaceId) {
+      if (typeof authSubject !== 'string' || !authSubject || typeof password !== 'string' ||
+          !password || typeof workspaceId !== 'string' || !workspaceId)
+        throw new Error('SYNC_LOGIN_INVALID');
+      const result = await request('/v1/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ auth_subject: authSubject, password, workspace_id: workspaceId })
+      });
+      if (!result.response.ok || typeof result.body.session_token !== 'string')
+        throw new Error(result.body.error || 'AUTH_LOGIN_DENIED');
+      setSessionToken(result.body.session_token);
+      return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
+    }
+
+    async function logout() {
+      if (!sessionToken) return clearSession();
+      try { await request('/v1/logout', { method: 'POST' }); } catch (_) {}
+      return clearSession();
+    }
+
     function clearSession() {
       sessionToken = null;
       for (const item of pending.values()) {
@@ -116,7 +137,7 @@
       });
     }
 
-    return Object.freeze({ setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, reconnect, snapshot, STATUS });
+    return Object.freeze({ login, logout, setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, reconnect, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });
