@@ -99,3 +99,11 @@ These checks are **strictly guarded** to the named disposable CI database and
 `GITHUB_ACTIONS=true`; they create no real Windows connection, app server,
 production credentials or real-money authority. The user machine still has no
 PostgreSQL server installed, so local two-device pilot remains blocked.
+
+
+The first credentialed-TCP CI attempt exposed an overly broad *test assertion*:
+PostgreSQL authorizes the service's session INSERT using column-level grants,
+so a table-level INSERT privilege check is incorrect. The read-only Pool
+preflight and credentialed-TCP SQL test must require the exact five INSERT
+columns; the actual database grants remain unchanged (least privilege).
+Failed intermediate CI is not a release authority.

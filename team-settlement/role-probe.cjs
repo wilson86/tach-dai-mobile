@@ -16,7 +16,11 @@ const AUTH_PROBE_SQL = PROBE_SQL.replace(
   'COALESCE((SELECT rolsuper',
   `has_table_privilege(current_user, 'kts_auth.credentials', 'SELECT') AS credential_read,
   has_table_privilege(current_user, 'kts_auth.sessions', 'SELECT') AS session_read,
-  has_table_privilege(current_user, 'kts_auth.sessions', 'INSERT') AS session_insert,
+  (has_column_privilege(current_user, 'kts_auth.sessions', 'session_hash', 'INSERT')
+   AND has_column_privilege(current_user, 'kts_auth.sessions', 'user_id', 'INSERT')
+   AND has_column_privilege(current_user, 'kts_auth.sessions', 'workspace_id', 'INSERT')
+   AND has_column_privilege(current_user, 'kts_auth.sessions', 'issued_at', 'INSERT')
+   AND has_column_privilege(current_user, 'kts_auth.sessions', 'expires_at', 'INSERT')) AS session_insert,
   has_column_privilege(current_user, 'kts_auth.sessions', 'revoked_at', 'UPDATE') AS session_revoke,
   COALESCE((SELECT rolsuper`);
 

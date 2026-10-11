@@ -11,7 +11,11 @@ BEGIN
   END IF;
   IF NOT has_table_privilege(current_user,'kts_auth.credentials','SELECT')
       OR NOT has_table_privilege(current_user,'kts_auth.sessions','SELECT')
-      OR NOT has_table_privilege(current_user,'kts_auth.sessions','INSERT')
+      OR NOT has_column_privilege(current_user,'kts_auth.sessions','session_hash','INSERT')
+      OR NOT has_column_privilege(current_user,'kts_auth.sessions','user_id','INSERT')
+      OR NOT has_column_privilege(current_user,'kts_auth.sessions','workspace_id','INSERT')
+      OR NOT has_column_privilege(current_user,'kts_auth.sessions','issued_at','INSERT')
+      OR NOT has_column_privilege(current_user,'kts_auth.sessions','expires_at','INSERT')
       OR NOT has_column_privilege(current_user,'kts_auth.sessions','revoked_at','UPDATE')
       OR has_table_privilege(current_user,'kts_team.scope_events','SELECT')
       OR has_function_privilege(current_user,
