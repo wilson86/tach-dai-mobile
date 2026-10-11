@@ -71,3 +71,27 @@ test('role is resolved from active membership, never from login input', () => {
   const forgedRole = auth.login({ auth_subject: 'subject_1', password: 'synthetic-password-1', workspace_id: 'group_a', role: 'admin' });
   assert.equal(auth.verifySession(forgedRole.session_token).role, 'operator');
 });
+
+test('only an active server-verified admin can manage memberships and identities', () => {
+  let now = 1_000;
+  const auth = A.createAuthService({ clock: () => now, sessionTtlMs: 1_000 });
+  auth.registerIdentity({ user_id: 'admin_1', auth_subject: 'subject_admin', password: 'synthetic-admin-password' });
+  auth.registerIdentity({ user_id: 'member_2', auth_subject: 'subject_2', password: 'synthetic-member-password' });
+  auth.setMembership({ workspace_id: 'group_a', user_id: 'admin_1', role: 'admin' });
+  auth.setMembership({ workspace_id: 'group_a', user_id: 'member_2', role: 'viewer' });
+  const adminSession = auth.login({ auth_subject: 'subject_admin', password: 'synthetic-admin-password', workspace_id: 'group_a' });
+  const memberSession = auth.login({ auth_subject: 'subject_2', password: 'synthetic-member-password', workspace_id: 'group_a' });
+  assert.equal(auth.manageMembership(auth.verifySession(adminSession.session_token), {
+    workspace_id: 'group_a', user_id: 'member_2', role: 'operator'
+  }).role, 'operator');
+  assert.throws(() => auth.manageMembership(auth.verifySession(memberSession.session_token), {
+    workspace_id: 'group_a', user_id: 'member_2', role: 'admin'
+  }), /AUTH_ROLE_DENIED/);
+  assert.throws(() => auth.manageMembership(auth.verifySession(adminSession.session_token), {
+    workspace_id: 'group_b', user_id: 'member_2', role: 'operator'
+  }), /AUTH_WORKSPACE_DENIED/);
+  assert.throws(() => auth.setIdentityDisabled(auth.verifySession(adminSession.session_token), 'group_a', 'admin_1'), /AUTH_SELF_DISABLE_DENIED/);
+  assert.equal(auth.setIdentityDisabled(auth.verifySession(adminSession.session_token), 'group_a', 'member_2', now).disabled_at, now);
+  assert.throws(() => auth.setIdentityDisabled(auth.verifySession(adminSession.session_token), 'group_b', 'member_2', now), /AUTH_WORKSPACE_DENIED/);
+  assert.throws(() => auth.verifySession(memberSession.session_token), /AUTH_SESSION_REVOKED/);
+});

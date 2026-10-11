@@ -6,6 +6,7 @@
 // every request; it must never trust role/workspace fields from the browser.
 
 const crypto = require('node:crypto');
+const { actorFromServer } = require('./core-contract.cjs');
 
 const ROLES = Object.freeze(['admin', 'operator', 'reviewer', 'viewer']);
 const KEY_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
@@ -141,7 +142,40 @@ function createAuthService({ clock = () => Date.now(), sessionTtlMs = SESSION_TT
     return true;
   }
 
-  return Object.freeze({ registerIdentity, setMembership, login, verifySession, revokeSession });
+  function requireAdmin(trustedActor, workspaceId) {
+    const actor = actorFromServer(trustedActor);
+    if (actor.workspace_id !== workspaceId) fail('AUTH_WORKSPACE_DENIED');
+    if (actor.role !== 'admin') fail('AUTH_ROLE_DENIED');
+    return actor;
+  }
+
+  function manageMembership(trustedActor, { workspace_id, user_id, role, revoked_at = null }) {
+    const actor = requireAdmin(trustedActor, workspace_id);
+    requireKey(user_id, 'AUTH_USER_ID_INVALID');
+    if (!identities.has(user_id) || !ROLES.includes(role)) fail('AUTH_MEMBERSHIP_INVALID');
+    if (revoked_at !== null && !Number.isSafeInteger(revoked_at)) fail('AUTH_REVOKED_AT_INVALID');
+    if (actor.user_id === user_id && (revoked_at !== null || role !== 'admin'))
+      fail('AUTH_SELF_ADMIN_CHANGE_DENIED');
+    return setMembership({ workspace_id, user_id, role, revoked_at });
+  }
+
+  function setIdentityDisabled(trustedActor, workspaceId, userId, disabledAt = clock()) {
+    const actor = requireAdmin(trustedActor, workspaceId);
+    if (actor.role !== 'admin') fail('AUTH_ROLE_DENIED');
+    requireKey(userId, 'AUTH_USER_ID_INVALID');
+    if (actor.user_id === userId) fail('AUTH_SELF_DISABLE_DENIED');
+    const identity = identities.get(userId);
+    if (!identity || !memberships.has(membershipKey(workspaceId, userId)) ||
+        (disabledAt !== null && !Number.isSafeInteger(disabledAt)))
+      fail('AUTH_IDENTITY_INVALID');
+    identities.set(userId, Object.freeze({ ...identity, disabled_at: disabledAt }));
+    return { workspace_id: workspaceId, user_id: userId, disabled_at: disabledAt };
+  }
+
+  return Object.freeze({
+    registerIdentity, setMembership, manageMembership, setIdentityDisabled,
+    login, verifySession, revokeSession
+  });
 }
 
 module.exports = Object.freeze({

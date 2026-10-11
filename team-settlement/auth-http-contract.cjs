@@ -69,7 +69,8 @@ function createAuthHttpServer(auth, {
   clock = () => Date.now()
 } = {}) {
   if (!auth || typeof auth.login !== 'function' || typeof auth.verifySession !== 'function' ||
-      typeof auth.revokeSession !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
+      typeof auth.revokeSession !== 'function' || typeof auth.manageMembership !== 'function' ||
+      typeof auth.setIdentityDisabled !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
       !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function')
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
@@ -132,6 +133,45 @@ function createAuthHttpServer(auth, {
         if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
         auth.revokeSession(token);
         return noContent(res);
+      }
+      if (req.url === '/v1/admin/memberships' && req.method === 'POST') {
+        const token = bearer(req);
+        if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+        let input;
+        try { input = await readJson(req, maxBodyBytes); }
+        catch (error) {
+          if (error.code === 'AUTH_BODY_TOO_LARGE') return json(res, 413, { error: error.code });
+          return json(res, 400, { error: 'AUTH_JSON_INVALID' });
+        }
+        try {
+          const actor = auth.verifySession(token);
+          return json(res, 200, auth.manageMembership(actor, input));
+        } catch (error) {
+          if (error.message === 'AUTH_ROLE_DENIED' || error.message === 'AUTH_WORKSPACE_DENIED')
+            return json(res, 403, { error: error.message });
+          if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
+            return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+          return json(res, 400, { error: error.message === 'AUTH_SELF_ADMIN_CHANGE_DENIED' ? error.message : 'AUTH_MEMBERSHIP_INVALID' });
+        }
+      }
+      if (req.url === '/v1/admin/disable' && req.method === 'POST') {
+        const token = bearer(req);
+        if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+        let input;
+        try { input = await readJson(req, maxBodyBytes); }
+        catch (error) {
+          if (error.code === 'AUTH_BODY_TOO_LARGE') return json(res, 413, { error: error.code });
+          return json(res, 400, { error: 'AUTH_JSON_INVALID' });
+        }
+        try {
+          const actor = auth.verifySession(token);
+          return json(res, 200, auth.setIdentityDisabled(actor, input.workspace_id, input.user_id, input.disabled_at));
+        } catch (error) {
+          if (error.message === 'AUTH_ROLE_DENIED') return json(res, 403, { error: error.message });
+          if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
+            return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
+          return json(res, 400, { error: error.message === 'AUTH_SELF_DISABLE_DENIED' ? error.message : 'AUTH_IDENTITY_INVALID' });
+        }
       }
       return json(res, 404, { error: 'AUTH_ROUTE_NOT_FOUND' });
     } catch {

@@ -65,6 +65,8 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(http.includes('AUTH_BODY_TOO_LARGE'));
   assert(http.includes('AUTH_RATE_LIMITED'));
   assert(http.includes('maxLoginAttempts'));
+  assert(http.includes('/v1/admin/memberships'));
+  assert(http.includes('/v1/admin/disable'));
   assert(http.includes('deployed service'));
   assert(migration.includes('CREATE SCHEMA IF NOT EXISTS kts_auth'));
   assert(migration.includes('password_hash'));

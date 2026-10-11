@@ -101,3 +101,30 @@ test('HTTP login applies bounded failed-attempt rate limiting and resets after s
     assert.equal(afterWindow.status, 200);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
+
+test('HTTP admin routes require server-derived admin role and can revoke a member', async () => {
+  const auth = setup();
+  auth.registerIdentity({ user_id: 'admin_1', auth_subject: 'subject_admin', password: 'synthetic-admin-password' });
+  auth.setMembership({ workspace_id: 'group_a', user_id: 'admin_1', role: 'admin' });
+  const server = createAuthHttpServer(auth);
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const adminLogin = await request(server, { method: 'POST', path: '/v1/login', body: {
+      auth_subject: 'subject_admin', password: 'synthetic-admin-password', workspace_id: 'group_a'
+    }});
+    const adminToken = JSON.parse(adminLogin.body).session_token;
+    const update = await request(server, { method: 'POST', path: '/v1/admin/memberships', token: adminToken, body: {
+      workspace_id: 'group_a', user_id: 'member_1', role: 'reviewer'
+    }});
+    assert.equal(update.status, 200);
+    assert.equal(JSON.parse(update.body).role, 'reviewer');
+    const disable = await request(server, { method: 'POST', path: '/v1/admin/disable', token: adminToken, body: {
+      workspace_id: 'group_a', user_id: 'member_1', disabled_at: 2_000
+    }});
+    assert.equal(disable.status, 200);
+    const memberLogin = await request(server, { method: 'POST', path: '/v1/login', body: {
+      auth_subject: 'subject_1', password: 'synthetic-password-1', workspace_id: 'group_a'
+    }});
+    assert.equal(memberLogin.status, 401);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
