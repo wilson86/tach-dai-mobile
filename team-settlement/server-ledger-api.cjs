@@ -17,8 +17,9 @@ function requireVerifiedDraftReceipt(result, proposedEventId, expectedRevision) 
   if (!result || typeof result !== 'object' || Array.isArray(result) ||
       typeof result.event_id !== 'string' || !EVENT_ID_RE.test(result.event_id) ||
       typeof result.replayed !== 'boolean' ||
-      (!result.replayed && (result.event_id !== proposedEventId ||
-        result.new_revision !== expectedRevision + 1))) {
+      !Number.isSafeInteger(result.new_revision) ||
+      result.new_revision !== expectedRevision + 1 ||
+      (!result.replayed && result.event_id !== proposedEventId)) {
     throw new Error('TEAM_DRAFT_RECEIPT_UNVERIFIED');
   }
   return result;

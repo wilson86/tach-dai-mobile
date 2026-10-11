@@ -179,7 +179,9 @@
         // HTTP 200 alone does not prove a financial draft reached the ledger.
         if (result.body.sync_status !== STATUS.SYNCED ||
             typeof result.body.event_id !== 'string' || !result.body.event_id ||
-            (!Number.isSafeInteger(result.body.new_revision) && result.body.replayed !== true))
+            !Number.isSafeInteger(result.body.new_revision) ||
+            result.body.new_revision < item.base_revision + 1 ||
+            result.body.new_revision !== item.base_revision + 1)
           return setStatus(item, STATUS.BLOCKED, 'SYNC_ACK_UNVERIFIED');
         item.server_result = clone(result.body);
         item.server_revision = result.body.new_revision;

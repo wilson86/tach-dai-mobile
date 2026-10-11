@@ -22,6 +22,8 @@ DECLARE
   v_actor text;
   v_role text;
   v_saved kts_team.idempotency_receipts%ROWTYPE;
+  v_replay_revision bigint;
+  v_replay_feed_seq bigint;
   v_revision bigint;
   v_feed_seq bigint;
   v_state text;
@@ -63,7 +65,13 @@ BEGIN
     IF v_saved.request_sha256<>p_request_sha256 THEN
       RAISE EXCEPTION 'TEAM_IDEMPOTENCY_CONFLICT';
     END IF;
-    RETURN jsonb_build_object('event_id',v_saved.event_id,'replayed',true);
+    SELECT scope_revision, feed_seq INTO v_replay_revision, v_replay_feed_seq
+    FROM kts_team.scope_events
+    WHERE workspace_id=p_workspace_id AND event_id=v_saved.event_id;
+    IF NOT FOUND THEN RAISE EXCEPTION 'TEAM_IDEMPOTENCY_RECEIPT_ORPHANED'; END IF;
+    RETURN jsonb_build_object(
+      'event_id',v_saved.event_id,'replayed',true,
+      'new_revision',v_replay_revision,'feed_seq',v_replay_feed_seq);
   END IF;
 
   INSERT INTO kts_team.scopes(workspace_id,partner_id,business_date,region,state,revision)

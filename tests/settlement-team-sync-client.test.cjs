@@ -318,3 +318,28 @@ test('successful synced draft may log out without unsent-data prompt',async()=>{
   assert.equal((await client.syncDraft(draft.id)).status,'SYNCED');
   assert.equal((await client.logout()).authenticated,false);
 });
+
+test('replayed HTTP acknowledgement without original server revision cannot mark draft SYNCED',async()=>{
+  const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{
+    event_id:'previous_synthetic_event',replayed:true,sync_status:'SYNCED'
+  })});
+  client.setSessionToken('x'.repeat(43),'group_a');
+  const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
+    business_date:'2026-10-12',region:'mn'},{synthetic:true});
+  const result=await client.syncDraft(item.id);
+  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
+  assert.equal(client.snapshot().drafts[0].server_revision,undefined);
+});
+
+test('replayed HTTP acknowledgement with exact original revision may mark draft SYNCED',async()=>{
+  const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{
+    event_id:'previous_synthetic_event',replayed:true,new_revision:1,sync_status:'SYNCED'
+  })});
+  client.setSessionToken('x'.repeat(43),'group_a');
+  const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
+    business_date:'2026-10-12',region:'mn'},{synthetic:true});
+  const result=await client.syncDraft(item.id);
+  assert.equal(result.status,'SYNCED');
+  assert.equal(result.server_revision,1);
+});

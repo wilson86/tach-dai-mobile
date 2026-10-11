@@ -30,11 +30,12 @@ test('verified non-replay SQL receipt is the only successful new-write SYNCED cl
 });
 
 test('valid idempotent replay accepts only an explicit replay receipt',async()=>{
-  const {api}=candidate({event_id:'previous_committed_event',replayed:true});
+  const {api}=candidate({event_id:'previous_committed_event',replayed:true,new_revision:1,feed_seq:2});
   const replay=await api.appendDraft('synthetic_session',intent);
   assert.equal(replay.sync_status,'SYNCED');
   assert.equal(replay.event_id,'previous_committed_event');
   assert.equal(replay.replayed,true);
+  assert.equal(replay.new_revision,1);
 });
 
 test('missing or contradictory database receipts never become SYNCED',async()=>{
@@ -44,7 +45,11 @@ test('missing or contradictory database receipts never become SYNCED',async()=>{
     {event_id:'candidate_event_1',replayed:false,new_revision:0},
     {event_id:'unrelated_event',replayed:false,new_revision:1},
     {event_id:'candidate_event_1',replayed:'false',new_revision:1},
-    {event_id:' ',replayed:true}, [],
+    {event_id:' ',replayed:true},
+    {event_id:'previous_committed_event',replayed:true},
+    {event_id:'previous_committed_event',replayed:true,new_revision:'1'},
+    {event_id:'previous_committed_event',replayed:true,new_revision:2},
+    [],
     {event_id:'candidate_event_1',replayed:false,new_revision:'1'}
   ]){
     const {api}=candidate(receipt);

@@ -37,7 +37,9 @@ BEGIN
   replay_result := kts_team.append_draft(
     'group_a','customer_1','2026-10-12','mn',1,
     'event_a2','req_2',repeat('c',64),'{"fake_test":true}'::jsonb);
-  IF replay_result->>'replayed'<>'true' OR replay_result->>'event_id'<>'event_a2' THEN
+  IF replay_result->>'replayed'<>'true' OR replay_result->>'event_id'<>'event_a2'
+     OR replay_result->>'new_revision'<>'2'
+     OR replay_result->>'feed_seq'<>'2' THEN
     RAISE EXCEPTION 'TEAM_DRAFT_IDEMPOTENT_RETRY_FAILED';
   END IF;
 
