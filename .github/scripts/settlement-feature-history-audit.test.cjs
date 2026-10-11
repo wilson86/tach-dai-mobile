@@ -2582,7 +2582,7 @@ test('imported exact money claim requires matching durable HIOSKT Shadow receipt
   const receipt={id:'synthetic-exact-receipt',scope_id:scope.id,
     partner_id:partner.id,business_date:scope.business_date,region:'mn',
     comparison_status:'MATCH_EXACT',comparison,
-    local_snapshot:{settlement_result:{...totals},category_rows:[],message_ids:[msg.id]},
+    local_snapshot:{settlement_result:{...totals},category_rows:[],message_ids:[msg.id],scope_status:'complete_unverified'},
     reference_snapshot:{totals:{...reference.totals},source:reference.source},
     trigger:'SYNTHETIC_TEST_ONLY'};
   const backup=(row,events=[])=>({format:'kts-settlement-export',version:5,

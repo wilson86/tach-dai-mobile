@@ -1116,6 +1116,19 @@
         ? row.category_rows
         : row.settlement_result && Array.isArray(row.settlement_result.category_rows)
           ? row.settlement_result.category_rows : [];
+      const localProvenanceMatches=local=>{
+        if(String(local.scope_status||'')!==String(row.scope_status||'')) return false;
+        if(String(local.engine_version||'')!==String(row.engine_version||'')) return false;
+        if(stableStringify(local.config_snapshot||null)!==
+           stableStringify(row.config_snapshot||null)) return false;
+        if(stableStringify(local.lottery_result_snapshot||null)!==
+           stableStringify(row.lottery_result_snapshot||null)) return false;
+        const lottery=row.lottery_result_snapshot||{};
+        if(String(local.result_fingerprint||'')!==String(lottery.fingerprint||'')) return false;
+        if(String(local.result_verification_status||'')!==
+           String(lottery.verification_status||'')) return false;
+        return true;
+      };
       return knownShadowReceipts.some(event=>
         event && String(event.scope_id||'')===String(row.id) &&
         String(event.partner_id||'')===String(row.partner_id) &&
@@ -1126,6 +1139,7 @@
         stableStringify(event.comparison)===stableStringify(ref.comparison) &&
         stableStringify(event.reference_snapshot||null)===stableStringify(reference) &&
         event.local_snapshot && monetaryMatch(event.local_snapshot.settlement_result) &&
+        localProvenanceMatches(event.local_snapshot) &&
         Array.isArray(event.local_snapshot.category_rows) &&
         stableStringify(event.local_snapshot.category_rows)===stableStringify(settlementCategoryRows) &&
         stableStringify((event.local_snapshot.message_ids||[]).map(String).sort())===
