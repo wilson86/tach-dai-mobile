@@ -35,3 +35,19 @@ financial events. Reject a stale role or revoked user as
 `AUTH_SESSION_REVOKED`. This is a contract/repository check using isolated
 synthetic users only; a genuine durable auth service and revocation lifecycle
 are still required before exposing a team API.
+
+
+## Persistent session boundaries
+
+A session token is random and held only in browser memory. The Postgres
+candidate stores its **SHA-256 hex digest**, never the raw token. Every
+verification checks a nonexpired, nonrevoked saved session and re-resolves
+workspace membership and identity disabled status inside one transaction;
+restarting the Node service does not restore revoked credentials. This avoids
+blindly trusting a JWT/client role flag.
+
+Before pilot, add login-rate limiting that persists or is shared across
+processes, audit trails and alerting for failed attempts, credential reset
+and rekey procedures, narrowly scoped auth DB roles, verified TLS/VPN,
+transaction isolation and security review. Separate `kts_auth` privileges
+from data-reader/writer permissions. Store no raw customer data in auth tables.

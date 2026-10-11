@@ -72,6 +72,12 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(http.includes('/v1/admin/memberships'));
   assert(http.includes('/v1/admin/disable'));
   assert(http.includes('deployed service'));
+  const durable=readFileSync(resolve(__dirname,'../team-settlement/postgres-auth-service.cjs'),'utf8');
+  assert(durable.includes('kts_auth.sessions'));
+  assert(durable.includes('kts_auth.credentials'));
+  assert(durable.includes('AUTH_ADMIN_UNAVAILABLE'));
+  assert(durable.includes('FROM kts_team.memberships'));
+  assert(!durable.includes('kts_router.sqlite3'));
   assert(migration.includes('CREATE SCHEMA IF NOT EXISTS kts_auth'));
   assert(migration.includes('password_hash'));
   assert(migration.includes('session_hash'));

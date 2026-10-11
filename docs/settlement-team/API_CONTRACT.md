@@ -73,3 +73,31 @@ role, timeouts, secure secret storage, durable user identity and real
 PostgreSQL end-to-end integration still require separate qualification
 and explicit human authorization before network exposure. Do not treat
 adapter unit tests as proof that group accounting is deployed.
+
+
+## M1 optional durable session-auth candidate (no real service)
+
+`team-settlement/postgres-auth-service.cjs` now demonstrates **async**
+authentication against isolated PostgreSQL `kts_auth.credentials` and
+`kts_auth.sessions` tables. It stores only a SHA-256 token hash, uses the
+existing scrypt verifier, checks disabled identity and active workspace
+membership at login, and **re-queries the database for every session check**.
+A returned actor is derived solely from the server's database records. Logout
+revokes the saved hash. The existing HTTP facade and server-ledger facade
+can `await` either the legacy synchronous in-memory synthetic auth service
+or the injected async service, with an isolated synthetic HTTP test.
+
+**Deliberate admin block:** durable service does NOT yet implement audited
+membership/identity administration. Attempts to call admin endpoints return
+`TEAM_ROUTE_NOT_ENABLED` until a transactional reviewed authorizer and
+real per-tenant admin audit are supplied. It is not safe to provision actual
+members by calling synthetic helper routes.
+
+**Qualification limit:** This service requires an injected `db.transaction`
+adapter. Current Node HTTP tests inject an isolated synthetic database;
+PostgreSQL CI verifies candidate SQL schema separately. No deployed
+PostgreSQL Pool/configuration, no live TLS service, no integrated durable
+production login, no credential lifecycle recovery/rotation/rate-limit
+persistence across processes and no 30-person account provisioning exists.
+No auth keys, passwords, real sessions or customer data go to public CI.
+Do not declare real team use ready or retire HIOSKT.

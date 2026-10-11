@@ -18,14 +18,14 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
       typeof repository.appendDraft !== 'function' || typeof repository.getScope !== 'function' ||
       typeof eventId !== 'function') throw new Error('TEAM_SERVER_API_CONFIG_INVALID');
 
-  function actor(sessionToken) {
-    const trusted = auth.verifySession(sessionToken);
+  async function actor(sessionToken) {
+    const trusted = await auth.verifySession(sessionToken);
     C.actorFromServer(trusted);
     return trusted;
   }
 
   async function appendDraft(sessionToken, input) {
-    const trustedActor = actor(sessionToken);
+    const trustedActor = await actor(sessionToken);
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('TEAM_INTENT_INVALID');
     const scope = C.requireScope(input.scope);
     if (scope.workspace_id !== trustedActor.workspace_id) throw new Error('TEAM_WORKSPACE_DENIED');
@@ -44,12 +44,12 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
   }
 
   async function getScope(sessionToken, scope) {
-    const trustedActor = actor(sessionToken);
+    const trustedActor = await actor(sessionToken);
     return repository.getScope(trustedActor, C.requireScope(scope));
   }
 
   async function getChanges(sessionToken, options) {
-    const trustedActor = actor(sessionToken);
+    const trustedActor = await actor(sessionToken);
     if (typeof repository.getChanges !== 'function') throw new Error('TEAM_ROUTE_NOT_ENABLED');
     return repository.getChanges(trustedActor, options);
   }

@@ -120,7 +120,7 @@ function createAuthHttpServer(auth, {
         const key = loginKey(req, input);
         if (rateLimited(key)) return json(res, 429, { error: 'AUTH_RATE_LIMITED' });
         try {
-          const result = auth.login(input);
+          const result = await auth.login(input);
           clearLoginFailures(key);
           return json(res, 200, result);
         } catch {
@@ -129,13 +129,13 @@ function createAuthHttpServer(auth, {
         }
       }
       if (req.url === '/v1/session' && req.method === 'GET') {
-        try { return json(res, 200, auth.verifySession(bearer(req))); }
+        try { return json(res, 200, await auth.verifySession(bearer(req))); }
         catch { return json(res, 401, { error: 'AUTH_SESSION_INVALID' }); }
       }
       if (req.url === '/v1/logout' && req.method === 'POST') {
         const token = bearer(req);
         if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
-        auth.revokeSession(token);
+        await auth.revokeSession(token);
         return noContent(res);
       }
       if (req.url === '/v1/admin/memberships' && req.method === 'POST') {
@@ -148,9 +148,10 @@ function createAuthHttpServer(auth, {
           return json(res, 400, { error: 'AUTH_JSON_INVALID' });
         }
         try {
-          const actor = auth.verifySession(token);
-          return json(res, 200, auth.manageMembership(actor, input));
+          const actor = await auth.verifySession(token);
+          return json(res, 200, await auth.manageMembership(actor, input));
         } catch (error) {
+          if (error.message === 'AUTH_ADMIN_UNAVAILABLE') return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
           if (error.message === 'AUTH_ROLE_DENIED' || error.message === 'AUTH_WORKSPACE_DENIED')
             return json(res, 403, { error: error.message });
           if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
@@ -168,9 +169,10 @@ function createAuthHttpServer(auth, {
           return json(res, 400, { error: 'AUTH_JSON_INVALID' });
         }
         try {
-          const actor = auth.verifySession(token);
-          return json(res, 200, auth.setIdentityDisabled(actor, input.workspace_id, input.user_id, input.disabled_at));
+          const actor = await auth.verifySession(token);
+          return json(res, 200, await auth.setIdentityDisabled(actor, input.workspace_id, input.user_id, input.disabled_at));
         } catch (error) {
+          if (error.message === 'AUTH_ADMIN_UNAVAILABLE') return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
           if (error.message === 'AUTH_ROLE_DENIED') return json(res, 403, { error: error.message });
           if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
             return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
@@ -191,7 +193,7 @@ function createAuthHttpServer(auth, {
             !['mn','mt','mb'].includes(parts[5]))
           return json(res, 422, { error: 'TEAM_SCOPE_INVALID' });
         try {
-          const actor = auth.verifySession(token);
+          const actor = await auth.verifySession(token);
           const scope = { workspace_id: actor.workspace_id, partner_id: parts[3],
             business_date: parts[4], region: parts[5] };
           return json(res, 200, await ledger.getScope(token, scope));
