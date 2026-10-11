@@ -384,13 +384,17 @@
         const comparisonByCode=new Map(comparisonRows.map(row=>[codeOf(row),row]));
         const localRows= input.local_snapshot && Array.isArray(input.local_snapshot.category_rows)
           ? input.local_snapshot.category_rows : [];
+        const validMoney=value=>
+          (typeof value==='number' && Number.isFinite(value)) ||
+          (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+           Number.isFinite(Number(value)));
         const aggregateCategory=(rows,code)=>{
           const matched=rows.filter(row=>codeOf(row)===code);
           const result={};
           for(const field of ['xac','qua_co','hit_units','payout']){
             const supplied=matched.filter(row=>Object.prototype.hasOwnProperty.call(row||{},field));
             if(!supplied.length) continue;
-            if(supplied.some(row=>!Number.isFinite(Number(row[field]))))
+            if(supplied.some(row=>!validMoney(row[field])))
               throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH');
             result[field]=supplied.reduce((sum,row)=>sum+Number(row[field]),0);
           }
@@ -415,7 +419,7 @@
             const proof=fields[field];
             for(const [side,actual] of [['local',localCategory[field]],['reference',referenceCategory[field]]]){
               if(proof[side]!=null &&
-                 (actual==null || !Number.isFinite(Number(proof[side])) ||
+                 (actual==null || !validMoney(proof[side]) ||
                   Number(proof[side])!==Number(actual)))
                 throw new Error('SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH');
             }
