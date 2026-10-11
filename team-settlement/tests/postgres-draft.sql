@@ -3,14 +3,14 @@
 -- Runs after postgres-smoke.sql, never against operational data.
 CREATE ROLE team_smoke_guest NOLOGIN;
 GRANT USAGE ON SCHEMA kts_team TO team_smoke_guest;
-DO $
+DO $$
 BEGIN
   IF has_function_privilege('team_smoke_guest',
     'kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)','EXECUTE') THEN
     RAISE EXCEPTION 'TEAM_FUNCTION_PUBLIC_EXECUTE_LEAK';
   END IF;
 END
-$;
+$$;
 CREATE ROLE team_smoke_writer NOLOGIN;
 GRANT USAGE ON SCHEMA kts_team TO team_smoke_writer;
 GRANT SELECT (user_id,disabled_at) ON kts_team.identities TO team_smoke_writer;
