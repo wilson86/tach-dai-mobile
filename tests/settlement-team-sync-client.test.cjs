@@ -2,7 +2,11 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const http = require('node:http');
 const Sync = require('../app/settlement-team-sync-client.js');
+const A = require('../team-settlement/auth-contract.cjs');
+const { createAuthHttpServer } = require('../team-settlement/auth-http-contract.cjs');
+const { createLedgerApi } = require('../team-settlement/ledger-api-contract.cjs');
 
 function response(status, body) { return { status, ok: status >= 200 && status < 300, json: async () => body }; }
 function storage() {
@@ -89,4 +93,37 @@ test('subscription exposes state transitions for a UI without exposing credentia
   assert.equal(states.at(-1).drafts[0].status, Sync.STATUS.SYNCED);
   assert.equal(Object.prototype.hasOwnProperty.call(states.at(-1), 'session_token'), false);
   assert.equal(states.length >= 4, true);
+});
+
+test('PWA client integrates with synthetic localhost auth, draft and change endpoints', async () => {
+  const auth = A.createAuthService({ clock: () => 1_000, sessionTtlMs: 10_000 });
+  auth.registerIdentity({ user_id: 'operator_1', auth_subject: 'subject_operator', password: 'synthetic-operator-password' });
+  auth.setMembership({ workspace_id: 'group_a', user_id: 'operator_1', role: 'operator' });
+  const ledger = createLedgerApi({ auth, clock: () => 1_000 });
+  const server = createAuthHttpServer(auth, { ledger: {
+    appendDraft: (token, input) => ledger.mutateDraft(token, input),
+    getChanges: async (_token, { cursor }) => ({
+      items: cursor ? [] : [{ event_id: 'synthetic_event_1' }],
+      next_cursor: 'synthetic_cursor_1', sync_status: 'SYNCED'
+    })
+  }});
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const saved = storage();
+    const client = Sync.createSyncClient({
+      fetchImpl: globalThis.fetch.bind(globalThis), storage: saved,
+      baseUrl: `http://127.0.0.1:${server.address().port}`
+    });
+    const login = await client.login('subject_operator', 'synthetic-operator-password', 'group_a');
+    assert.equal(login.authenticated, true);
+    const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
+    assert.equal((await client.syncDraft(draft.id)).status, Sync.STATUS.SYNCED);
+    const changes = await client.pullChanges();
+    assert.equal(changes.status, Sync.STATUS.SYNCED);
+    assert.equal(changes.items.length, 1);
+    assert.equal(saved.data.get(Sync.CURSOR_KEY), 'synthetic_cursor_1');
+    await client.logout();
+    assert.equal(client.snapshot().authenticated, false);
+    assert.equal(saved.data.has('session_token'), false);
+  } finally { await new Promise(resolve => server.close(resolve)); }
 });
