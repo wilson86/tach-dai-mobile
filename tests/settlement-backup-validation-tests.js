@@ -183,6 +183,9 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   const event=S.normalizeShadowEvent({id:'se-forged-message',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[],message_ids:['m-content'],scope_status:'complete_unverified',messages:[{id:'m-content',raw_text:'FORGED CONTENT',region:'mn',status:'parsed_waiting_result',canonical_version:null,canonical_payload:null,parser_error:null}]},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
   const p=payload({partners:[partner('a')],messages:[msg('m-content')],settlements:[row],shadow_events:[event]});
   assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+  const validMessage={id:'m-content',raw_text:msg('m-content').raw_text,region:'mn',status:'parsed_waiting_result',canonical_version:null,canonical_payload:msg('m-content').canonical_payload,parser_error:null};
+  const roleEvent=S.normalizeShadowEvent({id:'se-forged-role',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[],message_ids:['m-content'],partner_role:'owner',scope_status:'complete_unverified',messages:[validMessage]},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  assert.throws(()=>S.validateImportPayload(payload({partners:[partner('a')],messages:[msg('m-content')],settlements:[row],shadow_events:[roleEvent]}),empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
 }
 
 // Exact receipts must be tied to the same persisted KQXS draw provenance;

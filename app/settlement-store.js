@@ -1116,7 +1116,12 @@
         ? row.category_rows
         : row.settlement_result && Array.isArray(row.settlement_result.category_rows)
           ? row.settlement_result.category_rows : [];
+      const partnerRows=[...existingPartners,...incomingPartners];
+      const partner=partnerRows.find(value=>String(value && value.id||'')===String(row.partner_id));
+      const rawRole=String(partner && partner.role||'').toLowerCase();
+      const expectedPartnerRole=['customer','owner'].includes(rawRole) ? rawRole : '';
       const localProvenanceMatches=local=>{
+        if(String(local.partner_role==null?'':local.partner_role).toLowerCase()!==expectedPartnerRole) return false;
         if(String(local.scope_status||'')!==String(row.scope_status||'')) return false;
         if(String(local.engine_version||'')!==String(row.engine_version||'')) return false;
         if(stableStringify(local.config_snapshot||null)!==
