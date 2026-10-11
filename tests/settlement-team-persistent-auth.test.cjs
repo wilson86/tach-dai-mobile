@@ -151,3 +151,30 @@ test('async scrypt verifier matches approved policy without synchronous per-logi
   assert.equal(await verifyPasswordAsync('synthetic-incorrect-password',encoded),false);
   assert.equal(await verifyPasswordAsync('synthetic-safe-password','scrypt-v1$1,8,1$bad$bad'),false);
 });
+
+test('durable login does not issue a bearer when INSERT RETURNING receipt is absent or forged',async()=>{
+  for(const returned of [{rows:[]},{rows:[{session_hash:'0'.repeat(64)}]},
+      {rows:[{session_hash:'a'.repeat(64)},{session_hash:'b'.repeat(64)}]},
+      {rows:null}]){
+    const syntheticHash=hashPassword('synthetic-private-password',Buffer.alloc(16,0x51));
+    let writes=0;
+    const db={transaction:async work=>work({query:async(sql,args)=>{
+      if(sql.includes('set_config'))return {rows:[]};
+      if(sql.includes('FROM kts_team.identities i'))return {rows:[{
+        user_id:'user_a',disabled_at:null,password_hash:syntheticHash,team_role:'operator'}]};
+      if(sql.includes('INSERT INTO kts_auth.sessions')){writes++;return returned;}
+      throw Error('UNEXPECTED_QUERY');
+    }})};
+    const auth=createPostgresAuthService({db,clock:()=>1000});
+    await assert.rejects(auth.login(credentials),/AUTH_DATABASE_RESULT_INVALID/);
+    assert.equal(writes,1);
+  }
+});
+
+test('session revocation rejects impossible multi-row database acknowledgement',async()=>{
+  const db={transaction:async work=>work({query:async()=>{
+    return {rowCount:2};
+  }})};
+  const auth=createPostgresAuthService({db});
+  await assert.rejects(auth.revokeSession('x'.repeat(43)),/AUTH_DATABASE_RESULT_INVALID/);
+});

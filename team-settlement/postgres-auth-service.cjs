@@ -50,12 +50,17 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
       if(!Number.isSafeInteger(now)||now<0||!Number.isSafeInteger(now+sessionTtlMs))
         error('AUTH_CLOCK_INVALID');
       const token=crypto.randomBytes(32).toString('base64url');
-      rows(await tx.query(
+      const expectedHash=tokenHash(token);
+      const inserted=rows(await tx.query(
         `INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expires_at)
          VALUES($1,$2,$3,$4::timestamptz,$5::timestamptz)
          RETURNING session_hash`,
-        [tokenHash(token),account.user_id,workspace_id,
+        [expectedHash,account.user_id,workspace_id,
          new Date(now).toISOString(),new Date(now+sessionTtlMs).toISOString()]));
+      // A successful SQL round trip is NOT a persisted login receipt.
+      // Deny a bearer when a broken adapter returns no or inconsistent rows.
+      if(inserted.length!==1||inserted[0]?.session_hash!==expectedHash)
+        error('AUTH_DATABASE_RESULT_INVALID');
       return Object.freeze({session_token:token,expires_at:now+sessionTtlMs});
     });
   }
@@ -96,7 +101,8 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
       const result=await tx.query(
         `UPDATE kts_auth.sessions SET revoked_at=now()
           WHERE session_hash=$1 AND revoked_at IS NULL`,[hash]);
-      if(!result||!Number.isSafeInteger(result.rowCount))
+      if(!result||!Number.isSafeInteger(result.rowCount)||
+          result.rowCount<0||result.rowCount>1)
         error('AUTH_DATABASE_RESULT_INVALID');
       return result.rowCount===1;
     });
