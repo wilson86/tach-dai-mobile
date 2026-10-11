@@ -192,7 +192,8 @@ function createAuthHttpServer(auth, {
           const code = error.message;
           if (code === 'AUTH_SESSION_INVALID' || code === 'AUTH_SESSION_REVOKED') return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
           if (['TEAM_ROLE_DENIED','TEAM_WORKSPACE_DENIED','TEAM_ACTOR_UNVERIFIED'].includes(code)) return json(res, 403, { error: code });
-          if (['TEAM_REVISION_CONFLICT','TEAM_IDEMPOTENCY_CONFLICT'].includes(code)) return json(res, 409, { error: code });
+          if (['TEAM_REVISION_CONFLICT','TEAM_IDEMPOTENCY_CONFLICT'].includes(code))
+            return json(res, 409, { error: code, sync_status: 'CONFLICT', resolution: 'MANUAL_REVIEW' });
           if (['TEAM_OFFLINE_NOT_AUTHORITATIVE','TEAM_SCOPE_INVALID','TEAM_REVISION_INVALID','TEAM_PAYLOAD_INVALID','TEAM_INTENT_ACTION_FORBIDDEN','TEAM_IDEMPOTENCY_KEY_REQUIRED'].includes(code)) return json(res, 422, { error: code });
           return json(res, 500, { error: 'TEAM_BACKEND_UNAVAILABLE' });
         }

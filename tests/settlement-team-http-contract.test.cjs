@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const A = require('../team-settlement/auth-contract.cjs');
 const { createAuthHttpServer } = require('../team-settlement/auth-http-contract.cjs');
+const { createLedgerApi } = require('../team-settlement/ledger-api-contract.cjs');
 
 function request(server, { method, path, body, token }) {
   const address = server.address();
@@ -50,7 +51,28 @@ test('draft HTTP route maps fail-closed transaction errors without leaking inter
   try {
     const conflict = await request(server, { method: 'POST', path: '/v1/scopes/drafts', token, body: { synthetic: true } });
     assert.equal(conflict.status, 409);
-    assert.deepEqual(JSON.parse(conflict.body), { error: 'TEAM_REVISION_CONFLICT' });
+    assert.deepEqual(JSON.parse(conflict.body), { error: 'TEAM_REVISION_CONFLICT', sync_status: 'CONFLICT', resolution: 'MANUAL_REVIEW' });
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('HTTP two-client reconnect returns explicit conflict, then succeeds with refreshed CAS revision', async () => {
+  const auth = A.createAuthService({ clock: () => 1_000, sessionTtlMs: 10_000 });
+  auth.registerIdentity({ user_id: 'operator_1', auth_subject: 'subject_operator', password: 'synthetic-operator-password' });
+  auth.setMembership({ workspace_id: 'group_a', user_id: 'operator_1', role: 'operator' });
+  const session = auth.login({ auth_subject: 'subject_operator', password: 'synthetic-operator-password', workspace_id: 'group_a' });
+  const inMemoryLedger = createLedgerApi({ auth, clock: () => 1_000 });
+  const server = createAuthHttpServer(auth, { ledger: { appendDraft: (token, input) => inMemoryLedger.mutateDraft(token, input) } });
+  const scope = { workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' };
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    const first = await request(server, { method: 'POST', path: '/v1/scopes/drafts', token: session.session_token, body: { scope, expected_revision: 0, idempotency_key: 'client_a', payload: { synthetic: true, client: 'a' } } });
+    assert.equal(first.status, 200);
+    const stale = await request(server, { method: 'POST', path: '/v1/scopes/drafts', token: session.session_token, body: { scope, expected_revision: 0, idempotency_key: 'client_b', payload: { synthetic: true, client: 'b' } } });
+    assert.equal(stale.status, 409);
+    assert.equal(JSON.parse(stale.body).sync_status, 'CONFLICT');
+    const retry = await request(server, { method: 'POST', path: '/v1/scopes/drafts', token: session.session_token, body: { scope, expected_revision: 1, idempotency_key: 'client_b_retry', payload: { synthetic: true, client: 'b' } } });
+    assert.equal(retry.status, 200);
+    assert.equal(JSON.parse(retry.body).new_revision, 2);
   } finally { await new Promise(resolve => server.close(resolve)); }
 });
 

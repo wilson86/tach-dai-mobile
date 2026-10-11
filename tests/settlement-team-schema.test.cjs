@@ -92,6 +92,7 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(httpRoute.includes('TEAM_BACKEND_UNAVAILABLE'));
   assert(httpRoute.includes('/v1/changes'));
   assert(httpRoute.includes('TEAM_CURSOR_INVALID'));
+  assert(httpRoute.includes('resolution'));
   const sync=readFileSync(resolve(__dirname,'../team-settlement/sync-contract.cjs'),'utf8');
   assert(sync.includes('MANUAL_REVIEW'));
   assert(sync.includes('RETRY_WITH_CAS'));
