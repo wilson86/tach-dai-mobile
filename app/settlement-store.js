@@ -356,14 +356,21 @@
         total_payout:['total_payout','payout','tien_trung'],
         final_net:['final_net','final','thu_bu']
       };
+      const validMoney=value=>
+        (typeof value==='number' && Number.isFinite(value)) ||
+        (typeof value==='string' && /^[+-]?\d+(?:\.\d*)?(?:[eE][+-]?\d+)?$/.test(value.trim()) &&
+         Number.isFinite(Number(value)));
       for(const field of mandatory){
         const proof=comparison.totals[field];
-        if(proof.local!=null && String(proof.local)!==String(localTotals[field]))
+        if(proof.local==null || proof.reference==null ||
+           !validMoney(proof.local) || !validMoney(proof.reference))
+          throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+        if(localTotals[field]==null || Number(proof.local)!==Number(localTotals[field]))
           throw new Error('SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH');
         const expectedReference=(referenceAliases[field]||[])
           .map(alias=>referenceTotals[alias]).find(value=>value!=null);
-        if(proof.reference!=null &&
-           (expectedReference==null || String(proof.reference)!==String(expectedReference)))
+        if(expectedReference==null || !validMoney(expectedReference) ||
+           Number(proof.reference)!==Number(expectedReference))
           throw new Error('SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH');
       }
       // If the independent HIOSKT reference carried category evidence, the

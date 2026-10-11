@@ -142,7 +142,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 // MATCH_EXACT. This is a forged-proof negative case, not a money-rule test.
 {
   const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
-    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}},
+    totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}},
     categories:[{code:'DAT',status:'MISMATCH'}]};
   const reference={totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
   const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
@@ -162,6 +162,8 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   assert.throws(()=>S.normalizeShadowEvent({id:'se-missing-local-category-field',scope_id:settlement.id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
   const forgedTotal={...validComparison,totals:{...validComparison.totals,total_xac:{status:'MATCH_EXACT',local:10,reference:999}}};
   assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-total-value',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedTotal,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH/);
+  const missingTotalValues={...validComparison,totals:Object.fromEntries(Object.keys(validComparison.totals).map(field=>[field,{status:'MATCH_EXACT'}]))};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-missing-total-values',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:missingTotalValues,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
 }
 
 // The receipt's local category attribution must also be the same settlement
@@ -169,7 +171,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 // enough to authorize a different local breakdown.
 {
   const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
-    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}},
+     totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}},
     categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MATCH_EXACT'},qua_co:{status:'MATCH_EXACT'},payout:{status:'MATCH_EXACT'}}}]};
   const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
   const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
@@ -184,7 +186,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 // persisted raw/canonical message evidence must be the same input snapshot.
 {
   const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
-    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}}};
+     totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}}};
   const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6}};
   const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
   const id='scope:a:2026-10-06:mn';
@@ -201,7 +203,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 // matching money alone must not authorize evidence from another draw.
 {
   const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
-    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}}};
+     totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}}};
   const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6}};
   const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
   const id='scope:a:2026-10-06:mn';

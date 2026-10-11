@@ -1940,18 +1940,21 @@ test('backup merge cannot silently skip another monetary event under same Shadow
    business_date:'2026-09-22',region:'mn',
    trigger:'SYNTHETIC_IMPORT',reason:'SYNTHETIC_ONLY',
    observed_at:'2026-09-22T12:00:00Z',
-   local_snapshot:{settlement_result:{final_net:0}},
-   reference_snapshot:{totals:{final:'0'}},
+    local_snapshot:{settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}},
+    reference_snapshot:{totals:{xac:'0',qua_co:'0',payout:'0',final:'0'}},
    comparison:{status:'MATCH_EXACT',exact:true,safe_to_promote:true,
      required_totals_exact:true,compared_fields:4,
-     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
-       .map(field=>[field,{status:'MATCH_EXACT'}]))},comparison_status:'MATCH_EXACT'
+      totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+        .map(field=>[field,{status:'MATCH_EXACT',local:0,reference:0}]))},comparison_status:'MATCH_EXACT'
  };
  const stores={[store.STORES.shadowEvents]:[shadow]};
  const snapshot={[store.STORES.partners]:[partner],[store.STORES.shadowEvents]:[shadow]};
  const payload={format:'kts-settlement-export',version:5,stores};
  assert.equal(store.validateImportPayload(payload,snapshot,{replace:false}).valid,true);
- const conflicting={...shadow,reference_snapshot:{totals:{final:'100'}}};
+   const conflicting={...shadow,reference_snapshot:{totals:{xac:'0',qua_co:'0',payout:'0',final:'100'}},
+    local_snapshot:{settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:100}},
+    comparison:{...shadow.comparison,totals:{...shadow.comparison.totals,
+      final_net:{...shadow.comparison.totals.final_net,local:100,reference:100}}}};
  assert.throws(()=>store.validateImportPayload({...payload,stores:{
    [store.STORES.shadowEvents]:[conflicting]}},snapshot,{replace:false}),
    /IMPORT_SHADOW_EVENT_CONTENT_COLLISION/);
@@ -2475,8 +2478,8 @@ test('EOD MATCH_EXACT requires verified KQXS independent from HIOSKT comparison'
   assert.equal(noShadowProof.counts.exact,0);
   const exactComparison={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
     required_totals_exact:true,compared_fields:4,
-    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
-      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+       .map(field=>[field,{status:'MATCH_EXACT',local:0,reference:0}]))};
   const proved={...row,reference_app_snapshot:{source:'SYNTHETIC_ONLY',
     comparison:exactComparison}};
   const verified=report.buildDailyOperationsReport(input({
@@ -2570,8 +2573,8 @@ test('imported exact money claim requires matching durable HIOSKT Shadow receipt
     refund_amount:0,final_net:20};
   const comparison={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
     required_totals_exact:true,compared_fields:4,
-    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
-      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+    totals:Object.fromEntries([['total_xac',100],['total_qua_co',90],['total_payout',70],['final_net',20]]
+      .map(([field,value])=>[field,{status:'MATCH_EXACT',local:value,reference:value}]))};
   const reference={totals:{xac:100,qua_co:90,payout:70,final:20},
     source:'SYNTHETIC_TEST_ONLY',comparison};
   const scope={id:'scope:synthetic-exact-import:2026-09-22:mn',
@@ -2654,8 +2657,8 @@ test('Shadow receipts reject cross-scope IDs and match claims without comparison
   const source={id:'synthetic-receipt-scope',partner_id:'synthetic',
     business_date:'2026-09-22',region:'mn',
     scope_id:'scope:synthetic:2026-09-22:mn',
-    local_snapshot:{settlement_result:{final_net:0}},
-    reference_snapshot:{totals:{final:0}},trigger:'SYNTHETIC'};
+    local_snapshot:{settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}},
+    reference_snapshot:{totals:{xac:0,qua_co:0,payout:0,final:0}},trigger:'SYNTHETIC'};
   for(const scope_id of ['scope:another:2026-09-22:mn',
     'scope:synthetic:2026-09-22:mt','scope:synthetic:2026-09-21:mn','']){
     assert.throws(()=>store.normalizeShadowEvent({...source,scope_id}),
@@ -2674,8 +2677,8 @@ test('Shadow receipts reject cross-scope IDs and match claims without comparison
   const good=store.normalizeShadowEvent({...source,
     comparison_status:'MATCH_EXACT',comparison:{status:'MATCH_EXACT',exact:true,safe_to_promote:true,
      required_totals_exact:true,compared_fields:4,
-     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
-       .map(field=>[field,{status:'MATCH_EXACT'}]))}});
+      totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+        .map(field=>[field,{status:'MATCH_EXACT',local:0,reference:0}]))}});
   assert.equal(good.scope_id,source.scope_id);
   assert.equal(good.comparison_status,'MATCH_EXACT');
   const neutral=store.normalizeShadowEvent({...source,comparison_status:'UNVERIFIED'});
@@ -2782,15 +2785,15 @@ test('Shadow receipt exact claim requires full comparator promotion evidence',as
   const ctx={window:{}};
   vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),ctx);
   const api=ctx.window.KTS_SETTLEMENT_STORE;
-  const proof={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
-    required_totals_exact:true,compared_fields:4,
-    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
-      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+   const proof={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+     required_totals_exact:true,compared_fields:4,
+     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+       .map(field=>[field,{status:'MATCH_EXACT',local:0,reference:0}]))};
   const base={id:'synthetic-promotion-evidence',partner_id:'synthetic',
     business_date:'2026-09-22',region:'mn',
     scope_id:'scope:synthetic:2026-09-22:mn',
-    local_snapshot:{settlement_result:{final_net:0}},
-    reference_snapshot:{totals:{final:0}},trigger:'SYNTHETIC',
+     local_snapshot:{settlement_result:{total_xac:0,total_qua_co:0,total_payout:0,final_net:0}},
+     reference_snapshot:{totals:{xac:0,qua_co:0,payout:0,final:0}},trigger:'SYNTHETIC',
     comparison:proof,comparison_status:'MATCH_EXACT'};
   assert.equal(api.normalizeShadowEvent(base).comparison_status,'MATCH_EXACT');
   for(const invalid of [
