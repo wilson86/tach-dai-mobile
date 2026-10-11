@@ -114,7 +114,7 @@ test('feature build identity pins history and service worker Git blobs',()=>{
 });
 test('feature SW rotates the qualification history runtime cache',()=>{
   const source=readFileSync(resolve(root,'app','sw.js'),'utf8');
-  assert.ok(source.includes('v1.0.245-exact-requires-promotion-proof'));
+  assert.ok(source.includes('v1.0.246-shadow-proof-at-ingress'));
   assert.ok(source.includes("'./settlement-qualification-history.js'"));
   assert.ok(source.includes("'./settlement-build-identity.js'"));
 });
@@ -1942,7 +1942,10 @@ test('backup merge cannot silently skip another monetary event under same Shadow
    observed_at:'2026-09-22T12:00:00Z',
    local_snapshot:{settlement_result:{final_net:0}},
    reference_snapshot:{totals:{final:'0'}},
-   comparison:{status:'MATCH_EXACT'},comparison_status:'MATCH_EXACT'
+   comparison:{status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+     required_totals_exact:true,compared_fields:4,
+     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+       .map(field=>[field,{status:'MATCH_EXACT'}]))},comparison_status:'MATCH_EXACT'
  };
  const stores={[store.STORES.shadowEvents]:[shadow]};
  const snapshot={[store.STORES.partners]:[partner],[store.STORES.shadowEvents]:[shadow]};
@@ -2635,7 +2638,10 @@ test('Shadow receipts reject cross-scope IDs and match claims without comparison
       /SHADOW_EVENT_MATCH_WITHOUT_COMPARISON/);
   }
   const good=store.normalizeShadowEvent({...source,
-    comparison_status:'MATCH_EXACT',comparison:{status:'MATCH_EXACT'}});
+    comparison_status:'MATCH_EXACT',comparison:{status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+     required_totals_exact:true,compared_fields:4,
+     totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+       .map(field=>[field,{status:'MATCH_EXACT'}]))}});
   assert.equal(good.scope_id,source.scope_id);
   assert.equal(good.comparison_status,'MATCH_EXACT');
   const neutral=store.normalizeShadowEvent({...source,comparison_status:'UNVERIFIED'});
@@ -2736,4 +2742,43 @@ test('partial Shadow comparison must never publish exact monetary status',async(
  assert.equal(saved.settlement.comparison_status,'INCOMPLETE_REFERENCE');
  assert.equal(receipt.comparison_status,'INCOMPLETE_REFERENCE');
  assert.equal(count,2);
+});
+
+test('Shadow receipt exact claim requires full comparator promotion evidence',async()=>{
+  const ctx={window:{}};
+  vm.runInNewContext(readFileSync(resolve(root,'app','settlement-store.js'),'utf8'),ctx);
+  const api=ctx.window.KTS_SETTLEMENT_STORE;
+  const proof={status:'MATCH_EXACT',exact:true,safe_to_promote:true,
+    required_totals_exact:true,compared_fields:4,
+    totals:Object.fromEntries(['total_xac','total_qua_co','total_payout','final_net']
+      .map(field=>[field,{status:'MATCH_EXACT'}]))};
+  const base={id:'synthetic-promotion-evidence',partner_id:'synthetic',
+    business_date:'2026-09-22',region:'mn',
+    scope_id:'scope:synthetic:2026-09-22:mn',
+    local_snapshot:{settlement_result:{final_net:0}},
+    reference_snapshot:{totals:{final:0}},trigger:'SYNTHETIC',
+    comparison:proof,comparison_status:'MATCH_EXACT'};
+  assert.equal(api.normalizeShadowEvent(base).comparison_status,'MATCH_EXACT');
+  for(const invalid of [
+    {...proof,safe_to_promote:false},
+    {...proof,required_totals_exact:false},
+    {...proof,exact:false},
+    {...proof,compared_fields:3},
+    {...proof,totals:{final_net:{status:'MATCH_EXACT'}}},
+    {...proof,totals:{...proof.totals,total_payout:{status:'MISMATCH'}}},
+    {status:'MATCH_EXACT'}
+  ]){
+    const event={...base,comparison:invalid};
+    assert.throws(()=>api.normalizeShadowEvent(event),
+      /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+    await assert.rejects(api.saveShadowEvent(event),
+      /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+    const payload={format:'kts-settlement-export',version:5,
+      stores:{[api.STORES.partners]:[{id:'synthetic',role:'customer'}],
+        [api.STORES.shadowEvents]:[event]}};
+    assert.throws(()=>api.validateImportPayload(payload,{},{}),
+      /SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+  }
+  assert.equal(api.normalizeShadowEvent({...base,comparison_status:'UNVERIFIED',
+    comparison:{status:'UNVERIFIED'}}).comparison_status,'UNVERIFIED');
 });

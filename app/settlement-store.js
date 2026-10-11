@@ -331,6 +331,23 @@
         String(input.comparison_status||'').toUpperCase()==='MATCH_DISPLAY_ONLY') &&
        !expectedComparisonStatus)
       throw new Error('SHADOW_EVENT_MATCH_WITHOUT_COMPARISON');
+    // A raw exact match may cover only selected fields: the immutable
+    // money receipt needs full comparator promotion proof, not its label.
+    const effectiveComparisonStatus=String(
+      input.comparison_status||expectedComparisonStatus||'UNVERIFIED').toUpperCase();
+    if(effectiveComparisonStatus==='MATCH_EXACT'){
+      const comparison=input.comparison;
+      const mandatory=['total_xac','total_qua_co','total_payout','final_net'];
+      if(!comparison || comparison.safe_to_promote!==true ||
+         comparison.required_totals_exact!==true ||
+         comparison.exact!==true ||
+         !Number.isInteger(comparison.compared_fields) ||
+         comparison.compared_fields<mandatory.length ||
+         !mandatory.every(field=>comparison.totals &&
+           comparison.totals[field] &&
+           comparison.totals[field].status==='MATCH_EXACT'))
+        throw new Error('SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING');
+    }
     const evidenceCore = {
       scope_id: scopeId,
       trigger: String(input.trigger || 'UNKNOWN'),
