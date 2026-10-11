@@ -8,6 +8,8 @@
 const http = require('node:http');
 
 const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
+const DEFAULT_LOGIN_ATTEMPT_LIMIT = 5;
+const DEFAULT_LOGIN_WINDOW_MS = 60 * 1000;
 
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
@@ -60,10 +62,46 @@ function readJson(req, maxBodyBytes) {
   });
 }
 
-function createAuthHttpServer(auth, { maxBodyBytes = DEFAULT_MAX_BODY_BYTES } = {}) {
+function createAuthHttpServer(auth, {
+  maxBodyBytes = DEFAULT_MAX_BODY_BYTES,
+  maxLoginAttempts = DEFAULT_LOGIN_ATTEMPT_LIMIT,
+  loginWindowMs = DEFAULT_LOGIN_WINDOW_MS,
+  clock = () => Date.now()
+} = {}) {
   if (!auth || typeof auth.login !== 'function' || typeof auth.verifySession !== 'function' ||
-      typeof auth.revokeSession !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256)
+      typeof auth.revokeSession !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
+      !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
+      !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 || typeof clock !== 'function')
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
+  const loginAttempts = new Map();
+
+  function loginKey(req, input) {
+    const source = typeof req.socket?.remoteAddress === 'string' ? req.socket.remoteAddress : 'unknown';
+    const subject = typeof input.auth_subject === 'string' ? input.auth_subject : 'missing';
+    return `${source}:${subject}`;
+  }
+
+  function rateLimited(key) {
+    const now = clock();
+    const entry = loginAttempts.get(key);
+    if (!entry || now - entry.started_at >= loginWindowMs) {
+      loginAttempts.set(key, { started_at: now, count: 0 });
+      return false;
+    }
+    return entry.count >= maxLoginAttempts;
+  }
+
+  function recordFailedLogin(key) {
+    const now = clock();
+    const entry = loginAttempts.get(key);
+    if (!entry || now - entry.started_at >= loginWindowMs)
+      loginAttempts.set(key, { started_at: now, count: 1 });
+    else entry.count += 1;
+  }
+
+  function clearLoginFailures(key) {
+    loginAttempts.delete(key);
+  }
 
   return http.createServer(async (req, res) => {
     try {
@@ -74,9 +112,14 @@ function createAuthHttpServer(auth, { maxBodyBytes = DEFAULT_MAX_BODY_BYTES } = 
           if (error.code === 'AUTH_BODY_TOO_LARGE') return json(res, 413, { error: error.code });
           return json(res, 400, { error: 'AUTH_JSON_INVALID' });
         }
+        const key = loginKey(req, input);
+        if (rateLimited(key)) return json(res, 429, { error: 'AUTH_RATE_LIMITED' });
         try {
-          return json(res, 200, auth.login(input));
+          const result = auth.login(input);
+          clearLoginFailures(key);
+          return json(res, 200, result);
         } catch {
+          recordFailedLogin(key);
           return json(res, 401, { error: 'AUTH_LOGIN_DENIED' });
         }
       }
@@ -97,4 +140,7 @@ function createAuthHttpServer(auth, { maxBodyBytes = DEFAULT_MAX_BODY_BYTES } = 
   });
 }
 
-module.exports = Object.freeze({ DEFAULT_MAX_BODY_BYTES, createAuthHttpServer });
+module.exports = Object.freeze({
+  DEFAULT_MAX_BODY_BYTES, DEFAULT_LOGIN_ATTEMPT_LIMIT, DEFAULT_LOGIN_WINDOW_MS,
+  createAuthHttpServer
+});

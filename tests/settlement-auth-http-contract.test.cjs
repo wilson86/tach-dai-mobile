@@ -77,3 +77,27 @@ test('HTTP login rejects oversized bodies without reaching authentication', asyn
     assert.deepEqual(JSON.parse(result.body), { error: 'AUTH_BODY_TOO_LARGE' });
   }, { maxBodyBytes: 256 });
 });
+
+test('HTTP login applies bounded failed-attempt rate limiting and resets after success/window', async () => {
+  let now = 1_000;
+  const auth = setup();
+  const server = createAuthHttpServer(auth, { maxLoginAttempts: 2, loginWindowMs: 100, clock: () => now });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  try {
+    for (let i = 0; i < 2; i++) {
+      const denied = await request(server, { method: 'POST', path: '/v1/login', body: {
+        auth_subject: 'subject_1', password: 'wrong-password', workspace_id: 'group_a'
+      }});
+      assert.equal(denied.status, 401);
+    }
+    const limited = await request(server, { method: 'POST', path: '/v1/login', body: {
+      auth_subject: 'subject_1', password: 'synthetic-password-1', workspace_id: 'group_a'
+    }});
+    assert.equal(limited.status, 429);
+    now = 1_101;
+    const afterWindow = await request(server, { method: 'POST', path: '/v1/login', body: {
+      auth_subject: 'subject_1', password: 'synthetic-password-1', workspace_id: 'group_a'
+    }});
+    assert.equal(afterWindow.status, 200);
+  } finally { await new Promise(resolve => server.close(resolve)); }
+});

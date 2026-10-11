@@ -3,7 +3,7 @@
 **No endpoint in this document is deployed.** v0 proposal for 10–30 human accounts, distinct from counterparties.
 
 ## Trusted request processing sequence
-1. Rate limit and cap request bodies. TLS, session signing/expiry/revocation and CSRF security MUST be implemented before network exposure. The synthetic `team-settlement/auth-contract.cjs` plus `auth-http-contract.cjs` cover password hashing, opaque expiry/revocation, active-membership resolution and bounded JSON routes only; they are not a deployed HTTP provider or persistent identity store.
+1. Rate limit and cap request bodies. TLS, session signing/expiry/revocation and CSRF security MUST be implemented before network exposure. The synthetic `team-settlement/auth-contract.cjs` plus `auth-http-contract.cjs` cover password hashing, opaque expiry/revocation, active-membership resolution, bounded JSON routes and failed-login rate limiting only; they are not a deployed HTTP provider or persistent identity store.
 2. Resolve logged-in human `user_id` and workspace through server session and an **active membership query** (client may suggest a workspace, never assert role).
 3. Begin PostgreSQL transaction; `SET LOCAL kts.workspace_id = <verified workspace>`. RLS is defense in depth; verify object ownership and role explicitly.
 4. Parse and validate the request, reject unknown fields/roles/monetary server-derived amounts. Check KQXS verification/parser build and effective-dated partner configuration as required.
