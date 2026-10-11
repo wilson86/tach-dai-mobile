@@ -97,4 +97,8 @@ test('authentication boundary is explicitly synthetic and separate from settleme
   assert(sync.includes('MANUAL_REVIEW'));
   assert(sync.includes('RETRY_WITH_CAS'));
   assert(!sync.includes('last-writer-wins'));
+  const pwaSync=readFileSync(resolve(__dirname,'../app/settlement-team-sync-client.js'),'utf8');
+  assert(pwaSync.includes('AUTH_SESSION_REQUIRED'));
+  assert(pwaSync.includes('TEAM_REVISION_CONFLICT'));
+  assert(pwaSync.includes('memory-only'));
 });

@@ -5,6 +5,7 @@ on:
       - 'team-settlement/**'
       - 'docs/settlement-team/**'
       - 'tests/settlement-team-*.test.cjs'
+      - 'tests/settlement-sync-contract.test.cjs'
       - '.github/workflows/settlement-team-contract.yml'
   workflow_dispatch:
 
@@ -22,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Node contract and schema source tests (synthetic only)
-        run: node --test tests/settlement-team-*.test.cjs
+        run: node --test tests/settlement-team-*.test.cjs tests/settlement-sync-contract.test.cjs
       - name: No production or paid deploy tasks
         run: |
           echo "TEAM_CONTRACT_QA_ONLY=PASS"

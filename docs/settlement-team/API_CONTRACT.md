@@ -18,6 +18,8 @@ The bounded HTTP adapter exposes `POST /v1/scopes/drafts` only when an explicit 
 
 Reconnect policy is explicit: unchanged server base may retry with CAS; a changed server revision with local intent returns HTTP `409` plus `CONFLICT/MANUAL_REVIEW`; server-blocked state returns `BLOCKED`. There is no automatic last-writer-wins merge for financial rows.
 
+The PWA `app/settlement-team-sync-client.js` keeps bearer credentials memory-only, stores only the opaque change cursor, labels unsent drafts `PENDING`, stops on `CONFLICT`/`BLOCKED`, and never retries a conflict automatically.
+
 The synthetic `team-settlement/server-ledger-api.cjs` composes authenticated sessions with the repository seam. `team-settlement/postgres-ledger-repository.cjs` sets verified tenant/actor transaction-local settings, uses parameterized queries, delegates draft CAS/idempotency to `kts_team.append_draft`, and rolls back on invalid results. These modules open no connection and are not a production deployment.
 
 ## Suggested error and evidence semantics
