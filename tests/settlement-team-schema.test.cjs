@@ -35,6 +35,13 @@ test('append-only protections and strict role contracts are present',()=>{
   assert(sql.includes("team_role IN ('admin','operator','reviewer','viewer')"));
   assert(sql.includes("partner_kind IN ('customer','owner')"));
   assert(!sql.includes('PASSWORD =') && !sql.includes('KTS_ROUTER'));
+  const draftMigration=readFileSync(resolve(__dirname,'../team-settlement/migrations/002_draft_transaction.sql'),'utf8');
+  assert(draftMigration.includes('REVOKE ALL ON FUNCTION kts_team.append_draft'));
+  assert(draftMigration.includes('FROM PUBLIC;'));
+  assert(draftMigration.includes('AND i.disabled_at IS NULL'));
+  assert(draftMigration.includes('AND m.revoked_at IS NULL'));
+  assert(draftMigration.includes('TEAM_REVISION_CONFLICT'));
+  assert(draftMigration.includes('TEAM_IDEMPOTENCY_CONFLICT'));
   assert(model.includes('Thirty-client')||model.includes('Thirty-client test'));
 });
 test('approval and offline reject are called out in API',()=>{

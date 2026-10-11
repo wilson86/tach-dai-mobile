@@ -30,9 +30,11 @@ BEGIN
   IF current_setting('kts.workspace_id', true) IS DISTINCT FROM p_workspace_id THEN
     RAISE EXCEPTION 'TEAM_WORKSPACE_DENIED';
   END IF;
-  SELECT team_role INTO v_role
-  FROM kts_team.memberships
-  WHERE workspace_id=p_workspace_id AND user_id=v_actor AND revoked_at IS NULL;
+  SELECT m.team_role INTO v_role
+  FROM kts_team.memberships m
+  JOIN kts_team.identities i ON i.user_id = m.user_id
+  WHERE m.workspace_id=p_workspace_id AND m.user_id=v_actor
+    AND m.revoked_at IS NULL AND i.disabled_at IS NULL;
   IF COALESCE(v_role,'') NOT IN ('admin','operator') THEN
     RAISE EXCEPTION 'TEAM_ROLE_DENIED';
   END IF;
@@ -96,7 +98,9 @@ BEGIN
     'new_revision',p_expected_revision+1
   );
 END;
-$$;
+$;
+-- PostgreSQL functions have EXECUTE TO PUBLIC by default; remove that grant.
+REVOKE ALL ON FUNCTION kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb) FROM PUBLIC;
 COMMIT;
 
 -- GRANT EXECUTE only to reviewed runtime API role. Do not expose DB port.
