@@ -9,6 +9,7 @@ assert(html.includes('./settlement-parser-replay.js'));
 assert(replay.includes("global.addEventListener('kts:repair-open'"));
 assert(replay.includes('Replay parser cả nhóm'));
 assert(replay.includes('diagnostic_only:true'));
+assert(replay.includes("rawStatus === 'MATCH_EXACT' && !referenceMatchExact ? 'INCOMPLETE_REFERENCE' : rawStatus"));
 assert(replay.includes('fetchCanonical(raw, scope.region, scope.business_date)'));
 assert(replay.includes('PARSER_REGRESSION_RISK'));
 assert(replay.includes('PARSER_CHANGE_RESOLVES_REFERENCE'));
