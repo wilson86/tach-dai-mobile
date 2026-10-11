@@ -155,6 +155,22 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
   assert.doesNotThrow(()=>S.normalizeShadowEvent({id:'se-valid-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}));
 }
 
+// The receipt's local category attribution must also be the same settlement
+// row being imported; aggregate totals and exact category labels are not
+// enough to authorize a different local breakdown.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+    totals:{total_xac:{status:'MATCH_EXACT'},total_qua_co:{status:'MATCH_EXACT'},total_payout:{status:'MATCH_EXACT'},final_net:{status:'MATCH_EXACT'}},
+    categories:[{code:'DAT',status:'MATCH_EXACT'}]};
+  const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const id='scope:a:2026-10-06:mn';
+  const event=S.normalizeShadowEvent({id:'se-forged-local-category',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:99,qua_co:75.24,payout:0}],message_ids:['m-local']},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  const settlement={id,partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m-local'],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:money,settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],reference_app_snapshot:{...reference,comparison}};
+  const p=payload({partners:[partner('a')],messages:[msg('m-local')],settlements:[settlement],shadow_events:[event]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+}
+
 
 {
   const legacyResult={

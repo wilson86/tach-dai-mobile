@@ -1112,6 +1112,10 @@
         values.every(key=>expectedAmounts && actual[key]!=null &&
           expectedAmounts[key]!=null &&
           String(actual[key])===String(expectedAmounts[key]));
+      const settlementCategoryRows=Array.isArray(row.category_rows)
+        ? row.category_rows
+        : row.settlement_result && Array.isArray(row.settlement_result.category_rows)
+          ? row.settlement_result.category_rows : [];
       return knownShadowReceipts.some(event=>
         event && String(event.scope_id||'')===String(row.id) &&
         String(event.partner_id||'')===String(row.partner_id) &&
@@ -1122,6 +1126,8 @@
         stableStringify(event.comparison)===stableStringify(ref.comparison) &&
         stableStringify(event.reference_snapshot||null)===stableStringify(reference) &&
         event.local_snapshot && monetaryMatch(event.local_snapshot.settlement_result) &&
+        Array.isArray(event.local_snapshot.category_rows) &&
+        stableStringify(event.local_snapshot.category_rows)===stableStringify(settlementCategoryRows) &&
         stableStringify((event.local_snapshot.message_ids||[]).map(String).sort())===
           stableStringify((row.message_ids||[]).map(String).sort()) &&
         (!event.evidence_fingerprint ||
