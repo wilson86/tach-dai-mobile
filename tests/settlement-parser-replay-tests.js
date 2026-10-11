@@ -100,5 +100,8 @@ function makeCtx(parserImpl, regressionImpl, capturedIdentity=true) {
     assert.strictEqual(group.parser_identity_unknown_cases,1);
   }
   assert.strictEqual(makeCtx().api.classifyResolution({reference_match_exact:true},1,{reference_match_exact:false}),'PARSER_REGRESSION_RISK');
+  const unsafeSummary=makeCtx().api.replaySummary({pass:true,comparison:{status:'MATCH_EXACT',safe_to_promote:false}},null);
+  assert.strictEqual(unsafeSummary.reference_match_exact,false);
+  assert.strictEqual(unsafeSummary.status,'INCOMPLETE_REFERENCE','unsafe raw exact must not retain exact display status');
   console.log('settlement-parser-replay-tests: PASS');
 })().catch(e=>{console.error(e);process.exit(1);});

@@ -8,6 +8,18 @@ const store = {
   STORES: { metadata: 'metadata' },
   async get(name, key) { return name === 'metadata' && state.metadata && state.metadata.key === key ? JSON.parse(JSON.stringify(state.metadata)) : null; },
   async saveMetadata(key, row) { state.metadata = JSON.parse(JSON.stringify(Object.assign({}, row, { key }))); return state.metadata; }
+  ,async mutateMetadataAtomically(key, updater) {
+    const current = state.metadata || { key, version: 1, candidates: [] };
+    const next = await updater(JSON.parse(JSON.stringify(current)));
+    if (next) state.metadata = JSON.parse(JSON.stringify(next));
+    return state.metadata;
+  }
+  ,async mutateMetadataRowsAtomically(keys, updater) {
+    const rows = {}; for (const key of keys) rows[key] = key === (state.metadata && state.metadata.key) ? JSON.parse(JSON.stringify(state.metadata)) : { key, version: 1, cases: [] };
+    const result = await updater(rows);
+    if (result && result.rows) { for (const [key,row] of Object.entries(result.rows)) { if (key === 'shadow_regression_candidates_v1') state.metadata = JSON.parse(JSON.stringify(row)); if (key === 'shadow_regression_cases_v1') state.pinned = JSON.parse(JSON.stringify(row.cases || [])); } }
+    return result && result.result;
+  }
 };
 const runtime = {
   async getHistory(scope) {
@@ -16,6 +28,8 @@ const runtime = {
   }
 };
 const regression = {
+  META_KEY: 'shadow_regression_cases_v1',
+  normalizeCase(c) { return JSON.parse(JSON.stringify(c)); },
   async caseFromEvidence(event, options) {
     return {
       format: 'kts-shadow-regression-case-v1',

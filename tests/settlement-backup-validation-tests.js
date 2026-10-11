@@ -10,7 +10,7 @@ function msg(id,p='a'){return {id,partner_id:p,business_date:'2026-10-06',region
 function payload(stores){const base=empty();Object.assign(base,stores||{});return {format:'kts-settlement-export',version:5,stores:base};}
 assert.strictEqual(typeof S.validateImportPayload,'function');
 {
-  const p=payload({partners:[partner('a')],configs:[cfg('a:v1','a')],messages:[msg('m1')],settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1'],config_snapshot:cfg('a:v1','a')}]});
+  const p=payload({partners:[partner('a')],configs:[cfg('a:v1','a')],messages:[msg('m1')],settlements:[{id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m1'],scope_status:'complete_unverified',config_snapshot:cfg('a:v1','a')}]});
   const out=S.validateImportPayload(p,empty(),{replace:false});
   assert.strictEqual(out.valid,true);assert.strictEqual(out.counts.messages,1);
 }
@@ -59,7 +59,7 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 }
 {
   const p=payload({partners:[partner('a')],shadow_events:[{id:'se1',scope_id:'scope:b:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn'}]});
-  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_SCOPE_ID_MISMATCH/);
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/SHADOW_EVENT_SCOPE_ID_MISMATCH/);
 }
 {
   const ex=empty(); ex.partners=[partner('a')]; ex.messages=[msg('same','a')];
@@ -134,7 +134,85 @@ assert(source.indexOf('validateImportPayload(payload, existing',importPos)<sourc
 {
   const core={id:'se-fp',scope_id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{a:1},reference_snapshot:{b:2},comparison:{status:'MATCH_EXACT'},evidence_fingerprint:'tampered'};
   const p=payload({partners:[partner('a')],shadow_events:[core]});
-  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SHADOW_FINGERPRINT_MISMATCH/);
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+}
+
+// An imported exact receipt must not pass when its supplied HIOSKT categories
+// contradict the local category rows, even if its four aggregate totals claim
+// MATCH_EXACT. This is a forged-proof negative case, not a money-rule test.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+    totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}},
+    categories:[{code:'DAT',status:'MISMATCH'}]};
+  const reference={totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const settlement={id:'scope:a:2026-10-06:mn',partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:[],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',
+    result_snapshot:money,settlement_result:money,category_rows:[{code:'DAT',xac:11,qua_co:8.36,payout:0}],reference_app_snapshot:{source:'HIOSKT_MANUAL',...reference,comparison}};
+  const eventReference={source:'HIOSKT_MANUAL',...reference};
+  settlement.reference_app_snapshot={...eventReference,comparison};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:settlement.category_rows,message_ids:['m-forged']},reference_snapshot:eventReference,comparison,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
+  const validComparison={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MATCH_EXACT',local:10,reference:10},qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},payout:{status:'MATCH_EXACT',local:0,reference:0}}}]};
+  assert.doesNotThrow(()=>S.normalizeShadowEvent({id:'se-valid-category',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}));
+  const forgedFields={...comparison,categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MISMATCH'}}}]};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category-field',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:settlement.region,trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedFields,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
+  const forgedCategoryValue={...validComparison,categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MATCH_EXACT',local:999,reference:10},qua_co:{status:'MATCH_EXACT'},payout:{status:'MATCH_EXACT'}}}]};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-category-value',scope_id:settlement.id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedCategoryValue,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH/);
+  const missingCategoryValues={...validComparison,categories:[{...validComparison.categories[0],fields:{xac:{status:'MATCH_EXACT'},qua_co:{status:'MATCH_EXACT'},payout:{status:'MATCH_EXACT'}}}]};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-missing-category-values',scope_id:settlement.id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:missingCategoryValues,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
+  const malformedCategoryReference={...eventReference,categories:[{code:'DAT',xac:true,qua_co:7.6,payout:0}]};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-malformed-category-money',scope_id:settlement.id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:malformedCategoryReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISMATCH/);
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-missing-local-category-field',scope_id:settlement.id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:validComparison,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_CATEGORY_PROMOTION_EVIDENCE_MISSING/);
+  const forgedTotal={...validComparison,totals:{...validComparison.totals,total_xac:{status:'MATCH_EXACT',local:10,reference:999}}};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-forged-total-value',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:forgedTotal,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_TOTAL_PROMOTION_EVIDENCE_MISMATCH/);
+  const missingTotalValues={...validComparison,totals:Object.fromEntries(Object.keys(validComparison.totals).map(field=>[field,{status:'MATCH_EXACT'}]))};
+  assert.throws(()=>S.normalizeShadowEvent({id:'se-missing-total-values',scope_id:settlement.id,partner_id:'a',business_date:settlement.business_date,region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],message_ids:['m-forged']},reference_snapshot:eventReference,comparison:missingTotalValues,comparison_status:'MATCH_EXACT'}),/SHADOW_EVENT_EXACT_PROMOTION_EVIDENCE_MISSING/);
+}
+
+// The receipt's local category attribution must also be the same settlement
+// row being imported; aggregate totals and exact category labels are not
+// enough to authorize a different local breakdown.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+     totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}},
+    categories:[{code:'DAT',status:'MATCH_EXACT',fields:{xac:{status:'MATCH_EXACT',local:99,reference:10},qua_co:{status:'MATCH_EXACT',local:75.24,reference:7.6},payout:{status:'MATCH_EXACT',local:0,reference:0}}}]};
+  const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6},categories:[{code:'DAT',xac:10,qua_co:7.6,payout:0}]};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const id='scope:a:2026-10-06:mn';
+  const event=S.normalizeShadowEvent({id:'se-forged-local-category',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[{code:'DAT',xac:99,qua_co:75.24,payout:0}],message_ids:['m-local']},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  const settlement={id,partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m-local'],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:money,settlement_result:money,category_rows:[{code:'DAT',xac:10,qua_co:7.6,payout:0}],reference_app_snapshot:{...reference,comparison}};
+  const p=payload({partners:[partner('a')],messages:[msg('m-local')],settlements:[settlement],shadow_events:[event]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+}
+
+// Message IDs alone are not enough provenance for an exact receipt: the
+// persisted raw/canonical message evidence must be the same input snapshot.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+     totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}}};
+  const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6}};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const id='scope:a:2026-10-06:mn';
+  const row={id,partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m-content'],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:money,settlement_result:money,category_rows:[],reference_app_snapshot:{...reference,comparison}};
+  const event=S.normalizeShadowEvent({id:'se-forged-message',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[],message_ids:['m-content'],scope_status:'complete_unverified',messages:[{id:'m-content',raw_text:'FORGED CONTENT',region:'mn',status:'parsed_waiting_result',canonical_version:null,canonical_payload:null,parser_error:null}]},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  const p=payload({partners:[partner('a')],messages:[msg('m-content')],settlements:[row],shadow_events:[event]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+  const validMessage={id:'m-content',raw_text:msg('m-content').raw_text,region:'mn',status:'parsed_waiting_result',canonical_version:null,canonical_payload:msg('m-content').canonical_payload,parser_error:null};
+  const roleEvent=S.normalizeShadowEvent({id:'se-forged-role',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[],message_ids:['m-content'],partner_role:'owner',scope_status:'complete_unverified',messages:[validMessage]},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  assert.throws(()=>S.validateImportPayload(payload({partners:[partner('a')],messages:[msg('m-content')],settlements:[row],shadow_events:[roleEvent]}),empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
+}
+
+// Exact receipts must be tied to the same persisted KQXS draw provenance;
+// matching money alone must not authorize evidence from another draw.
+{
+  const comparison={status:'MATCH_EXACT',safe_to_promote:true,exact:true,required_totals_exact:true,compared_fields:5,
+     totals:{total_xac:{status:'MATCH_EXACT',local:10,reference:10},total_qua_co:{status:'MATCH_EXACT',local:7.6,reference:7.6},total_payout:{status:'MATCH_EXACT',local:0,reference:0},final_net:{status:'MATCH_EXACT',local:7.6,reference:7.6}}};
+  const reference={source:'HIOSKT_MANUAL',totals:{xac:10,qua_co:7.6,payout:0,final:7.6}};
+  const money={total_xac:10,total_qua_co:7.6,total_payout:0,refund_amount:0,final_net:7.6};
+  const id='scope:a:2026-10-06:mn';
+  const row={id,partner_id:'a',business_date:'2026-10-06',region:'mn',message_ids:['m-draw'],scope_status:'complete_unverified',comparison_status:'MATCH_EXACT',result_snapshot:money,settlement_result:money,category_rows:[],lottery_result_snapshot:{fingerprint:'draw-1'},reference_app_snapshot:{...reference,comparison}};
+  const event=S.normalizeShadowEvent({id:'se-forged-draw',scope_id:id,partner_id:'a',business_date:'2026-10-06',region:'mn',trigger:'TEST',local_snapshot:{settlement_result:money,category_rows:[],message_ids:['m-draw'],lottery_result_snapshot:{fingerprint:'draw-2'}},reference_snapshot:reference,comparison,comparison_status:'MATCH_EXACT'});
+  const p=payload({partners:[partner('a')],messages:[msg('m-draw')],settlements:[row],shadow_events:[event]});
+  assert.throws(()=>S.validateImportPayload(p,empty(),{}),/IMPORT_SETTLEMENT_EXACT_RECEIPT_MISSING/);
 }
 
 

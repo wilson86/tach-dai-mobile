@@ -8,7 +8,7 @@ ctx.globalThis = ctx;
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync('app/settlement-shadow.js', 'utf8'), ctx, { filename: 'settlement-shadow.js' });
 const S = ctx.KTS_SETTLEMENT_SHADOW;
-assert.strictEqual(S.version, 'settlement-shadow-v4-exact-decimal');
+assert.strictEqual(S.version, 'settlement-shadow-v22-reference-exact-schema-integrity');
 assert.strictEqual(S.decimalCanonical('0013.0500'), '13.05');
 
 const local = {

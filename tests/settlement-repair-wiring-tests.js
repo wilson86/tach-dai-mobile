@@ -16,6 +16,7 @@ assert(repair.includes('replayCase(candidate.case)'));
 assert(repair.includes("basis: 'CAPTURED_CANONICAL'"));
 assert(repair.includes('TRƯỚC SỬA · MISMATCH'));
 assert(repair.includes('ENGINE HIỆN TẠI · MATCH_EXACT'));
+assert(repair.includes("rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus"));
 assert(repair.includes('không chạy lại parser backend'));
 assert(repair.includes('Candidate vẫn giữ nguyên'));
 assert(repair.includes('Tin gốc liên quan'));

@@ -108,12 +108,22 @@
 
       let blocked = 0;
       for (const scope of scopes.values()) {
+        // Record the monetary row BEFORE invoking the pipeline. A pipeline
+        // might commit a valid settlement and then throw (e.g. downstream
+        // callback failure); treating that late exception as permission to
+        // overwrite the new money with zero-valued BLOCKED is unsafe.
+        const settlementId =
+          `scope:${scope.partner_id}:${scope.business_date}:${scope.region}`;
+        const settlementAtStart = await store.get(store.STORES.settlements, settlementId);
+        let outcome;
+        let recoveryCommitted = false;
         try {
-          const outcome = await pipeline.settleScope(scope);
-          if (outcome && outcome.status === 'blocked') blocked += 1;
+          outcome = await pipeline.settleScope(scope);
         } catch (error) {
           blocked += 1;
-          const currentMessages = allMessages.filter(message =>
+          // Re-read rather than reuse the pre-import loop snapshot: another
+          // tab may have edited, cancelled or added a bet since that read.
+          const currentMessages = (await store.getAll(store.STORES.messages)).filter(message =>
             String(message && message.status || '').toLowerCase() !== 'cancelled' &&
             String(message && message.partner_id || '') === scope.partner_id &&
             String(message && message.business_date || '') === scope.business_date &&
@@ -125,8 +135,27 @@
             total_xac:0,total_qua_co:0,total_payout:0,refund_amount:0,final_net:0,
             direction:'HOA',category_totals:{},category_rows:[],detail_rows:[],message_breakdown:[]
           };
-          await store.saveSettlement({
-            id:`scope:${scope.partner_id}:${scope.business_date}:${scope.region}`,
+          // Never clobber another tab's newer monetary settlement on the
+          // exceptional recovery path. The normal pipeline already uses
+          // the same cross-store atomic revalidation contract.
+          if (typeof store.saveSettlementIfScopeUnchanged !== 'function')
+            throw new Error('IMPORT_RECALC_ATOMIC_BLOCK_REQUIRED');
+          const [config, result, partner, priorSettlement] = await Promise.all([
+            store.resolveConfigForDate(scope.partner_id, scope.business_date).catch(() => null),
+            store.get(store.STORES.results, `${scope.business_date}:${scope.region}`),
+            store.get(store.STORES.partners, scope.partner_id),
+            store.get(store.STORES.settlements,
+              `scope:${scope.partner_id}:${scope.business_date}:${scope.region}`)
+          ]);
+          // Even without a cross-tab race after recovery's fresh snapshot,
+          // the pipeline itself may already have committed a newer result.
+          // Require the original pre-run settlement to still be current;
+          // the following atomic CAS covers subsequent tab mutations.
+          if (JSON.stringify(priorSettlement || null) !==
+              JSON.stringify(settlementAtStart || null))
+            throw new Error('IMPORT_RECALC_SETTLEMENT_CHANGED_DURING_ERROR:' + scopeKey(scope));
+          const attempted = await store.saveSettlementIfScopeUnchanged({
+            id:settlementId,
             partner_id:scope.partner_id,
             message_ids:currentMessages.map(message => message.id),
             business_date:scope.business_date,
@@ -141,8 +170,18 @@
             scope_status:'blocked',
             blocked_reasons:[reason],
             comparison_status:'blocked'
-          });
+          }, { messages:currentMessages, config, result, partner, settlement:priorSettlement });
+          if (!attempted || attempted.superseded || !attempted.saved)
+            throw new Error('IMPORT_RECALC_BLOCK_SUPERSEDED:' + scopeKey(scope));
+          recoveryCommitted = true;
         }
+        // A superseded calculation has committed nothing; it is never a
+        // successful recalculation and must not be masked by fallback writes.
+        if (outcome && outcome.status === 'blocked') blocked += 1;
+        if (!recoveryCommitted && (!outcome ||
+            !['blocked','empty','complete_unverified','provisional']
+              .includes(outcome.status) || !outcome.settlement))
+          throw new Error('IMPORT_RECALC_SCOPE_NOT_COMMITTED:' + scopeKey(scope));
       }
       return { scope_count:scopes.size, blocked_count:blocked };
     }
@@ -178,12 +217,14 @@
       const file = input && input.files && input.files[0];
       if (!file) return status('Chọn file backup JSON trước.', 'warn');
       setBackupBusy(true);
+      let backupCommitted=false;
       try {
         status('Đang kiểm tra và khôi phục backup…', '');
         const text = await file.text();
         const payload = JSON.parse(text);
         if (!pipeline || typeof pipeline.settleScope !== 'function') throw new Error('IMPORT_RECALC_PIPELINE_UNAVAILABLE');
         const validation = await store.importAll(payload, { replace: false });
+        backupCommitted=true;
         status('Đã gộp dữ liệu · đang tính lại các phạm vi bị ảnh hưởng…', 'warn');
         const recalculated = await recalculateImportedScopes(payload);
         const inserted = Object.values(validation.inserted_counts || validation.counts || {}).reduce((sum, count) => sum + Number(count || 0), 0);
@@ -193,14 +234,26 @@
           : '';
         status(`Đã gộp backup an toàn · thêm ${inserted} bản ghi mới${skipped ? ` · giữ nguyên ${skipped} bản ghi đã có trên máy` : ''} · đã tính lại ${recalculated.scope_count} phạm vi${suffix}. Tải lại trang để cập nhật danh sách.`, recalculated.blocked_count ? 'warn' : 'ok');
       } catch (e) {
-        status('KHÔNG khôi phục: ' + String(e && e.message || e), 'err');
+        const reason=String(e && e.message || e);
+        if(backupCommitted){
+          // ImportAll already COMMITTED; reporting "not restored" would
+          // mislead the operator into repeating an import with partial recalc.
+          status('ĐÃ GỘP dữ liệu backup, nhưng tính lại settlement chưa hoàn tất: '+
+            reason+'. Không chốt tiền; kiểm tra phạm vi bị chặn trước khi thao tác tiếp.', 'err');
+        }else if(reason.startsWith('IMPORT_PROTECTED_EVIDENCE_COLLISION:')){
+          status('KHÔNG gộp backup: bằng chứng xác nhận HIOSKT hoặc lịch sử QA '+
+            'khác với dữ liệu đang lưu. Không có dữ liệu nào bị ghi đè. '+
+            'Xuất backup hiện tại để đối chiếu thủ công trước khi khôi phục.', 'err');
+        }else{
+          status('KHÔNG khôi phục: '+reason, 'err');
+        }
       } finally {
         setBackupBusy(false);
       }
     });
   }
 
-  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v5-recalculate-imported-scopes', filename });
+  global.KTS_SETTLEMENT_BACKUP_UI = Object.freeze({ version: 'settlement-backup-ui-v7-verified-import-recalc-outcome', filename });
   if (global.document && global.document.readyState === 'loading') global.document.addEventListener('DOMContentLoaded', install, { once: true });
   else install();
 })(typeof window !== 'undefined' ? window : globalThis);

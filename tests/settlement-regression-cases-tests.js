@@ -10,12 +10,14 @@ for (const file of [
   'app/settlement-engine.js',
   'app/settlement-mb-rules.js',
   'app/settlement-evaluator.js',
+  'app/settlement-runtime.js',
+  'app/settlement-feature-gates.js',
   'app/settlement-shadow.js',
   'app/settlement-regression-cases.js'
 ]) vm.runInContext(fs.readFileSync(file, 'utf8'), ctx, { filename:file });
 
 const R = ctx.KTS_SETTLEMENT_REGRESSION_CASES;
-assert.strictEqual(R.version, 'settlement-regression-cases-v1');
+assert.strictEqual(R.version, 'settlement-regression-cases-v6-live-row-attribution');
 
 const result = {
   business_date:'2026-09-22', region:'mb', complete:true,

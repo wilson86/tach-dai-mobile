@@ -158,7 +158,7 @@ assert.match(app,/Kết quả \(\$\{result\.outputs\.length\}\)/);
 assert.equal(version.version,'1.0.2');
 assert.equal(version.business_engine_sha256,'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c');
 assert.equal(version.contract,U.CONTRACT);
-assert.match(sw,/kts-tach-unified-v1\.0\.2-da-vong-final-6ce6/);
+assert.match(sw,/const CACHE=`\$\{CACHE_PREFIX\}v1\.0\.248-kqxs-metadata-consistency`/);
 assert.match(sw,/skipWaiting\(\)/);
 assert.match(sw,/clients\.claim\(\)/);
 assert.match(sw,/(?:cache|c)\.put\(req,copy\)|(?:cache|c)\.put\(req, copy\)/);

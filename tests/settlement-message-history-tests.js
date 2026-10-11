@@ -60,7 +60,12 @@ const goodMessages = [messages[0], messages[2]];
 const exactSettlement = [{
   id:'scope:p1:2026-10-06:mn', partner_id:'p1', business_date:'2026-10-06', region:'mn', message_ids:['m1'],
   scope_status:'complete_unverified', comparison_status:'MATCH_EXACT', blocked_reasons:[],
-  settlement_result:{ total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32 }
+  settlement_result:{ total_xac:18,total_qua_co:13.68,total_payout:75,refund_amount:0,final_net:-61.32 },
+  reference_app_snapshot:{
+    totals:{xac:18,qua_co:13.68,payout:75,final:-61.32},
+    comparison:{ status:'MATCH_EXACT', safe_to_promote:true, exact:true, required_totals_exact:true, compared_fields:4,
+      totals:{ total_xac:{status:'MATCH_EXACT',local:18,reference:18}, total_qua_co:{status:'MATCH_EXACT',local:13.68,reference:13.68}, total_payout:{status:'MATCH_EXACT',local:75,reference:75}, final_net:{status:'MATCH_EXACT',local:-61.32,reference:-61.32} } }
+  }
 }];
 const exactSummary = H.buildScopeSummary(scope, goodMessages, exactSettlement, {
   id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true
@@ -70,6 +75,17 @@ assert.strictEqual(exactSummary.kqxs.label, 'ĐÃ ĐỦ KQ · CHỜ ĐỐI CHI�
 assert.strictEqual(exactSummary.totals.xac, 18);
 assert.strictEqual(exactSummary.totals.direction, 'BÙ');
 assert(Math.abs(exactSummary.totals.final_net - (-61.32)) < 1e-9);
+
+const forgedExact = H.buildScopeSummary(scope, goodMessages, [{...exactSettlement[0], reference_app_snapshot:null}], {
+  id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true
+});
+assert.strictEqual(forgedExact.state.code, 'UNVERIFIED', 'raw MATCH_EXACT without proof must fail closed');
+const incompleteProof = JSON.parse(JSON.stringify(exactSettlement[0]));
+incompleteProof.reference_app_snapshot.comparison.totals.final_net = {status:'MATCH_EXACT'};
+const incompleteExact = H.buildScopeSummary(scope, goodMessages, [incompleteProof], {
+  id:'2026-10-06:mn', business_date:'2026-10-06', region:'mn', complete:true
+});
+assert.strictEqual(incompleteExact.state.code, 'UNVERIFIED', 'exact flags without monetary values must fail closed');
 
 const parsedSample={canonical_payload:{legs:[
   {code:'DAX',values:['28','68','69'],stake:'5',station_codes:['bt','vt']},
@@ -126,4 +142,5 @@ assert(historySource.includes('epoch === refreshEpoch && scopeMatch(scope, curre
 assert(historySource.includes('Phạm vi đã đổi. Không hủy tin từ danh sách cũ.'));
 assert(historySource.includes('Phạm vi đã đổi. Không khôi phục tin từ danh sách cũ.'));
 assert(historySource.includes("String(message.status || '').toLowerCase() === 'cancelled'"));
+assert(historySource.includes('function safeExactComparison'));
 console.log('settlement-message-history-tests: PASS');

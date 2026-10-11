@@ -29,6 +29,7 @@ function makeStore(messages=[], options={}) {
       return cfg(options.configPartner || partner);
     },
     async saveSettlement(row){const i=state.settlements.findIndex(x=>x.id===row.id);if(i>=0)state.settlements[i]={...row};else state.settlements.push({...row});return {...row};},
+    async saveSettlementIfScopeUnchanged(row,expected){const current=state.settlements.find(x=>x.id===row.id);if(expected.settlement&&current&&JSON.stringify(current)!==JSON.stringify(expected.settlement))return {saved:null,superseded:true};const i=state.settlements.findIndex(x=>x.id===row.id);if(i>=0)state.settlements[i]={...row};else state.settlements.push({...row});return {saved:{...row},superseded:false};},
     async saveMessage(row){const v={...row,id:row.id||'saved-'+(state.messages.length+1)};const i=state.messages.findIndex(x=>x.id===v.id);if(i>=0)state.messages[i]=v;else state.messages.push(v);return {...v};}
   };
 }
