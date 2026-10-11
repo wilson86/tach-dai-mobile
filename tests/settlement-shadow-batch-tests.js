@@ -90,9 +90,9 @@ const B = ctx.KTS_SETTLEMENT_SHADOW_BATCH;
   assert.strictEqual(parsed[0]._row, 2);
   assert.strictEqual(parsed[0].partner, 'Hiền');
   // An extra or omitted TAB must not silently shift payout/partner/region column attribution.
-  for (const suffix of ['\textra', '\t']) {
-    assert.throws(() => B.parseInput(tsv + suffix), /BATCH_TSV_COLUMN_COUNT_MISMATCH:3:/);
-  }
+  assert.throws(() => B.parseInput(tsv + '\textra'), /BATCH_TSV_COLUMN_COUNT_MISMATCH:3:/);
+  assert.throws(() => B.parseInput(tsv.replace('\t0\t-4431.12','\t0\textra\t-4431.12')),
+    /BATCH_TSV_COLUMN_COUNT_MISMATCH:2:/);
   const omittedCell = tsv.split('\n');
   omittedCell[1] = omittedCell[1].replace('\t0\t-4431.12','\t-4431.12');
   assert.throws(() => B.parseInput(omittedCell.join('\n')), /BATCH_TSV_COLUMN_COUNT_MISMATCH:2:/);

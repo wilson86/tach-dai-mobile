@@ -4,6 +4,11 @@ on:
     paths:
       - "app/settlement-qualification-history.js"
       - "app/settlement-build-identity.js"
+      - "app/settlement-shadow-batch.js"
+      - "app/settlement-shadow-ui.js"
+      - "app/sw.js"
+      - "tests/settlement-shadow-batch-tests.js"
+      - "tests/settlement-shadow-ui-tests.js"
       - ".github/scripts/settlement-feature-history-audit.test.cjs"
       - ".github/workflows/settlement-feature-history-audit.yml"
   workflow_dispatch:
