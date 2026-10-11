@@ -115,9 +115,12 @@
         const local = event.local_snapshot && event.local_snapshot.settlement_result || {};
         const ref = event.reference_snapshot && event.reference_snapshot.totals || {};
         const finalCmp = comp.totals && comp.totals.final_net || null;
-        const cls = event.comparison_status === 'MATCH_EXACT' ? 'ok' : event.comparison_status === 'MISMATCH' ? 'err' : 'warn';
+        const rawStatus = String(event.comparison_status || '').toUpperCase();
+        const safeExact = rawStatus === 'MATCH_EXACT' && comp.status === 'MATCH_EXACT' && comp.safe_to_promote === true && comp.exact === true;
+        const displayStatus = rawStatus === 'MATCH_EXACT' && !safeExact ? 'INCOMPLETE_REFERENCE' : rawStatus;
+        const cls = displayStatus === 'MATCH_EXACT' ? 'ok' : displayStatus === 'MISMATCH' ? 'err' : 'warn';
         const verify = event.local_snapshot && event.local_snapshot.result_verification_status || 'unverified';
-        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>#${rows.length-index}</b> <span class="tag ${cls}">${esc(event.comparison_status)}</span> <span class="tag">${esc(event.trigger || 'UNKNOWN')}</span></div><span class="hint">${esc(when(event.observed_at))}</span></div>`+
+        return `<div class="report-message"><div class="row" style="justify-content:space-between"><div><b>#${rows.length-index}</b> <span class="tag ${cls}">${esc(displayStatus)}</span> <span class="tag">${esc(event.trigger || 'UNKNOWN')}</span></div><span class="hint">${esc(when(event.observed_at))}</span></div>`+
           `<div class="hint" style="margin-top:4px">THU/BÙ KTS <b>${money(local.final_net)}</b> · HIOSKT <b>${money(ref.final)}</b> · lệch <b>${money(finalCmp && finalCmp.delta)}</b> · KQXS ${esc(verify)} · engine ${esc(event.local_snapshot && event.local_snapshot.engine_version || '—')} · config v${esc(event.local_snapshot && event.local_snapshot.config_version == null ? '—' : event.local_snapshot.config_version)}</div>`+
           `${event.reason ? `<div class="hint">Lý do: ${esc(event.reason)}</div>` : ''}</div>`;
       }).join('');
