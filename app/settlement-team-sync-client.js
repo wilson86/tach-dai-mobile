@@ -28,15 +28,29 @@
   }
   function errorCode(error, fallback) { return error && error.code || fallback; }
 
+  function trustedOrigin(parsed) {
+    const host = parsed.hostname.toLowerCase();
+    const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+    return parsed.protocol === 'https:' || (parsed.protocol === 'http:' && loopback);
+  }
+
   function normalizeBaseUrl(value) {
+    // Empty baseUrl is same-origin. A remote page loaded via HTTP must not
+    // silently send settlement passwords or bearer sessions over cleartext.
+    // An explicit HTTPS API URL does NOT make an insecure page itself safe.
+    const browserLocation = typeof globalThis !== 'undefined' ? globalThis.location : null;
+    if (browserLocation) {
+      let page;
+      try { page = new URL(browserLocation.href); }
+      catch (_) { throw new Error('SYNC_PAGE_ORIGIN_INVALID'); }
+      if (!trustedOrigin(page)) throw new Error('SYNC_PAGE_ORIGIN_INSECURE');
+    }
     if (value === '') return '';
     if (typeof value !== 'string' || value !== value.trim()) throw new Error('SYNC_BASE_URL_INVALID');
     let parsed;
     try { parsed = new URL(value); } catch (_) { throw new Error('SYNC_BASE_URL_INVALID'); }
     if (parsed.username || parsed.password || parsed.search || parsed.hash) throw new Error('SYNC_BASE_URL_INVALID');
-    const host = parsed.hostname.toLowerCase();
-    const loopback = host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
-    if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && loopback))
+    if (!trustedOrigin(parsed))
       throw new Error('SYNC_BASE_URL_INSECURE');
     return value.replace(/\/+$/, '');
   }

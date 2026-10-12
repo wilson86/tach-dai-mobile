@@ -464,3 +464,40 @@ test('snapshot explicitly warns that pending financial drafts are volatile acros
   assert.equal(first.snapshot().volatile_unsent_count,0);
   assert.equal(first.snapshot().reload_loss_risk,false);
 });
+
+test('browser same-origin fallback denies remote cleartext before any credential request',async()=>{
+  // In Node, emulate the browser location. Restore the global descriptor so
+  // independent tests are unaffected by this synthetic test's page origin.
+  const original=Object.getOwnPropertyDescriptor(globalThis,'location');
+  let requests=0;
+  const options={fetchImpl:async()=>{requests++;return response(200,{});}};
+  try {
+    for(const href of [
+      'http://team.example.test/settlement.html',
+      'ftp://team.example.test/',
+      'file:///tmp/settlement.html'
+    ]) {
+      Object.defineProperty(globalThis,'location',{
+        configurable:true,value:{href}
+      });
+      assert.throws(()=>Sync.createSyncClient({...options,baseUrl:''}),
+        /SYNC_PAGE_ORIGIN_INSECURE/);
+      assert.throws(()=>Sync.createSyncClient({
+        ...options,baseUrl:'https://api.example.test'
+      }),/SYNC_PAGE_ORIGIN_INSECURE/);
+    }
+    for(const href of [
+      'https://team.example.test/settlement.html',
+      'http://127.0.0.1:23456/settlement.html'
+    ]) {
+      Object.defineProperty(globalThis,'location',{
+        configurable:true,value:{href}
+      });
+      assert.doesNotThrow(()=>Sync.createSyncClient({...options,baseUrl:''}));
+    }
+    assert.equal(requests,0);
+  } finally {
+    if(original)Object.defineProperty(globalThis,'location',original);
+    else delete globalThis.location;
+  }
+});
