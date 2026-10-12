@@ -270,6 +270,16 @@ function createAuthHttpServer(auth, {
         let parsed;
         try { parsed = new URL(req.url, 'http://team.local'); }
         catch { return json(res, 422, { error: 'TEAM_CURSOR_INVALID' }); }
+        // Reject disguised /v1/changes routes and unsupported/duplicate query
+        // parameters. Never let client-supplied workspace or role flags enter
+        // the server's authenticated change feed contract.
+        if (parsed.pathname !== '/v1/changes')
+          return json(res, 404, { error: 'AUTH_ROUTE_NOT_FOUND' });
+        const queryKeys = [...parsed.searchParams.keys()];
+        if (queryKeys.some(key => !['limit', 'cursor'].includes(key)) ||
+            parsed.searchParams.getAll('limit').length > 1 ||
+            parsed.searchParams.getAll('cursor').length > 1)
+          return json(res, 422, { error: 'TEAM_CURSOR_INVALID' });
         const rawLimit = parsed.searchParams.get('limit');
         const limit = rawLimit === null ? 100 : Number(rawLimit);
         if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
