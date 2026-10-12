@@ -13,7 +13,7 @@ function fakePool({failBegin=false,failCommit=false,failRollback=false}={}){
       if(sql==='ROLLBACK'&&failRollback)throw new Error('rollback rejected');
       if(sql.includes('FROM kts_team.memberships'))return {rows:[{team_role:'viewer'}]};
       if(sql.includes('FROM kts_team.scope_events'))return {rows:[
-        {feed_seq:'1',event_id:'e1',recorded_at:'2026-10-12T10:00:00Z'}]};
+        {workspace_id:'group_a',feed_seq:'1',event_id:'e1',recorded_at:'2026-10-12T10:00:00Z'}]};
       return {rows:[]};
     },
     release:flag=>releases.push(flag)
