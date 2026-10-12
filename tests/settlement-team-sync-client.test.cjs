@@ -432,3 +432,35 @@ test('failed draft request releases its flight slot so a later explicit retry ca
   assert.equal((await client.syncDraft(item.id)).status,'SYNCED');
   assert.equal(calls,2);
 });
+
+test('snapshot explicitly warns that pending financial drafts are volatile across reload',async()=>{
+  let online=false;const saved=storage();
+  const fetchImpl=async(url)=>{
+    if(!online)throw Object.assign(new Error('synthetic offline'),{code:'NETWORK_DOWN'});
+    return response(200,{event_id:'event_durable_1',replayed:false,
+      new_revision:1,feed_seq:1,sync_status:'SYNCED'});
+  };
+  const first=Sync.createSyncClient({storage:saved,fetchImpl});
+  first.setSessionToken('t'.repeat(43),'group_a');
+  assert.equal(first.snapshot().draft_persistence,'MEMORY_ONLY');
+  assert.equal(first.snapshot().volatile_unsent_count,0);
+  assert.equal(first.snapshot().reload_loss_risk,false);
+  const draft=first.queueDraft({
+    workspace_id:'group_a',partner_id:'fake_partner',
+    business_date:'2026-10-12',region:'mn'
+  },{synthetic:true});
+  assert.equal(first.snapshot().volatile_unsent_count,1);
+  assert.equal(first.snapshot().reload_loss_risk,true);
+  assert.equal((await first.syncDraft(draft.id)).status,'PENDING');
+  assert.equal(first.snapshot().reload_loss_risk,true);
+  // Simulate page reload by constructing a new client with the same storage.
+  // This is NOT a durability success: the offline intent is gone.
+  const afterReload=Sync.createSyncClient({storage:saved,fetchImpl});
+  assert.equal(afterReload.snapshot().draft_persistence,'MEMORY_ONLY');
+  assert.deepEqual(afterReload.snapshot().drafts,[]);
+  assert.equal(saved.data.has('session_token'),false);
+  online=true;
+  assert.equal((await first.syncDraft(draft.id)).status,'SYNCED');
+  assert.equal(first.snapshot().volatile_unsent_count,0);
+  assert.equal(first.snapshot().reload_loss_risk,false);
+});

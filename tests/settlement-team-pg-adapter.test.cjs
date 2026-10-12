@@ -107,3 +107,45 @@ test('unawaited SQL query blocks COMMIT and destroys pooled connection',async()=
   assert.deepEqual(released,[true]);
   finish({rows:[]});
 });
+
+test('simulated COMMIT persisted but response was lost: deny ACK, destroy pool client, replay same event',async()=>{
+  // This is a deterministic Pool-double fault simulation, NOT an actual TCP
+  // disconnect drill. The first COMMIT applies a synthetic event durably then
+  // throws as if its acknowledgement never reached the Node application.
+  const committed=new Map(),released=[];let connectionNumber=0;
+  const pool={async connect(){
+    const number=++connectionNumber;let pending=null;
+    return {
+      async query(sql,args=[]){
+        if(sql==='BEGIN'){pending=null;return {rows:[]};}
+        if(sql==='SELECT synthetic_append($1)'){
+          const key=args[0];
+          if(committed.has(key))return {rows:[{...committed.get(key),replayed:true}]};
+          pending={key,event_id:'synthetic_event_1',replayed:false};
+          return {rows:[{event_id:pending.event_id,replayed:false}]};
+        }
+        if(sql==='COMMIT'){
+          if(pending&&!committed.has(pending.key))
+            committed.set(pending.key,{event_id:pending.event_id});
+          if(number===1)throw new Error('SIMULATED_LOST_COMMIT_ACK');
+          return {rows:[]};
+        }
+        if(sql==='ROLLBACK'){pending=null;return {rows:[]};}
+        throw new Error('UNEXPECTED_SYNTHETIC_SQL');
+      },
+      release(destroy){released.push({number,destroy});}
+    };
+  }};
+  const adapter=createPgTransactionAdapter({pool});
+  const append=key=>adapter.transaction(async tx=>{
+    const result=await tx.query('SELECT synthetic_append($1)',[key]);
+    return result.rows[0];
+  });
+  await assert.rejects(append('fake_retry_1'),/SIMULATED_LOST_COMMIT_ACK/);
+  assert.equal(committed.size,1);
+  assert.deepEqual(released,[{number:1,destroy:true}]);
+  const replay=await append('fake_retry_1');
+  assert.deepEqual(replay,{event_id:'synthetic_event_1',replayed:true});
+  assert.equal(committed.size,1);
+  assert.deepEqual(released.at(-1),{number:2,destroy:false});
+});

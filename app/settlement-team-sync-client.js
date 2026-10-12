@@ -291,8 +291,16 @@
     }
 
     function snapshot() {
+      const volatileUnsentCount=Array.from(pending.values())
+        .filter(item=>item.status!==STATUS.SYNCED).length;
       return Object.freeze({
         authenticated: Boolean(sessionToken), cursor, workspace_id: workspaceId,
+        // Financial drafts are only held in this JavaScript process. A browser
+        // reload/close can destroy them; these fields let the UI warn before
+        // data loss WITHOUT falsely claiming any local/offline persistence.
+        draft_persistence: 'MEMORY_ONLY',
+        volatile_unsent_count: volatileUnsentCount,
+        reload_loss_risk: volatileUnsentCount>0,
         drafts: Object.freeze(Array.from(pending.values()).map(item => Object.freeze(clone(item))))
       });
     }
