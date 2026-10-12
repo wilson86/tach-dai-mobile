@@ -130,7 +130,7 @@ function createPostgresLedgerRepository({ db } = {}) {
     const after = decodeCursor(cursor, verifiedActor.workspace_id);
     return inActorTransaction(actor, async (tx, trustedActor) => {
       const result = await tx.query(
-        `SELECT event_id,partner_id,business_date::text AS business_date,region,
+        `SELECT workspace_id,event_id,partner_id,business_date::text AS business_date,region,
                 scope_revision,feed_seq,actor_user_id,event_kind,payload_sha256,result_snapshot,recorded_at
            FROM kts_team.scope_events
           WHERE workspace_id=$1 AND feed_seq > $2::bigint
@@ -138,7 +138,21 @@ function createPostgresLedgerRepository({ db } = {}) {
           LIMIT $3::int`,
         [trustedActor.workspace_id, after.feed_seq, limit + 1]
       );
-      if (!result || !Array.isArray(result.rows)) throw new Error('TEAM_DB_RESULT_INVALID');
+      if (!result || !Array.isArray(result.rows) ||
+          result.rows.length > limit + 1) throw new Error('TEAM_DB_RESULT_INVALID');
+      // Defense in depth: a stale/misrouted SQL adapter must never skip feed
+      // events or leak a different tenant, even if database RLS is misconfigured.
+      let previous = BigInt(after.feed_seq);
+      for (const row of result.rows) {
+        if (!row || typeof row !== 'object' || Array.isArray(row) ||
+            row.workspace_id !== trustedActor.workspace_id)
+          throw new Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+        let sequence;
+        try { sequence = BigInt(normalizedFeedSeq(row.feed_seq)); }
+        catch { throw new Error('TEAM_FEED_RESPONSE_UNVERIFIED'); }
+        if (sequence <= previous) throw new Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+        previous = sequence;
+      }
       const hasMore = result.rows.length > limit;
       const items = result.rows.slice(0, limit).map(row => Object.freeze({ ...row }));
       const last = items.at(-1);

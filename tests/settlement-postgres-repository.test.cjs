@@ -56,8 +56,8 @@ test('scope reads stay workspace-scoped and reject empty result', async () => {
 
 test('change reads use a bounded ordered cursor and return sync status', async () => {
   const rows = [
-    { event_id: 'event_a', feed_seq: '1', recorded_at: '2026-10-12T10:00:00.000Z', event_kind: 'DRAFT_CREATED' },
-    { event_id: 'event_b', feed_seq: '2', recorded_at: '2026-10-12T10:01:00.000Z', event_kind: 'DRAFT_CHANGED' }
+    { workspace_id:'group_a', event_id: 'event_a', feed_seq: '1', recorded_at: '2026-10-12T10:00:00.000Z', event_kind: 'DRAFT_CREATED' },
+    { workspace_id:'group_a', event_id: 'event_b', feed_seq: '2', recorded_at: '2026-10-12T10:01:00.000Z', event_kind: 'DRAFT_CHANGED' }
   ];
   const db = fakeDb(rows);
   const repo = createPostgresLedgerRepository({ db });
@@ -71,4 +71,45 @@ test('change reads use a bounded ordered cursor and return sync status', async (
   assert.deepEqual(cursor,{feed_seq:'1',workspace_id:'group_a'});
   await assert.rejects(() => repo.getChanges(actor, { cursor: 'not-a-cursor' }), /TEAM_CURSOR_INVALID/);
   await assert.rejects(() => repo.getChanges(actor, { limit: 501 }), /TEAM_LIMIT_INVALID/);
+});
+
+test('change feed rejects cross-workspace, repeated, descending and malformed SQL rows before cursor ACK',async()=>{
+  const wrongs=[
+    [{workspace_id:'group_b',event_id:'alien',feed_seq:'1'}],
+    [{workspace_id:'group_a',event_id:'a',feed_seq:'1'},
+     {workspace_id:'group_a',event_id:'b',feed_seq:'1'}],
+    [{workspace_id:'group_a',event_id:'a',feed_seq:'2'},
+     {workspace_id:'group_a',event_id:'b',feed_seq:'1'}],
+    [{workspace_id:'group_a',event_id:'a',feed_seq:'not-numeric'}],
+    [{workspace_id:'group_a',event_id:'a',feed_seq:'9223372036854775808'}],
+    [null]
+  ];
+  for(const rows of wrongs){
+    let sqlCalls=0;
+    const db={async transaction(work){return work({
+      async query(sql) {
+        if(sql.includes('FROM kts_team.memberships'))return {rows:[{team_role:'operator'}]};
+        if(sql.includes('FROM kts_team.scope_events')){sqlCalls++;return {rows};}
+        return {rows:[]};
+      }
+    });}};
+    const repository=createPostgresLedgerRepository({db});
+    await assert.rejects(repository.getChanges(actor,{limit:2}),
+      /TEAM_FEED_RESPONSE_UNVERIFIED/);
+    assert.equal(sqlCalls,1);
+  }
+});
+test('change feed rejects an overfull SQL page even if every row is tenant-scoped',async()=>{
+  const rows=Array.from({length:4},(_,i)=>({
+    workspace_id:'group_a',event_id:'fake_'+i,feed_seq:String(i+1)
+  }));
+  const db={async transaction(work){return work({
+    async query(sql){
+      if(sql.includes('FROM kts_team.memberships'))return {rows:[{team_role:'operator'}]};
+      if(sql.includes('FROM kts_team.scope_events'))return {rows};
+      return {rows:[]};
+    }
+  });}};
+  const repo=createPostgresLedgerRepository({db});
+  await assert.rejects(repo.getChanges(actor,{limit:2}),/TEAM_DB_RESULT_INVALID/);
 });

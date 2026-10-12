@@ -7,9 +7,9 @@ const { createPostgresLedgerRepository, encodeCursor, decodeCursor } =
 const ACTOR={ server_verified:true, membership_active:true,
   workspace_id:'group_a', user_id:'reviewer_1', role:'viewer' };
 const events=[
-  { event_id:'e1', feed_seq:'1', recorded_at:'2026-10-12T01:00:03.000Z' },
-  { event_id:'e2', feed_seq:'2', recorded_at:'2026-10-12T01:00:02.000Z' },
-  { event_id:'e3', feed_seq:'3', recorded_at:'2026-10-12T01:00:01.000Z' }
+  { workspace_id:'group_a',event_id:'e1', feed_seq:'1', recorded_at:'2026-10-12T01:00:03.000Z' },
+  { workspace_id:'group_a',event_id:'e2', feed_seq:'2', recorded_at:'2026-10-12T01:00:02.000Z' },
+  { workspace_id:'group_a',event_id:'e3', feed_seq:'3', recorded_at:'2026-10-12T01:00:01.000Z' }
 ];
 
 function fakeDb({ revoked = false, role = 'viewer' } = {}){
