@@ -71,3 +71,21 @@ touch the live KTS Router/Telegram service. PostgreSQL stays 127.0.0.1:5433.
   money oracle and explicit operational owner sign-off are satisfied.
 - No changes to Router/Telegram, E:/F:, production database, release
   channels, or public GitHub private evidence. No paid infrastructure.
+
+## Synthetic Team UI shell — GitHub-only, not yet physically accepted
+
+An opt-in `app/settlement-team-pilot.html` now includes standalone Team
+login/workspace context, fixed synthetic-only DRAFT payload and fake_* partner
+validation, manual sync/reconnect, scope/change-feed readers, conflict/status
+display, and a `beforeunload` unsent-draft warning. Its CSP permits only
+same-origin API calls, scripts and styles. The legacy `settlement.html` does
+not initialize this UI, so current operators are unaffected.
+
+This is **source and Node UI-contract QA only**. It is NOT a running server,
+private TLS endpoint or completed real-browser test. The test-only HTTPS
+backend must separately serve the page, scripts and `/v1` API routes on one
+trusted origin. NEVER reuse the existing Tailscale Serve mapping to
+`127.0.0.1:8787`; that is an occupied operational service, not an available
+isolated pilot ingress. Before a physical two-device test, independently
+qualify client-side unload warnings and ensure no synthetic password/session
+can reach a non-TLS remote origin. Current draft persistence remains MEMORY_ONLY.
