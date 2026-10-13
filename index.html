@@ -463,7 +463,18 @@ function parseBetPayloadAst(rest){
 }
 
 function validateBetPayload(rest){
-  parseBetPayloadAst(rest); return true;
+  // The generated engine owns the money contract (half-unit precision and
+  // safe-integer range).  Validate every recognized stake before any PWA
+  // materialization so an invalid allocation is a normal atomic rejection,
+  // never an uncaught exception or a consumer-specific acceptance.
+  parseBetPayloadAst(rest);
+  for(const {amount} of KTS_BUSINESS_ENGINE.extractStakeOccurrences(rest)){
+    const parsed=KTS_BUSINESS_ENGINE.parseMoney(amount);
+    // Zero does not have a settled wager semantics in the corpus.  Hold it
+    // before processing rather than reporting success with no wager rows.
+    if(parsed.halfUnits===0) throw new Error("SỐ TIỀN 0 CẦN XÁC MINH NGHIỆP VỤ");
+  }
+  return true;
   const toks=rest.split(/\s+/).filter(Boolean);
   if(!toks.length) throw new Error("thiếu nội dung cược");
   let i=0;
