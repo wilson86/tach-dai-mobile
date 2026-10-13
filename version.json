@@ -1,6 +1,6 @@
 {
-  "version": "2.0.21",
-  "updated": "2026-10-05",
-  "notes": "Fail closed when the same betting selector is repeated for one number group without a new number group; e.g. 322 b5n b30n is rejected. Existing mixed selectors such as b + da remain valid; business engine 6ce6 unchanged.",
+  "version": "2.0.22",
+  "updated": "2026-10-13",
+  "notes": "Standalone Telegram separator lines are ignored while malformed mixed content fails closed; prior duplicate-selector protections remain active; business engine 6ce6 unchanged.",
   "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c"
 }

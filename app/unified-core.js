@@ -175,7 +175,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.5';
+  const UX_VERSION='1.0.6';
 
   function selectAllText(el){
     if(!el) return;
