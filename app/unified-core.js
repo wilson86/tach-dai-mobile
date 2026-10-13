@@ -128,14 +128,19 @@
     }
     return sections.join('\n\n');
   }
+  function isStandaloneSeparator(line){
+    // Same standalone-divider contract as both PWA modes and the Router bridge.
+    return /^[\-—–_/\\|]{3,}$/u.test(String(line||'').trim());
+  }
   function transformDaVongText(text,api,region,stations){
     requireApi(api);
-    const lines=String(text||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
-    if(!lines.length) return {ok:false,output:'',display_output:'',outputs:[],error:'DA_VONG_TEXT_REQUIRED',contract:CONTRACT};
+    const lines=String(text||'').split(/\r?\n/).map(x=>x.trim());
+    if(!lines.some(line=>line && !isStandaloneSeparator(line))) return {ok:false,output:'',display_output:'',outputs:[],error:'DA_VONG_TEXT_REQUIRED',contract:CONTRACT};
     const outputs=[], blocks=[];
     let pairLines=0;
     try{
       for(let i=0;i<lines.length;i++){
+        if(!lines[i] || isStandaloneSeparator(lines[i])) continue;
         try{
           const generated=expandDaVongLineDetailed(lines[i],api,region,stations);
           outputs.push(...generated.outputs);
