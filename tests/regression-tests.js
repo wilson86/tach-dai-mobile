@@ -338,6 +338,53 @@ rules.run();
 assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
 assert.match(ui.output.value, /trùng số 22/);
 
+  // PWA direct-UI regression: this path must never depend on Router bridge.
+  ui.region.value = "mn";
+  ui.date.value = "2026-10-13";
+  ui.today.checked = false;
+  const separatorMessage = "2d. 52. 852. B10n.\n--//-----//--\n3d. 43. 83.b 10n";
+  ui.input.value = separatorMessage;
+  rules.run();
+  const separatorOutput = ui.output.value;
+  assert.ok(separatorOutput.length > 0 && !separatorOutput.includes("PHÁT HIỆN TIN SAI"));
+  assert.ok(!separatorOutput.includes("--//-----//--"));
+  assert.deepEqual(Array.from(new Set(rules.getOutputRecords().map(r => r.sourceLine))), [1, 3]);
+
+  // A separator is not an output row and cannot change money allocation.
+  ui.input.value = "2d. 52. 852. B10n.\n3d. 43. 83.b 10n";
+  rules.run();
+  assert.equal(ui.output.value, separatorOutput);
+
+  // Blank physical lines retain their original source spans even in Ngang.
+  ui.input.value = "2d 52 b10n\n\n--//-----//--\n3d 43 b10n";
+  rules.run();
+  assert.deepEqual(Array.from(new Set(rules.getOutputRecords().map(r => r.sourceLine))), [1, 4]);
+
+  // An all-separator input is HOLD/EMPTY, not successful empty output.
+  ui.input.value = "----\n////\n————";
+  rules.run();
+  assert.equal(ui.output.value, "");
+  assert.equal(rules.getOutputRecords().length, 0);
+
+  // Any mixed or unrecognized text is still an atomic parser error.
+  ui.input.value = "2d 52 b10n\n--//oops//--";
+  rules.run();
+  assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
+  assert.match(ui.output.value, /Dòng 2:/);
+  assert.equal(rules.getOutputRecords().length, 0);
+
+  // CUT all preserves clipboard/undo contract and removes orphan separators.
+  ui.input.value = separatorMessage;
+  rules.run();
+  ui.output.selectionStart = 0;
+  ui.output.selectionEnd = ui.output.value.length;
+  await rules.cutSelectedOutput();
+  assert.equal(ui.input.value, "");
+  assert.equal(ui.output.value, "");
+  rules.triggerUndo();
+  assert.equal(ui.input.value, separatorMessage);
+  assert.equal(ui.output.value, separatorOutput);
+
 // Standalone controls must exist without relying on the Unified iframe injector.
 assert.match(html, /id="selectAllInputBtn"/);
 assert.match(html, /id="selectAllOutputBtn"/);
