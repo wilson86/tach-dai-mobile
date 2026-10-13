@@ -927,10 +927,15 @@ function processLine(line,region,stations){
   return out;
 }
 
+function isStandaloneSeparator(line){
+  // Match the Router bridge; separators are whole physical lines, never bet tokens.
+  return /^[\-—–_/\\|]{3,}$/u.test(String(line||"").trim());
+}
+
 function validateBatch(text,region,stations){
   const errors=[];
   text.split(/\r?\n/).forEach((raw,idx)=>{
-    raw=raw.trim(); if(!raw)return;
+    raw=raw.trim(); if(!raw || isStandaloneSeparator(raw))return;
     try{validateCheckOnlyLine(raw,region,stations);}
     catch(e){errors.push({line:idx+1,msg:e.message,raw});}
   });
@@ -977,7 +982,7 @@ function currentPlainInputLines(){
   // Chat log cần đi qua preprocess đầy đủ bằng run().
   const raw=inputEl.value;
   if(looksLikeChatLog(raw)) return null;
-  return raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  return raw.split(/\r?\n/).map(x=>x.trim());
 }
 
 function mapPureDeletion(oldLines,newLines){
@@ -1108,11 +1113,12 @@ function deleteCompletedSourceLines(){
   const oldLines=inputEl.value.split("\n");
   const kept=[];
   const oldToNew=new Map();
+  const wagerStillAlive=outputRecords.some(r=>r.alive && !completed.has(r.sourceLine));
   let newNo=0;
 
   oldLines.forEach((line,idx)=>{
     const oldNo=idx+1;
-    if(completed.has(oldNo)) return;
+    if(completed.has(oldNo) || (!wagerStillAlive && (!line.trim() || isStandaloneSeparator(line)))) return;
     kept.push(line);
     newNo++;
     oldToNew.set(oldNo,newNo);
@@ -1205,10 +1211,17 @@ function run(options={}){
     return;
   }
 
-  const lines=source.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const lines=source.split(/\r?\n/).map(x=>x.trim());
+  if(!lines.some(line=>line && !isStandaloneSeparator(line))){
+    outputEl.value="";
+    resetOutputRecords();
+    setStatus("Tin chỉ có dấu phân cách; không có dòng cược.","err");
+    return;
+  }
   lastSourceLines=lines.slice();
   outputRecords=[];
   lines.forEach((line,idx)=>{
+    if(!line || isStandaloneSeparator(line)) return;
     const generated=processLine(line,region,stations);
     generated.forEach(text=>outputRecords.push({
       sourceLine:idx+1,
