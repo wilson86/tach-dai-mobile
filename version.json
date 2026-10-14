@@ -1,6 +1,6 @@
 {
-  "version": "2.0.25",
-  "updated": "2026-10-14",
-  "notes": "Semantic checkbox grouping by validated number+selector clause, not physical line only; original source, money, DX/ĐX and fail-closed semantics preserved.",
+  "version": "2.0.26",
+  "updated": "2026-10-15",
+  "notes": "Cut succeeds only when remaining executable source regenerates exactly the surviving output; unreplayable partial derived rows fail closed without money or source drift.",
   "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb"
 }

@@ -271,36 +271,27 @@ const selectFirstVisibleOutput = () => {
   ui.output.selectionEnd = end === -1 ? ui.output.value.length : end;
 };
 
-// Cut 1/3: tin gốc vẫn còn nguyên.
+// A single derived DX row is not executable source. Refuse atomically.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstLines[0]);
 assert.equal(ui.input.value, initialInput);
-assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
-assert.equal(outputRecords().filter(record => record.alive).length, 5);
+assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
+assert.equal(outputRecords().filter(record => record.alive).length, 6);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
 
-// Cut 2/3: tin gốc vẫn còn nguyên.
-selectFirstVisibleOutput();
+// Selecting the full source-equivalent group is executable and removes only it.
+ui.output.selectionStart = 0;
+ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstLines[1]);
-assert.equal(ui.input.value, initialInput);
-assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
-assert.equal(outputRecords().filter(record => record.alive).length, 4);
-
-// Cut 3/3: source đầu mới bị xóa, source sau được remap.
-selectFirstVisibleOutput();
-await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstLines[2]);
 assert.equal(ui.input.value, "3d 64 51 dx 5n");
 assert.equal(ui.output.value, secondOutput);
 assert.equal(outputRecords().length, 3);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
 
-// Undo bước cut cuối phải khôi phục source, output và mapping trước CUT.
+// Undo restores the complete source/output bijection.
 rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
-assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
+assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
 
 // Cut toàn bộ 3 output và Undo phải quay về đầy đủ sáu output records.
@@ -315,15 +306,17 @@ assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
-// Nguồn có 2 output: CUT một phần vẫn giữ nguyên source.
+// A single station-derived DD row cannot be represented as a valid source;
+// refuse it, then permit a whole source-equivalent group cut.
 ui.input.value = "2d 22 10 dd 5n";
 rules.run();
 assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
 assert.equal(ui.input.value, "2d 22 10 dd 5n");
-assert.equal(ui.output.value, "qn 22 10 dd 5n");
-selectFirstVisibleOutput();
+assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
+ui.output.selectionStart = 0;
+ui.output.selectionEnd = ui.output.value.length;
 await rules.cutSelectedOutput();
 assert.equal(ui.input.value, "");
 assert.equal(ui.output.value, "");
