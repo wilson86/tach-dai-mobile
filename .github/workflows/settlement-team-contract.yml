@@ -88,6 +88,10 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-smoke.sql
       - name: Verify atomic draft idempotency, CAS and role denied
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-draft.sql
+      - name: Add disposable human-review state transitions (never production)
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/004_review_workflow.sql
+      - name: Prove distinct operator/reviewer durable workflow with audit
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-review-workflow.sql
       - name: Race 30 synthetic clients on one scope revision
         run: bash team-settlement/tests/concurrent-30.sh
       - name: Prove commit-order feed for two parallel scopes in same workspace
