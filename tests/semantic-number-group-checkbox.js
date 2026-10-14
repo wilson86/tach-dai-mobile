@@ -84,13 +84,18 @@ async function main(){
   assert.equal(rules.els.input.value,original,"undo restores exact dotted source");
   assert.equal(rules.els.output.value,baseline,"undo restores all group outputs");
   assert.equal(groups().length,2);
-  // A selected *single* row does not erase a group with other live output.
+  // A single child wager cannot disappear while its original source still
+  // reconstructs the FULL parent group. Reject the Cut rather than silently
+  // resurrecting money on rerun. Individual checkbox Copy remains supported.
   const firstRow=groups()[0].children[1].children[0];
   firstRow.checked=true;firstRow.events.change();
+  await rules.copyOutput();
+  assert.equal(clipboard.text,all[0].text);
   await rules.cutSelectedOutput();
-  assert.equal(rules.els.input.value,original,"partial child wager retains all original source clauses");
-  assert.equal(rules.els.output.value.split("\n").length,all.length-1);
-  rules.undo();
+  assert.equal(rules.els.input.value,original,"unsafe child Cut must preserve source");
+  assert.equal(rules.els.output.value,baseline,"unsafe child Cut must preserve result");
+  rules.run();
+  assert.equal(rules.els.output.value,baseline,"rerun after a refused Cut cannot change output");
   // Select all then full Cut clears both logical groups atomically.
   els.selectAllOutputBtn.events.click();
   assert.match(els.resultGroupsSummary.textContent,new RegExp(`Đã chọn ${all.length}/${all.length}`));
