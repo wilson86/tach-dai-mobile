@@ -1239,8 +1239,67 @@ function selectedAliveRecordIndexes(){
   return picked;
 }
 
+// If every output of a logical number-group has been cut, remove only that
+// number-group from the editable source **when** replay proves an exact
+// conservation match. Otherwise preserve the original full line (fail closed).
+// This never rewrites Telegram chat envelopes or station-specific text.
+function trimCompletedSemanticSourceGroups(){
+  if(looksLikeChatLog(inputEl.value)) return;
+  const rawLines=inputEl.value.split("\n");
+  const regions=resolveExplicitSourceRegion(inputEl.value);
+  if(regions.explicit) return;
+  const region=regionEl.value,stations=getSchedule(region,parseLocalDate(dateEl.value||localDateISO()));
+  let changed=false;
+  for(let lineIndex=0;lineIndex<rawLines.length;lineIndex++){
+    const sourceLine=lineIndex+1;
+    const lineRecords=outputRecords.filter(r=>r.sourceLine===sourceLine);
+    if(!lineRecords.length || lineRecords.some(r=>!r.sourceGroupNo||!r.sourceGroupText)) continue;
+    const original=normalizeInput(rawLines[lineIndex]);
+    const head=original.match(/^(2dphu|2d|3d|4d)\s+(.+)$/u);
+    if(!head)continue;
+    const originalClauses=splitNumberGroups(head[2]);
+    if(originalClauses.length<2)continue;
+    const groups=new Map();
+    for(const record of lineRecords){
+      if(!groups.has(record.sourceGroupNo))groups.set(record.sourceGroupNo,[]);
+      groups.get(record.sourceGroupNo).push(record);
+    }
+    if(groups.size!==originalClauses.length)continue;
+    if([...groups].some(([no,records])=>
+      no<1||no>originalClauses.length||
+      records.some(r=>r.sourceGroupText!==`${head[1]} ${originalClauses[no-1]}`)
+    ))continue;
+    const keep=[];
+    let removed=false;
+    for(let n=1;n<=originalClauses.length;n++){
+      const records=groups.get(n);
+      if(!records) {removed=false;break;}
+      if(records.every(r=>!r.alive))removed=true;
+      else keep.push(originalClauses[n-1]);
+    }
+    if(!removed||!keep.length)continue; // full-line deletion handled separately
+    const rewritten=`${head[1]} ${keep.join(" ")}`;
+    try{
+      validateCheckOnlyLine(rewritten,region,stations);
+      const expected=processLine(rewritten,region,stations);
+      const current=lineRecords.filter(r=>r.alive).map(r=>r.text);
+      if(expected.length!==current.length||expected.some((v,i)=>v!==current[i]))continue;
+    }catch(_){continue;}
+    rawLines[lineIndex]=rewritten;
+    lastSourceLines[lineIndex]=normalizeInput(rewritten);
+    outputRecords=outputRecords.filter(r=>r.sourceLine!==sourceLine||r.alive);
+    for(const record of outputRecords)if(record.sourceLine===sourceLine){
+      const newIndex=keep.indexOf(originalClauses[record.sourceGroupNo-1]);
+      if(newIndex>=0)record.sourceGroupNo=newIndex+1;
+    }
+    changed=true;
+  }
+  if(changed)inputEl.value=rawLines.join("\n");
+}
+
 function deleteCompletedSourceLines(){
   if(!outputRecords.length) return;
+  trimCompletedSemanticSourceGroups();
 
   const grouped=new Map();
   outputRecords.forEach(r=>{
