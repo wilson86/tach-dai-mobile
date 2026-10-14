@@ -6,7 +6,13 @@
 // Read-only, synthetic-only formatting. Nothing here authorizes a mutation.
 const ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const PARTNER=/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/;
-const DAY=/^\d{4}-\d{2}-\d{2}$/;
+function validBusinessDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  if (year < 1 || month < 1 || month > 12) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1];
+}
 const TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
 const MAX=9223372036854775807n;
 function positive(value){
@@ -24,7 +30,7 @@ function auditRows(items,workspace){
     if(x.event_kind!=='SUBMITTED'&&x.event_kind!=='REVIEWED')continue;
     const s=x.result_snapshot;
     if(x.workspace_id!==workspace||!ID.test(x.event_id)||!PARTNER.test(x.partner_id)||
-       !DAY.test(x.business_date)||!['mn','mt','mb'].includes(x.region)||
+       !validBusinessDate(x.business_date)||!['mn','mt','mb'].includes(x.region)||
        !positive(x.feed_seq)||!positive(x.scope_revision)||
        !ID.test(x.actor_user_id)||
        typeof x.recorded_at!=='string'||!TIME.test(x.recorded_at)||

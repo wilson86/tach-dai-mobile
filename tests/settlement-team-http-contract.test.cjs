@@ -118,3 +118,22 @@ test('read-only team scope route is session-scoped and rejects revoked/cross-wor
     assert.equal((await request(server,{method:'GET',path,token:viewer.session_token})).status,401);
   } finally {await new Promise(resolve=>server.close(resolve));}
 });
+
+test('read-only GET rejects impossible calendar dates before ledger invocation',async()=>{
+ const calls=[];
+ const {server,token}=await setup({getScope:async(_session,scope)=>{
+   calls.push(scope);return {...scope,state:'DRAFT',revision:0};
+ }});
+ try{
+   for(const date of ['2026-02-29','2026-04-31','0000-01-01','2026-13-01']){
+     const x=await request(server,{method:'GET',path:'/v1/scopes/fake_partner_1/'+date+'/mn',token});
+     assert.equal(x.status,422,date);
+     assert.equal(JSON.parse(x.body).error,'TEAM_SCOPE_INVALID');
+   }
+   assert.equal(calls.length,0);
+   const accepted=await request(server,{method:'GET',path:'/v1/scopes/fake_partner_1/2028-02-29/mn',token});
+   assert.equal(accepted.status,200);
+   assert.equal(calls.length,1);
+   assert.equal(calls[0].business_date,'2028-02-29');
+ }finally{await new Promise(resolve=>server.close(resolve));}
+});

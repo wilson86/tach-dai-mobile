@@ -7,6 +7,7 @@
 
 const http = require('node:http');
 const { URL } = require('node:url');
+const { validDate } = require('./core-contract.cjs');
 
 const DEFAULT_MAX_BODY_BYTES = 16 * 1024;
 const DEFAULT_LOGIN_ATTEMPT_LIMIT = 5;
@@ -257,7 +258,7 @@ function createAuthHttpServer(auth, {
         const parts = req.url.split('/');
         if (parts.length !== 6 || parts[1] !== 'v1' || parts[2] !== 'scopes' ||
             !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(parts[3]) ||
-            !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(parts[4]) ||
+            !validDate(parts[4]) ||
             !['mn','mt','mb'].includes(parts[5]))
           return json(res, 422, { error: 'TEAM_SCOPE_INVALID' });
         try {

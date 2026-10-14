@@ -52,3 +52,11 @@ test('review audit preserves 64-bit SQL revision exactly for read-only evidence'
  row.scope_revision='9223372036854775808';
  assert.throws(()=>Audit.auditRows([row],'group_a'),/SYNC_REVIEW_AUDIT_UNVERIFIED/);
 });
+
+test('review audit rejects impossible business dates and accepts Gregorian leap day',()=>{
+ for(const business_date of ['2026-02-29','2026-04-31','2026-00-15','0000-01-01'])
+   assert.throws(()=>Audit.auditRows([{...sample(),business_date}],'group_a'),
+     /SYNC_REVIEW_AUDIT_UNVERIFIED/);
+ const observed=Audit.auditRows([{...sample(),business_date:'2028-02-29'}],'group_a');
+ assert.equal(observed[0].business_date,'2028-02-29');
+});
