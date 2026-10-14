@@ -79,7 +79,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.27</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.28</span></div>
 
   <div class="card">
     <div class="controls">
@@ -172,6 +172,7 @@ let lastOutputSelection={start:0,end:0};
 // explicit local-only exact-output ledger rather than inventing a source that
 // would be parsed with different money semantics on the next Run.
 const EXACT_OUTPUT_LEDGER_PREFIX="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n";
+const EXACT_OUTPUT_LEDGER_STORAGE_KEY="KTS_EXACT_OUTPUT_LEDGER_V1";
 let workingLedger=null;
 function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
 function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
@@ -194,6 +195,20 @@ function parseExactOutputLedger(raw){
       !ledger.rows.every(r=>typeof r.id==="string"&&typeof r.text==="string"&&Number.isInteger(r.sourceLine)))return false;
     return ledger;
   }catch(_){return false;}
+}
+function persistExactOutputLedger(){
+  try{
+    if(inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) localStorage.setItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY,inputEl.value);
+    else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
+  }catch(_){}
+}
+function restorePersistedExactOutputLedger(){
+  try{
+    const raw=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY)||"";
+    if(!raw)return;
+    if(parseExactOutputLedger(raw)) inputEl.value=raw;
+    else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
+  }catch(_){}
 }
 function announceWorkingSource(){
   // Same-origin Unified listens to this local event; no postMessage or polling
@@ -265,6 +280,7 @@ function loadSettings(){
     if(typeof s.today==="boolean") todayEl.checked=s.today;
     if(s.date) dateEl.value=s.date;
   }catch(_){}
+  restorePersistedExactOutputLedger();
   updateUI();
 }
 
@@ -1234,6 +1250,7 @@ function scheduleFullInputSync(){
 }
 
 function syncAfterAnyInputEdit(){
+  if(!inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) persistExactOutputLedger();
   // Fast path: xóa nguyên dòng/tin -> KQ đổi ngay, không cần debounce.
   if(syncPureInputDeletionNow()) return;
 
@@ -1461,6 +1478,7 @@ async function cutSelectedOutput(){
   }
   checkedResultRecordIndexes.clear();
   renderOutputRecords();
+  persistExactOutputLedger();
   announceWorkingSource();
 
   lastOutputSelection={start:0,end:0};
@@ -1608,6 +1626,7 @@ $("undoBtn").addEventListener("click",()=>{
   statusEl.className=s.cls;
   resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
   renderGroupedResults();
+  persistExactOutputLedger();
   announceWorkingSource();
 });
 regionEl.addEventListener("change",updateUI);
@@ -1631,7 +1650,7 @@ initGroupedResults();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.27";
+const APP_VERSION = "2.0.28";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
