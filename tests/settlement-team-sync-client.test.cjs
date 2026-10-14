@@ -944,3 +944,63 @@ test('leap-day scope passes calendar preflight without silently normalizing the 
  assert.match(url,/2028-02-29/);
  assert.equal(client.queueDraft(scope,{synthetic:true}).status,'PENDING');
 });
+
+test('reconnect cannot send newly queued draft from another account after suspended write',async()=>{
+ let completeFirstDraft=null;
+ const requests=[];
+ const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+   requests.push({url,auth:options.headers.authorization});
+   if(url.includes('/v1/changes'))return response(200,{
+     items:[],next_cursor:null,sync_status:'SYNCED',has_more:false
+   });
+   if(url.includes('/v1/scopes/drafts'))
+     return new Promise(resolve=>{completeFirstDraft=resolve;});
+   throw Error('UNEXPECTED_REQUEST');
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const scopeA={workspace_id:'group_a',partner_id:'fake_a',business_date:'2026-10-14',region:'mn'};
+ client.queueDraft(scopeA,{synthetic:true});
+ const started=client.reconnect();
+ for(let i=0;i<12&&!completeFirstDraft;i++)await Promise.resolve();
+ assert.equal(typeof completeFirstDraft,'function');
+ assert.equal(requests.filter(x=>x.url.includes('/v1/scopes/drafts')).length,1);
+ client.setSessionToken('b'.repeat(43),'group_b',{discardPending:true});
+ const scopeB={...scopeA,workspace_id:'group_b',partner_id:'fake_b'};
+ const newDraft=client.queueDraft(scopeB,{synthetic:true});
+ completeFirstDraft(response(503,{error:'synthetic-disconnect'}));
+ const result=await started;
+ assert.equal(result.pull.status,'BLOCKED');
+ assert.equal(result.pull.error,'SYNC_SESSION_CHANGED');
+ assert.equal(result.drafts.length,0);
+ assert.equal(requests.filter(x=>x.url.includes('/v1/scopes/drafts')).length,1);
+ assert.equal(client.snapshot().workspace_id,'group_b');
+ assert.equal(client.snapshot().drafts[0].id,newDraft.id);
+ assert.equal(client.snapshot().drafts[0].status,'PENDING');
+});
+
+test('reconnect snapshots pending draft IDs and never sends drafts queued mid-poll',async()=>{
+ let resolvePoll=null;
+ const seen=[];
+ const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+   seen.push({url,body:options.body});
+   if(url.includes('/v1/changes'))return new Promise(resolve=>{resolvePoll=resolve;});
+   if(url.includes('/v1/scopes/drafts'))return response(503,{});
+   throw Error('UNEXPECTED_REQUEST');
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const scope={workspace_id:'group_a',partner_id:'fake_a',business_date:'2026-10-14',region:'mn'};
+ const first=client.queueDraft(scope,{synthetic:true});
+ const reconnecting=client.reconnect();
+ assert.equal(typeof resolvePoll,'function');
+ const later=client.queueDraft(scope,{synthetic:true});
+ resolvePoll(response(200,{items:[],next_cursor:null,sync_status:'SYNCED',has_more:false}));
+ const observed=await reconnecting;
+ assert.equal(observed.pull.status,'SYNCED');
+ assert.equal(observed.drafts.length,1);
+ assert.equal(observed.drafts[0].id,first.id);
+ assert.equal(later.status,'PENDING');
+ const sent=seen.filter(x=>x.url.includes('/v1/scopes/drafts'));
+ assert.equal(sent.length,1);
+ assert.equal(JSON.parse(sent[0].body).idempotency_key,first.id);
+ assert.equal(client.snapshot().drafts.find(x=>x.id===later.id).status,'PENDING');
+});

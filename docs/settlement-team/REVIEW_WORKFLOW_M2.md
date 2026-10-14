@@ -255,3 +255,15 @@ could normalize invalid days. The reviewer audit display now identifies the
 actual reviewer separately from the original submitter and displays the
 server-supplied exact decimal feed sequence; this is presentation-only and
 does not convert financial values or authorize real-money review.
+
+## Session-pinned reconnect after async network pauses
+
+`reconnect()` captures the authenticated session epoch and exact pending
+draft IDs **before** beginning its change-feed request. Any intervening
+account/workspace/session change cancels the old reconnect result; it may
+never continue using a live `Map` iterator to submit new user's drafts.
+Even within one session, drafts created during an outstanding reconnect are
+not sent implicitly in that reconnect attempt. Intent IDs and idempotency
+keys are unchanged. This race guard does not create durable offline queues,
+and remote write uncertainty is still PENDING until an original receipt is
+verified on deliberate retry.

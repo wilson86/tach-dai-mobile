@@ -456,11 +456,27 @@
     }
 
     async function reconnect() {
+      // A reconnect started by user A must NEVER start writes for user B
+      // after an async network await and a session/workspace switch.
+      // Freeze the originally pending intents; Map's live iterator could
+      // otherwise pick up new drafts created in a later session.
+      const epoch = sessionEpoch;
+      const retryIds = Array.from(pending.values())
+        .filter(item => item.status === STATUS.PENDING).map(item => item.id);
+      const sessionChanged = () => ({
+        pull: { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] },
+        drafts: []
+      });
       const pulled = await pullChanges();
+      if (epoch !== sessionEpoch) return sessionChanged();
       if (pulled.status === STATUS.BLOCKED) return { pull: pulled, drafts: [] };
       const drafts = [];
-      for (const item of pending.values()) {
-        if (item.status === STATUS.PENDING) drafts.push(await syncDraft(item.id));
+      for (const id of retryIds) {
+        if (epoch !== sessionEpoch) return sessionChanged();
+        const item = pending.get(id);
+        if (item && item.status === STATUS.PENDING)
+          drafts.push(await syncDraft(id));
+        if (epoch !== sessionEpoch) return sessionChanged();
       }
       return { pull: pulled, drafts };
     }
