@@ -50,3 +50,15 @@ event ID, and accepts only a full verified receipt with expected review state.
 The composition flag defaults **OFF**. There is deliberately NO HTTP review
 mutation endpoint, no UI approval button, no production privilege grant, and
 no route that finalizes money. Synthetic contract tests are not live deployment.
+
+## Opt-in synthetic HTTP review-only route
+
+`POST /v1/scopes/review` is **404 disabled by default**. An isolated
+`createIsolatedTeamPrototype({syntheticOnly:true,syntheticReviewEnabled:true})`
+may opt in to the review-only route; all outgoing requests still need an
+authenticated session, explicit action, scope, expected revision, and
+idempotency key. The service derives the trusted actor and digest and the
+SQL layer rechecks membership/CAS/separation of duties under tenant RLS.
+This route *cannot close* or *reopen* a scope, calculate money, or mutate the
+operational Router. No UI button was added. This is a test-only internal
+API, not production readiness, and only disposable localhost CI may expose it.

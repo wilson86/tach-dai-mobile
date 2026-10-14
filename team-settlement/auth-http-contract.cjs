@@ -72,7 +72,8 @@ function createAuthHttpServer(auth, {
   maxLoginKeys = DEFAULT_MAX_LOGIN_KEYS,
   maxLoginSourceAttempts = DEFAULT_MAX_LOGIN_SOURCE_ATTEMPTS,
   clock = () => Date.now(),
-  ledger = null
+  ledger = null,
+  enableSyntheticReviewHttp = false
 } = {}) {
   if (!auth || typeof auth.login !== 'function' || typeof auth.verifySession !== 'function' ||
       typeof auth.revokeSession !== 'function' || typeof auth.manageMembership !== 'function' ||
@@ -82,7 +83,8 @@ function createAuthHttpServer(auth, {
       !Number.isSafeInteger(maxLoginKeys) || maxLoginKeys < 1 || maxLoginKeys > 100000 ||
       !Number.isSafeInteger(maxLoginSourceAttempts) || maxLoginSourceAttempts < 1 ||
       maxLoginSourceAttempts > 100000 ||
-      typeof clock !== 'function' ||
+      typeof clock !== 'function' || typeof enableSyntheticReviewHttp !== 'boolean' ||
+      (enableSyntheticReviewHttp && (!ledger || typeof ledger.advanceReview !== 'function')) ||
       (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' &&
         typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function'))))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
@@ -209,6 +211,40 @@ function createAuthHttpServer(auth, {
           if (error.message === 'AUTH_SESSION_INVALID' || error.message === 'AUTH_SESSION_REVOKED')
             return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
           return json(res, 400, { error: error.message === 'AUTH_SELF_DISABLE_DENIED' ? error.message : 'AUTH_IDENTITY_INVALID' });
+        }
+      }
+
+      // Explicit opt-in on isolated synthetic-only server composition.
+      // This route does NOT close accounts or calculate actual money.
+      if (req.url === '/v1/scopes/review' && req.method === 'POST') {
+        if (!enableSyntheticReviewHttp || !ledger || typeof ledger.advanceReview!=='function')
+          return json(res,404,{error:'TEAM_ROUTE_NOT_ENABLED'});
+        const token=bearer(req);
+        if(!token)return json(res,401,{error:'AUTH_SESSION_INVALID'});
+        let input;
+        try{input=await readJson(req,maxBodyBytes);}
+        catch(error){
+          if(error.code==='AUTH_BODY_TOO_LARGE')return json(res,413,{error:error.code});
+          return json(res,400,{error:'AUTH_JSON_INVALID'});
+        }
+        try{
+          return json(res,200,await ledger.advanceReview(token,input));
+        }catch(error){
+          const code=error&&error.message;
+          if(code==='AUTH_SESSION_INVALID'||code==='AUTH_SESSION_REVOKED')
+            return json(res,401,{error:'AUTH_SESSION_INVALID'});
+          if(['TEAM_ROLE_DENIED','TEAM_WORKSPACE_DENIED','TEAM_ACTOR_UNVERIFIED',
+              'TEAM_SEPARATION_OF_DUTIES'].includes(code))
+            return json(res,403,{error:code});
+          if(['TEAM_REVISION_CONFLICT','TEAM_IDEMPOTENCY_CONFLICT',
+              'TEAM_IDEMPOTENCY_CONTEXT_MISMATCH','TEAM_SUBMIT_REQUIRES_DRAFT',
+              'TEAM_APPROVE_REQUIRES_PENDING','TEAM_TRANSITION_DENIED'].includes(code))
+            return json(res,409,{error:code,sync_status:'CONFLICT',resolution:'MANUAL_REVIEW'});
+          if(['TEAM_SCOPE_INVALID','TEAM_INTENT_INVALID','TEAM_REVIEW_REQUEST_INVALID',
+              'TEAM_REVIEW_ACTION_FORBIDDEN','TEAM_REVISION_INVALID',
+              'TEAM_IDEMPOTENCY_KEY_REQUIRED'].includes(code))
+            return json(res,422,{error:code});
+          return json(res,503,{error:'TEAM_REVIEW_NOT_VERIFIED'});
         }
       }
       // Read-only scope endpoint. Browser-supplied workspace IDs are ignored;

@@ -24,7 +24,9 @@ function createIsolatedTeamPrototype({
   const auth=createPostgresAuthService({db:authDb,clock});
   const ledgerRepository=createPostgresLedgerRepository({db:ledgerDb});
   const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled});
-  const server=createAuthHttpServer(auth,{ledger,clock});
+  const server=createAuthHttpServer(auth,{
+    ledger,clock,enableSyntheticReviewHttp:syntheticReviewEnabled
+  });
   // The caller controls when/how to listen. This candidate must NEVER
   // automatically expose a port or initialize an operational database.
   return Object.freeze({auth,ledgerRepository,ledger,server,
