@@ -27,7 +27,7 @@ test('PWA client keeps bearer token in memory and syncs a queued draft', async (
   const saved = storage(); const calls = [];
   const client = Sync.createSyncClient({ storage: saved, fetchImpl: async (url, options) => {
     calls.push({ url, options });
-    if (url.includes('/v1/scopes/drafts')) return response(200, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, sync_status: 'SYNCED' });
+    if (url.includes('/v1/scopes/drafts')) return response(200, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, scope_key: 'group_a:counterparty_1:2026-10-12:mn', sync_status: 'SYNCED' });
     return response(200, { items: [{event_id: 'event_feed_1'}], next_cursor: 'cursor_1', sync_status: 'SYNCED' });
   }});
   client.setSessionToken('x'.repeat(43));
@@ -90,7 +90,7 @@ test('login sends credentials once, keeps the returned bearer in memory, and log
 });
 
 test('subscription exposes state transitions for a UI without exposing credentials', async () => {
-  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', replayed: false, new_revision: 1, feed_seq: 1, sync_status: 'SYNCED' }) });
+  const client = Sync.createSyncClient({ storage: storage(), fetchImpl: async () => response(200, { event_id: 'e1', replayed: false, new_revision: 1, feed_seq: 1, scope_key: 'group_a:counterparty_1:2026-10-12:mn', sync_status: 'SYNCED' }) });
   const states = [];
   const unsubscribe = client.subscribe(state => states.push(state));
   client.setSessionToken('s'.repeat(43));
@@ -314,7 +314,7 @@ test('unsynced financial drafts cannot silently disappear on logout or account s
 test('successful synced draft may log out without unsent-data prompt',async()=>{
   const client=Sync.createSyncClient({fetchImpl:async url=>
     url.endsWith('/v1/logout')?response(204,{}):
-      response(200,{event_id:'event_1',replayed:false,new_revision:1,feed_seq:1,sync_status:'SYNCED'})});
+      response(200,{event_id:'event_1',replayed:false,new_revision:1,feed_seq:1,scope_key:'group_a:counterparty_1:2026-10-12:mn',sync_status:'SYNCED'})});
   client.setSessionToken('a'.repeat(43),'group_a');
   const draft=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
     business_date:'2026-10-12',region:'mn'}, {synthetic:true});
@@ -337,7 +337,7 @@ test('replayed HTTP acknowledgement without original server revision cannot mark
 
 test('replayed HTTP acknowledgement with exact original revision may mark draft SYNCED',async()=>{
   const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{
-    event_id:'previous_synthetic_event',replayed:true,new_revision:1,feed_seq:1,sync_status:'SYNCED'
+    event_id:'previous_synthetic_event',replayed:true,new_revision:1,feed_seq:1,scope_key:'group_a:counterparty_1:2026-10-12:mn',sync_status:'SYNCED'
   })});
   client.setSessionToken('x'.repeat(43),'group_a');
   const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
@@ -410,7 +410,7 @@ test('concurrent submits of one financial draft issue only one request and prese
   assert.equal(client.snapshot().drafts[0].status,'PENDING');
   finish(response(200,{
     event_id:'event_persisted',replayed:false,new_revision:1,
-    feed_seq:1,sync_status:'SYNCED'
+    feed_seq:1,scope_key:'group_a:counterparty_1:2026-10-12:mn',sync_status:'SYNCED'
   }));
   const committed=await first;
   assert.equal(committed.status,'SYNCED');
@@ -423,7 +423,7 @@ test('failed draft request releases its flight slot so a later explicit retry ca
     calls++;
     if(calls===1)throw Object.assign(Error('offline'),{code:'NETWORK_DOWN'});
     return response(200,{event_id:'event_saved',replayed:false,new_revision:1,
-      feed_seq:1,sync_status:'SYNCED'});
+      feed_seq:1,scope_key:'group_a:counterparty_1:2026-10-12:mn',sync_status:'SYNCED'});
   }});
   client.setSessionToken('a'.repeat(43),'group_a');
   const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
@@ -438,7 +438,7 @@ test('snapshot explicitly warns that pending financial drafts are volatile acros
   const fetchImpl=async(url)=>{
     if(!online)throw Object.assign(new Error('synthetic offline'),{code:'NETWORK_DOWN'});
     return response(200,{event_id:'event_durable_1',replayed:false,
-      new_revision:1,feed_seq:1,sync_status:'SYNCED'});
+      new_revision:1,feed_seq:1,scope_key:'group_a:fake_partner:2026-10-12:mn',sync_status:'SYNCED'});
   };
   const first=Sync.createSyncClient({storage:saved,fetchImpl});
   first.setSessionToken('t'.repeat(43),'group_a');
@@ -734,4 +734,29 @@ test('readScope blocks noncanonical or unsafe revision values before showing rev
    assert.equal(outcome.status,'BLOCKED',String(revision));
    assert.equal(outcome.error,'SYNC_SCOPE_UNVERIFIED');
  }
+});
+
+test('a synthetic draft needs an exact server scope receipt, not a different event or HTTP 200',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ const good={sync_status:'SYNCED',event_id:'server_event',replayed:false,new_revision:1,
+   feed_seq:1,scope_key:'group_a:fake_partner_1:2026-10-14:mn'};
+ for(const candidate of [
+   {...good,scope_key:undefined},
+   {...good,scope_key:'group_b:fake_partner_1:2026-10-14:mn'},
+   {...good,scope_key:'group_a:fake_other:2026-10-14:mn'},
+   {...good,scope_key:'group_a:fake_partner_1:2026-10-13:mn'},
+   {...good,scope_key:'group_a:fake_partner_1:2026-10-14:mt'}
+ ]){
+   const client=Sync.createSyncClient({fetchImpl:async()=>response(200,candidate)});
+   client.setSessionToken('a'.repeat(43),'group_a');
+   const draft=client.queueDraft(scope,{synthetic:true});
+   const result=await client.syncDraft(draft.id);
+   assert.equal(result.status,'BLOCKED');
+   assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
+   assert.equal(client.snapshot().drafts[0].server_result,undefined);
+ }
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,good)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const draft=client.queueDraft(scope,{synthetic:true});
+ assert.equal((await client.syncDraft(draft.id)).status,'SYNCED');
 });

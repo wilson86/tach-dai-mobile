@@ -243,8 +243,12 @@
         if (result.response.status === 409) return setStatus(item, STATUS.CONFLICT, result.body.error || 'TEAM_REVISION_CONFLICT');
         if (result.response.status === 401) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_INVALID');
         if (!result.response.ok) return setStatus(item, STATUS.BLOCKED, result.body.error || 'SYNC_SERVER_REJECTED');
+        // A receipt for another scope must never mark this draft as committed.
+        const scopeKey = [item.scope.workspace_id,item.scope.partner_id,
+          item.scope.business_date,item.scope.region].join(':');
         // HTTP 200 alone does not prove a financial draft reached the ledger.
         if (result.body.sync_status !== STATUS.SYNCED ||
+            result.body.scope_key !== scopeKey ||
             typeof result.body.event_id !== 'string' ||
             !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.body.event_id) ||
             typeof result.body.replayed !== 'boolean' ||

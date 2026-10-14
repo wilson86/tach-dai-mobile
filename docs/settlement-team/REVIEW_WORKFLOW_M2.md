@@ -142,3 +142,13 @@ audit formatter keeps valid PostgreSQL signed-bigint revisions as exact
 **decimal text**, never a lossy JavaScript Number. These are client-side
 fail-closed checks, not a replacement for server RLS/CAS, a financial oracle,
 or a complete durable audit archive.
+
+## Draft acknowledgement must match original scope
+
+`syncDraft()` does not call a fake DRAFT `SYNCED` for an arbitrary HTTP 200,
+even with a plausible event ID, feed sequence and revision: the reply's
+server-authored `scope_key` must match the original workspace, partner, date
+and region exactly. Missing/foreign receipts are `SYNC_ACK_UNVERIFIED` and
+do not satisfy the operator's saved-draft claim. The authenticated server
+still owns tenant membership, CAS and idempotency; this browser check is an
+additional fail-closed presentation guard, not a financial approval.
