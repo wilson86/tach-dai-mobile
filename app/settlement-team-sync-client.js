@@ -175,9 +175,11 @@
 
     async function login(authSubject, password, workspaceId) {
       if (logoutInFlight) throw new Error('SYNC_LOGOUT_IN_FLIGHT');
-      if (sessionToken) throw new Error('SYNC_ACTIVE_SESSION_LOGOUT_REQUIRED');
       if (loginInFlight) throw new Error('SYNC_LOGIN_IN_FLIGHT');
+      // Report at-risk unsent data before the general active-account guard,
+      // so the operator gets the actionable loss-prevention reason.
       if (hasUnsyncedDrafts()) throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
+      if (sessionToken) throw new Error('SYNC_ACTIVE_SESSION_LOGOUT_REQUIRED');
       if (typeof authSubject !== 'string' || !authSubject || typeof password !== 'string' ||
           !password || typeof workspaceId !== 'string' || !workspaceId)
         throw new Error('SYNC_LOGIN_INVALID');
