@@ -5,6 +5,7 @@ on:
       - 'team-settlement/**'
       - 'app/settlement-team-sync-client.js'
       - 'app/settlement-team-recovery-v0.js'
+      - 'app/settlement-team-recovery-idb-v0.js'
       - 'app/settlement-team-review-audit.js'
       - 'app/settlement-team-pilot*'
       - 'docs/settlement-team/**'

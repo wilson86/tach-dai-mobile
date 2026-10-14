@@ -197,3 +197,24 @@ same bytes at that instant: it is NOT independent proof of fsync, power-loss
 durability, IndexedDB eviction policy or receipt reconciliation. This
 remains a separate **DEFAULT-OFF synthetic Node contract**, with no mobile
 UI activation or real customer data.
+
+## Browser IndexedDB encrypted store candidate — DEFAULT OFF, NOT PHYSICAL QA
+
+New isolated `app/settlement-team-recovery-idb-v0.js` is an opt-in browser
+candidate for a single synthetic encrypted vault slot. It is **not imported
+by the pilot HTML, start script, PWA sync client or server**. The adapter
+requires explicit `syntheticOnly:true`, an injected IndexedDB factory,
+and `isSecureContext===true`. All read/write input is authenticated AES-GCM
+envelope JSON, never a cleartext draft or token. It uses one IndexedDB
+transaction per operation and `objectStore.add` rather than `put`; only
+transaction completion acknowledges success. A duplicate key returns false;
+quota failure, transaction abort, blocked schema upgrade and malformed
+stored data fail closed. The adapter never deletes old/corrupt evidence.
+
+Seven Node synthetic contract tests use a controlled fake IndexedDB API for
+atomic add, repeated open, duplicate race, quota abort, wrong/unsafe slot,
+invalid ciphertext and default-off static browser wiring. **This fake is
+not an actual IndexedDB browser runtime**. Real device reload, app
+termination, storage eviction, quota policy, browser shutdown/power loss,
+authentication and secret management still require separately approved
+physical/browser QA. No real phone storage or operational money is accessed.
