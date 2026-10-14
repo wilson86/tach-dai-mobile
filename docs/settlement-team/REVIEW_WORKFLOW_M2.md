@@ -37,3 +37,16 @@ and absence of CLOSED scopes. Future steps need a reviewed repository API,
 authenticated HTTP route, UI human decision capture, persisted request audit
 and operator-controlled account provisioning, followed by backup/restore and
 independent financial oracle qualification.
+
+## Default-off internal Node review seam
+
+`postgres-ledger-repository.cjs` delegates `advanceReview()` to the
+parameterized PostgreSQL function inside a verified tenant/actor transaction.
+`server-ledger-api.cjs` exposes an *internal* service method only when
+`syntheticReviewEnabled:true` is explicitly injected: it derives the actor
+from durable login, accepts only `submit_review` or `approve_review`,
+checks role and workspace, uses a server-generated canonical digest and
+event ID, and accepts only a full verified receipt with expected review state.
+The composition flag defaults **OFF**. There is deliberately NO HTTP review
+mutation endpoint, no UI approval button, no production privilege grant, and
+no route that finalizes money. Synthetic contract tests are not live deployment.

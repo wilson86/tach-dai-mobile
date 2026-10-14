@@ -37,10 +37,14 @@ function digest(value) {
   return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 
-function createServerLedgerApi({ auth, repository, eventId = () => `event_${crypto.randomBytes(12).toString('hex')}` } = {}) {
+function createServerLedgerApi({
+  auth, repository, eventId = () => `event_${crypto.randomBytes(12).toString('hex')}`,
+  syntheticReviewEnabled=false
+} = {}) {
   if (!auth || typeof auth.verifySession !== 'function' || !repository ||
       typeof repository.appendDraft !== 'function' || typeof repository.getScope !== 'function' ||
-      typeof eventId !== 'function') throw new Error('TEAM_SERVER_API_CONFIG_INVALID');
+      (typeof eventId !== 'function' || typeof syntheticReviewEnabled !== 'boolean'))
+    throw new Error('TEAM_SERVER_API_CONFIG_INVALID');
 
   async function actor(sessionToken) {
     const trusted = await auth.verifySession(sessionToken);
@@ -70,6 +74,35 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
     return Object.freeze({ ...verified, scope_key: C.scopeKey(scope), sync_status: 'SYNCED' });
   }
 
+
+  // Default-off internal synthetic service; NO HTTP review endpoint or UI button.
+  async function advanceReview(sessionToken,input) {
+    if(!syntheticReviewEnabled)throw Error('TEAM_ROUTE_NOT_ENABLED');
+    const trustedActor=await actor(sessionToken);
+    if(typeof repository.advanceReview!=='function')throw Error('TEAM_ROUTE_NOT_ENABLED');
+    if(!input||typeof input!=='object'||Array.isArray(input))throw Error('TEAM_INTENT_INVALID');
+    if(Object.keys(input).some(k=>!['action','scope','expected_revision','idempotency_key'].includes(k)))
+      throw Error('TEAM_REVIEW_REQUEST_INVALID');
+    const {action,expected_revision,idempotency_key}=input;
+    if(!['submit_review','approve_review'].includes(action))throw Error('TEAM_REVIEW_ACTION_FORBIDDEN');
+    const scope=C.requireScope(input.scope);
+    if(scope.workspace_id!==trustedActor.workspace_id)throw Error('TEAM_WORKSPACE_DENIED');
+    C.authorize(trustedActor,action,scope);
+    if(!Number.isSafeInteger(expected_revision)||expected_revision<0||!Number.isSafeInteger(expected_revision+1))
+      throw Error('TEAM_REVISION_INVALID');
+    if(typeof idempotency_key!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(idempotency_key))
+      throw Error('TEAM_IDEMPOTENCY_KEY_REQUIRED');
+    const request_sha256=digest({action,scope,expected_revision});
+    const proposedEventId=eventId();
+    const result=await repository.advanceReview(trustedActor,{scope,action,expected_revision,
+      idempotency_key,request_sha256,event_id:proposedEventId});
+    const verified=requireVerifiedDraftReceipt(result,proposedEventId,expected_revision);
+    const requiredState=action==='submit_review'?'PENDING_REVIEW':'REVIEWED';
+    if(verified.state!==requiredState)throw Error('TEAM_REVIEW_RECEIPT_UNVERIFIED');
+    return Object.freeze({...verified,scope_key:C.scopeKey(scope),
+      sync_status:'SYNCED',review_state:requiredState});
+  }
+
   async function getScope(sessionToken, scope) {
     const trustedActor = await actor(sessionToken);
     const checked = C.requireScope(scope);
@@ -93,7 +126,7 @@ function createServerLedgerApi({ auth, repository, eventId = () => `event_${cryp
     return repository.getChanges(trustedActor, options);
   }
 
-  return Object.freeze({ appendDraft, getScope, getChanges });
+  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges });
 }
 
 module.exports = Object.freeze({ digest, createServerLedgerApi });

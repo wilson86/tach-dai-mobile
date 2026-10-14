@@ -10,18 +10,20 @@ const {createAuthHttpServer}=require('./auth-http-contract.cjs');
 const {qualifyIsolatedPoolRoles}=require('./role-probe.cjs');
 
 function createIsolatedTeamPrototype({
-  authPool, ledgerPool, clock=()=>Date.now(), syntheticOnly=false
+  authPool, ledgerPool, clock=()=>Date.now(), syntheticOnly=false,
+  syntheticReviewEnabled=false
 }={}){
   if(syntheticOnly!==true)throw new Error('TEAM_RELEASE_NOT_AUTHORIZED');
   if(!authPool || !ledgerPool || authPool===ledgerPool ||
      typeof authPool.connect!=='function' || typeof ledgerPool.connect!=='function')
     throw new Error('TEAM_DB_ROLES_NOT_ISOLATED');
   if(typeof clock!=='function')throw new Error('TEAM_CLOCK_INVALID');
+  if(typeof syntheticReviewEnabled!=='boolean')throw Error('TEAM_REVIEW_CONFIG_INVALID');
   const authDb=createPgTransactionAdapter({pool:authPool});
   const ledgerDb=createPgTransactionAdapter({pool:ledgerPool});
   const auth=createPostgresAuthService({db:authDb,clock});
   const ledgerRepository=createPostgresLedgerRepository({db:ledgerDb});
-  const ledger=createServerLedgerApi({auth,repository:ledgerRepository});
+  const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled});
   const server=createAuthHttpServer(auth,{ledger,clock});
   // The caller controls when/how to listen. This candidate must NEVER
   // automatically expose a port or initialize an operational database.

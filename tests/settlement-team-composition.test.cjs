@@ -29,3 +29,15 @@ test('isolated auth and ledger pool roles compose without connecting or opening 
     assert.throws(()=>app.auth.manageMembership(),/AUTH_ADMIN_UNAVAILABLE/);
   }finally{app.server.closeAllConnections?.();}
 });
+
+test('synthetic-only composition keeps review mutation unreachable from HTTP',async()=>{
+ const pool={connect:async()=>{throw Error('POOL_MUST_NOT_CONNECT');}};
+ const app=createIsolatedTeamPrototype({authPool:pool,
+   ledgerPool:{connect:async()=>{throw Error('POOL_MUST_NOT_CONNECT');}},
+   syntheticOnly:true,syntheticReviewEnabled:true});
+ try{
+   assert.equal(app.server.listening,false);
+   assert.equal(typeof app.ledger.advanceReview,'function');
+   assert.equal(app.server.address(),null);
+ }finally{app.server.closeAllConnections?.();}
+});

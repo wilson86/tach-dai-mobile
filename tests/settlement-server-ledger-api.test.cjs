@@ -57,3 +57,42 @@ test('server API never accepts a client role and scopes reads through the reposi
   assert.equal(read.state, 'DRAFT');
   assert.equal(read.role, undefined);
 });
+
+test('review seam is off by default, even if SQL repo is injected',async()=>{
+ const {auth,token}=setup();
+ let calls=0;
+ const repo={appendDraft:async()=>{},getScope:async()=>{},advanceReview:async()=>{calls++;}};
+ const api=createServerLedgerApi({auth,repository:repo});
+ await assert.rejects(()=>api.advanceReview(token,{scope,action:'submit_review',
+   expected_revision:1,idempotency_key:'key'}),/TEAM_ROUTE_NOT_ENABLED/);
+ assert.equal(calls,0);
+});
+test('opt-in review seam trusts only authenticated actor and verified receipt',async()=>{
+ const {auth,token}=setup();const observed=[];
+ let reply={event_id:'event_1',replayed:false,new_revision:2,feed_seq:2,state:'PENDING_REVIEW'};
+ const repo={appendDraft:async()=>{},getScope:async()=>{},advanceReview:async(a,i)=>{
+   observed.push([a,i]);return reply;
+ }};
+ const api=createServerLedgerApi({auth,repository:repo,eventId:()=>'event_1',syntheticReviewEnabled:true});
+ const input={scope,action:'submit_review',expected_revision:1,idempotency_key:'review_key'};
+ const valid=await api.advanceReview(token,input);
+ assert.equal(valid.review_state,'PENDING_REVIEW');
+ assert.equal(valid.sync_status,'SYNCED');
+ assert.equal(observed.length,1);
+ assert.equal(observed[0][0].role,'operator');
+ assert.equal(observed[0][0].user_id,'operator_1');
+ assert.match(observed[0][1].request_sha256,/^[a-f0-9]{64}$/);
+ for(const bad of [{...input,role:'admin'}, {...input,offline:true},
+   {...input,action:'approve_review'}, {...input,action:'close_scope'},
+   {...input,scope:{...scope,workspace_id:'group_b'}},
+   {...input,expected_revision:-1},{...input,idempotency_key:'bad/key'}]){
+   await assert.rejects(()=>api.advanceReview(token,bad));
+ }
+ assert.equal(observed.length,1);
+ for(reply of [
+   {event_id:'event_1',replayed:false,new_revision:2,feed_seq:2},
+   {event_id:'event_1',replayed:false,new_revision:2,feed_seq:2,state:'CLOSED'},
+   {event_id:'event_other',replayed:false,new_revision:2,feed_seq:2,state:'PENDING_REVIEW'},
+   {event_id:'event_1',replayed:false,new_revision:3,feed_seq:2,state:'PENDING_REVIEW'}
+ ])await assert.rejects(()=>api.advanceReview(token,input),/TEAM_(?:DRAFT|REVIEW)_RECEIPT_UNVERIFIED/);
+});

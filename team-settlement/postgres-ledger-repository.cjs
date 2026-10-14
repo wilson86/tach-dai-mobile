@@ -109,6 +109,31 @@ function createPostgresLedgerRepository({ db } = {}) {
     });
   }
 
+
+  // PostgreSQL function rechecks session roles, transaction state, CAS, SoD and RLS.
+  async function advanceReview(actor,{scope,action,expected_revision,event_id,idempotency_key,request_sha256}={}) {
+    if(!['submit_review','approve_review'].includes(action))throw Error('TEAM_REVIEW_ACTION_FORBIDDEN');
+    const checked=C.requireScope(scope);
+    if(!Number.isSafeInteger(expected_revision)||expected_revision<0||!Number.isSafeInteger(expected_revision+1))
+      throw Error('TEAM_REVISION_INVALID');
+    if(typeof event_id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(event_id))
+      throw Error('TEAM_REQUEST_INVALID');
+    if(typeof idempotency_key!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(idempotency_key))
+      throw Error('TEAM_IDEMPOTENCY_KEY_REQUIRED');
+    assertHash(request_sha256);
+    return inScopeTransaction(actor,checked,async tx=>{
+      const result=await tx.query(
+        `SELECT kts_team.advance_review($1::text,$2::text,$3::date,$4::text,$5::text,
+          $6::bigint,$7::text,$8::text,$9::text) AS result`,
+        [checked.workspace_id,checked.partner_id,checked.business_date,checked.region,
+          action,expected_revision,event_id,idempotency_key,request_sha256]
+      );
+      if(!result||!Array.isArray(result.rows)||result.rows.length!==1)
+        throw Error('TEAM_DB_RESULT_INVALID');
+      return result.rows[0].result;
+    });
+  }
+
   async function getScope(actor, scope) {
     return inScopeTransaction(actor, scope, async tx => {
       const result = await tx.query(
@@ -167,7 +192,7 @@ function createPostgresLedgerRepository({ db } = {}) {
     });
   }
 
-  return Object.freeze({ appendDraft, getScope, getChanges });
+  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges });
 }
 
 module.exports = Object.freeze({ createPostgresLedgerRepository, encodeCursor, decodeCursor });

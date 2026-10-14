@@ -113,3 +113,33 @@ test('change feed rejects an overfull SQL page even if every row is tenant-scope
   const repo=createPostgresLedgerRepository({db});
   await assert.rejects(repo.getChanges(actor,{limit:2}),/TEAM_DB_RESULT_INVALID/);
 });
+
+test('review repository uses scoped transaction with parameterized DB-only call',async()=>{
+ const db=fakeDb([{result:{event_id:'event_review',replayed:false,new_revision:2,
+   feed_seq:2,state:'PENDING_REVIEW'}}]);
+ const repo=createPostgresLedgerRepository({db});
+ const data={scope,action:'submit_review',expected_revision:1,event_id:'event_review',
+   idempotency_key:'req_review',request_sha256:'a'.repeat(64)};
+ const result=await repo.advanceReview(actor,data);
+ assert.equal(result.state,'PENDING_REVIEW');
+ assert.equal(db.calls[0].type,'begin');
+ assert.deepEqual(db.calls[1].params,['group_a','operator_1']);
+ assert.match(db.calls[3].text,/kts_team\.advance_review/);
+ assert.deepEqual(db.calls[3].params,['group_a','counterparty_1','2026-10-12','mn',
+   'submit_review',1,'event_review','req_review','a'.repeat(64)]);
+ assert.equal(db.calls.at(-1).type,'commit');
+ const count=db.calls.length;
+ for(const bad of [{...data,action:'close_scope'},
+   {...data,scope:{...scope,workspace_id:'group_b'}},
+   {...data,request_sha256:'not_a_hash'}])
+   await assert.rejects(()=>repo.advanceReview(actor,bad));
+ assert.equal(db.calls.length,count);
+});
+test('malformed SQL review result rolls back without receipt',async()=>{
+ const db=fakeDb([]);
+ const repo=createPostgresLedgerRepository({db});
+ await assert.rejects(()=>repo.advanceReview(actor,{scope,action:'submit_review',
+   expected_revision:1,event_id:'review_event',idempotency_key:'review_key',
+   request_sha256:'a'.repeat(64)}),/TEAM_DB_RESULT_INVALID/);
+ assert.equal(db.calls.at(-1).type,'rollback');
+});
