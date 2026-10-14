@@ -38,7 +38,8 @@
 <section><h2>Đọc máy chủ thử nghiệm</h2>
 <div class="actions">
 <button id="team-read" type="button" disabled>Đọc scope</button>
-<button id="team-pull" type="button" disabled>Đọc change feed</button></div>
+<button id="team-pull" type="button" disabled>Đọc trang change feed tiếp theo</button></div>
+<p id="team-feed-progress" role="status">Chưa xác minh đã đọc hết các trang. MEMORY_ONLY, không phải toàn bộ lịch sử.</p>
 <p id="team-review-readonly" role="status">CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.</p>
 <p>Trạng thái máy chủ: DRAFT → PENDING_REVIEW → REVIEWED → CLOSED.
 Chức năng gửi/duyệt chỉ được bật bởi người vận hành pilot synthetic có phê duyệt;
@@ -47,7 +48,7 @@ không có chốt tiền, close hoặc reopen.</p>
 <button id="team-submit-review" type="button" disabled>Gửi duyệt giả lập</button>
 <button id="team-approve-review" type="button" disabled>Phê duyệt giả lập (người khác)</button></div>
 <ul id="team-review-attempts" aria-label="Trạng thái yêu cầu xét duyệt thử nghiệm"></ul>
-<p>Lịch sử xét duyệt (chỉ đọc): người gửi, người duyệt, thời điểm và revision từ máy chủ. Chỉ hiển thị trang change feed mới đọc; không phải toàn bộ lịch sử.</p>
+<p>Lịch sử xét duyệt (chỉ đọc): người gửi, người duyệt, thời điểm và revision từ máy chủ. Các trang đã đọc được cộng dồn tạm thời tối đa 500 sự kiện trong phiên; không phải toàn bộ lịch sử và không phải lưu trữ bền vững.</p>
 <ul id="team-review-audit" aria-label="Lịch sử xét duyệt xác minh"></ul>
 <ul id="team-changes" aria-label="Mã sự kiện change feed"></ul></section>
 <section><h2>Thông báo</h2><p id="team-notice" aria-live="polite"></p>

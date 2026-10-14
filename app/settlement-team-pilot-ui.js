@@ -25,7 +25,7 @@ const IDS=['team-login','team-subject','team-password','team-workspace',
  'team-sync','team-pull','team-reconnect','team-read','team-context',
  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
- 'team-review-audit'];
+ 'team-review-audit','team-feed-progress'];
 function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   const d=doc||(typeof document!=='undefined'?document:null);
   const w=win||(typeof window!=='undefined'?window:null);
@@ -46,14 +46,27 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     throw Error('TEAM_PILOT_REVIEW_CLIENT_REQUIRED');
   let busy=false,dead=false,notice='',unsubscribe,verifiedScope=null;
   let verifiedEventIds=[],verifiedAuditRows=[],historyTruncated=false,observedSessionEpoch=null;
+  let feedHasMore=null,feedStale=false;
   const listeners=[];
   function on(el,name,handler){el.addEventListener(name,handler);listeners.push([el,name,handler]);}
   function clear(el){while(el.firstChild)el.removeChild(el.firstChild);}
   function row(el,value){const li=d.createElement('li');li.textContent=String(value);el.appendChild(li);}
   function tell(value){notice=String(value);e['team-notice'].textContent=notice;}
+  function renderFeedProgress(){
+    const next=feedHasMore===true?'CÒN TRANG: nhấn Đọc change feed để tiếp tục':
+      feedHasMore===false?'Đã đến cuối tại lần kiểm tra (có thể có sự kiện mới)':
+      'Chưa xác minh đã đọc hết các trang';
+    e['team-feed-progress'].textContent='Trong phiên: '+verifiedEventIds.length+
+      ' sự kiện, '+verifiedAuditRows.length+' xét duyệt • '+next+
+      (historyTruncated?' • Chỉ giữ 500 sự kiện gần nhất':'')+
+      (feedStale?' • Lần đọc gần nhất CHƯA XÁC MINH':'')+
+      ' • MEMORY_ONLY, không phải toàn bộ lịch sử.';
+  }
   function clearVerifiedHistory(){
     verifiedEventIds=[];verifiedAuditRows=[];historyTruncated=false;
+    feedHasMore=null;feedStale=false;
     clear(e['team-changes']);clear(e['team-review-audit']);
+    renderFeedProgress();
   }
   function clearReview(){
     verifiedScope=null;
@@ -270,49 +283,59 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     performReview('submit_review','DRAFT')));
   on(e['team-approve-review'],'click',()=>void action(()=>
     performReview('approve_review','PENDING_REVIEW')));
-  on(e['team-pull'],'click',()=>void action(async()=>{
-    const r=await sync.pullChanges();
-    if(r.status==='SYNCED'&&Array.isArray(r.items)){
-      let auditRows;
-      try{auditRows=Audit.auditRows(r.items,sync.snapshot().workspace_id);}
-      catch(_){
-        tell('CHƯA XÁC MINH lịch sử xét duyệt. Danh sách đang hiển thị là lần đọc trước.');
-        return;
-      }
-      const newIds=r.items.map(item=>item.event_id);
-      const known=new Set(verifiedEventIds);
-      const withinPage=new Set(newIds);
-      if(withinPage.size!==newIds.length ||
-         newIds.some(id=>typeof id!=='string'||known.has(id))){
-        tell('CHƯA XÁC MINH change feed: trùng mã sự kiện; giữ lịch sử phiên đã đọc trước.');
-        return;
-      }
-      // Only server-verified pages enter this read-only, volatile timeline.
-      verifiedEventIds.push(...newIds);
-      verifiedAuditRows.push(...auditRows);
-      if(verifiedEventIds.length>MAX_VISIBLE_EVENTS){
-        verifiedEventIds=verifiedEventIds.slice(-MAX_VISIBLE_EVENTS);
-        const keep=new Set(verifiedEventIds);
-        verifiedAuditRows=verifiedAuditRows.filter(x=>keep.has(x.event_id));
-        historyTruncated=true;
-      }
-      clear(e['team-changes']);clear(e['team-review-audit']);
-      for(const id of verifiedEventIds)row(e['team-changes'],id);
-      for(const item of verifiedAuditRows)row(e['team-review-audit'],Audit.displayRow(item));
-      tell('Change feed SYNCED: '+r.items.length+' sự kiện mới; đã đọc trong phiên '+
-        verifiedEventIds.length+' sự kiện / '+verifiedAuditRows.length+
-        ' xét duyệt'+(historyTruncated?' (chỉ giữ '+MAX_VISIBLE_EVENTS+' gần nhất)':'')+
-        '. Không phải toàn bộ lịch sử máy chủ; đóng trang sẽ xóa.');
-    }else{
-      tell('CHƯA CẬP NHẬT change feed: '+String(r.status||'BLOCKED')+
-        (r.error?' • '+r.error:'')+'. Danh sách đang hiển thị là lần đọc trước.');
+  // Both manual pull and reconnect consume the SAME server-verified page.
+  // Otherwise reconnect would advance the cursor but silently hide its events.
+  function acceptFeedPage(r){
+    if(!r||r.status!=='SYNCED'||!Array.isArray(r.items)){
+      feedStale=true;renderFeedProgress();
+      return {ok:false,message:'CHƯA CẬP NHẬT change feed: '+
+        String(r&&r.status||'BLOCKED')+(r&&r.error?' • '+r.error:'')+
+        '. Danh sách đang hiển thị là lần đọc trước.'};
     }
+    let auditRows;
+    try{auditRows=Audit.auditRows(r.items,sync.snapshot().workspace_id);}
+    catch(_){
+      feedStale=true;renderFeedProgress();
+      return {ok:false,message:'CHƯA XÁC MINH lịch sử xét duyệt. Danh sách đang hiển thị là lần đọc trước.'};
+    }
+    const newIds=r.items.map(item=>item.event_id);
+    const known=new Set(verifiedEventIds);
+    if(new Set(newIds).size!==newIds.length ||
+       newIds.some(id=>typeof id!=='string'||known.has(id)) ||
+       (r.has_more!=null&&typeof r.has_more!=='boolean') ||
+       (r.has_more===true&&newIds.length===0)){
+      feedStale=true;renderFeedProgress();
+      return {ok:false,message:'CHƯA XÁC MINH change feed: trùng mã sự kiện hoặc metadata không hợp lệ; giữ lịch sử phiên đã đọc trước.'};
+    }
+    verifiedEventIds.push(...newIds);
+    verifiedAuditRows.push(...auditRows);
+    if(verifiedEventIds.length>MAX_VISIBLE_EVENTS){
+      verifiedEventIds=verifiedEventIds.slice(-MAX_VISIBLE_EVENTS);
+      const keep=new Set(verifiedEventIds);
+      verifiedAuditRows=verifiedAuditRows.filter(x=>keep.has(x.event_id));
+      historyTruncated=true;
+    }
+    feedHasMore=typeof r.has_more==='boolean'?r.has_more:null;
+    feedStale=false;
+    clear(e['team-changes']);clear(e['team-review-audit']);
+    for(const id of verifiedEventIds)row(e['team-changes'],id);
+    for(const item of verifiedAuditRows)row(e['team-review-audit'],Audit.displayRow(item));
+    renderFeedProgress();
+    return {ok:true,message:'Change feed SYNCED: '+r.items.length+' sự kiện mới; đã đọc trong phiên '+
+      verifiedEventIds.length+' sự kiện / '+verifiedAuditRows.length+
+      ' xét duyệt'+(historyTruncated?' (chỉ giữ '+MAX_VISIBLE_EVENTS+' gần nhất)':'')+
+      '. Không phải toàn bộ lịch sử máy chủ; đóng trang sẽ xóa.'};
+  }
+  on(e['team-pull'],'click',()=>void action(async()=>{
+    const result=acceptFeedPage(await sync.pullChanges());
+    tell(result.message);
   }));
   on(e['team-reconnect'],'click',()=>void action(async()=>{
     const r=await sync.reconnect();
-    const states=Array.isArray(r.drafts)?r.drafts:[];
-    const feed=r.pull&&r.pull.status==='SYNCED'?'SYNCED':'CHƯA XÁC MINH';
-    tell('Kết nối lại — change feed: '+feed+'; DRAFT: '+draftOutcome(states)+
+    const states=r&&Array.isArray(r.drafts)?r.drafts:[];
+    const progress=acceptFeedPage(r&&r.pull);
+    tell('Kết nối lại — change feed: '+(progress.ok?'SYNCED':'CHƯA XÁC MINH')+
+      '; '+progress.message+'; DRAFT: '+draftOutcome(states)+
       '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   for(const id of ['team-partner','team-date','team-region']){

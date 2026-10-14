@@ -232,3 +232,16 @@ volatile timeline so an earlier account's data cannot remain visible.
 Partner/date/region `input` events also invalidate stale review controls
 immediately, without waiting for blur. This is **not** a durable audit export,
 offline persistence, or financial close authority.
+
+## Reconnect page receipt visibility and manual feed progress
+
+Manual `pullChanges()` and `reconnect()` now feed the same fail-closed
+read-only event/audit UI path. A reconnect may advance an authenticated
+cursor, so its accepted events MUST become visible in the in-session
+history, not silently disappear from the operator's review. Invalid audit
+rows, duplicate events or malformed `has_more` cannot replace the last
+verified timeline or claim a successful UI update. A separate status line
+distinguishes `has_more=true` (read the next page), `has_more=false`
+(reached the end **at that poll only**), unknown page status and stale
+failed reads. This does not authenticate historical completeness, persist
+offline data or permit monetary finalization.

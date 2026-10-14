@@ -19,13 +19,14 @@ function element(){
  };
 }
 function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
- syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null}={}){
+ syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
+ pullHasMore=false,reconnectItems=[],reconnectHasMore=false}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
   'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
   'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
-  'team-review-audit'];
+  'team-review-audit','team-feed-progress'];
  const els=Object.fromEntries(ids.map(id=>[id,element()]));
  const doc={
    getElementById:id=>els[id]||null,
@@ -74,10 +75,11 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
    async pullChanges(){
      calls.push('pullChanges');requestCount++;
      const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
-     return status==='SYNCED'?{status,items:feedPages?feedPages[Math.min(requestCount-1,feedPages.length-1)]:(feedItems||[{event_id:'synthetic_safe_event'}])}:
+     return status==='SYNCED'?{status,has_more:pullHasMore,items:feedPages?feedPages[Math.min(requestCount-1,feedPages.length-1)]:(feedItems||[{event_id:'synthetic_safe_event'}])}:
        {status,error:'SYNC_NETWORK_UNAVAILABLE',items:[]};
    },
-   async reconnect(){calls.push('reconnect');return {pull:{status:reconnectStatus},drafts:reconnectDrafts};},
+   async reconnect(){calls.push('reconnect');return {pull:{status:reconnectStatus,
+     items:reconnectStatus==='SYNCED'?reconnectItems:[],has_more:reconnectHasMore},drafts:reconnectDrafts};},
    async logout(){
      calls.push('logout');state.authenticated=false;state.workspace_id=null;state.session_epoch++;
      state.drafts=[];notify();
@@ -455,5 +457,48 @@ test('editing partner before change/blur invalidates old read-only scope control
  h.els['team-partner'].fire('input');
  assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
  assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+
+test('reconnect renders verified feed events it consumed instead of silently skipping them',async()=>{
+ const event={workspace_id:'group_a',event_id:'reconnected_submit',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'1',
+   recorded_at:'2026-10-14T11:00:00.123Z',
+   result_snapshot:{synthetic_review_only:true,from_state:'DRAFT',
+     to_state:'PENDING_REVIEW',actor_user_id:'fake_operator',submitted_by:'fake_operator'}};
+ const h=harness({reconnectItems:[event],reconnectHasMore:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.deepEqual(h.els['team-changes'].children.map(x=>x.textContent),['reconnected_submit']);
+ assert.equal(h.els['team-review-audit'].children.length,1);
+ assert.match(h.els['team-feed-progress'].textContent,/CÒN TRANG/);
+ assert.match(h.els['team-notice'].textContent,/change feed: SYNCED/);
+ h.mounted.dispose();
+});
+
+test('reconnect with malformed review payload never labels its pulled feed verified',async()=>{
+ const h=harness({reconnectItems:[{workspace_id:'group_b',event_id:'fake_bad',
+   event_kind:'REVIEWED'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH/);
+ assert.match(h.els['team-feed-progress'].textContent,/Lần đọc gần nhất CHƯA XÁC MINH/);
+ h.mounted.dispose();
+});
+
+test('explicit page-progress indicator distinguishes more pages, terminal poll and stale retries',async()=>{
+ const h=harness({feedPages:[[ {event_id:'event_1'} ],[]],pullHasMore:true,
+   pullStatuses:['SYNCED','PENDING']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.match(h.els['team-feed-progress'].textContent,/CÒN TRANG/);
+ h.els['team-pull'].fire('click');await tick();
+ assert.match(h.els['team-feed-progress'].textContent,/CÒN TRANG/);
+ assert.match(h.els['team-feed-progress'].textContent,/CHƯA XÁC MINH/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-feed-progress'].textContent,/Chưa xác minh đã đọc hết/);
  h.mounted.dispose();
 });
