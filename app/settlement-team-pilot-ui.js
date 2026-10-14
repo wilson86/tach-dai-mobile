@@ -33,13 +33,28 @@ function mount({doc,win,client,Sync}={}){
       'Đã đăng nhập: '+String(state.workspace_id||'unknown'):'Chưa đăng nhập';
     const unsent=state.drafts.filter(x=>x.status!=='SYNCED').length;
     e['team-warning'].textContent=unsent>0?
-      'CẢNH BÁO: '+unsent+' bản nháp MEMORY_ONLY chưa ghi máy chủ; tải lại/đóng trang sẽ mất.':
+      'CẢNH BÁO: '+unsent+' bản nháp MEMORY_ONLY CHƯA có receipt xác minh; có thể đã tới máy chủ, không được coi là đã lưu. Tải lại/đóng trang sẽ mất bản nháp cục bộ.':
       'MEMORY_ONLY — chưa có lưu ngoại tuyến bền vững; bản nháp mới có thể mất khi tải lại.';
     for(const id of ['team-logout','team-create','team-sync','team-pull','team-reconnect','team-read'])
       e[id].disabled=busy||!state.authenticated;
     e['team-login'].querySelector('button[type="submit"]').disabled=busy||state.authenticated;
     clear(e['team-drafts']);
     for(const x of state.drafts)row(e['team-drafts'],x.id+' • '+x.status+(x.error?' • '+x.error:''));
+  }
+  // Only the sync client's verified receipt may mark a draft SYNCED.
+  // Do not collapse offline, conflict, and rejection into a generic success.
+  function draftOutcome(items){
+    const counts={SYNCED:0,PENDING:0,CONFLICT:0,BLOCKED:0};
+    for(const item of items){
+      if(Object.prototype.hasOwnProperty.call(counts,item.status))counts[item.status]++;
+      else counts.BLOCKED++; // Unknown state must never be presented as saved.
+    }
+    const parts=[];
+    if(counts.SYNCED)parts.push(counts.SYNCED+' SYNCED (receipt máy chủ hợp lệ)');
+    if(counts.PENDING)parts.push(counts.PENDING+' PENDING (chưa có receipt)');
+    if(counts.CONFLICT)parts.push(counts.CONFLICT+' CONFLICT (cần người duyệt)');
+    if(counts.BLOCKED)parts.push(counts.BLOCKED+' BLOCKED (chưa xác minh)');
+    return parts.length?parts.join('; '):'không có bản nháp cần gửi';
   }
   async function action(fn){
     if(dead||busy)return;
@@ -67,6 +82,7 @@ function mount({doc,win,client,Sync}={}){
       workspace=e['team-workspace'].value.trim();
     e['team-password'].value='';
     await sync.login(subject,pwd,workspace);
+    clear(e['team-changes']); // Never display another session's previously read feed.
     tell('Đăng nhập pilot thành công. Chỉ dùng dữ liệu giả.');
   });});
   on(e['team-logout'],'click',()=>void action(async()=>{
@@ -81,23 +97,32 @@ function mount({doc,win,client,Sync}={}){
     tell(draft.id+' PENDING: chỉ có trong bộ nhớ, chưa ghi máy chủ.');
   }));
   on(e['team-sync'],'click',()=>void action(async()=>{
-    for(const x of sync.snapshot().drafts.filter(z=>z.status==='PENDING'))
-      await sync.syncDraft(x.id);
-    tell('Chỉ những DRAFT SYNCED với receipt hợp lệ mới đã ghi máy chủ.');
+    const pending=sync.snapshot().drafts.filter(z=>z.status==='PENDING');
+    const results=[];
+    for(const x of pending)results.push(await sync.syncDraft(x.id));
+    tell('Kết quả gửi: '+draftOutcome(results)+'. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   on(e['team-read'],'click',()=>void action(async()=>{
     const r=await sync.readScope(scope());
     tell('Đọc scope: '+r.status+(r.scope?' • revision '+r.scope.revision:''));
   }));
   on(e['team-pull'],'click',()=>void action(async()=>{
-    const r=await sync.pullChanges();clear(e['team-changes']);
-    if(r.status==='SYNCED'&&Array.isArray(r.items))
+    const r=await sync.pullChanges();
+    if(r.status==='SYNCED'&&Array.isArray(r.items)){
+      clear(e['team-changes']);
       for(const item of r.items)row(e['team-changes'],String(item.event_id||'fake_event'));
-    tell('Lịch sử: '+r.status+(r.error?' • '+r.error:''));
+      tell('Change feed SYNCED: '+r.items.length+' sự kiện được xác minh.');
+    }else{
+      tell('CHƯA CẬP NHẬT change feed: '+String(r.status||'BLOCKED')+
+        (r.error?' • '+r.error:'')+'. Danh sách đang hiển thị là lần đọc trước.');
+    }
   }));
   on(e['team-reconnect'],'click',()=>void action(async()=>{
     const r=await sync.reconnect();
-    tell('Kết nối lại: '+r.pull.status+'. Xung đột cần người duyệt.');
+    const states=Array.isArray(r.drafts)?r.drafts:[];
+    const feed=r.pull&&r.pull.status==='SYNCED'?'SYNCED':'CHƯA XÁC MINH';
+    tell('Kết nối lại — change feed: '+feed+'; DRAFT: '+draftOutcome(states)+
+      '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   on(w,'beforeunload',event=>{
     if(sync.snapshot().drafts.some(x=>x.status!=='SYNCED')){

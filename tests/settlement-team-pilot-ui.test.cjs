@@ -18,7 +18,7 @@ function element(){
    fire(type,event={}){const fn=listeners.get(type);if(!fn)throw Error('MISSING_HANDLER');return fn(event);}
  };
 }
-function harness(){
+function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[]}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
@@ -49,14 +49,17 @@ function harness(){
    },
    async syncDraft(id){
      calls.push('syncDraft');const draft=state.drafts.find(x=>x.id===id);
-     if(draft)draft.status='SYNCED';notify();return {...draft};
+     if(draft){draft.status=syncStatus;if(syncStatus!=='SYNCED')draft.error='SYNC_NETWORK_UNAVAILABLE';}
+     notify();return {...draft};
    },
    async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1}};},
    async pullChanges(){
      calls.push('pullChanges');requestCount++;
-     return {status:'SYNCED',items:[{event_id:'synthetic_safe_event'}]};
+     const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
+     return status==='SYNCED'?{status,items:[{event_id:'synthetic_safe_event'}]}:
+       {status,error:'SYNC_NETWORK_UNAVAILABLE',items:[]};
    },
-   async reconnect(){calls.push('reconnect');return {pull:{status:'SYNCED'}};},
+   async reconnect(){calls.push('reconnect');return {pull:{status:reconnectStatus},drafts:reconnectDrafts};},
    async logout(){
      calls.push('logout');state.authenticated=false;state.workspace_id=null;
      state.drafts=[];notify();return {authenticated:false};
@@ -151,4 +154,55 @@ test('HTML remains inert without runtime: scripts have no network listener or da
  const start=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot-start.js'),'utf8');
  assert.match(start,/KtsTeamPilotUI\.mount/);
  assert.doesNotMatch(start,/listen\(|tailscale|spawn\(|postgres/);
+});
+
+
+test('offline PENDING cannot be presented as successfully saved',async()=>{
+ const h=harness({syncStatus:'PENDING'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ h.els['team-sync'].fire('click');await tick();
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ assert.match(h.els['team-notice'].textContent,/1 PENDING \(chưa có receipt\)/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/1 SYNCED/);
+ assert.match(h.els['team-warning'].textContent,/CHƯA có receipt/);
+ h.mounted.dispose();
+});
+test('conflict is explicitly distinguished from saved receipt',async()=>{
+ const h=harness({syncStatus:'CONFLICT'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ h.els['team-sync'].fire('click');await tick();
+ assert.equal(h.state.drafts[0].status,'CONFLICT');
+ assert.match(h.els['team-notice'].textContent,/1 CONFLICT \(cần người duyệt\)/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/1 SYNCED/);
+ h.mounted.dispose();
+});
+test('rejected BLOCKED draft remains visibly unverified',async()=>{
+ const h=harness({syncStatus:'BLOCKED'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ h.els['team-sync'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/1 BLOCKED \(chưa xác minh\)/);
+ assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
+ h.mounted.dispose();
+});
+test('reconnect never treats SYNCED change feed as proof that a PENDING draft was saved',async()=>{
+ const h=harness({reconnectStatus:'SYNCED',reconnectDrafts:[{status:'PENDING'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/change feed: SYNCED/);
+ assert.match(h.els['team-notice'].textContent,/1 PENDING \(chưa có receipt\)/);
+ h.mounted.dispose();
+});
+test('failed change-feed pull keeps last verified items but clearly marks them stale',async()=>{
+ const h=harness({pullStatuses:['SYNCED','PENDING']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children[0].textContent,'synthetic_safe_event');
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,1);
+ assert.match(h.els['team-notice'].textContent,/CHƯA CẬP NHẬT change feed/);
+ assert.match(h.els['team-notice'].textContent,/lần đọc trước/);
+ h.mounted.dispose();
 });
