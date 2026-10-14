@@ -112,6 +112,8 @@ const engine=fs.readFileSync(path.join(root,'business_engine.generated.js'),'utf
 const app=fs.readFileSync(path.join(root,'app','index.html'),'utf8');
 const sw=fs.readFileSync(path.join(root,'app','sw.js'),'utf8');
 const version=JSON.parse(fs.readFileSync(path.join(root,'app','version.json'),'utf8'));
+const expectedEngine=(engine.match(/ENGINE_SHA256: ([0-9a-f]{64})/u)||[])[1];
+assert.ok(expectedEngine,'generated engine digest missing');
 
 // Bind the new Đá Vòng projection to the real 6ce6 Mobile parser, not only the
 // synthetic test adapter, so MB/MT contextual DA validation is proven end-to-end.
@@ -132,7 +134,7 @@ function loadActualRules(){
 }
 {
   const rules=loadActualRules();
-  assert.equal(rules.engine.ENGINE_SHA256,'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c');
+  assert.equal(rules.engine.ENGINE_SHA256,expectedEngine);
   const realApi={normalizeInput:rules.normalizeInput.bind(rules),validateCheckOnlyLine:rules.validateCheckOnlyLine.bind(rules),processLine:rules.processLine.bind(rules),splitBetChunks:rules.splitBetChunks.bind(rules)};
   const date=new Date('2026-10-04T12:00:00');
   const mb=U.transformDaVongText('68 86 28 da 5n',realApi,'mb',rules.getSchedule('mb',date));
@@ -143,9 +145,14 @@ function loadActualRules(){
   }
   const station=U.transformDaVongText('hue 68 86 da 5n',realApi,'mt',rules.getSchedule('mt',date));
   assert.equal(station.ok,true,station.error); assert.equal(station.pair_lines,0); assert.ok(station.outputs.some(x=>/\bdat\s*5n$/u.test(x)));
+  for(const source of ['2d 52 dx5n','2d 52 52 dx5n','2d 52 b10n dx5n']){
+    const rejected=U.transformDaVongText(source,realApi,'mt',rules.getSchedule('mt',date));
+    assert.equal(rejected.ok,false,source); assert.deepEqual(Array.from(rejected.outputs),[]);
+  }
+  assert.equal(U.transformDaVongText('2d 52 25 dx5n',realApi,'mt',rules.getSchedule('mt',date)).ok,true);
 }
 
-assert.match(engine,/ENGINE_SHA256: 6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c/);
+assert.match(engine,new RegExp(`ENGINE_SHA256: ${expectedEngine}`));
 assert.match(app,/data-mode="tach"/);
 assert.match(app,/data-mode="ngang"/);
 assert.match(app,/data-mode="davong"/);
@@ -156,9 +163,9 @@ assert.match(app,/id="dvCutSelection"/);
 assert.match(app,/id="dvSelectAllOutput"/);
 assert.match(app,/Kết quả \(\$\{result\.outputs\.length\}\)/);
 assert.match(version.version,/^\d+\.\d+\.\d+$/u);
-assert.equal(version.business_engine_sha256,'6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c');
+assert.equal(version.business_engine_sha256,expectedEngine);
 assert.equal(version.contract,U.CONTRACT);
-assert.match(sw,new RegExp(`kts-tach-unified-v${version.version.replaceAll('.', '\\.')}-[^"]*-6ce6`));
+assert.match(sw,new RegExp(`kts-tach-unified-v${version.version.replaceAll('.', '\\.')}-[^"]*-${expectedEngine.slice(0,6)}`));
 assert.match(sw,/skipWaiting\(\)/);
 assert.match(sw,/clients\.claim\(\)/);
 assert.match(sw,/(?:cache|c)\.put\(req,copy\)|(?:cache|c)\.put\(req, copy\)/);

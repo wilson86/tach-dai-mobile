@@ -77,7 +77,7 @@
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-const EXPECTED_ENGINE='6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c';
+const EXPECTED_ENGINE='046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb';
 const modeButtons=[...document.querySelectorAll('.tab')];
 function setMode(mode){
   if(!['tach','ngang','davong'].includes(mode)) mode='tach';
@@ -177,7 +177,7 @@ function loadSharedSettings(){
 function engine(){
   const w=$('tachFrame').contentWindow;
   const names=['normalizeInput','validateCheckOnlyLine','processLine','getSchedule','preprocessChatText','looksLikeChatLog','resolveExplicitSourceRegion','splitBetChunks'];
-  if(!w||names.some(n=>typeof w[n]!=='function')) throw Error('ENGINE_6CE6_NOT_READY');
+  if(!w||names.some(n=>typeof w[n]!=='function')) throw Error('ENGINE_046935_NOT_READY');
   if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.ENGINE_SHA256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
   return w;
 }
@@ -232,7 +232,7 @@ $('dvCopy').addEventListener('click',async()=>{const text=bettingPayloadFromDisp
 $('sharedRegion').addEventListener('change',syncSharedSettings);
 $('sharedDate').addEventListener('change',()=>{$('sharedToday').checked=false;syncSharedSettings()});
 $('sharedToday').addEventListener('change',syncSharedSettings);
-$('tachFrame').addEventListener('load',()=>{syncSharedSettings();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine 6ce6 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
+$('tachFrame').addEventListener('load',()=>{syncSharedSettings();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine 046935 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
 $('ngangFrame').addEventListener('load',syncSharedSettings);
 loadSharedSettings();
 if('serviceWorker' in navigator&&location.protocol!=='file:') window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{}));
