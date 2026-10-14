@@ -65,7 +65,11 @@ function createRecoveryReconciliation({auth,repository,syntheticOnly=false}={}){
   async function inspect(sessionToken,quarantined){
     if(typeof sessionToken!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(sessionToken))
       fail('AUTH_SESSION_INVALID');
-    const actor=C.actorFromServer(await auth.verifySession(sessionToken));
+    // Preserve the raw VERIFIED SERVER authority for repository membership
+    // rechecks. actorFromServer normalizes display fields and intentionally
+    // strips trust markers; that normalized object must never be re-authenticated.
+    const trustedActor=await auth.verifySession(sessionToken);
+    const actor=C.actorFromServer(trustedActor);
     if(!['admin','operator'].includes(actor.role))fail('TEAM_RECOVERY_ROLE_DENIED');
     if(!Array.isArray(quarantined)||quarantined.length<1||quarantined.length>30)
       fail('TEAM_RECOVERY_QUARANTINE_REQUIRED');
@@ -74,7 +78,7 @@ function createRecoveryReconciliation({auth,repository,syntheticOnly=false}={}){
     if(new Set(keys).size!==keys.length)fail('TEAM_RECOVERY_DUPLICATE_INTENT');
     // Required repository method must independently recheck membership within
     // a tenant-scoped READ-ONLY PostgreSQL transaction; never browser evidence.
-    const rows=await repository.lookupRecoveryReceipts(actor,keys);
+    const rows=await repository.lookupRecoveryReceipts(trustedActor,keys);
     if(!Array.isArray(rows)||rows.length>specs.length)
       fail('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
     const seen=new Map(),allowed=new Set(keys);
