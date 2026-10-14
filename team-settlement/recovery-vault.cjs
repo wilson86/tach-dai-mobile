@@ -36,6 +36,12 @@ function createSyntheticRecoveryVault({auth,store,cryptoProvider,syntheticOnly=f
     sameActor(actor,await verified(sessionToken)); // reauth after slow key derivation
     const acknowledged=await store.writeIfAbsent(SLOT,text);
     if(acknowledged!==true)deny('TEAM_VAULT_SAVE_UNVERIFIED');
+    // A dishonest/failed adapter may claim an atomic save without retaining
+    // the exact encrypted bytes. Require a read-back and re-auth after I/O.
+    // Even a matching read-back does NOT guarantee crash-safe persistence.
+    const stored=await store.read(SLOT);
+    if(stored!==text)deny('TEAM_VAULT_SAVE_UNVERIFIED');
+    sameActor(actor,await verified(sessionToken));
     return Object.freeze({status:'ENCRYPTED_ADAPTER_ACK',durability:'UNVERIFIED',
       ciphertext_bytes:text.length,auto_send_enabled:false,backup_slot:SLOT});
   }
@@ -43,8 +49,12 @@ function createSyntheticRecoveryVault({auth,store,cryptoProvider,syntheticOnly=f
     consent(explicitConsent);
     const actor=await verified(sessionToken);
     const text=await store.read(SLOT);
-    if(text===null)return Object.freeze({status:'NO_ENCRYPTED_BACKUP',
-      durability:'UNVERIFIED',auto_send_enabled:false,items:Object.freeze([])});
+    if(text===null){
+      // A late logout cannot be reported as an authoritative empty backup.
+      sameActor(actor,await verified(sessionToken));
+      return Object.freeze({status:'NO_ENCRYPTED_BACKUP',
+        durability:'UNVERIFIED',auto_send_enabled:false,items:Object.freeze([])});
+    }
     if(typeof text!=='string')deny('TEAM_VAULT_BACKUP_INVALID');
     const envelope=Recovery.parseEnvelope(text);
     const restored=await Recovery.open({envelope,actor,passphrase,cryptoProvider});

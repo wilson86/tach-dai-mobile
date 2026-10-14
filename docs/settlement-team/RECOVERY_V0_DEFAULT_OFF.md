@@ -179,3 +179,21 @@ login/account change between asynchronous boundaries, forged injected outputs,
 consent, and a static assertion that neither the PWA nor HTTP server imports
 this composition. No physical phone qualification, persistence policy,
 production interface or automatic replay exists.
+
+## Post-write ciphertext read-back + final live membership check
+
+For manual synthetic `vault.save`, an adapter's `writeIfAbsent=true`
+alone no longer produces an `ENCRYPTED_ADAPTER_ACK`. The operation now
+**reads the same slot back and compares the exact canonical encrypted
+string**, then verifies the server-authenticated actor/role again after
+slow storage I/O. An ACK without bytes, replacement, read error or revoked
+identity produces NO positive saved status. Uncertain ciphertext is left
+untouched (never overwritten/deleted on error), allowing later
+human-controlled forensics. An empty-backup inspection also repeats
+membership verification before returning a no-backup state.
+
+A matching read-back proves only that this injected adapter returned the
+same bytes at that instant: it is NOT independent proof of fsync, power-loss
+durability, IndexedDB eviction policy or receipt reconciliation. This
+remains a separate **DEFAULT-OFF synthetic Node contract**, with no mobile
+UI activation or real customer data.

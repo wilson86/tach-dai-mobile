@@ -33,7 +33,7 @@ test('manual synthetic encrypted store survives a fresh instance; nothing auto-s
  assert.equal(saved.status,'ENCRYPTED_ADAPTER_ACK');
  assert.equal(saved.durability,'UNVERIFIED');
  assert.equal(saved.auto_send_enabled,false);
- assert.equal(first.calls.length,2); // verified again after PBKDF2
+ assert.equal(first.calls.length,3); // before seal, after PBKDF2, after read-back
  const ciphertext=store.data.get(SLOT);
  assert.equal(typeof ciphertext,'string');
  assert.equal(ciphertext.includes('fake private device data'),false);
@@ -51,7 +51,7 @@ test('manual synthetic encrypted store survives a fresh instance; nothing auto-s
  assert.equal(recovered.items[0].auto_retry,false);
  assert.equal(recovered.requires_server_receipt_review,true);
  assert.equal(second.calls.length,2);
- assert.deepEqual(store.calls.map(x=>x[0]),['read','cas','read']);
+ assert.deepEqual(store.calls.map(x=>x[0]),['read','cas','read','read']);
 });
 
 test('default-off and explicit per-operation consent prevent access to storage',async()=>{
@@ -141,4 +141,53 @@ test('injected backend failures never create a positive encrypted backup receipt
    async writeIfAbsent(){throw Error('STORAGE_WRITE_FAILED');}};
  await assert.rejects(create(s2).vault.save({sessionToken:token,
    passphrase:secret,drafts:[draft()],explicitConsent:true}),/STORAGE_WRITE_FAILED/);
+});
+
+test('adapter false-positive ACK without stored ciphertext never counts as a backup',async()=>{
+ let reads=0;
+ const store={async read(){reads++;return null;},
+   async writeIfAbsent(){return true;}};
+ const client=create(store);
+ await assert.rejects(client.vault.save({sessionToken:token,passphrase:secret,
+   drafts:[draft()],explicitConsent:true}),/TEAM_VAULT_SAVE_UNVERIFIED/);
+ assert.equal(reads,2);
+ // Never call a retry method. A future attempt must first investigate
+ // whether an unknown remote/adapter write happened.
+});
+
+test('backup replacement between write and read-back must not return success',async()=>{
+ let count=0,stored=null;
+ const s={async read(){count++;return count===1?null:'{"mismatched":true}';},
+   async writeIfAbsent(_,text){stored=text;return true;}};
+ await assert.rejects(create(s).vault.save({sessionToken:token,passphrase:secret,
+   drafts:[draft()],explicitConsent:true}),/TEAM_VAULT_SAVE_UNVERIFIED/);
+ assert.equal(typeof stored,'string'); // Do not delete disputed bytes.
+ assert.equal(stored.includes('fake private device data'),false);
+});
+
+test('role revocation after successful encrypted write/read-back denies saved claim',async()=>{
+ const s=storage();let checks=0;
+ const x=create(s,{identity:()=>{
+   checks++;return checks>=3?{...actor,role:'viewer'}:actor;
+ }});
+ await assert.rejects(x.vault.save({sessionToken:token,passphrase:secret,
+   drafts:[draft()],explicitConsent:true}),/TEAM_VAULT_ROLE_DENIED/);
+ assert.equal(checks,3);
+ const original=s.data.get(SLOT);
+ assert.equal(typeof original,'string'); // partial outcome remains preserved
+ assert.equal(original.includes(secret),false);
+ // A later authorized caller can inspect, but cannot silently overwrite.
+ await assert.rejects(create(s).vault.save({sessionToken:token,passphrase:secret,
+   drafts:[draft()],explicitConsent:true}),/TEAM_VAULT_BACKUP_ALREADY_EXISTS/);
+ assert.equal(s.data.get(SLOT),original);
+});
+
+test('identity revoked while checking an empty backup denies any no-backup claim',async()=>{
+ const s=storage();let checks=0;
+ const x=create(s,{identity:()=>{
+   checks++;return checks===1?actor:{...actor,role:'viewer'};
+ }});
+ await assert.rejects(x.vault.inspect({sessionToken:token,passphrase:secret,
+   explicitConsent:true}),/TEAM_VAULT_ROLE_DENIED/);
+ assert.equal(checks,2);
 });
