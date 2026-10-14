@@ -26,6 +26,8 @@ function testService({who=actor,rows=[],read}={}){
    auth:{async verifySession(t){verifies++;assert.equal(t,token);return who;}},
    repository:{async lookupRecoveryReceipts(a,ids){
      reads++;assert.equal(a.user_id,who.user_id);
+   assert.equal(a.server_verified,true); // Never pass normalized actor to DB.
+   assert.equal(a.membership_active,true);
      return read?read(a,ids):rows;
    }}});
  return {service,get reads(){return reads;},get verifies(){return verifies;}};
