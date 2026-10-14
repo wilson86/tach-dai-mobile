@@ -1004,3 +1004,25 @@ test('reconnect snapshots pending draft IDs and never sends drafts queued mid-po
  assert.equal(JSON.parse(sent[0].body).idempotency_key,first.id);
  assert.equal(client.snapshot().drafts.find(x=>x.id===later.id).status,'PENDING');
 });
+
+test('omitted has_more must remain UNKNOWN rather than falsely claiming terminal feed',async()=>{
+ let result={sync_status:'SYNCED',items:[
+   {workspace_id:'group_a',event_id:'event_1',feed_seq:'1'}],next_cursor:'c1'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,result)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ let page=await client.pullChanges(1);
+ assert.equal(page.status,'SYNCED');
+ assert.equal(page.has_more,null);
+ assert.equal(client.snapshot().cursor,'c1');
+ result={sync_status:'SYNCED',has_more:true,items:[
+   {workspace_id:'group_a',event_id:'event_2',feed_seq:'2'}],next_cursor:'c2'};
+ page=await client.pullChanges(1);
+ assert.equal(page.status,'SYNCED');
+ assert.equal(page.has_more,true);
+ result={sync_status:'SYNCED',has_more:false,items:[
+   {workspace_id:'group_a',event_id:'event_3',feed_seq:'3'}],next_cursor:'c3'};
+ page=await client.pullChanges(1);
+ assert.equal(page.status,'SYNCED');
+ assert.equal(page.has_more,false);
+ assert.equal(client.snapshot().cursor,'c3');
+});

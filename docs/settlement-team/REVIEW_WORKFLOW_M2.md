@@ -267,3 +267,12 @@ not sent implicitly in that reconnect attempt. Intent IDs and idempotency
 keys are unchanged. This race guard does not create durable offline queues,
 and remote write uncertainty is still PENDING until an original receipt is
 verified on deliberate retry.
+
+## Unknown pagination completeness is not terminal evidence
+
+Older synthetic change-feed responses may omit `has_more`; the browser still
+accepts an otherwise validated legacy page but now explicitly returns
+`has_more=null`, **not** `false`. The pilot shows "Chưa xác minh đã đọc hết"
+and never infers that the server's authoritative history is exhausted. Only
+an explicit verified `false` may support "end at last poll", and even then
+new events could arrive immediately. Modern PostgreSQL emits a boolean.

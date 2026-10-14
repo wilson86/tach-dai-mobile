@@ -393,7 +393,9 @@
           if (requestedWorkspace !== null)
             lastAcceptedFeedSequence = BigInt(page.items[page.items.length - 1].feed_seq);
         }
-        return { status: STATUS.SYNCED, items: clone(page.items), next_cursor: cursor, has_more: page.has_more === true };
+        return { status: STATUS.SYNCED, items: clone(page.items), next_cursor: cursor,
+          // Missing legacy synthetic metadata is UNKNOWN, never proven terminal.
+          has_more: typeof page.has_more === 'boolean' ? page.has_more : null };
       } catch (error) {
         if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
         return { status: STATUS.PENDING, error: errorCode(error, 'SYNC_NETWORK_UNAVAILABLE'), items: [] };

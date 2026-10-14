@@ -502,3 +502,13 @@ test('explicit page-progress indicator distinguishes more pages, terminal poll a
  assert.match(h.els['team-feed-progress'].textContent,/Chưa xác minh đã đọc hết/);
  h.mounted.dispose();
 });
+
+test('missing page-completeness metadata never tells pilot viewer it reached the end',async()=>{
+ const h=harness({pullHasMore:null});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,1);
+ assert.match(h.els['team-feed-progress'].textContent,/Chưa xác minh đã đọc hết/);
+ assert.doesNotMatch(h.els['team-feed-progress'].textContent,/Đã đến cuối/);
+ h.mounted.dispose();
+});
