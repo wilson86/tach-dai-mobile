@@ -64,7 +64,8 @@ async function main(){
   const firstLines=all.filter(r=>r.sourceGroupNo===1).map(r=>r.text);
   const secondLines=all.filter(r=>r.sourceGroupNo===2).map(r=>r.text);
   assert.ok(firstLines.length>0&&secondLines.length>0);
-  assert.deepEqual(firstLines.concat(secondLines),baseline.split("\n"),"source-order and stake conservation");
+  // Records originate in the VM; normalize to the host realm before strict comparison.
+  assert.deepEqual(Array.from(firstLines.concat(secondLines)),baseline.split("\n"),"source-order and stake conservation");
   // Choosing the first group cannot accidentally select another group's rows.
   g1.children[0].children[0].checked=true;
   g1.children[0].children[0].events.change();

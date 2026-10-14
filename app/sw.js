@@ -1,8 +1,8 @@
 'use strict';
 // Pilot UI refresh: bump the cache key whenever checkbox UX or shell changes.
 // The new service worker refreshes unified-core.js for existing pilot installs.
-const CACHE='kts-tach-unified-v1.0.10-checkbox-cache-refresh-046935';
-const CORE=['./','./index.html','./unified-core.js','./unified-core.js?ux=1.0.10','./manifest.webmanifest','./version.json','../icon-192.png','../icon-512.png'];
+const CACHE='kts-tach-unified-v1.0.11-semantic-result-checkbox-groups-046935';
+const CORE=['./','./index.html','./unified-core.js','./unified-core.js?ux=1.0.11','./manifest.webmanifest','./version.json','../icon-192.png','../icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
 self.addEventListener('fetch',event=>{
