@@ -218,3 +218,16 @@ not an actual IndexedDB browser runtime**. Real device reload, app
 termination, storage eviction, quota policy, browser shutdown/power loss,
 authentication and secret management still require separately approved
 physical/browser QA. No real phone storage or operational money is accessed.
+
+## Synthetic IndexedDB + vault integration proof (not browser proof)
+
+The default-off IndexedDB adapter now validates the exact expected object
+store schema (`keyPath=null`, `autoIncrement=false`) before opening a
+read or add request; a foreign or corrupted schema fails closed. New
+Node fake-IndexedDB tests compose the actual `createSyntheticRecoveryVault`
+with the encrypted store across two vault instances, including
+post-write ciphertext read-back, renewed mock session verification, decrypt
+to QUARANTINED, wrong-secret denial, and no automatic sync. They also model
+the important distinction between an individual `add()` request success
+and a **later transaction abort**: only completed transactions may return
+a saved ACK. No actual browser disk persistence was measured.

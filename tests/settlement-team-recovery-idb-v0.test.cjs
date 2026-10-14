@@ -5,6 +5,7 @@ const {webcrypto}=require('node:crypto');
 const {createSyntheticIndexedDbStore,SLOT}=
  require('../app/settlement-team-recovery-idb-v0.js');
 const Recovery=require('../app/settlement-team-recovery-v0.js');
+const {createSyntheticRecoveryVault}=require('../team-settlement/recovery-vault.cjs');
 const actor={workspace_id:'group_a',user_id:'fake_op'};
 const secret='synthetic-idb-test-only-strong-key';
 const draft={id:'draft_'+'a'.repeat(32),status:'PENDING',
@@ -13,7 +14,8 @@ const draft={id:'draft_'+'a'.repeat(32),status:'PENDING',
  payload:{synthetic:true,description:'fake_test_private'}};
 const envelope=()=>Recovery.seal({actor,passphrase:secret,drafts:[draft],
  cryptoProvider:webcrypto}).then(x=>Recovery.serializeEnvelope(x));
-function fakeIdb({blocked=false,failOpen=false,abortWrites=false,missingStore=false}={}){
+function fakeIdb({blocked=false,failOpen=false,abortWrites=false,
+  abortAfterSuccess=false,badKeyPath=false,missingStore=false}={}){
  const saved=new Map(),calls=[];
  const names=new Set(missingStore?[]:['sealed']);
  let version=missingStore?1:0;
@@ -28,6 +30,7 @@ function fakeIdb({blocked=false,failOpen=false,abortWrites=false,missingStore=fa
     abort(){setImmediate(()=>tx.onabort?.());},
     objectStore(){
      return {
+      keyPath:badKeyPath?'id':null,autoIncrement:false,
       get(key){
        const req={result:undefined};
        setImmediate(()=>{calls.push('get');req.result=saved.get(key);
@@ -42,6 +45,11 @@ function fakeIdb({blocked=false,failOpen=false,abortWrites=false,missingStore=fa
          req.onerror?.();setImmediate(()=>tx.onabort?.());return;}
         if(abortWrites){req.error={name:'QuotaExceededError'};
          req.onerror?.();setImmediate(()=>tx.onabort?.());return;}
+        if(abortAfterSuccess){
+         req.onsuccess?.();
+         setImmediate(()=>tx.onabort?.());
+         return;
+        }
         saved.set(key,value);req.onsuccess?.();
         setImmediate(()=>tx.oncomplete?.());
        });
@@ -150,4 +158,56 @@ test('new IndexedDB adapter remains entirely unreferenced by actual PWA',()=>{
    assert.doesNotMatch(fs.readFileSync(path.join(root,p),'utf8'),
      /settlement-team-recovery-idb-v0|KtsTeamSyntheticIndexedDbV0/);
  }
+});
+
+test('encrypted draft survives independent synthetic vault clients on fake IndexedDB',async()=>{
+ await secure(async()=>{
+  const fake=fakeIdb();
+  const auth={async verifySession(value){assert.equal(value,'a'.repeat(43));
+    return {server_verified:true,membership_active:true,
+      user_id:'fake_op',workspace_id:'group_a',role:'operator'};}};
+  const makeVault=()=>createSyntheticRecoveryVault({
+    auth,syntheticOnly:true,cryptoProvider:webcrypto,
+    store:createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true})
+  });
+  const first=makeVault(),token='a'.repeat(43);
+  const receipt=await first.save({sessionToken:token,passphrase:secret,
+    drafts:[draft],explicitConsent:true});
+  assert.equal(receipt.status,'ENCRYPTED_ADAPTER_ACK');
+  assert.equal(receipt.durability,'UNVERIFIED');
+  assert.equal(receipt.auto_send_enabled,false);
+  const bytes=fake.saved.get(SLOT);
+  for(const value of [secret,token,'fake_partner_1','fake_test_private'])
+    assert.equal(bytes.includes(value),false);
+  const recovered=await makeVault().inspect({sessionToken:token,
+    passphrase:secret,explicitConsent:true});
+  assert.equal(recovered.status,'QUARANTINED');
+  assert.equal(recovered.auto_send_enabled,false);
+  assert.equal(recovered.items[0].id,draft.id);
+  assert.equal(recovered.items[0].auto_retry,false);
+  assert.equal(recovered.requires_server_receipt_review,true);
+  assert.equal(await makeVault().inspect({sessionToken:token,
+    passphrase:'different-strong-synthetic-password',explicitConsent:true})
+    .then(()=>false,()=>true),true);
+  assert.equal(fake.saved.get(SLOT),bytes);
+ });
+});
+test('IndexedDB schema with unexpected keyPath refuses reads and writes',async()=>{
+ await secure(async()=>{
+  const fake=fakeIdb({badKeyPath:true});
+  const store=createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true});
+  await assert.rejects(store.read(SLOT),/TEAM_IDB_SCHEMA_INVALID/);
+  await assert.rejects(store.writeIfAbsent(SLOT,await envelope()),
+    /TEAM_IDB_SCHEMA_INVALID/);
+  assert.equal(fake.saved.size,0);
+ });
+});
+test('transaction abort after add request success cannot produce a saved ACK',async()=>{
+ await secure(async()=>{
+  const fake=fakeIdb({abortAfterSuccess:true});
+  const store=createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true});
+  await assert.rejects(store.writeIfAbsent(SLOT,await envelope()),
+    /TEAM_IDB_TRANSACTION_ABORTED/);
+  assert.equal(fake.saved.size,0);
+ });
 });
