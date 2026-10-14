@@ -83,3 +83,21 @@ test('server refuses a gap in immutable workspace feed instead of skipping event
     cursor:encodeCursor('1','group_a'),limit:2
   }),/TEAM_FEED_RESPONSE_UNVERIFIED/);
 });
+
+test('cursor decoding rejects extra claims, noncanonical bytes and unsafe JS numeric sequences',()=>{
+ const canonical=encodeCursor('7','group_a');
+ assert.deepEqual(decodeCursor(canonical,'group_a'),{feed_seq:'7'});
+ const encoded=obj=>Buffer.from(JSON.stringify(obj),'utf8').toString('base64url');
+ for(const value of [
+   encoded({feed_seq:'7',workspace_id:'group_a',role:'admin'}),
+   encoded({workspace_id:'group_a',feed_seq:'7'}),
+   encoded({feed_seq:7,workspace_id:'group_a'}),
+   encoded({feed_seq:'07',workspace_id:'group_a'}),
+   encoded({feed_seq:'7',workspace_id:'group_b'}),
+   canonical+'='
+ ])assert.throws(()=>decodeCursor(value,'group_a'),/TEAM_CURSOR_INVALID/);
+ assert.throws(()=>encodeCursor(Number.MAX_SAFE_INTEGER+1,'group_a'),/TEAM_CURSOR_INVALID/);
+ assert.throws(()=>encodeCursor(NaN,'group_a'),/TEAM_CURSOR_INVALID/);
+ assert.deepEqual(decodeCursor(encodeCursor('9223372036854775807','group_a'),'group_a'),
+   {feed_seq:'9223372036854775807'});
+});

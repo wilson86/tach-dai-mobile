@@ -187,3 +187,24 @@ movement. Missing optional `has_more` is tolerated only for older synthetic
 contract responses. Draft queue creation also rejects a base revision if
 incrementing it would lose JavaScript integer precision, before allocating
 an idempotency key or issuing a write. These guards do not authorize money.
+
+## Synthetic identity and final-state presentation guards
+
+Overlapping browser logins now fail with `SYNC_LOGIN_IN_FLIGHT`: a second
+identity exchange cannot race the first request and silently install its
+session. Rejected logins release this single-flight guard, while an explicit
+session change still invalidates delayed responses. The opt-in browser pilot
+does **not** accept `CLOSED` or `REOPEN_REQUESTED` as verified read-only
+states, since neither transition is implemented/qualified for this version.
+The server still owns approval roles and no real monetary finalization exists.
+
+## Canonical change-feed cursor contract
+
+The database repository refuses extra cursor JSON fields, alternate key order,
+nonnumeric/noncanonical sequence encoding and unsafe numeric values. The only
+accepted nonempty cursor is the exact URL-safe encoding produced by
+`encodeCursor()` for the same authenticated workspace; initial null cursor
+starts at sequence zero. Canonical encoding is **not a cryptographic signature**:
+a malicious client with workspace access could still forge a sequence. Real
+financial audit/export needs signed or server-stored read checkpoints and
+independent authoritative comparison before release.

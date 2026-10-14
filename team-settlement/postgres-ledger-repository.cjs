@@ -13,6 +13,8 @@ const MAX_FEED_SEQ = 9223372036854775807n;
 function normalizedFeedSeq(value) {
   if (typeof value !== 'string' && typeof value !== 'number' && typeof value !== 'bigint')
     throw new Error('TEAM_CURSOR_INVALID');
+  if (typeof value === 'number' && (!Number.isSafeInteger(value) || value < 0))
+    throw new Error('TEAM_CURSOR_INVALID');
   const str=String(value);
   if (!/^(0|[1-9][0-9]{0,18})$/.test(str)) throw new Error('TEAM_CURSOR_INVALID');
   if (BigInt(str)>MAX_FEED_SEQ) throw new Error('TEAM_CURSOR_INVALID');
@@ -34,7 +36,12 @@ function decodeCursor(cursor, workspaceId) {
   try {
     const parsed = JSON.parse(Buffer.from(cursor,'base64url').toString('utf8'));
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
-        parsed.workspace_id !== workspaceId) throw new Error();
+        Object.keys(parsed).length !== 2 ||
+        !Object.prototype.hasOwnProperty.call(parsed,'feed_seq') ||
+        !Object.prototype.hasOwnProperty.call(parsed,'workspace_id') ||
+        parsed.workspace_id !== workspaceId ||
+        typeof parsed.feed_seq !== 'string' ||
+        encodeCursor(parsed.feed_seq,workspaceId) !== cursor) throw new Error();
     return { feed_seq: normalizedFeedSeq(parsed.feed_seq) };
   } catch { throw new Error('TEAM_CURSOR_INVALID'); }
 }

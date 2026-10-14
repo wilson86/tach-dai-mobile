@@ -89,6 +89,7 @@
     let sessionToken = null; // Deliberately memory-only. Never persist bearer credentials.
     let workspaceId = null;
     let sessionEpoch = 0;
+    let loginInFlight = false; // Only one pending identity exchange per browser client.
      // Cursor is session-specific. Never reuse a prior user's/workspace's cursor
     // from generic local storage: doing so can skip new user's change events.
     let cursor = null;
@@ -150,21 +151,27 @@
     }
 
     async function login(authSubject, password, workspaceId) {
+      if (loginInFlight) throw new Error('SYNC_LOGIN_IN_FLIGHT');
       if (hasUnsyncedDrafts()) throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       if (typeof authSubject !== 'string' || !authSubject || typeof password !== 'string' ||
           !password || typeof workspaceId !== 'string' || !workspaceId)
         throw new Error('SYNC_LOGIN_INVALID');
       const epoch = sessionEpoch;
-      const result = await request('/v1/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ auth_subject: authSubject, password, workspace_id: workspaceId })
-      });
-      if (epoch !== sessionEpoch) throw new Error('SYNC_SESSION_CHANGED');
-      if (!result.response.ok || typeof result.body.session_token !== 'string')
-        throw new Error(result.body.error || 'AUTH_LOGIN_DENIED');
-      setSessionToken(result.body.session_token, workspaceId);
-      return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
+      loginInFlight = true;
+      try {
+        const result = await request('/v1/login', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ auth_subject: authSubject, password, workspace_id: workspaceId })
+        });
+        if (epoch !== sessionEpoch) throw new Error('SYNC_SESSION_CHANGED');
+        if (!result.response.ok || typeof result.body.session_token !== 'string')
+          throw new Error(result.body.error || 'AUTH_LOGIN_DENIED');
+        setSessionToken(result.body.session_token, workspaceId);
+        return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
+      } finally {
+        loginInFlight = false;
+      }
     }
 
     async function logout({ discardPending = false } = {}) {
@@ -417,6 +424,9 @@
             row.business_date !== scope.business_date ||
             row.region !== scope.region || !numericRevision ||
             !REVIEW_STATES.includes(row.state) ||
+            // CLOSED and REOPEN_REQUESTED have no qualified transactional path.
+            // A synthetic pilot must not visually authenticate final money states.
+            ['CLOSED','REOPEN_REQUESTED'].includes(row.state) ||
             (['PENDING_REVIEW','REVIEWED','CLOSED'].includes(row.state) &&
               (typeof row.submitted_by !== 'string' ||
                !FEED_EVENT_ID.test(row.submitted_by))) ||

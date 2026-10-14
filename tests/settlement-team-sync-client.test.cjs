@@ -874,3 +874,44 @@ test('feed limit and contradictory has_more metadata fail closed before cursor a
   assert.equal((await client.pullChanges(2)).status,'SYNCED');
   assert.equal(client.snapshot().cursor,'page_2');
 });
+
+test('parallel login attempts cannot race to replace a verified account',async()=>{
+ let complete,networkRequests=0;
+ const client=Sync.createSyncClient({fetchImpl:()=>{networkRequests++;
+   return new Promise(resolve=>{complete=resolve;});}});
+ const first=client.login('user_a','synthetic-password','group_a');
+ await assert.rejects(client.login('user_b','synthetic-password','group_b'),/SYNC_LOGIN_IN_FLIGHT/);
+ assert.equal(networkRequests,1);
+ complete(response(200,{session_token:'a'.repeat(43),expires_at:42}));
+ assert.equal((await first).authenticated,true);
+ assert.equal(client.snapshot().workspace_id,'group_a');
+ assert.equal(client.snapshot().authenticated,true);
+});
+
+test('failed login releases account exchange slot; session cancellation rejects stale reply',async()=>{
+ let calls=0;
+ const client=Sync.createSyncClient({fetchImpl:async()=>{calls++;
+   return calls===1?response(401,{error:'AUTH_LOGIN_DENIED'}):
+     response(200,{session_token:'b'.repeat(43),expires_at:42});
+ }});
+ await assert.rejects(client.login('bad','wrong','group_a'),/AUTH_LOGIN_DENIED/);
+ assert.equal(client.snapshot().authenticated,false);
+ assert.equal((await client.login('good','synthetic-password','group_b')).authenticated,true);
+ assert.equal(client.snapshot().workspace_id,'group_b');
+ assert.equal(calls,2);
+});
+
+test('synthetic pilot refuses unimplemented CLOSED and REOPEN_REQUESTED scopes as verified money states',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ let state='REVIEWED';
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{
+   ...scope,revision:3,state,submitted_by:'fake_operator',reviewed_by:'fake_reviewer'
+ })});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.readScope(scope)).status,'SYNCED');
+ for(state of ['CLOSED','REOPEN_REQUESTED']){
+   const denied=await client.readScope(scope);
+   assert.equal(denied.status,'BLOCKED');
+   assert.equal(denied.error,'SYNC_SCOPE_UNVERIFIED');
+ }
+});
