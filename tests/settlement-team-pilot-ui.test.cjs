@@ -19,12 +19,13 @@ function element(){
  };
 }
 function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
- syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED']}={}){
+ syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
   'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
-  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts'];
+  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
+  'team-review-audit'];
  const els=Object.fromEntries(ids.map(id=>[id,element()]));
  const doc={
    getElementById:id=>els[id]||null,
@@ -71,7 +72,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
    async pullChanges(){
      calls.push('pullChanges');requestCount++;
      const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
-     return status==='SYNCED'?{status,items:[{event_id:'synthetic_safe_event'}]}:
+     return status==='SYNCED'?{status,items:feedItems||[{event_id:'synthetic_safe_event'}]}:
        {status,error:'SYNC_NETWORK_UNAVAILABLE',items:[]};
    },
    async reconnect(){calls.push('reconnect');return {pull:{status:reconnectStatus},drafts:reconnectDrafts};},
@@ -95,7 +96,7 @@ const tick=()=>new Promise(resolve=>setImmediate(resolve));
 
 test('standalone pilot page uses restricted same-origin CSP and never wires legacy PWA',()=>{
  const html=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.html'),'utf8');
- for(const file of ['settlement-team-sync-client.js','settlement-team-pilot-ui.js',
+ for(const file of ['settlement-team-review-audit.js','settlement-team-sync-client.js','settlement-team-pilot-ui.js',
    'settlement-team-pilot-start.js','settlement-team-pilot.css'])
    assert.ok(html.includes(file),file);
  assert.match(html,/Content-Security-Policy/);
@@ -321,4 +322,50 @@ test('opt-in controls stay concealed when the HTML hidden flag is set',()=>{
  assert.ok(stylesheet.includes('[hidden]{display:none!important}'));
  const bootstrap=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot-start.js'),'utf8');
  assert.equal(bootstrap.includes('syntheticReviewUiEnabled:true'),false);
+});
+
+test('verified human-review audit shows only server actor, submitter, time and revision',async()=>{
+ const submitted={
+   workspace_id:'group_a',event_id:'event_2',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'2',
+   recorded_at:'2026-10-14T11:00:00.123Z',
+   result_snapshot:{synthetic_review_only:true,from_state:'DRAFT',
+     to_state:'PENDING_REVIEW',actor_user_id:'fake_operator',submitted_by:'fake_operator'}
+ };
+ const reviewed={...submitted,event_id:'event_3',event_kind:'REVIEWED',
+   actor_user_id:'fake_reviewer',scope_revision:3,feed_seq:'3',
+   recorded_at:'2026-10-14T11:01:00.123Z',result_snapshot:{
+     synthetic_review_only:true,from_state:'PENDING_REVIEW',
+     to_state:'REVIEWED',actor_user_id:'fake_reviewer',submitted_by:'fake_operator'}};
+ const h=harness({feedItems:[submitted,reviewed]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,2);
+ assert.match(h.els['team-review-audit'].children[1].textContent,/fake_reviewer/);
+ assert.match(h.els['team-review-audit'].children[1].textContent,/fake_operator/);
+ assert.match(h.els['team-review-audit'].children[1].textContent,/revision 3/);
+ assert.match(h.els['team-notice'].textContent,/TRANG HIỆN TẠI/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,0);
+ h.mounted.dispose();
+});
+test('audit validation failure cannot show forged reviewer or clear previous verified feed',async()=>{
+ const good={workspace_id:'group_a',event_id:'event_good',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'2',
+   recorded_at:'2026-10-14T11:00:00.123Z',result_snapshot:{
+     synthetic_review_only:true,from_state:'DRAFT',to_state:'PENDING_REVIEW',
+     actor_user_id:'fake_operator',submitted_by:'fake_operator'}};
+ const feed=[good];
+ const h=harness({feedItems:feed});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,1);
+ feed[0]={...good,workspace_id:'group_b',actor_user_id:'fake_forged'};
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,1);
+ assert.doesNotMatch(h.els['team-review-audit'].children[0].textContent,/fake_forged/);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH/);
+ h.mounted.dispose();
 });

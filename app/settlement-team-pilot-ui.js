@@ -1,7 +1,7 @@
 (function(root,factory){
-  if(typeof module==='object'&&module.exports)module.exports=factory();
-  else root.KtsTeamPilotUI=factory();
-}(typeof globalThis!=='undefined'?globalThis:this,function(){
+  if(typeof module==='object'&&module.exports)module.exports=factory(require('./settlement-team-review-audit.js'));
+  else root.KtsTeamPilotUI=factory(root.KtsTeamReviewAudit);
+}(typeof globalThis!=='undefined'?globalThis:this,function(Audit){
 'use strict';
 // Opt-in, synthetic-only, no production or automatic server startup.
 const PARTNER=/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/;
@@ -16,7 +16,8 @@ const IDS=['team-login','team-subject','team-password','team-workspace',
  'team-logout','team-partner','team-date','team-region','team-create',
  'team-sync','team-pull','team-reconnect','team-read','team-context',
  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
- 'team-review-controls','team-submit-review','team-approve-review','team-review-attempts'];
+ 'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
+ 'team-review-audit'];
 function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   const d=doc||(typeof document!=='undefined'?document:null);
   const w=win||(typeof window!=='undefined'?window:null);
@@ -29,6 +30,8 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     return [id,el];
   }));
   const sync=client||f.createSyncClient({baseUrl:''});
+  if(!Audit||typeof Audit.auditRows!=='function'||typeof Audit.displayRow!=='function')
+    throw Error('TEAM_REVIEW_AUDIT_DEPENDENCY_REQUIRED');
   if(typeof syntheticReviewUiEnabled!=='boolean')
     throw Error('TEAM_PILOT_REVIEW_CONFIG_INVALID');
   if(syntheticReviewUiEnabled && typeof sync.reviewScope!=='function')
@@ -125,6 +128,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     e['team-password'].value='';
     await sync.login(subject,pwd,workspace);
     clear(e['team-changes']); // Never display another session's previously read feed.
+    clear(e['team-review-audit']);
     clearReview();
     tell('Đăng nhập pilot thành công. Chỉ dùng dữ liệu giả.');
   });});
@@ -138,6 +142,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     }catch(err){
       if(!sync.snapshot().authenticated){
         clear(e['team-changes']); // Do not show former user's feed after local logout.
+        clear(e['team-review-audit']);
         clearReview();
         if(err&&err.message==='SYNC_LOGOUT_REVOKE_UNVERIFIED'){
           tell('Đã xóa phiên trên trình duyệt. CHƯA XÁC MINH thu hồi phiên trên máy chủ vì lỗi mạng/phản hồi; không coi là đăng xuất máy chủ thành công.');
@@ -146,7 +151,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       }
       throw err;
     }
-    clear(e['team-changes']);clearReview();
+    clear(e['team-changes']);clear(e['team-review-audit']);clearReview();
     tell('Đã đăng xuất và xác nhận máy chủ thu hồi phiên.');
   }));
   on(e['team-create'],'click',()=>void action(async()=>{
@@ -246,9 +251,17 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   on(e['team-pull'],'click',()=>void action(async()=>{
     const r=await sync.pullChanges();
     if(r.status==='SYNCED'&&Array.isArray(r.items)){
-      clear(e['team-changes']);
+      let auditRows;
+      try{auditRows=Audit.auditRows(r.items,sync.snapshot().workspace_id);}
+      catch(_){
+        tell('CHƯA XÁC MINH lịch sử xét duyệt. Danh sách đang hiển thị là lần đọc trước.');
+        return;
+      }
+      clear(e['team-changes']);clear(e['team-review-audit']);
       for(const item of r.items)row(e['team-changes'],String(item.event_id||'fake_event'));
-      tell('Change feed SYNCED: '+r.items.length+' sự kiện được xác minh.');
+      for(const item of auditRows)row(e['team-review-audit'],Audit.displayRow(item));
+      tell('Change feed SYNCED: '+r.items.length+' sự kiện; '+auditRows.length+
+        ' xét duyệt trên TRANG HIỆN TẠI, không phải toàn bộ lịch sử.');
     }else{
       tell('CHƯA CẬP NHẬT change feed: '+String(r.status||'BLOCKED')+
         (r.error?' • '+r.error:'')+'. Danh sách đang hiển thị là lần đọc trước.');

@@ -99,3 +99,22 @@ Roles and separation of duties are enforced **server-side and in SQL**,
 never by visual button hiding. Review UI remains hidden by default and close,
 reopen or financial finalization remain inaccessible. This opt-in UI source
 has only GitHub synthetic tests, no new physical-device requalification.
+
+## Synthetic read-only human audit feed (2026-10-14)
+
+The pilot now loads `settlement-team-review-audit.js` before the sync client.
+For `SUBMITTED` and `REVIEWED`, each feed row must match the authenticated
+workspace and synthetic partner; provide a positive revision/feed sequence,
+safe actor/event IDs, server timestamp, and a coherent `result_snapshot`
+containing exactly the expected state transition, submitter and reviewer
+identity. Review actor IDs must match the immutable event and snapshot;
+a reviewer cannot be their own submitter. Unexpected/missing audit metadata
+fails closed **before the browser feed cursor advances**.
+
+The UI renders only whitelisted review details through `textContent`:
+action, fake scope, server actor ID, original submitter ID, revision, timestamp,
+and event ID. Raw snapshots are not displayed. A failed audit page never
+replaces previously verified history and is marked stale. The visible
+review list covers *only the current change-feed page*, not a complete
+financial audit trail; no durable review history is stored on the browser.
+This remains opt-in synthetic-only, not finance release authorization.

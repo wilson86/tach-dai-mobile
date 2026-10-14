@@ -1,7 +1,7 @@
 (function (root, factory) {
-  if (typeof module === 'object' && module.exports) module.exports = factory();
-  else root.KtsSettlementSyncClient = factory();
-}(typeof globalThis !== 'undefined' ? globalThis : this, function () {
+  if (typeof module === 'object' && module.exports) module.exports = factory(require('./settlement-team-review-audit.js'));
+  else root.KtsSettlementSyncClient = factory(root.KtsTeamReviewAudit);
+}(typeof globalThis !== 'undefined' ? globalThis : this, function (Audit) {
   'use strict';
 
   const STATUS = Object.freeze({ PENDING: 'PENDING', SYNCED: 'SYNCED', CONFLICT: 'CONFLICT', BLOCKED: 'BLOCKED' });
@@ -29,6 +29,11 @@
         if(sequence<=previous)return false;
         previous=sequence;
       }
+    }
+    // Validate audit actor, tenant and transition before cursor moves.
+    if(workspaceId!==null){
+      if(!Audit||typeof Audit.auditRows!=='function')return false;
+      try{Audit.auditRows(items,workspaceId);}catch(_){return false;}
     }
     return true;
   }

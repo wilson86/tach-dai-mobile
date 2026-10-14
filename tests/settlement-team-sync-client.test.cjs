@@ -643,3 +643,32 @@ test('review lost response is blocked from account switch until explicit discard
  assert.equal(client.snapshot().review_attempts.length,0);
  assert.equal(client.snapshot().authenticated,false);
 });
+
+test('client rejects forged reviewer audit metadata before cursor advancement',async()=>{
+ let payload={sync_status:'SYNCED',next_cursor:'cursor_good',items:[{
+   workspace_id:'group_a',event_id:'review_event_a',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',feed_seq:'2',scope_revision:2,
+   recorded_at:'2026-10-14T10:30:15.123Z',
+   result_snapshot:{synthetic_review_only:true,actor_user_id:'fake_operator',
+     submitted_by:'fake_operator',from_state:'DRAFT',to_state:'PENDING_REVIEW'}
+ }]};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,payload)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'cursor_good');
+ for(const bad of [
+   {...payload.items[0],actor_user_id:'fake_forged'},
+   {...payload.items[0],result_snapshot:{...payload.items[0].result_snapshot,
+     to_state:'CLOSED'}},
+   {...payload.items[0],event_kind:'REVIEWED',result_snapshot:{
+     synthetic_review_only:true,actor_user_id:'fake_operator',
+     submitted_by:'fake_operator',from_state:'PENDING_REVIEW',to_state:'REVIEWED'}}
+ ]){
+   payload={sync_status:'SYNCED',next_cursor:'cursor_bad',items:[bad]};
+   const blocked=await client.pullChanges();
+   assert.equal(blocked.status,'BLOCKED');
+   assert.equal(blocked.error,'SYNC_FEED_UNVERIFIED');
+   assert.equal(client.snapshot().cursor,'cursor_good');
+ }
+});
