@@ -87,6 +87,8 @@
     let cursor = null;
     const pending = new Map();
     const draftFlights = new Set();
+    const reviewAttempts = new Map(); // Volatile; same-key retries within this session.
+    const reviewFlights = new Set();
     const listeners = new Set();
 
     function emit() {
@@ -115,7 +117,8 @@
     }
 
     function hasUnsyncedDrafts() {
-      return Array.from(pending.values()).some(item => item.status !== STATUS.SYNCED);
+      return Array.from(pending.values()).some(item => item.status !== STATUS.SYNCED) ||
+        Array.from(reviewAttempts.values()).some(item => item.status !== STATUS.SYNCED);
     }
 
     function setSessionToken(token, workspace = null, { discardPending = false } = {}) {
@@ -130,6 +133,7 @@
       sessionToken = token;
       workspaceId = workspace;
       pending.clear();
+      reviewAttempts.clear();
       cursor = null;
       emit();
       return snapshot();
@@ -182,6 +186,7 @@
       // Prototype drafts are volatile. Do not display a previous user's data
       // after logout or let a later login submit it under another identity.
       pending.clear();
+      reviewAttempts.clear();
       emit();
       return snapshot();
     }
@@ -247,6 +252,73 @@
       }
       } finally {
         draftFlights.delete(id);
+      }
+    }
+
+
+    // Only a deliberate human button press should create a review intent.
+    // Never regenerate a key for a network-uncertain same-scope transition.
+    async function reviewScope(action,scope,expectedRevision,{retryOnly=false}={}) {
+      if(!['submit_review','approve_review'].includes(action))
+        throw Error('SYNC_REVIEW_ACTION_INVALID');
+      if(!sessionToken || workspaceId===null)
+        throw Error('AUTH_SESSION_REQUIRED');
+      if(!scope || scope.workspace_id!==workspaceId ||
+          typeof scope.partner_id!=='string' ||
+          !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(scope.partner_id) ||
+          typeof scope.business_date!=='string' ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(scope.business_date) ||
+          !['mn','mt','mb'].includes(scope.region))
+        throw Error('SYNC_SCOPE_INVALID');
+      if(!Number.isSafeInteger(expectedRevision) || expectedRevision<0 ||
+          !Number.isSafeInteger(expectedRevision+1))
+        throw Error('SYNC_REVISION_INVALID');
+      const target=JSON.stringify([action,workspaceId,scope.partner_id,scope.business_date,
+        scope.region,expectedRevision]);
+      let attempt=reviewAttempts.get(target);
+      if(!attempt && retryOnly===true)throw Error('SYNC_REVIEW_RETRY_NOT_FOUND');
+      if(!attempt){
+        attempt={action,scope:clone(scope),expected_revision:expectedRevision,
+          idempotency_key:newDraftId(),status:STATUS.PENDING};
+        reviewAttempts.set(target,attempt);
+        emit();
+      }
+      if(attempt.status!==STATUS.PENDING)return Object.freeze(clone(attempt));
+      if(reviewFlights.has(target))
+        return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_REVIEW_ALREADY_IN_FLIGHT'});
+      const epoch=sessionEpoch;
+      reviewFlights.add(target);
+      try{
+        let result;
+        try{
+          result=await request('/v1/scopes/review',{
+            method:'POST',headers:{'content-type':'application/json'},
+            body:JSON.stringify({action,scope:attempt.scope,
+              expected_revision:attempt.expected_revision,idempotency_key:attempt.idempotency_key})
+          });
+        }catch(error){
+          if(epoch!==sessionEpoch)return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
+          return setStatus(attempt,STATUS.PENDING,errorCode(error,'SYNC_NETWORK_UNAVAILABLE'));
+        }
+        if(epoch!==sessionEpoch)return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
+        const status=result.response.status;
+        if(status===409)return setStatus(attempt,STATUS.CONFLICT,result.body.error||'TEAM_REVISION_CONFLICT');
+        if(status>=500)return setStatus(attempt,STATUS.PENDING,'SYNC_REVIEW_RECEIPT_UNCERTAIN');
+        if(status===401||status===403||status===404||!result.response.ok)
+          return setStatus(attempt,STATUS.BLOCKED,result.body.error||'SYNC_REVIEW_SERVER_REJECTED');
+        const body=result.body,expectedState=action==='submit_review'?'PENDING_REVIEW':'REVIEWED';
+        const expectedKey=[workspaceId,scope.partner_id,scope.business_date,scope.region].join(':');
+        if(!body || body.sync_status!==STATUS.SYNCED || body.review_state!==expectedState ||
+            body.scope_key!==expectedKey || body.replayed!==true && body.replayed!==false ||
+            typeof body.event_id!=='string' || !FEED_EVENT_ID.test(body.event_id) ||
+            !verifiedFeedSequence(body.feed_seq) ||
+            !Number.isSafeInteger(body.new_revision) ||
+            body.new_revision!==attempt.expected_revision+1)
+          return setStatus(attempt,STATUS.BLOCKED,'SYNC_REVIEW_RECEIPT_UNVERIFIED');
+        attempt.server_result=clone(body);
+        return setStatus(attempt,STATUS.SYNCED);
+      }finally{
+        reviewFlights.delete(target);
       }
     }
 
@@ -337,7 +409,8 @@
 
     function snapshot() {
       const volatileUnsentCount=Array.from(pending.values())
-        .filter(item=>item.status!==STATUS.SYNCED).length;
+        .filter(item=>item.status!==STATUS.SYNCED).length+
+        Array.from(reviewAttempts.values()).filter(item=>item.status!==STATUS.SYNCED).length;
       return Object.freeze({
         authenticated: Boolean(sessionToken), cursor, workspace_id: workspaceId,
         // Financial drafts are only held in this JavaScript process. A browser
@@ -346,11 +419,13 @@
         draft_persistence: 'MEMORY_ONLY',
         volatile_unsent_count: volatileUnsentCount,
         reload_loss_risk: volatileUnsentCount>0,
-        drafts: Object.freeze(Array.from(pending.values()).map(item => Object.freeze(clone(item))))
+        drafts: Object.freeze(Array.from(pending.values()).map(item => Object.freeze(clone(item)))),
+        review_attempts: Object.freeze(Array.from(reviewAttempts.values())
+          .map(item=>Object.freeze(clone(item))))
       });
     }
 
-    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, pullChanges, readScope, reconnect, snapshot, STATUS });
+    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, reconnect, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });

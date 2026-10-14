@@ -574,3 +574,72 @@ test('browser feed fails closed on descending or duplicate sequence and oversize
    assert.equal(client.snapshot().cursor,null);
  }
 });
+
+test('review requires an authenticated synthetic workspace and rejects close/finalize',async()=>{
+ const client=Sync.createSyncClient({fetchImpl:async()=>{throw Error('NO_REQUEST_EXPECTED')}});
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ await assert.rejects(()=>client.reviewScope('submit_review',scope,1),/AUTH_SESSION_REQUIRED/);
+ client.setSessionToken('a'.repeat(43),'group_a');
+ for(const action of ['close_scope','reopen_scope','approve','finalize'])
+   await assert.rejects(()=>client.reviewScope(action,scope,1),/SYNC_REVIEW_ACTION_INVALID/);
+ await assert.rejects(()=>client.reviewScope('submit_review',{...scope,partner_id:'customer_real'},1),/SYNC_SCOPE_INVALID/);
+ await assert.rejects(()=>client.reviewScope('submit_review',{...scope,workspace_id:'group_b'},1),/SYNC_SCOPE_INVALID/);
+ await assert.rejects(()=>client.reviewScope('submit_review',scope,-1),/SYNC_REVISION_INVALID/);
+ assert.equal(client.snapshot().review_attempts.length,0);
+});
+test('review retry keeps exact key and scope after lost response and accepts valid original replay receipt',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ const requests=[];let online=false;
+ const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+   assert.equal(url,'/v1/scopes/review');
+   const payload=JSON.parse(options.body);requests.push(payload);
+   if(!online)throw Error('PHONE_OFFLINE');
+   return response(200,{event_id:'event_review',replayed:true,feed_seq:'2',
+     new_revision:2,scope_key:'group_a:fake_partner_1:2026-10-14:mn',
+     review_state:'PENDING_REVIEW',sync_status:'SYNCED'});
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const first=await client.reviewScope('submit_review',scope,1);
+ assert.equal(first.status,'PENDING');
+ assert.equal(client.snapshot().volatile_unsent_count,1);
+ assert.equal(client.snapshot().reload_loss_risk,true);
+ assert.match(requests[0].idempotency_key,/^draft_[0-9a-f]{32}$/);
+ online=true;
+ const done=await client.reviewScope('submit_review',scope,1,{retryOnly:true});
+ assert.equal(done.status,'SYNCED');
+ assert.equal(done.server_result.event_id,'event_review');
+ assert.equal(requests.length,2);
+ assert.deepEqual(requests[0],requests[1]);
+ assert.equal(client.snapshot().volatile_unsent_count,0);
+ assert.equal((await client.reviewScope('submit_review',scope,1)).status,'SYNCED');
+ assert.equal(requests.length,2);
+});
+test('review never reports SYNCED for uncertain or incomplete server responses',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ for(const data of [
+   response(200,{sync_status:'SYNCED',review_state:'PENDING_REVIEW',event_id:'event_1',
+     replayed:false,feed_seq:1,new_revision:2,scope_key:'group_other:fake_partner_1:2026-10-14:mn'}),
+   response(200,{sync_status:'SYNCED',review_state:'CLOSED',event_id:'event_1',
+     replayed:false,feed_seq:1,new_revision:2,scope_key:'group_a:fake_partner_1:2026-10-14:mn'}),
+   response(200,{sync_status:'SYNCED',review_state:'PENDING_REVIEW',event_id:'event_1',
+     replayed:false,feed_seq:1,new_revision:3,scope_key:'group_a:fake_partner_1:2026-10-14:mn'}),
+   response(503,{error:'TEAM_BACKEND_UNAVAILABLE'})
+ ]){
+   const client=Sync.createSyncClient({fetchImpl:async()=>data});
+   client.setSessionToken('a'.repeat(43),'group_a');
+   const out=await client.reviewScope('submit_review',scope,1);
+   assert.notEqual(out.status,'SYNCED');
+   assert.equal(out.status,data.status===503?'PENDING':'BLOCKED');
+ }
+});
+test('review lost response is blocked from account switch until explicit discard',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>{throw Error('NETWORK_DOWN')}});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ await client.reviewScope('submit_review',scope,1);
+ assert.throws(()=>client.setSessionToken('b'.repeat(43),'group_b'),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+ await assert.rejects(()=>client.logout(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+ client.clearSession();
+ assert.equal(client.snapshot().review_attempts.length,0);
+ assert.equal(client.snapshot().authenticated,false);
+});

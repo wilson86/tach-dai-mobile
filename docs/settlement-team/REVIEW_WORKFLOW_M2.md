@@ -62,3 +62,20 @@ SQL layer rechecks membership/CAS/separation of duties under tenant RLS.
 This route *cannot close* or *reopen* a scope, calculate money, or mutate the
 operational Router. No UI button was added. This is a test-only internal
 API, not production readiness, and only disposable localhost CI may expose it.
+
+## Volatile client review intents — default not exposed in UI
+
+The browser sync client now has an explicit `reviewScope(action,scope,expectedRevision)`
+internal API for **fake/demo/synthetic** partner IDs only. It requires an
+already-authenticated workspace, accepts only submit_review / approve_review,
+generates an opaque secure idempotency key and retains the exact action/scope/
+revision/key in MEMORY_ONLY while the result is uncertain. A voluntary
+`retryOnly:true` request can reuse the same key without forging a new review.
+Only a verified server receipt with expected state, revision, feed sequence,
+scope key, event ID and replay flag may mark it SYNCED; 409 is CONFLICT,
+4xx BLOCKED, network/5xx remain PENDING/uncertain.
+
+Unsent review intents block automatic account switching/logout and increase
+the visible volatile_unsent_count/reload_loss_risk. This cannot guarantee
+survival after browser reload/close; no durable offline review queue exists.
+No production UI or endpoint was activated by this client-only change.
