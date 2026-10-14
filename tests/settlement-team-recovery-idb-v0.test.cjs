@@ -14,8 +14,8 @@ const draft={id:'draft_'+'a'.repeat(32),status:'PENDING',
  payload:{synthetic:true,description:'fake_test_private'}};
 const envelope=()=>Recovery.seal({actor,passphrase:secret,drafts:[draft],
  cryptoProvider:webcrypto}).then(x=>Recovery.serializeEnvelope(x));
-function fakeIdb({blocked=false,failOpen=false,abortWrites=false,
-  abortAfterSuccess=false,badKeyPath=false,missingStore=false}={}){
+function fakeIdb({blocked=false,lateSuccess=false,failOpen=false,abortWrites=false,
+  abortAfterSuccess=false,badKeyPath=false,badAutoIncrement=false,missingStore=false}={}){
  const saved=new Map(),calls=[];
  const names=new Set(missingStore?[]:['sealed']);
  let version=missingStore?1:0;
@@ -30,7 +30,7 @@ function fakeIdb({blocked=false,failOpen=false,abortWrites=false,
     abort(){setImmediate(()=>tx.onabort?.());},
     objectStore(){
      return {
-      keyPath:badKeyPath?'id':null,autoIncrement:false,
+      keyPath:badKeyPath?'id':null,autoIncrement:badAutoIncrement,
       get(key){
        const req={result:undefined};
        setImmediate(()=>{calls.push('get');req.result=saved.get(key);
@@ -66,8 +66,12 @@ function fakeIdb({blocked=false,failOpen=false,abortWrites=false,
    const request={result:db,transaction:{abort(){}},onerror:null,onblocked:null,
     onupgradeneeded:null,onsuccess:null};
    setImmediate(()=>{
-    if(blocked){request.onblocked?.();return;}
-    if(failOpen){request.onerror?.();return;}
+    if(blocked){request.onblocked?.();
+      if(lateSuccess)setImmediate(()=>request.onsuccess?.());
+      return;}
+    if(failOpen){request.onerror?.();
+      if(lateSuccess)setImmediate(()=>request.onsuccess?.());
+      return;}
     if(version===0&&!missingStore)
       request.onupgradeneeded?.({oldVersion:0});
     request.onsuccess?.();
@@ -208,6 +212,39 @@ test('transaction abort after add request success cannot produce a saved ACK',as
   const store=createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true});
   await assert.rejects(store.writeIfAbsent(SLOT,await envelope()),
     /TEAM_IDB_TRANSACTION_ABORTED/);
+  assert.equal(fake.saved.size,0);
+ });
+});
+
+test('late success after BLOCKED open is closed without reading any records',async()=>{
+ await secure(async()=>{
+  const fake=fakeIdb({blocked:true,lateSuccess:true});
+  const store=createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true});
+  await assert.rejects(store.read(SLOT),/TEAM_IDB_BLOCKED/);
+  await new Promise(resolve=>setImmediate(resolve));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(fake.calls.filter(x=>x==='close').length,1);
+  assert.equal(fake.calls.some(x=>x.startsWith('transaction:')),false);
+ });
+});
+test('late open success after reported error cannot revive an IDB operation',async()=>{
+ await secure(async()=>{
+  const fake=fakeIdb({failOpen:true,lateSuccess:true});
+  const store=createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true});
+  await assert.rejects(store.read(SLOT),/TEAM_IDB_OPEN_FAILED/);
+  await new Promise(resolve=>setImmediate(resolve));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(fake.calls.filter(x=>x==='close').length,1);
+  assert.equal(fake.calls.some(x=>x.startsWith('transaction:')),false);
+ });
+});
+test('unexpected autoIncrement schema is refused, never modified',async()=>{
+ await secure(async()=>{
+  const fake=fakeIdb({badAutoIncrement:true});
+  const store=createSyntheticIndexedDbStore({indexedDB:fake.api,syntheticOnly:true});
+  await assert.rejects(store.read(SLOT),/TEAM_IDB_SCHEMA_INVALID/);
+  await assert.rejects(store.writeIfAbsent(SLOT,await envelope()),
+    /TEAM_IDB_SCHEMA_INVALID/);
   assert.equal(fake.saved.size,0);
  });
 });
