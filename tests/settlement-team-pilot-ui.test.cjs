@@ -218,6 +218,6 @@ test('UI clears former user feed and warns when remote logout revocation is unve
  assert.equal(h.state.authenticated,false);
  assert.equal(h.els['team-changes'].children.length,0);
  assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH thu hồi phiên/);
- assert.doesNotMatch(h.els['team-notice'].textContent,/máy chủ thành công\.$/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/^Đã đăng xuất và xác nhận máy chủ/);
  h.mounted.dispose();
 });
