@@ -21,34 +21,39 @@ function createSyntheticIndexedDbStore({indexedDB,syntheticOnly=false}={}){
  function key(slot){if(slot!==SLOT)reject('TEAM_IDB_SLOT_INVALID');}
  function open(){
   return new Promise((resolve,rejectPromise)=>{
-   let request;
-   try{request=indexedDB.open(DB,1);}catch(_){rejectPromise(Error('TEAM_IDB_OPEN_FAILED'));return;}
+   let request,settled=false;
+   const fail=code=>{if(!settled){settled=true;rejectPromise(Error(code));}};
+   try{request=indexedDB.open(DB,1);}
+   catch(_){fail('TEAM_IDB_OPEN_FAILED');return;}
    if(!request||typeof request!=='object'){
-     rejectPromise(Error('TEAM_IDB_OPEN_FAILED'));return;
+    fail('TEAM_IDB_OPEN_FAILED');return;
    }
-   request.onblocked=()=>rejectPromise(Error('TEAM_IDB_BLOCKED'));
-   request.onerror=()=>rejectPromise(Error('TEAM_IDB_OPEN_FAILED'));
+   // Browser can invoke onsuccess after onblocked. Never revive a rejected
+   // opener or leak the late opened handle.
+   request.onblocked=()=>fail('TEAM_IDB_BLOCKED');
+   request.onerror=()=>fail('TEAM_IDB_OPEN_FAILED');
    request.onupgradeneeded=event=>{
     try{
-     if(event.oldVersion!==0||!request.result||
+     if(settled||event.oldVersion!==0||!request.result||
         typeof request.result.createObjectStore!=='function')
        throw Error('TEAM_IDB_SCHEMA_INVALID');
      request.result.createObjectStore(STORE);
     }catch(_){
      try{request.transaction?.abort();}catch(_){}
-     rejectPromise(Error('TEAM_IDB_SCHEMA_INVALID'));
+     fail('TEAM_IDB_SCHEMA_INVALID');
     }
    };
    request.onsuccess=()=>{
     const db=request.result;
+    if(settled){try{db?.close?.();}catch(_){}return;}
     if(!db||typeof db.transaction!=='function'||
        !db.objectStoreNames||!db.objectStoreNames.contains(STORE)||
        db.version!==1){
-      try{db?.close?.();}catch(_){}
-      rejectPromise(Error('TEAM_IDB_SCHEMA_INVALID'));return;
+     try{db?.close?.();}catch(_){}
+     fail('TEAM_IDB_SCHEMA_INVALID');return;
     }
     db.onversionchange=()=>{try{db.close();}catch(_){}};
-    resolve(db);
+    settled=true;resolve(db);
    };
   });
  }
