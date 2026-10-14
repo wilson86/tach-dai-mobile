@@ -242,6 +242,10 @@
         if (epoch !== sessionEpoch) return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' });
         if (result.response.status === 409) return setStatus(item, STATUS.CONFLICT, result.body.error || 'TEAM_REVISION_CONFLICT');
         if (result.response.status === 401) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_INVALID');
+        // A 5xx can occur AFTER PostgreSQL committed but BEFORE an ACK reached the phone.
+        // Keep the same durable-on-server idempotency key for an explicit retry.
+        if (result.response.status >= 500)
+          return setStatus(item, STATUS.PENDING, 'SYNC_DRAFT_RECEIPT_UNCERTAIN');
         if (!result.response.ok) return setStatus(item, STATUS.BLOCKED, result.body.error || 'SYNC_SERVER_REJECTED');
         // A receipt for another scope must never mark this draft as committed.
         const scopeKey = [item.scope.workspace_id,item.scope.partner_id,
@@ -417,7 +421,9 @@
               (typeof row.reviewed_by !== 'string' ||
                !FEED_EVENT_ID.test(row.reviewed_by) ||
                row.reviewed_by === row.submitted_by)) ||
-            (row.state === 'PENDING_REVIEW' && row.reviewed_by != null))
+            (row.state === 'PENDING_REVIEW' && row.reviewed_by != null) ||
+            (row.state === 'DRAFT' &&
+              (row.submitted_by != null || row.reviewed_by != null)))
           return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_UNVERIFIED' };
         return { status: STATUS.SYNCED, scope: clone(row) };
       } catch (error) {

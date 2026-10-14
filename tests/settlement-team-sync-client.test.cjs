@@ -760,3 +760,46 @@ test('a synthetic draft needs an exact server scope receipt, not a different eve
  const draft=client.queueDraft(scope,{synthetic:true});
  assert.equal((await client.syncDraft(draft.id)).status,'SYNCED');
 });
+
+test('500 after possible commit keeps draft uncertain and reuses the SAME key for deliberate retry',async()=>{
+ const calls=[];
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ let count=0;
+ const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+   calls.push({url,body:JSON.parse(options.body)});
+   count++;
+   if(count===1)return response(503,{error:'TEAM_BACKEND_UNAVAILABLE'});
+   return response(200,{sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-10-14:mn',
+     event_id:'committed_event',replayed:true,new_revision:1,feed_seq:'1'});
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const draft=client.queueDraft(scope,{synthetic:true});
+ const first=await client.syncDraft(draft.id);
+ assert.equal(first.status,'PENDING');
+ assert.equal(first.error,'SYNC_DRAFT_RECEIPT_UNCERTAIN');
+ assert.equal(client.snapshot().drafts[0].server_result,undefined);
+ const second=await client.syncDraft(draft.id);
+ assert.equal(second.status,'SYNCED');
+ assert.equal(calls.length,2);
+ assert.equal(calls[0].body.idempotency_key,calls[1].body.idempotency_key);
+ assert.deepEqual(calls[0].body,calls[1].body);
+ assert.equal(second.server_result.replayed,true);
+});
+
+test('DRAFT state cannot display counterfeit submitter or reviewer provenance',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ let row={...scope,revision:1,state:'DRAFT',submitted_by:null,reviewed_by:null};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,row)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.readScope(scope)).status,'SYNCED');
+ for(const invalid of [
+   {...row,submitted_by:'fake_operator'},
+   {...row,reviewed_by:'fake_reviewer'},
+   {...row,submitted_by:'fake_operator',reviewed_by:'fake_reviewer'}
+ ]){
+   row=invalid;
+   const result=await client.readScope(scope);
+   assert.equal(result.status,'BLOCKED');
+   assert.equal(result.error,'SYNC_SCOPE_UNVERIFIED');
+ }
+});

@@ -152,3 +152,14 @@ and region exactly. Missing/foreign receipts are `SYNC_ACK_UNVERIFIED` and
 do not satisfy the operator's saved-draft claim. The authenticated server
 still owns tenant membership, CAS and idempotency; this browser check is an
 additional fail-closed presentation guard, not a financial approval.
+
+## Uncertain draft ACK and fake DRAFT provenance
+
+HTTP 5xx after a draft write is **not evidence the server rolled back**:
+`syncDraft()` keeps the original request `PENDING` with
+`SYNC_DRAFT_RECEIPT_UNCERTAIN`. A deliberate retry reuses its original scope,
+revision, payload and idempotency key; only a fully scoped replay receipt can
+produce `SYNCED`. A rejected 4xx remains `BLOCKED`. This behavior protects
+against duplicate intent creation but does not make offline browser memory
+durable. A read-only `DRAFT` scope is also denied if it improperly claims
+a `submitted_by` or `reviewed_by` identity before the review transition.
