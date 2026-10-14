@@ -155,7 +155,7 @@ async function open({envelope,actor,passphrase,cryptoProvider}={}){
   if(!envelope||typeof envelope!=='object'||Array.isArray(envelope)||
      JSON.stringify(envelope).length>MAX_ENVELOPE_BYTES||
      Object.keys(envelope).sort().join('|')!==
-       'cipher|ciphertext|iv|iterations|kdf|kind|salt|version'||
+       'cipher|ciphertext|iterations|iv|kdf|kind|salt|version'||
      envelope.kind!==KIND||envelope.version!==0||
      envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-SHA256'||
      envelope.iterations!==ITERATIONS)
