@@ -95,3 +95,21 @@ test('size, multiplicity, unsafe numbers and impossible dates are rejected',asyn
  await assert.rejects(seal([{...draft(),payload:{synthetic:true,anything:'a'.repeat(50000)}}]),
    /TEAM_RECOVERY_DRAFT_INVALID|TEAM_RECOVERY_SIZE_LIMIT/);
 });
+
+test('recovery remains default-off in browser and its source is a CI path trigger',()=>{
+ const fs=require('node:fs'),path=require('node:path');
+ const root=path.join(__dirname,'..');
+ for(const file of [
+   'app/settlement-team-pilot.html',
+   'app/settlement-team-pilot-start.js',
+   'app/settlement-team-pilot-ui.js',
+   'app/settlement-team-sync-client.js'
+ ]){
+   const body=fs.readFileSync(path.join(root,file),'utf8');
+   assert.doesNotMatch(body,/settlement-team-recovery-v0|KtsTeamSyntheticRecoveryV0/,file);
+ }
+ const workflow=fs.readFileSync(path.join(root,
+   '.github/workflows/settlement-team-contract.yml'),'utf8');
+ assert.match(workflow,/app\/settlement-team-recovery-v0\.js/);
+ assert.match(workflow,/node --test tests\/settlement-team-\*\.test\.cjs/);
+});

@@ -43,3 +43,13 @@ safe. A future product must independently approve its threat model and
 prove lifecycle recovery without storing the decryption secret alongside
 the ciphertext. `GROUP_APP_READY=NO`, `REAL_MONEY_READY=NO`,
 `RELEASE_READINESS=BLOCKED`.
+
+## Default-off guard and CI source path
+
+The contract workflow path filter explicitly includes
+`app/settlement-team-recovery-v0.js`, ensuring standalone future code
+changes cannot silently bypass the standard synthetic test job. A dedicated
+Node test asserts the pilot HTML/start/UI and live sync client never import
+this prototype; only the synthetic test harness exercises its API. Releasing
+a browser download/import workflow requires a separate approved security and
+device-qualification change, not a hidden new script tag.
