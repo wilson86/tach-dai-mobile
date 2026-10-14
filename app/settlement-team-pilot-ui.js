@@ -5,6 +5,14 @@
 'use strict';
 // Opt-in, synthetic-only, no production or automatic server startup.
 const PARTNER=/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/;
+function validBusinessDate(value) {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split('-').map(Number);
+  if (year < 1 || month < 1 || month > 12) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  return day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1];
+}
+const MAX_VISIBLE_EVENTS=500;
 const REVIEW_LABELS=Object.freeze({
   DRAFT:'DRAFT — bản nháp',
   PENDING_REVIEW:'PENDING_REVIEW — chờ người duyệt',
@@ -37,11 +45,16 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   if(syntheticReviewUiEnabled && typeof sync.reviewScope!=='function')
     throw Error('TEAM_PILOT_REVIEW_CLIENT_REQUIRED');
   let busy=false,dead=false,notice='',unsubscribe,verifiedScope=null;
+  let verifiedEventIds=[],verifiedAuditRows=[],historyTruncated=false,observedSessionEpoch=null;
   const listeners=[];
   function on(el,name,handler){el.addEventListener(name,handler);listeners.push([el,name,handler]);}
   function clear(el){while(el.firstChild)el.removeChild(el.firstChild);}
   function row(el,value){const li=d.createElement('li');li.textContent=String(value);el.appendChild(li);}
   function tell(value){notice=String(value);e['team-notice'].textContent=notice;}
+  function clearVerifiedHistory(){
+    verifiedEventIds=[];verifiedAuditRows=[];historyTruncated=false;
+    clear(e['team-changes']);clear(e['team-review-audit']);
+  }
   function clearReview(){
     verifiedScope=null;
     e['team-review-readonly'].textContent='CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.';
@@ -53,6 +66,14 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   }
   function render(state){
     if(dead)return;
+    // A session rotation can occur outside this page's explicit login/logout
+    // handlers. Never retain a prior actor's observed tenant audit timeline.
+    if(Number.isSafeInteger(state.session_epoch)&&
+       state.session_epoch!==observedSessionEpoch){
+      observedSessionEpoch=state.session_epoch;
+      clearVerifiedHistory();
+      clearReview();
+    }
     e['team-context'].textContent=state.authenticated?
       'Đã đăng nhập: '+String(state.workspace_id||'unknown'):'Chưa đăng nhập';
     const reviews=Array.isArray(state.review_attempts)?state.review_attempts:[];
@@ -117,7 +138,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     const business_date=e['team-date'].value;
     const region=e['team-region'].value;
     if(!workspace_id||!PARTNER.test(partner_id)||
-       !/^\d{4}-\d{2}-\d{2}$/.test(business_date)||
+       !validBusinessDate(business_date)||
        !['mn','mt','mb'].includes(region))
       throw Error('TEAM_PILOT_SCOPE_INVALID');
     return {workspace_id,partner_id,business_date,region};
@@ -127,8 +148,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       workspace=e['team-workspace'].value.trim();
     e['team-password'].value='';
     await sync.login(subject,pwd,workspace);
-    clear(e['team-changes']); // Never display another session's previously read feed.
-    clear(e['team-review-audit']);
+    clearVerifiedHistory(); // Never display another session's previously read feed.
     clearReview();
     tell('Đăng nhập pilot thành công. Chỉ dùng dữ liệu giả.');
   });});
@@ -141,8 +161,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       await sync.logout({discardPending:n>0});
     }catch(err){
       if(!sync.snapshot().authenticated){
-        clear(e['team-changes']); // Do not show former user's feed after local logout.
-        clear(e['team-review-audit']);
+        clearVerifiedHistory(); // Do not show former user's feed after local logout.
         clearReview();
         if(err&&err.message==='SYNC_LOGOUT_REVOKE_UNVERIFIED'){
           tell('Đã xóa phiên trên trình duyệt. CHƯA XÁC MINH thu hồi phiên trên máy chủ vì lỗi mạng/phản hồi; không coi là đăng xuất máy chủ thành công.');
@@ -151,7 +170,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       }
       throw err;
     }
-    clear(e['team-changes']);clear(e['team-review-audit']);clearReview();
+    clearVerifiedHistory();clearReview();
     tell('Đã đăng xuất và xác nhận máy chủ thu hồi phiên.');
   }));
   on(e['team-create'],'click',()=>void action(async()=>{
@@ -260,11 +279,30 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
         tell('CHƯA XÁC MINH lịch sử xét duyệt. Danh sách đang hiển thị là lần đọc trước.');
         return;
       }
+      const newIds=r.items.map(item=>item.event_id);
+      const known=new Set(verifiedEventIds);
+      const withinPage=new Set(newIds);
+      if(withinPage.size!==newIds.length ||
+         newIds.some(id=>typeof id!=='string'||known.has(id))){
+        tell('CHƯA XÁC MINH change feed: trùng mã sự kiện; giữ lịch sử phiên đã đọc trước.');
+        return;
+      }
+      // Only server-verified pages enter this read-only, volatile timeline.
+      verifiedEventIds.push(...newIds);
+      verifiedAuditRows.push(...auditRows);
+      if(verifiedEventIds.length>MAX_VISIBLE_EVENTS){
+        verifiedEventIds=verifiedEventIds.slice(-MAX_VISIBLE_EVENTS);
+        const keep=new Set(verifiedEventIds);
+        verifiedAuditRows=verifiedAuditRows.filter(x=>keep.has(x.event_id));
+        historyTruncated=true;
+      }
       clear(e['team-changes']);clear(e['team-review-audit']);
-      for(const item of r.items)row(e['team-changes'],String(item.event_id||'fake_event'));
-      for(const item of auditRows)row(e['team-review-audit'],Audit.displayRow(item));
-      tell('Change feed SYNCED: '+r.items.length+' sự kiện; '+auditRows.length+
-        ' xét duyệt trên TRANG HIỆN TẠI, không phải toàn bộ lịch sử.');
+      for(const id of verifiedEventIds)row(e['team-changes'],id);
+      for(const item of verifiedAuditRows)row(e['team-review-audit'],Audit.displayRow(item));
+      tell('Change feed SYNCED: '+r.items.length+' sự kiện mới; đã đọc trong phiên '+
+        verifiedEventIds.length+' sự kiện / '+verifiedAuditRows.length+
+        ' xét duyệt'+(historyTruncated?' (chỉ giữ '+MAX_VISIBLE_EVENTS+' gần nhất)':'')+
+        '. Không phải toàn bộ lịch sử máy chủ; đóng trang sẽ xóa.');
     }else{
       tell('CHƯA CẬP NHẬT change feed: '+String(r.status||'BLOCKED')+
         (r.error?' • '+r.error:'')+'. Danh sách đang hiển thị là lần đọc trước.');
@@ -277,8 +315,11 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     tell('Kết nối lại — change feed: '+feed+'; DRAFT: '+draftOutcome(states)+
       '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
-  for(const id of ['team-partner','team-date','team-region'])
-    on(e[id],'change',()=>{clearReview();render(sync.snapshot());});
+  for(const id of ['team-partner','team-date','team-region']){
+    const invalidate=()=>{clearReview();render(sync.snapshot());};
+    on(e[id],'input',invalidate);
+    on(e[id],'change',invalidate);
+  }
   on(e['team-workspace'],'change',()=>{clearReview();render(sync.snapshot());});
   clearReview();
   on(w,'beforeunload',event=>{

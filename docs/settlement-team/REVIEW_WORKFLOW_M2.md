@@ -217,3 +217,18 @@ a new draft, preparing a review transition or issuing a read-only scope GET.
 Impossible dates return `SYNC_SCOPE_INVALID` without using the network.
 A valid Gregorian leap day is retained exactly; no implicit date rollover
 or real-money data processing is introduced.
+
+## Bounded, read-only session review history
+
+The synthetic pilot no longer removes previously verified event/audit rows
+on each successful change-feed page. It appends strictly new event IDs within
+the authenticated session, retains old verified rows after an empty page and
+marks failed polls as stale rather than authenticated updates. A duplicate
+event ID causes fail-closed presentation without replacing the last verified
+timeline. Memory is capped at the latest **500** events; the UI explicitly
+labels eviction, session-only state and incomplete audit history. Login,
+logout and independently detected `session_epoch` changes reset this
+volatile timeline so an earlier account's data cannot remain visible.
+Partner/date/region `input` events also invalidate stale review controls
+immediately, without waiting for blur. This is **not** a durable audit export,
+offline persistence, or financial close authority.

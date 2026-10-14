@@ -471,6 +471,7 @@
         Array.from(reviewAttempts.values()).filter(item=>item.status!==STATUS.SYNCED).length;
       return Object.freeze({
         authenticated: Boolean(sessionToken), cursor, workspace_id: workspaceId,
+        session_epoch: sessionEpoch, // Nonsecret UI signal: clear old identity's read-only audit history.
         // Financial drafts are only held in this JavaScript process. A browser
         // reload/close can destroy them; these fields let the UI warn before
         // data loss WITHOUT falsely claiming any local/offline persistence.
