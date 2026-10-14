@@ -202,7 +202,50 @@ function createPostgresLedgerRepository({ db } = {}) {
     });
   }
 
-  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges });
+
+  // DEFAULT OFF: read-only recovery proof; not exposed by HTTP or the PWA.
+  // The active DB membership is rechecked by inActorTransaction, followed by
+  // an actor/tenant-limited receipt-event JOIN in the very same transaction.
+  async function lookupRecoveryReceipts(actor,keys){
+    const a=C.actorFromServer(actor);
+    if(!['admin','operator'].includes(a.role))
+      throw Error('TEAM_RECOVERY_ROLE_DENIED');
+    if(!Array.isArray(keys)||keys.length<1||keys.length>30||
+       new Set(keys).size!==keys.length||
+       keys.some(k=>typeof k!=='string'||!/^draft_[a-f0-9]{32}$/.test(k)))
+      throw Error('TEAM_RECOVERY_KEY_INVALID');
+    const result=await inActorTransaction(actor,async(tx,trusted)=>{
+      const queried=await tx.query(
+        `SELECT r.workspace_id,r.idempotency_key,r.request_sha256,
+                e.event_id,e.actor_user_id,e.partner_id,
+                e.business_date::text AS business_date,e.region,
+                e.scope_revision,e.feed_seq,e.event_kind,e.payload_sha256
+           FROM kts_team.idempotency_receipts r
+           JOIN kts_team.scope_events e
+             ON e.workspace_id=r.workspace_id AND e.event_id=r.event_id
+          WHERE r.workspace_id=$1 AND e.actor_user_id=$2
+            AND r.idempotency_key=ANY($3::text[])
+          ORDER BY r.idempotency_key`,
+        [trusted.workspace_id,trusted.user_id,keys]
+      );
+      if(!queried||!Array.isArray(queried.rows)||queried.rows.length>keys.length)
+        throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+      const allowed=new Set(keys),seen=new Set();
+      return queried.rows.map(row=>{
+        if(!row||typeof row!=='object'||Array.isArray(row)||
+           row.workspace_id!==trusted.workspace_id||
+           row.actor_user_id!==trusted.user_id||
+           !allowed.has(row.idempotency_key)||
+           seen.has(row.idempotency_key))
+          throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+        seen.add(row.idempotency_key);
+        return Object.freeze({...row});
+      });
+    });
+    return Object.freeze(result);
+  }
+  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,
+    lookupRecoveryReceipts });
 }
 
 module.exports = Object.freeze({ createPostgresLedgerRepository, encodeCursor, decodeCursor });

@@ -73,3 +73,20 @@ Tests cover cold-start module reinitialization, ciphertext-only transport,
 canonical decoding, tampering and malformed input, and recursive immutability
 of decrypted payload/scope. These are synthetic crypto-contract tests,
 not device crash/restart, persistence or server receipt reconciliation proof.
+
+## Tenant-scoped read-only PostgreSQL receipt adapter (still default OFF)
+
+The candidate `postgres-ledger-repository.cjs` now supplies the opt-in
+`lookupRecoveryReceipts(actor, keys)` interface. It is **not used** by any
+live route or PWA. Within the existing injected transaction adapter it
+revalidates active DB membership, then performs only a parameterized SELECT
+joining immutable `idempotency_receipts` to `scope_events` by the exact
+tenant and original event ID, further restricted to the current actor and
+at most 30 original `draft_...` keys. Forged, duplicated and cross-tenant
+adapter rows abort; missing keys remain UNKNOWN and unretryable. The
+read-only contract also works with a fake DB/actor in Node synthetic QA.
+
+A dedicated future disposable-PostgreSQL grant review and real-SQL
+read-only qualification remain blockers. This method does not provision
+database roles, grant SELECT, open connections, change migrations,
+expose an HTTP route, load user files, or commit any recovered draft.

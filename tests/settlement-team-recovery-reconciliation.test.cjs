@@ -103,3 +103,69 @@ test('mixed evidence remains review-only, absence cannot authorize any automatic
  assert.equal(result.auto_send_enabled,false);
  assert.equal(result.items.every(x=>x.auto_retry===false),true);
 });
+
+const {createPostgresLedgerRepository}=require('../team-settlement/postgres-ledger-repository.cjs');
+function fakeDatabase({revoked=false,rows=[]}={}){
+ const calls=[];
+ const db={async transaction(run){return run({async query(sql,args=[]){
+   calls.push({sql,args});
+   if(sql.includes('set_config'))return {rows:[]};
+   if(sql.includes('FROM kts_team.memberships'))
+     return {rows:revoked?[]:[{team_role:'operator'}]};
+   if(sql.includes('FROM kts_team.idempotency_receipts'))return {rows};
+   throw Error('UNEXPECTED_SQL');
+ }});}};
+ return {db,calls};
+}
+test('receipt repository uses one tenant-actor-scoped SELECT after membership recheck',async()=>{
+ const item=intent(),verified=rowFor(item),f=fakeDatabase({rows:[verified]});
+ const repository=createPostgresLedgerRepository({db:f.db});
+ const records=await repository.lookupRecoveryReceipts(actor,[item.id]);
+ assert.equal(records.length,1);
+ assert.equal(records[0].event_id,verified.event_id);
+ assert.equal(Object.isFrozen(records),true);
+ assert.equal(Object.isFrozen(records[0]),true);
+ assert.equal(f.calls.length,3);
+ assert.match(f.calls[0].sql,/set_config/);
+ assert.match(f.calls[1].sql,/FROM kts_team.memberships/);
+ assert.match(f.calls[2].sql,/^SELECT/);
+ assert.match(f.calls[2].sql,/JOIN kts_team.scope_events/);
+ assert.match(f.calls[2].sql,/r.workspace_id=\$1/);
+ assert.match(f.calls[2].sql,/e.actor_user_id=\$2/);
+ assert.deepEqual(f.calls[2].args,['group_a','fake_operator',[item.id]]);
+});
+test('revoked membership, bad id, forged SQL actor and duplicate receipt never pass',async()=>{
+ const item=intent(),rec=rowFor(item);
+ const revoked=fakeDatabase({revoked:true,rows:[rec]});
+ await assert.rejects(createPostgresLedgerRepository({db:revoked.db})
+   .lookupRecoveryReceipts(actor,[item.id]),/AUTH_SESSION_REVOKED/);
+ assert.equal(revoked.calls.length,2);
+ const preflight=fakeDatabase({rows:[rec]});
+ const repository=createPostgresLedgerRepository({db:preflight.db});
+ for(const keys of [[item.id,item.id],['invalid key'],[],Array(31).fill(item.id)])
+   await assert.rejects(repository.lookupRecoveryReceipts(actor,keys),
+     /TEAM_RECOVERY_KEY_INVALID/);
+ assert.equal(preflight.calls.length,0);
+ for(const row of [
+   {...rec,actor_user_id:'fake_other'},
+   {...rec,workspace_id:'group_b'},
+   {...rec,idempotency_key:'draft_'+'b'.repeat(32)}
+ ]){
+   const source=fakeDatabase({rows:[row]});
+   await assert.rejects(createPostgresLedgerRepository({db:source.db})
+     .lookupRecoveryReceipts(actor,[item.id]),/TEAM_RECOVERY_RECEIPT_UNVERIFIED/);
+ }
+ const dup=fakeDatabase({rows:[rec,rec]});
+ await assert.rejects(createPostgresLedgerRepository({db:dup.db})
+   .lookupRecoveryReceipts(actor,[item.id]),/TEAM_RECOVERY_RECEIPT_UNVERIFIED/);
+});
+test('default-off repository lookup plus review service preserves unknown on empty SQL evidence',async()=>{
+ const db=fakeDatabase({rows:[]});
+ const repository=createPostgresLedgerRepository({db:db.db});
+ const service=createRecoveryReconciliation({syntheticOnly:true,
+   auth:{async verifySession(){return actor;}},repository});
+ const report=await service.inspect(token,[intent()]);
+ assert.equal(report.items[0].classification,'UNVERIFIED_NOT_SAFE_TO_RETRY');
+ assert.equal(report.auto_send_enabled,false);
+ assert.equal(db.calls.some(x=>/INSERT|UPDATE|DELETE/.test(x.sql)),false);
+});
