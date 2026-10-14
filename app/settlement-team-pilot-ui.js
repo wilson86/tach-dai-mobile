@@ -198,6 +198,10 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       sameScope(x.scope,selected)&&x.expected_revision===Number(previous.revision));
     if(attempt && attempt.status!=='PENDING')
       throw Error('TEAM_REVIEW_REQUIRES_MANUAL_REFRESH');
+    const label=actionName==='submit_review'?'GỬI DUYỆT':'PHÊ DUYỆT';
+    if(!w.confirm(label+' dữ liệu GIẢ '+selected.partner_id+' / '+selected.business_date+
+      ' / '+selected.region+' / revision '+previous.revision+
+      '? Chỉ SYNCED với server receipt mới được ghi nhận.'))return;
     if(!attempt){
       // First submit must be based on a fresh server read. Retry after uncertain
       // network result MUST preserve old revision/idempotency key, not rebase.
@@ -214,10 +218,6 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
         return;
       }
     }
-    const label=actionName==='submit_review'?'GỬI DUYỆT':'PHÊ DUYỆT';
-    if(!w.confirm(label+' dữ liệu GIẢ '+selected.partner_id+' / '+selected.business_date+
-      ' / '+selected.region+' / revision '+previous.revision+
-      '? Chỉ SYNCED với server receipt mới được ghi nhận.'))return;
     const outcome=await sync.reviewScope(actionName,selected,Number(previous.revision),
       {retryOnly:Boolean(attempt)});
     let current;
