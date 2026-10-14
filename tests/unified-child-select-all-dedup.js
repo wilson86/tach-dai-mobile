@@ -17,8 +17,8 @@ function child({native=true,groups=true,ghost=false}={}){
     const e={
       id,children:[],events:{},parentNode:null,
       addEventListener(type,fn){this.events[type]=fn;},
-      appendChild(x){x.parentNode=this;this.children.push(x);},
-      insertBefore(x,before){x.parentNode=this;const at=this.children.indexOf(before);this.children.splice(at>=0?at:0,0,x);},
+      appendChild(x){x.parentNode=this;this.children.push(x);if(x.id)nodes[x.id]=x;},
+      insertBefore(x,before){x.parentNode=this;const at=this.children.indexOf(before);this.children.splice(at>=0?at:0,0,x);if(x.id)nodes[x.id]=x;},
       remove(){if(this.parentNode){const a=this.parentNode.children;const i=a.indexOf(this);if(i>=0)a.splice(i,1);} delete nodes[this.id];},
       closest(){return{querySelector:()=>id==="input"?inputActions:outputActions}},
       focus(){},setSelectionRange(){}
