@@ -1,8 +1,7 @@
 'use strict';
-// UX_REFRESH: davong-tap-select-20261005. Cache key stays 1.0.4 so contract tests and
-// release identity remain stable; a changed service-worker byte stream forces a new
-// install and cache.addAll refreshes unified-core.js for existing phone installs.
-const CACHE='kts-tach-unified-v1.0.8-grouped-checkbox-results-046935';
+// Pilot UI refresh: bump the cache key whenever checkbox UX or shell changes.
+// The new service worker refreshes unified-core.js for existing pilot installs.
+const CACHE='kts-tach-unified-v1.0.9-checkbox-action-dedup-046935';
 const CORE=['./','./index.html','./unified-core.js','./manifest.webmanifest','./version.json','../icon-192.png','../icon-512.png'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(CORE)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('kts-tach-unified-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
