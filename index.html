@@ -40,6 +40,17 @@
   .result-card.ok{border-color:#a6e3c2;background:var(--okbg)}
   .hint{font-size:12px;color:var(--muted);line-height:1.4;margin-top:8px}
   .pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;background:#eef2f7;font-size:12px;font-weight:700;margin-right:4px}
+  .result-groups{display:grid;gap:10px;margin:8px 0;user-select:none;-webkit-user-select:none}
+  .result-groups-summary{font-size:12px;font-weight:750;color:#475467;text-align:right;margin:4px 0 8px}
+  .result-group{border:1px solid #d7dde7;background:#fff;border-radius:12px;overflow:hidden}
+  .result-group-header{display:flex;gap:10px;align-items:center;background:#eef3fb;padding:11px;font-weight:800;font-size:13px}
+  .result-group-title{min-width:0;overflow-wrap:anywhere}
+  .result-group-row{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #e8edf4;padding:13px 11px;font:15px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+  .result-group-row.checked{background:#eaf2ff}
+  .result-group input[type=checkbox]{width:23px;height:23px;flex:0 0 23px;accent-color:#0b57d0;margin:0;cursor:pointer}
+  .result-group label{cursor:pointer}
+  .result-group-row span{min-width:0}
+  #resultGroups:empty{display:none}
   @media (max-width:520px){
     .app{padding:8px 8px calc(18px + env(safe-area-inset-bottom))}
     .card{border-radius:12px;padding:10px}
@@ -114,6 +125,8 @@
 
   <div id="resultCard" class="card result-card">
     <div class="label">Kết quả</div>
+    <div id="resultGroupsSummary" class="result-groups-summary" aria-live="polite"></div>
+    <div id="resultGroups" class="result-groups" aria-label="Kết quả phân nhóm có ô chọn"></div>
     <textarea id="output" readonly spellcheck="false"></textarea>
     <div class="actions">
       <button id="cutBtn" class="secondary">Cắt phần chọn</button>
@@ -974,11 +987,99 @@ function selectLine(textarea,lineNo){
 function setStatus(text,type=""){
   statusEl.textContent=text;
   statusEl.className=`status ${type}`;
+  renderGroupedResults();
   resultCard.className=`card result-card ${type==="err"?"error":type==="ok"?"ok":""}`;
 }
 
 
+// View-only, source-line grouped checkbox selection. The authoritative wager
+// rows remain outputRecords and the legacy output textarea for clipboard/audit.
+const checkedResultRecordIndexes=new Set();
+let groupedResultReady=false;
+function checkedAliveRecordIndexes(){
+  return [...checkedResultRecordIndexes]
+    .filter(i=>Number.isInteger(i) && outputRecords[i] && outputRecords[i].alive)
+    .sort((a,b)=>a-b);
+}
+function renderGroupedResults(){
+  if(!groupedResultReady) return;
+  const list=$("resultGroups"),summary=$("resultGroupsSummary");
+  if(!list || typeof list.replaceChildren!=="function") return;
+  const visible=outputRecords.map((r,i)=>({...r,index:i})).filter(r=>r.alive);
+  const visibleIndices=new Set(visible.map(r=>r.index));
+  for(const index of checkedResultRecordIndexes)
+    if(!visibleIndices.has(index)) checkedResultRecordIndexes.delete(index);
+  const chosen=checkedAliveRecordIndexes();
+  const error=!visible.length && /^PHÁT HIỆN TIN SAI:/u.test(outputEl.value);
+  outputEl.style.display=error?"":"none";
+  list.style.display=error?"none":"";
+  summary.style.display=error?"none":"";
+  list.replaceChildren();
+  if(!error){
+    const groups=new Map();
+    for(const row of visible){
+      if(!groups.has(row.sourceLine)) groups.set(row.sourceLine,[]);
+      groups.get(row.sourceLine).push(row);
+    }
+    let groupNo=0;
+    for(const [lineNo,records] of groups){
+      groupNo++;
+      const section=document.createElement("section");section.className="result-group";
+      const header=document.createElement("label");header.className="result-group-header";
+      const all=document.createElement("input");all.type="checkbox";
+      all.setAttribute("aria-label",`Chọn cả nhóm ${groupNo}`);
+      all.checked=records.every(r=>checkedResultRecordIndexes.has(r.index));
+      all.indeterminate=!all.checked && records.some(r=>checkedResultRecordIndexes.has(r.index));
+      all.addEventListener("change",()=>{
+        for(const record of records){
+          if(all.checked)checkedResultRecordIndexes.add(record.index);
+          else checkedResultRecordIndexes.delete(record.index);
+        }
+        renderGroupedResults();
+      });
+      const source=String(lastSourceLines[lineNo-1]||"").slice(0,80);
+      const title=document.createElement("span");title.className="result-group-title";
+      title.textContent=`Nhóm ${groupNo} · Dòng ${lineNo} · ${records.length} kết quả${source?" · "+source:""}`;
+      header.append(all,title);section.appendChild(header);
+      for(const record of records){
+        const label=document.createElement("label");label.className="result-group-row";
+        if(checkedResultRecordIndexes.has(record.index)) label.classList.add("checked");
+        const checkbox=document.createElement("input");checkbox.type="checkbox";
+        checkbox.checked=checkedResultRecordIndexes.has(record.index);
+        checkbox.setAttribute("aria-label",`Chọn kết quả ${record.index+1}`);
+        checkbox.addEventListener("change",()=>{
+          if(checkbox.checked)checkedResultRecordIndexes.add(record.index);
+          else checkedResultRecordIndexes.delete(record.index);
+          renderGroupedResults();
+        });
+        const text=document.createElement("span");text.textContent=record.text;
+        label.append(checkbox,text);section.appendChild(label);
+      }
+      list.appendChild(section);
+    }
+    summary.textContent=visible.length?`Đã chọn ${chosen.length}/${visible.length} kết quả · ${groups.size} nhóm`:"Chưa có kết quả";
+  }
+  const cut=$("cutBtn");
+  if(cut){cut.disabled=chosen.length===0;cut.textContent=`Cắt đã chọn (${chosen.length})`;}
+  const all=$("selectAllOutputBtn");
+  if(all)all.textContent=visible.length&&chosen.length===visible.length?"Bỏ chọn tất cả":"Chọn tất cả";
+}
+function toggleAllGroupedResults(){
+  const visible=outputRecords.map((r,i)=>({...r,index:i})).filter(r=>r.alive);
+  const all=visible.length>0 && visible.every(r=>checkedResultRecordIndexes.has(r.index));
+  checkedResultRecordIndexes.clear();
+  if(!all)for(const record of visible)checkedResultRecordIndexes.add(record.index);
+  renderGroupedResults();
+}
+function initGroupedResults(){
+  const list=$("resultGroups"),summary=$("resultGroupsSummary");
+  if(!list || !summary || typeof list.replaceChildren!=="function")return;
+  groupedResultReady=true;
+  renderGroupedResults();
+}
+
 function resetOutputRecords(){
+  checkedResultRecordIndexes.clear();
   outputRecords=[];
   lastSourceLines=[];
   lastOutputSelection={start:0,end:0};
@@ -986,6 +1087,7 @@ function resetOutputRecords(){
 
 function renderOutputRecords(){
   outputEl.value=outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n");
+  renderGroupedResults();
 }
 
 function currentPlainInputLines(){
@@ -1038,6 +1140,7 @@ function syncPureInputDeletionNow(){
 
   // Giữ nguyên alive/dead của output các source còn lại.
   // Nhờ vậy các dòng đã Cut trước đó KHÔNG bị sinh lại.
+  checkedResultRecordIndexes.clear();
   outputRecords=outputRecords
     .filter(r=>oldToNew.has(r.sourceLine))
     .map(r=>({...r,sourceLine:oldToNew.get(r.sourceLine)}));
@@ -1164,9 +1267,9 @@ async function writeClipboardText(text){
 
 async function cutSelectedOutput(){
   rememberOutputSelection();
-  const indexes=selectedAliveRecordIndexes();
+  const indexes=groupedResultReady?checkedAliveRecordIndexes():selectedAliveRecordIndexes();
   if(!indexes.length){
-    setStatus("Hãy bôi đen dòng kết quả cần cắt trước.","err");
+    setStatus(groupedResultReady?"Hãy đánh dấu checkbox kết quả cần cắt.":"Hãy bôi đen dòng kết quả cần cắt trước.","err");
     return;
   }
 
@@ -1181,6 +1284,7 @@ async function cutSelectedOutput(){
   const inputBefore=inputEl.value;
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
   deleteCompletedSourceLines();
+  checkedResultRecordIndexes.clear();
   renderOutputRecords();
 
   lastOutputSelection={start:0,end:0};
@@ -1230,6 +1334,7 @@ function run(options={}){
     return;
   }
   lastSourceLines=lines.slice();
+  checkedResultRecordIndexes.clear();
   outputRecords=[];
   lines.forEach((line,idx)=>{
     if(!line || isStandaloneSeparator(line)) return;
@@ -1253,8 +1358,9 @@ function selectAllText(textarea){
 }
 
 async function copyOutput(){
-  const text=outputEl.value;
-  if(!text)return;
+  const checked=groupedResultReady?checkedAliveRecordIndexes():[];
+  const text=checked.length?checked.map(i=>outputRecords[i].text).join("\n"):outputEl.value;
+  if(!text || /^PHÁT HIỆN TIN SAI:/u.test(text))return;
   try{
     await navigator.clipboard.writeText(text);
     setStatus("Đã copy kết quả","ok");
@@ -1268,7 +1374,7 @@ async function copyOutput(){
 }
 
 $("selectAllInputBtn").addEventListener("click",()=>selectAllText(inputEl));
-$("selectAllOutputBtn").addEventListener("click",()=>selectAllText(outputEl));
+$("selectAllOutputBtn").addEventListener("click",()=>groupedResultReady?toggleAllGroupedResults():selectAllText(outputEl));
 
 outputEl.addEventListener("select",rememberOutputSelection);
 outputEl.addEventListener("mouseup",rememberOutputSelection);
@@ -1298,11 +1404,13 @@ $("undoBtn").addEventListener("click",()=>{
   inputEl.value=s.input;
   outputEl.value=s.output;
   outputRecords=(s.outputRecords||[]).map(r=>({...r}));
+  checkedResultRecordIndexes.clear();
   lastSourceLines=(s.sourceLines||inputEl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)).slice();
   lastOutputSelection={start:0,end:0};
   statusEl.textContent=s.status;
   statusEl.className=s.cls;
   resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
+  renderGroupedResults();
 });
 regionEl.addEventListener("change",updateUI);
 dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
@@ -1320,6 +1428,7 @@ inputEl.addEventListener("beforeinput",(ev)=>{
 inputEl.addEventListener("input",syncAfterAnyInputEdit);
 
 loadSettings();
+initGroupedResults();
 
 // =========================
 // PWA / AUTO UPDATE
