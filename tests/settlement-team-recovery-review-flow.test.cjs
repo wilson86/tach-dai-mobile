@@ -86,10 +86,12 @@ test('manual consent and a server-verified backup are mandatory before any looku
 test('identity changed between vault and independent receipt verification fails closed',async()=>{
  const item=draft();let verifies=0;
  const x=setup({rows:[originalReceipt(item)],identity:()=>{
-   verifies++;return verifies>4?{...actor,user_id:'fake_intruder'}:actor;
+   // save now verifies 3 times (including post-write read-back), then
+   // vault.inspect verifies twice; flip only at independent SQL re-auth.
+   verifies++;return verifies>5?{...actor,user_id:'fake_intruder'}:actor;
  }});
  await x.vault.save({sessionToken:token,passphrase:secret,drafts:[item],
-   explicitConsent:true}); // 2 identity checks
+   explicitConsent:true}); // 3 identity checks (including post-write)
  await assert.rejects(x.flow.review({sessionToken:token,
    passphrase:secret,explicitConsent:true}),/TEAM_RECOVERY_FLOW_IDENTITY_MISMATCH|TEAM_RECOVERY_RECEIPT_MISMATCH/);
  assert.equal(x.calls.includes('RECEIPTS'),true);
