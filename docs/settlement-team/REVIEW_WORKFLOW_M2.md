@@ -129,3 +129,16 @@ as `SYNC_SCOPE_UNVERIFIED` rather than approved financial state. The UI
 shows the server-derived IDs as read-only `textContent`; no permission to
 finalize a scope is added. PostgreSQL transactional role and RLS checks
 remain authoritative.
+
+## Browser exact-revision and cross-page audit guards
+
+The authenticated change-feed client refuses a later page whose first
+`feed_seq` is not greater than the last accepted sequence in that session.
+The cursor and sequence watermark reset together when the user or session
+changes; malformed/repeated pages cannot be labeled a verified update.
+Read-only `readScope` rejects revisions outside JavaScript's exact integer
+range before any button can derive an expected CAS revision. The historical
+audit formatter keeps valid PostgreSQL signed-bigint revisions as exact
+**decimal text**, never a lossy JavaScript Number. These are client-side
+fail-closed checks, not a replacement for server RLS/CAS, a financial oracle,
+or a complete durable audit archive.

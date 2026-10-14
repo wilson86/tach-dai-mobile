@@ -697,3 +697,41 @@ test('readScope requires coherent submitter/reviewer provenance before confirmin
    submitted_by:'fake_operator',reviewed_by:null};
  assert.equal((await client.readScope(scope)).status,'SYNCED');
 });
+
+// Server bigint sequence and scope revision must not be rounded in the browser.
+test('change feed rejects replayed older sequences across pages without advancing the cursor',async()=>{
+ let page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'one',feed_seq:'1'}],next_cursor:'cursor_1'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,page)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'cursor_1');
+ page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'replayed',feed_seq:'1'}],next_cursor:'cursor_wrong'};
+ let blocked=await client.pullChanges();
+ assert.equal(blocked.status,'BLOCKED');
+ assert.equal(blocked.error,'SYNC_FEED_UNVERIFIED');
+ assert.equal(client.snapshot().cursor,'cursor_1');
+ page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'two',feed_seq:'2'}],next_cursor:'cursor_2'};
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'cursor_2');
+ page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'older',feed_seq:'1'}],next_cursor:'cursor_bad'};
+ blocked=await client.pullChanges();
+ assert.equal(blocked.error,'SYNC_FEED_UNVERIFIED');
+ assert.equal(client.snapshot().cursor,'cursor_2');
+ client.setSessionToken('b'.repeat(43),'group_a');
+ assert.equal((await client.pullChanges()).status,'SYNCED'); // Fresh user session starts at feed origin.
+ assert.equal(client.snapshot().cursor,'cursor_bad');
+});
+
+test('readScope blocks noncanonical or unsafe revision values before showing review status',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ let revision='9007199254740991';
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{...scope,state:'DRAFT',revision})});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.readScope(scope)).status,'SYNCED');
+ for(revision of ['9007199254740992','9223372036854775807','999999999999999999999',
+   '01','+1','1.0',Number.MAX_SAFE_INTEGER+1,1.5,-1]){
+   const outcome=await client.readScope(scope);
+   assert.equal(outcome.status,'BLOCKED',String(revision));
+   assert.equal(outcome.error,'SYNC_SCOPE_UNVERIFIED');
+ }
+});

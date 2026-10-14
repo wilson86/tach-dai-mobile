@@ -43,3 +43,12 @@ test('draft/nonreview events are not presented as reviewer approval',()=>{
  const rows=Audit.auditRows([{event_kind:'DRAFT_CREATED'}],'group_a');
  assert.deepEqual(rows,[]);
 });
+
+test('review audit preserves 64-bit SQL revision exactly for read-only evidence',()=>{
+ const row=sample();row.scope_revision='9223372036854775807';
+ const observed=Audit.auditRows([row],'group_a')[0];
+ assert.equal(observed.revision,'9223372036854775807');
+ assert.match(Audit.displayRow(observed),/revision 9223372036854775807/);
+ row.scope_revision='9223372036854775808';
+ assert.throws(()=>Audit.auditRows([row],'group_a'),/SYNC_REVIEW_AUDIT_UNVERIFIED/);
+});

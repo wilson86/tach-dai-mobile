@@ -90,6 +90,8 @@
      // Cursor is session-specific. Never reuse a prior user's/workspace's cursor
     // from generic local storage: doing so can skip new user's change events.
     let cursor = null;
+    // The last verified tenant sequence persists across pages, never across sessions.
+    let lastAcceptedFeedSequence = null;
     const pending = new Map();
     const draftFlights = new Set();
     const reviewAttempts = new Map(); // Volatile; same-key retries within this session.
@@ -140,6 +142,7 @@
       pending.clear();
       reviewAttempts.clear();
       cursor = null;
+      lastAcceptedFeedSequence = null;
       emit();
       return snapshot();
     }
@@ -188,6 +191,7 @@
       sessionToken = null;
       workspaceId = null;
       cursor = null;
+      lastAcceptedFeedSequence = null;
       // Prototype drafts are volatile. Do not display a previous user's data
       // after logout or let a later login submit it under another identity.
       pending.clear();
@@ -348,12 +352,20 @@
         const page = result.body;
         if (!page || page.sync_status !== STATUS.SYNCED ||
             !verifiedFeedItems(page.items,requestedWorkspace,limit) ||
+            // A valid-looking replay on the NEXT page is not new history.
+            (requestedWorkspace !== null && page.items.length > 0 &&
+              lastAcceptedFeedSequence !== null &&
+              BigInt(page.items[0].feed_seq) <= lastAcceptedFeedSequence) ||
             (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
             (page.items.length === 0 && page.next_cursor != null && page.next_cursor !== cursor))
           return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };
         // Until per-user/per-workspace durable cursors are independently
         // authenticated, keep the change cursor only in this session's memory.
-        if (page.items.length > 0) cursor = page.next_cursor;
+        if (page.items.length > 0) {
+          cursor = page.next_cursor;
+          if (requestedWorkspace !== null)
+            lastAcceptedFeedSequence = BigInt(page.items[page.items.length - 1].feed_seq);
+        }
         return { status: STATUS.SYNCED, items: clone(page.items), next_cursor: cursor, has_more: page.has_more === true };
       } catch (error) {
         if (epoch !== sessionEpoch) return { status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED', items: [] };
@@ -387,7 +399,8 @@
         const revision = row && row.revision;
         const numericRevision = typeof revision === 'number'
           ? Number.isSafeInteger(revision) && revision >= 0
-          : typeof revision === 'string' && /^(0|[1-9][0-9]*)$/.test(revision);
+          : typeof revision === 'string' && /^(0|[1-9][0-9]{0,15})$/.test(revision) &&
+            BigInt(revision) <= BigInt(Number.MAX_SAFE_INTEGER);
         if (!row || row.workspace_id !== workspaceId ||
             row.partner_id !== scope.partner_id ||
             row.business_date !== scope.business_date ||

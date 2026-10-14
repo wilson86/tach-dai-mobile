@@ -47,7 +47,7 @@ function auditRows(items,workspace){
       event_id:x.event_id,kind:x.event_kind,actor:x.actor_user_id,
       submitted_by:s.submitted_by,partner:x.partner_id,
       region:x.region,business_date:x.business_date,
-      revision:Number(x.scope_revision),feed_seq:String(x.feed_seq),
+      revision:String(x.scope_revision),feed_seq:String(x.feed_seq),
       recorded_at:x.recorded_at
     }));
   }
