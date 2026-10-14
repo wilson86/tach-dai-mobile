@@ -14,6 +14,24 @@
     return BigInt(value) <= MAX_SIGNED_BIGINT;
   }
 
+  const FEED_EVENT_ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+  function verifiedFeedItems(items, workspaceId, limit) {
+    if (!Array.isArray(items) || items.length>limit) return false;
+    let previous=0n;
+    for(const item of items){
+      if(!item || typeof item!=='object' || Array.isArray(item) ||
+         typeof item.event_id!=='string' || !FEED_EVENT_ID.test(item.event_id))return false;
+      // Strict tenant checks on authenticated browser sessions; never render
+      // another workspace's event even if the server misroutes a feed.
+      if(workspaceId!==null){
+        if(item.workspace_id!==workspaceId || !verifiedFeedSequence(item.feed_seq))return false;
+        const sequence=BigInt(item.feed_seq);
+        if(sequence<=previous)return false;
+        previous=sequence;
+      }
+    }
+    return true;
+  }
   function clone(value) { return JSON.parse(JSON.stringify(value)); }
 
   // A per-client counter silently reuses idempotency keys across devices.
@@ -236,6 +254,7 @@
       if (!sessionToken) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED', items: [] };
       const epoch = sessionEpoch;
       const requestedCursor = cursor;
+      const requestedWorkspace = workspaceId;
       const query = '?limit=' + encodeURIComponent(String(limit)) +
         (requestedCursor ? '&cursor=' + encodeURIComponent(requestedCursor) : '');
       try {
@@ -250,7 +269,8 @@
         // Only a verified, contiguous page may advance the server change cursor.
         // A partial/forged 200 response must not skip unconsumed financial events.
         const page = result.body;
-        if (!page || page.sync_status !== STATUS.SYNCED || !Array.isArray(page.items) ||
+        if (!page || page.sync_status !== STATUS.SYNCED ||
+            !verifiedFeedItems(page.items,requestedWorkspace,limit) ||
             (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
             (page.items.length === 0 && page.next_cursor != null && page.next_cursor !== cursor))
           return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };

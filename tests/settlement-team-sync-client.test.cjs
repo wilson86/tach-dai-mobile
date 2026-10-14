@@ -113,7 +113,7 @@ test('PWA client integrates with synthetic localhost auth, draft and change endp
   const server = createAuthHttpServer(auth, { ledger: {
     appendDraft: (token, input) => ledger.mutateDraft(token, input),
     getChanges: async (_token, { cursor }) => ({
-      items: cursor ? [] : [{ event_id: 'synthetic_event_1' }],
+      items: cursor ? [] : [{ event_id: 'synthetic_event_1',workspace_id:'group_a',feed_seq:1 }],
       next_cursor: 'synthetic_cursor_1', sync_status: 'SYNCED'
     })
   }});
@@ -147,7 +147,7 @@ test('new workspace login cannot inherit prior cursor or draft data', async () =
   const client = Sync.createSyncClient({
     storage: saved, fetchImpl: async (url) => {
       if (url.includes('/v1/login')) return response(200, { session_token: 'b'.repeat(43), expires_at: 9999 });
-      if (url.includes('/v1/changes')) return response(200, { items: [{ event_id: 'a_1' }], next_cursor: 'cursor_from_a', sync_status: 'SYNCED' });
+      if (url.includes('/v1/changes')) return response(200, { items: [{ event_id: 'a_1',workspace_id:'group_a',feed_seq:1 }], next_cursor: 'cursor_from_a', sync_status: 'SYNCED' });
       return response(200, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, sync_status: 'SYNCED' });
     }
   });
@@ -232,10 +232,10 @@ test('partial HTTP 200 change feed cannot advance cursor or claim SYNCED', async
   let mode = 'good';
   const client = Sync.createSyncClient({ fetchImpl: async () => {
     if (mode === 'good') return response(200, {
-      sync_status: 'SYNCED', items: [{event_id:'a'}], next_cursor:'cursor_a', has_more:false
+      sync_status: 'SYNCED', items: [{event_id:'a',workspace_id:'group_a',feed_seq:1}], next_cursor:'cursor_a', has_more:false
     });
     if (mode === 'missing') return response(200, {
-      sync_status: 'SYNCED', items: [{event_id:'b'}], next_cursor:null
+      sync_status: 'SYNCED', items: [{event_id:'b',workspace_id:'group_a',feed_seq:2}], next_cursor:null
     });
     if (mode === 'empty-skipping') return response(200, {
       sync_status:'SYNCED', items:[], next_cursor:'cursor_skips_events'
@@ -376,13 +376,13 @@ test('two concurrent change polls never let a slower response roll the cursor ba
   const newer=client.pullChanges();
   assert.equal(resolveRequest.length,2);
   resolveRequest[1](response(200,{
-    sync_status:'SYNCED',items:[{event_id:'event_newer'}],
+    sync_status:'SYNCED',items:[{event_id:'event_newer',workspace_id:'group_a',feed_seq:2}],
     next_cursor:'cursor_newer',has_more:false
   }));
   assert.equal((await newer).status,'SYNCED');
   assert.equal(client.snapshot().cursor,'cursor_newer');
   resolveRequest[0](response(200,{
-    sync_status:'SYNCED',items:[{event_id:'event_older'}],
+    sync_status:'SYNCED',items:[{event_id:'event_older',workspace_id:'group_a',feed_seq:1}],
     next_cursor:'cursor_older',has_more:false
   }));
   const stale=await old;
@@ -536,5 +536,41 @@ test('scope read fails closed when review state is absent, unknown, or forged',a
    const bad=await client.readScope(scope);
    assert.equal(bad.status,'BLOCKED');
    assert.equal(bad.error,'SYNC_SCOPE_UNVERIFIED');
+ }
+});
+
+test('browser change feed rejects foreign tenant event and does not advance cursor',async()=>{
+ let body={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'event_a',feed_seq:'1'}],next_cursor:'cursor_1'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,body)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'cursor_1');
+ for(const bad of [
+   {workspace_id:'group_b',event_id:'foreign',feed_seq:'2'},
+   {event_id:'missing_tenant',feed_seq:'2'},
+   {workspace_id:'group_a',event_id:'invalid/../',feed_seq:'2'},
+   {workspace_id:'group_a',event_id:'missing_seq'},
+   {workspace_id:'group_a',event_id:'bad_seq',feed_seq:'9223372036854775808'}
+ ]){
+   body={sync_status:'SYNCED',items:[bad],next_cursor:'cursor_2'};
+   const failed=await client.pullChanges();
+   assert.equal(failed.status,'BLOCKED');
+   assert.equal(failed.error,'SYNC_FEED_UNVERIFIED');
+   assert.equal(client.snapshot().cursor,'cursor_1');
+ }
+});
+test('browser feed fails closed on descending or duplicate sequence and oversized page',async()=>{
+ let items=[];
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{sync_status:'SYNCED',items,next_cursor:'cursor_skip'})});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ for(items of [
+   [{workspace_id:'group_a',event_id:'a',feed_seq:'3'},{workspace_id:'group_a',event_id:'b',feed_seq:'2'}],
+   [{workspace_id:'group_a',event_id:'a',feed_seq:'1'},{workspace_id:'group_a',event_id:'b',feed_seq:'1'}],
+   [{workspace_id:'group_a',event_id:'a',feed_seq:'1'},{workspace_id:'group_a',event_id:'b',feed_seq:'2'}]
+ ]){
+   const failed=await client.pullChanges(1);
+   assert.equal(failed.status,'BLOCKED');
+   assert.equal(failed.error,'SYNC_FEED_UNVERIFIED');
+   assert.equal(client.snapshot().cursor,null);
  }
 });

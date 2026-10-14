@@ -116,3 +116,13 @@ offer submit/approve/close/reopen buttons. The durable PostgreSQL pilot
 currently implements only DRAFT writes; a rendered review state is **not**
 proof that a human workflow transition was authorized or committed.
 No actual-money calculation, HIOSKT oracle, or release authority is included.
+
+## Browser change-feed tenant validation (2026-10-14)
+
+When a browser has a known authenticated workspace, each item in a change
+page must contain that exact workspace ID, a safe event ID and a positive
+bounded `feed_seq` strictly increasing within the page. Pages larger than
+the requested limit, duplicate/out-of-order feed sequences, cross-workspace
+events and missing identifiers fail closed without moving the session cursor.
+This is client-side defense in depth only: SQL RLS and server-side membership
+checks remain the authority. No real-money authorization is added.
