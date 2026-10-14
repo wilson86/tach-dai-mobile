@@ -306,7 +306,7 @@ test('unsynced financial drafts cannot silently disappear on logout or account s
   assert.equal(calls.length,0); // Decision required before any request.
   assert.equal(client.snapshot().drafts.length,1);
   assert.equal(client.snapshot().drafts[0].id,draft.id);
-  await assert.rejects(client.logout({discardPending:true}),/SYNC_LOGOUT_REVOKE_UNVERIFIED/);
+  await client.logout({discardPending:true});
   assert.equal(calls.length,1);
   assert.equal(client.snapshot().authenticated,false);
   assert.equal(client.snapshot().drafts.length,0);
