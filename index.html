@@ -1270,12 +1270,13 @@ function trimCompletedSemanticSourceGroups(){
       records.some(r=>r.sourceGroupText!==`${head[1]} ${originalClauses[no-1]}`)
     ))continue;
     const keep=[];
+    const keptOriginalNumbers=[];
     let removed=false;
     for(let n=1;n<=originalClauses.length;n++){
       const records=groups.get(n);
       if(!records) {removed=false;break;}
       if(records.every(r=>!r.alive))removed=true;
-      else keep.push(originalClauses[n-1]);
+      else {keep.push(originalClauses[n-1]);keptOriginalNumbers.push(n);}
     }
     if(!removed||!keep.length)continue; // full-line deletion handled separately
     const rewritten=`${head[1]} ${keep.join(" ")}`;
@@ -1289,7 +1290,7 @@ function trimCompletedSemanticSourceGroups(){
     lastSourceLines[lineIndex]=normalizeInput(rewritten);
     outputRecords=outputRecords.filter(r=>r.sourceLine!==sourceLine||r.alive);
     for(const record of outputRecords)if(record.sourceLine===sourceLine){
-      const newIndex=keep.indexOf(originalClauses[record.sourceGroupNo-1]);
+      const newIndex=keptOriginalNumbers.indexOf(record.sourceGroupNo);
       if(newIndex>=0)record.sourceGroupNo=newIndex+1;
     }
     changed=true;
