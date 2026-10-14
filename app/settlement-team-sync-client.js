@@ -139,11 +139,20 @@
         throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       if (!sessionToken) return clearSession();
       const epoch = sessionEpoch;
-      try { await request('/v1/logout', { method: 'POST' }); } catch (_) {}
+      let revokeVerified = false;
+      try {
+        const result = await request('/v1/logout', { method: 'POST' });
+        revokeVerified = result.response.status === 204;
+      } catch (_) {
+        // On network loss the server may or may not have revoked the bearer.
+        // Never claim a remote logout without a verified 204 response.
+      }
       // A delayed logout response from a previous identity may not log out a
       // newer, independently authenticated session.
       if (epoch !== sessionEpoch) return snapshot();
-      return clearSession();
+      const localState = clearSession(); // Always discard memory-only bearer locally.
+      if (!revokeVerified) throw new Error('SYNC_LOGOUT_REVOKE_UNVERIFIED');
+      return localState;
     }
 
     function clearSession() {

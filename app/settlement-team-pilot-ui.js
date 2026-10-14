@@ -88,8 +88,19 @@ function mount({doc,win,client,Sync}={}){
   on(e['team-logout'],'click',()=>void action(async()=>{
     const n=sync.snapshot().drafts.filter(x=>x.status!=='SYNCED').length;
     if(n>0&&!w.confirm('Có '+n+' nháp chưa ghi! Đăng xuất sẽ xóa nháp. Đồng ý?'))return;
-    await sync.logout({discardPending:n>0});
-    clear(e['team-changes']);tell('Đã đăng xuất.');
+    try{
+      await sync.logout({discardPending:n>0});
+    }catch(err){
+      if(!sync.snapshot().authenticated){
+        clear(e['team-changes']); // Do not show former user's feed after local logout.
+        if(err&&err.message==='SYNC_LOGOUT_REVOKE_UNVERIFIED'){
+          tell('Đã xóa phiên trên trình duyệt. CHƯA XÁC MINH thu hồi phiên trên máy chủ vì lỗi mạng/phản hồi; không coi là đăng xuất máy chủ thành công.');
+          return;
+        }
+      }
+      throw err;
+    }
+    clear(e['team-changes']);tell('Đã đăng xuất và xác nhận máy chủ thu hồi phiên.');
   }));
   on(e['team-create'],'click',()=>void action(async()=>{
     const draft=sync.queueDraft(scope(),

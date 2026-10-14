@@ -18,7 +18,7 @@ function element(){
    fire(type,event={}){const fn=listeners.get(type);if(!fn)throw Error('MISSING_HANDLER');return fn(event);}
  };
 }
-function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[]}={}){
+function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
@@ -62,7 +62,9 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
    async reconnect(){calls.push('reconnect');return {pull:{status:reconnectStatus},drafts:reconnectDrafts};},
    async logout(){
      calls.push('logout');state.authenticated=false;state.workspace_id=null;
-     state.drafts=[];notify();return {authenticated:false};
+     state.drafts=[];notify();
+     if(logoutRevokeUnverified)throw Error('SYNC_LOGOUT_REVOKE_UNVERIFIED');
+     return {authenticated:false};
    }
  };
  Object.assign(els['team-subject'],{value:'fake_user'});
@@ -204,5 +206,18 @@ test('failed change-feed pull keeps last verified items but clearly marks them s
  assert.equal(h.els['team-changes'].children.length,1);
  assert.match(h.els['team-notice'].textContent,/CHƯA CẬP NHẬT change feed/);
  assert.match(h.els['team-notice'].textContent,/lần đọc trước/);
+ h.mounted.dispose();
+});
+
+test('UI clears former user feed and warns when remote logout revocation is unverified',async()=>{
+ const h=harness({logoutRevokeUnverified:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,1);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.state.authenticated,false);
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH thu hồi phiên/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/máy chủ thành công\.$/);
  h.mounted.dispose();
 });

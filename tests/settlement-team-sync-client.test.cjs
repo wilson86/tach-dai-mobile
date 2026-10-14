@@ -306,7 +306,7 @@ test('unsynced financial drafts cannot silently disappear on logout or account s
   assert.equal(calls.length,0); // Decision required before any request.
   assert.equal(client.snapshot().drafts.length,1);
   assert.equal(client.snapshot().drafts[0].id,draft.id);
-  await client.logout({discardPending:true});
+  await assert.rejects(client.logout({discardPending:true}),/SYNC_LOGOUT_REVOKE_UNVERIFIED/);
   assert.equal(calls.length,1);
   assert.equal(client.snapshot().authenticated,false);
   assert.equal(client.snapshot().drafts.length,0);
@@ -500,4 +500,26 @@ test('browser same-origin fallback denies remote cleartext before any credential
     if(original)Object.defineProperty(globalThis,'location',original);
     else delete globalThis.location;
   }
+});
+
+test('logout with HTTP 503 or network failure clears local bearer but does not claim remote revoke',async()=>{
+ for(const outcome of ['http503','network']){
+   let logoutCount=0;
+   const saved=storage();
+   const client=Sync.createSyncClient({storage:saved,fetchImpl:async (url,options)=>{
+     if(!url.endsWith('/v1/logout'))throw Error('UNEXPECTED_ROUTE');
+     logoutCount++;
+     assert.match(options.headers.authorization,/^Bearer [a-z]{43}$/);
+     if(outcome==='network')throw Error('NETWORK_UNAVAILABLE');
+     return response(503,{error:'AUTH_BACKEND_UNAVAILABLE'});
+   }});
+   client.setSessionToken('a'.repeat(43),'group_a');
+   const failed=client.logout();
+   await assert.rejects(failed,/SYNC_LOGOUT_REVOKE_UNVERIFIED/);
+   assert.equal(logoutCount,1);
+   assert.equal(client.snapshot().authenticated,false);
+   assert.equal(client.snapshot().workspace_id,null);
+   assert.equal(client.snapshot().drafts.length,0);
+   assert.equal(saved.data.has('session_token'),false);
+ }
 });
