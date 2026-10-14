@@ -59,7 +59,7 @@ async function main(){
   assert.equal(groups().length,1);
   const baseline=rules.els.output.value;
   assert.ok(baseline.split("\n").length>=3);
-  const all=records().filter(r=>r.alive).map(r=>r.text);
+  const all=Array.from(records()).filter(r=>r.alive).map(r=>r.text);
   const dxIndex=all.findIndex(line=>/ dx2,5n$/u.test(line));
   assert.ok(dxIndex>=0,"DX output available for one-row CUT");
   const dxCheckbox=groups()[0].children[dxIndex+1].children[0];
@@ -69,9 +69,9 @@ async function main(){
   const remaining=all.filter((_,i)=>i!==dxIndex);
   assert.equal(clipboard.text,all[dxIndex],"copy selected-only DX wager before deletion");
   assert.notEqual(rules.els.input.value,before,"working source must change *in same Cut event*");
-  assert.deepEqual(rules.els.output.value.split("\n"),remaining,"all other stakes unchanged");
+  assert.deepEqual(Array.from(rules.els.output.value.split("\n")),remaining,"all other stakes unchanged");
   rules.run();
-  assert.deepEqual(rules.els.output.value.split("\n"),remaining,"re-run must not resurrect single-row cut");
+  assert.deepEqual(Array.from(rules.els.output.value.split("\n")),remaining,"re-run must not resurrect single-row cut");
   rules.undo();
   assert.equal(rules.els.input.value,src,"undo restores original input");
   assert.equal(rules.els.output.value,baseline,"undo restores complete output");
@@ -85,11 +85,11 @@ async function main(){
   const first=groups()[0].children[1].children[0];
   first.checked=true;first.events.change();
   const firstBet=records()[0].text;
-  const remainingBet=records().filter(r=>r.alive).slice(1).map(r=>r.text);
+  const remainingBet=Array.from(records()).filter(r=>r.alive).slice(1).map(r=>r.text);
   assert.ok(remainingBet.length>=1);
   await rules.cutSelectedOutput();
   assert.equal(clipboard.text,firstBet,"first split row copied");
-  assert.deepEqual(rules.els.output.value.split("\n"),remainingBet,"partial B exposure cut, no sibling loss");
+  assert.deepEqual(Array.from(rules.els.output.value.split("\n")),remainingBet,"partial B exposure cut, no sibling loss");
   assert.notEqual(rules.els.input.value,"2d 219 b5n","top shows actual remaining source representation instantly");
   const persisted=rules.els.output.value;
   rules.run();

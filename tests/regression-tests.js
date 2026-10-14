@@ -271,13 +271,18 @@ const selectFirstVisibleOutput = () => {
   ui.output.selectionEnd = end === -1 ? ui.output.value.length : end;
 };
 
-// A single derived DX row is not executable source. Refuse atomically.
+// A single derived DX row is retained in the explicit lossless ledger.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
+assert.equal(ui.output.value, `${firstLines.slice(1).join("\n")}\n${secondOutput}`);
+assert.equal(outputRecords().filter(record => record.alive).length, 5);
+assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
+rules.run();
+assert.equal(ui.output.value, `${firstLines.slice(1).join("\n")}\n${secondOutput}`);
+rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
-assert.equal(outputRecords().filter(record => record.alive).length, 6);
-assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
 
 // Selecting the full source-equivalent group is executable and removes only it.
 ui.output.selectionStart = 0;
@@ -306,15 +311,15 @@ assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
-// A single station-derived DD row cannot be represented as a valid source;
-// refuse it, then permit a whole source-equivalent group cut.
+// A single station-derived DD row uses the lossless ledger, then the last
+// remaining row can still be cut normally.
 ui.input.value = "2d 22 10 dd 5n";
 rules.run();
 assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "2d 22 10 dd 5n");
-assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
+assert.equal(ui.output.value, "qn 22 10 dd 5n");
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = ui.output.value.length;
 await rules.cutSelectedOutput();

@@ -84,18 +84,20 @@ async function main(){
   assert.equal(rules.els.input.value,original,"undo restores exact dotted source");
   assert.equal(rules.els.output.value,baseline,"undo restores all group outputs");
   assert.equal(groups().length,2);
-  // A single child wager cannot disappear while its original source still
-  // reconstructs the FULL parent group. Reject the Cut rather than silently
-  // resurrecting money on rerun. Individual checkbox Copy remains supported.
+  // A single child wager uses the explicit lossless ledger when the parent
+  // source cannot reproduce just the surviving child rows.
   const firstRow=groups()[0].children[1].children[0];
   firstRow.checked=true;firstRow.events.change();
   await rules.copyOutput();
   assert.equal(clipboard.text,all[0].text);
   await rules.cutSelectedOutput();
-  assert.equal(rules.els.input.value,original,"unsafe child Cut must preserve source");
-  assert.equal(rules.els.output.value,baseline,"unsafe child Cut must preserve result");
+  assert.match(rules.els.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u,"child Cut persists a labelled exact ledger");
+  assert.equal(rules.els.output.value,all.slice(1).map(r=>r.text).join("\n"),"child Cut preserves every sibling exactly");
   rules.run();
-  assert.equal(rules.els.output.value,baseline,"rerun after a refused Cut cannot change output");
+  assert.equal(rules.els.output.value,all.slice(1).map(r=>r.text).join("\n"),"rerun from ledger cannot resurrect cut output");
+  rules.undo();
+  assert.equal(rules.els.input.value,original,"undo restores source before child Cut");
+  assert.equal(rules.els.output.value,baseline,"undo restores source before child Cut");
   // Select all then full Cut clears both logical groups atomically.
   els.selectAllOutputBtn.events.click();
   assert.match(els.resultGroupsSummary.textContent,new RegExp(`Đã chọn ${all.length}/${all.length}`));

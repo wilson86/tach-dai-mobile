@@ -79,7 +79,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.26</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.27</span></div>
 
   <div class="card">
     <div class="controls">
@@ -166,8 +166,41 @@ const inputEl=$("input"), outputEl=$("output"), runBtn=$("runBtn"), statusEl=$("
 const resultCard=$("resultCard");
 
 let undoStack=[];
-let outputRecords=[]; // [{sourceLine,text,alive}]
+let outputRecords=[]; // [{id,sourceLine,text,alive}]
 let lastOutputSelection={start:0,end:0};
+// A partial derived result is not always a valid customer message. Keep an
+// explicit local-only exact-output ledger rather than inventing a source that
+// would be parsed with different money semantics on the next Run.
+const EXACT_OUTPUT_LEDGER_PREFIX="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n";
+let workingLedger=null;
+function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
+function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
+function ledgerDate(){return String(dateEl.value||localDateISO());}
+function serializeExactOutputLedger(){
+  const origin=workingLedger?.origin||inputEl.value;
+  return EXACT_OUTPUT_LEDGER_PREFIX+JSON.stringify({
+    schema:"KTS_EXACT_OUTPUT_LEDGER_V1",engine:engineSha(),region:regionEl.value,
+    date:ledgerDate(),origin,
+    rows:outputRecords.filter(r=>r.alive).map(r=>({id:r.id,sourceLine:r.sourceLine,
+      sourceGroupNo:r.sourceGroupNo||0,sourceGroupText:r.sourceGroupText||"",text:r.text}))
+  });
+}
+function parseExactOutputLedger(raw){
+  if(!raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX))return null;
+  try{
+    const ledger=JSON.parse(raw.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
+    if(ledger?.schema!=="KTS_EXACT_OUTPUT_LEDGER_V1"||ledger.engine!==engineSha()||
+      ledger.region!==regionEl.value||ledger.date!==ledgerDate()||!Array.isArray(ledger.rows)||
+      !ledger.rows.every(r=>typeof r.id==="string"&&typeof r.text==="string"&&Number.isInteger(r.sourceLine)))return false;
+    return ledger;
+  }catch(_){return false;}
+}
+function announceWorkingSource(){
+  // Same-origin Unified listens to this local event; no postMessage or polling
+  // is used to publish a programmatic Cut.
+  try{if(typeof window!=="undefined"&&typeof window.dispatchEvent==="function"&&typeof CustomEvent==="function")
+    window.dispatchEvent(new CustomEvent("kts:working-source",{detail:{schema:"KTS_WORKING_SOURCE_V1",token:window.__KTS_UNIFIED_FRAME_TOKEN__||"",value:inputEl.value}}));}catch(_){}
+}
 
 // v2.0.5: source lines dùng để đồng bộ Input <-> Kết quả.
 // Giữ mapping riêng để xóa 1 tin trong Input thì chỉ xóa KQ của tin đó,
@@ -972,7 +1005,8 @@ function snapshot(){
     status:statusEl.textContent,
     cls:statusEl.className,
     outputRecords:outputRecords.map(r=>({...r})),
-    sourceLines:lastSourceLines.slice()
+    sourceLines:lastSourceLines.slice(),
+    workingLedger:cloneLedger(workingLedger)
   });
   if(undoStack.length>30)undoStack.shift();
 }
@@ -1113,6 +1147,7 @@ function resetOutputRecords(){
   outputRecords=[];
   lastSourceLines=[];
   lastOutputSelection={start:0,end:0};
+  workingLedger=null;
 }
 
 function renderOutputRecords(){
@@ -1384,6 +1419,7 @@ function restoreCutDraft(receipt){
   outputEl.value=receipt.output;
   outputRecords=receipt.outputRecords.map(r=>({...r}));
   lastSourceLines=receipt.sourceLines.slice();
+  workingLedger=cloneLedger(receipt.workingLedger);
   undoStack.pop();
   renderOutputRecords();
 }
@@ -1396,29 +1432,36 @@ async function cutSelectedOutput(){
     return;
   }
 
-  snapshot();
-  const receipt=undoStack[undoStack.length-1];
   const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
-  const inputBefore=inputEl.value;
-  indexes.forEach(i=>{ outputRecords[i].alive=false; });
-  deleteCompletedSourceLines();
-
-  // A successful Cut must never leave a source that regenerates removed rows.
-  // When a partial derived wager cannot be represented by a valid source,
-  // refuse the whole Cut instead of silently losing money or duplicating bets.
-  if(!cutOutputMatchesExecutableSource()){
-    restoreCutDraft(receipt);
-    setStatus("Không thể cắt riêng dòng này mà vẫn giữ đúng tin nguồn và tiền cược. Hãy chọn cả nhóm kết quả.","err");
-    return;
-  }
-  const copied=await writeClipboardText(selectedText);
-  if(!copied){
-    restoreCutDraft(receipt);
+  // Clipboard failure must be a true no-op, not a transient hidden mutation.
+  if(!(await writeClipboardText(selectedText))){
     setStatus("Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.","err");
     return;
   }
+  snapshot();
+  const receipt=undoStack[undoStack.length-1];
+  const inputBefore=inputEl.value;
+  const wasExactLedger=inputBefore.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
+  indexes.forEach(i=>{ outputRecords[i].alive=false; });
+  const hasAlive=outputRecords.some(r=>r.alive);
+  if(!hasAlive){
+    inputEl.value="";outputRecords=[];lastSourceLines=[];workingLedger=null;
+  }else if(wasExactLedger){
+    inputEl.value=serializeExactOutputLedger();lastSourceLines=[];
+  }else{
+    deleteCompletedSourceLines();
+  }
+
+  // Prefer a normal wager source where exact replay proves conservation. If
+  // that is impossible (for example one DX row), persist the exact surviving
+  // rows in a labelled local ledger; never fake a new customer message.
+  if(hasAlive&&!wasExactLedger&&!cutOutputMatchesExecutableSource()){
+    inputEl.value=serializeExactOutputLedger();
+    lastSourceLines=[];
+  }
   checkedResultRecordIndexes.clear();
   renderOutputRecords();
+  announceWorkingSource();
 
   lastOutputSelection={start:0,end:0};
   if(inputEl.value!==inputBefore){
@@ -1433,8 +1476,23 @@ function resolveExplicitSourceRegion(text){
 }
 
 function run(options={}){
-  const raw=inputEl.value.trim();
+  const submittedRaw=inputEl.value;
+  const raw=submittedRaw.trim();
   if(!raw){outputEl.value="";resetOutputRecords();setStatus("Chưa có tin.","err");return;}
+
+  const exactLedger=parseExactOutputLedger(raw);
+  if(exactLedger!==null){
+    if(!exactLedger){
+      resetOutputRecords();outputEl.value="PHÁT HIỆN TIN SAI:\n\nLedger kết quả cục bộ không hợp lệ hoặc không khớp engine/ngày/miền.";
+      setStatus("Ledger kết quả bị từ chối an toàn","err");return;
+    }
+    workingLedger={origin:exactLedger.origin};
+    checkedResultRecordIndexes.clear();
+    outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
+    lastSourceLines=[];renderOutputRecords();
+    setStatus(`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`,"ok");
+    return;
+  }
 
   const wasChat=looksLikeChatLog(raw);
   const clean=wasChat?preprocessChatText(raw):raw;
@@ -1467,6 +1525,7 @@ function run(options={}){
     return;
   }
   lastSourceLines=lines.slice();
+  workingLedger={origin:submittedRaw};
   checkedResultRecordIndexes.clear();
   outputRecords=[];
   lines.forEach((line,idx)=>{
@@ -1474,6 +1533,7 @@ function run(options={}){
     const generated=processLine(line,region,stations);
     const semantic=identifySemanticOutputGroups(line,region,stations,generated);
     generated.forEach((text,rowIndex)=>outputRecords.push({
+      id:`${idx+1}:${rowIndex+1}:${text}`,
       sourceLine:idx+1,
       sourceGroupNo:semantic?semantic[rowIndex].sourceGroupNo:0,
       sourceGroupText:semantic?semantic[rowIndex].sourceGroupText:"",
@@ -1540,6 +1600,7 @@ $("undoBtn").addEventListener("click",()=>{
   inputEl.value=s.input;
   outputEl.value=s.output;
   outputRecords=(s.outputRecords||[]).map(r=>({...r}));
+  workingLedger=cloneLedger(s.workingLedger);
   checkedResultRecordIndexes.clear();
   lastSourceLines=(s.sourceLines||inputEl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)).slice();
   lastOutputSelection={start:0,end:0};
@@ -1547,6 +1608,7 @@ $("undoBtn").addEventListener("click",()=>{
   statusEl.className=s.cls;
   resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
   renderGroupedResults();
+  announceWorkingSource();
 });
 regionEl.addEventListener("change",updateUI);
 dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
@@ -1569,7 +1631,7 @@ initGroupedResults();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.26";
+const APP_VERSION = "2.0.27";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
