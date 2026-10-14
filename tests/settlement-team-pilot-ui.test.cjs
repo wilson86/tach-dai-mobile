@@ -315,3 +315,10 @@ test('approver button is only a gated test action for a freshly verified pending
  assert.match(h.els['team-notice'].textContent,/PHÊ DUYỆT đã ghi nhận/);
  h.mounted.dispose();
 });
+
+test('opt-in controls stay concealed when the HTML hidden flag is set',()=>{
+ const stylesheet=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.css'),'utf8');
+ assert.ok(stylesheet.includes('[hidden]{display:none!important}'));
+ const bootstrap=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot-start.js'),'utf8');
+ assert.equal(bootstrap.includes('syntheticReviewUiEnabled:true'),false);
+});
