@@ -137,3 +137,24 @@ crash survival, encryption key recovery, backup media durability, user-facing
 consent/UI, database receipts or independent on-device authorization. The
 existing PWA/pilot continues to use `MEMORY_ONLY` drafts; module remains
 unwired and no filesystem, production or external account was touched.
+
+## CI-only disposable filesystem crash-boundary qualification — NOT a phone feature
+
+The new isolated `team-settlement/ci-recovery-file-store.cjs` supports only
+synthetic GitHub Actions CI when `GITHUB_ACTIONS=true`, with a private
+`RUNNER_TEMP` child directory. The module refuses all other paths or
+normal host/local environments. Its sole fixed file name contains **only**
+a canonical AES-256-GCM encrypted envelope, created atomically with O_EXCL,
+mode 0600 and an attempted file/directory fsync. Existing files (including
+uncertain partial writes) are never overwritten. Reads refuse symlinks,
+hardlinks, owner/mode violations, oversized records and malformed ciphertext.
+The tests create and remove an exclusive temporary test directory only on
+GitHub's disposable runner, reuse ciphertext from a new Node child process,
+and race 12 simultaneous exclusive writers. They NEVER touch E:/F:,
+operational Windows, browser IndexedDB or customer records.
+
+This is **not** a durable mobile storage implementation or a device power-loss
+proof: even fsync cannot establish a phone's storage policy/backup retention,
+and a killed/corrupt test file remains quarantined without any automatic
+re-send. It does not activate backup/restore in the app or change the
+human release gates. `durability=UNVERIFIED` remains mandatory.
