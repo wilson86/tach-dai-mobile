@@ -1061,3 +1061,52 @@ test('duplicate immutable event IDs or a nonadvancing page cursor cannot consume
  assert.equal((await client.pullChanges()).status,'SYNCED');
  assert.equal(client.snapshot().cursor,'new_login_page_1');
 });
+
+test('repeat syncDraft on a verified SYNCED receipt performs no second financial POST',async()=>{
+ let requests=0;
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>{
+   requests++;
+   return response(200,{sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-10-14:mn',
+     event_id:'saved_synthetic_event',replayed:false,new_revision:1,feed_seq:'1'});
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const draft=client.queueDraft(scope,{synthetic:true});
+ const initial=await client.syncDraft(draft.id);
+ assert.equal(initial.status,'SYNCED');
+ assert.equal(requests,1);
+ const repeat=await client.syncDraft(draft.id);
+ assert.equal(repeat.status,'SYNCED');
+ assert.deepEqual(repeat.server_result,initial.server_result);
+ assert.equal(requests,1);
+});
+
+test('reconnect never retries pending financial write when change feed is unverified',async()=>{
+ const cases=[{mode:'offline',expected:'PENDING'}, {mode:'unauthorized',expected:'BLOCKED'},
+   {mode:'malformed',expected:'BLOCKED'}];
+ for(const scenario of cases){
+   let writeRequests=0,pullRequests=0;
+   const client=Sync.createSyncClient({fetchImpl:async url=>{
+     if(url.includes('/v1/changes')){
+       pullRequests++;
+       if(scenario.mode==='offline')throw Object.assign(Error('offline'),{code:'NETWORK_DOWN'});
+       if(scenario.mode==='unauthorized')return response(401,{error:'AUTH_SESSION_INVALID'});
+       return response(200,{sync_status:'SYNCED',items:[{event_id:'unsafe_event',
+         workspace_id:'group_b',feed_seq:'1'}],next_cursor:'fake_cursor'});
+     }
+     if(url.includes('/v1/scopes/drafts'))writeRequests++;
+     return response(503,{error:'TEAM_BACKEND_UNAVAILABLE'});
+   }});
+   client.setSessionToken('a'.repeat(43),'group_a');
+   const draft=client.queueDraft({workspace_id:'group_a',partner_id:'fake_partner_1',
+     business_date:'2026-10-14',region:'mn'},{synthetic:true});
+   const observed=await client.reconnect();
+   assert.equal(observed.pull.status,scenario.expected,scenario.mode);
+   assert.equal(observed.drafts.length,0);
+   assert.equal(writeRequests,0);
+   assert.equal(pullRequests,1);
+   assert.equal(client.snapshot().drafts[0].id,draft.id);
+   assert.equal(client.snapshot().drafts[0].status,'PENDING');
+   assert.equal(client.snapshot().cursor,null);
+ }
+});

@@ -287,3 +287,15 @@ Event-ID memory resets on account/logout transitions, allowing a new session
 to begin from the original feed sequence. The rolling guard is supplementary
 to PostgreSQL workspace-scoped UNIQUE constraints; it is not a durable
 complete audit index, and financial release remains blocked.
+
+## Reconnect refuses writes without a verified feed; saved drafts are inert
+
+A deliberate reconnect first checks the authenticated change feed. When that
+check is PENDING, BLOCKED, unauthorized or malformed, the reconnect performs
+**zero** financial draft POST attempts; pending intents remain in volatile
+memory until the next explicit operation. It may retry previously pending
+draft IDs only if this initial feed read returns verified SYNCED for the same
+session. A draft already labeled SYNCED with a validated durable receipt is
+inert on a later manual `syncDraft(id)` invocation; a second POST is not
+emitted. This is a fail-closed browser behavior, not proof of money accuracy,
+offline durability, or authorization for automatic future retries.

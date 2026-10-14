@@ -254,7 +254,10 @@
       if (!item) throw new Error('SYNC_DRAFT_NOT_FOUND');
       if (draftFlights.has(id))
         return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_DRAFT_ALREADY_IN_FLIGHT' });
-      if (item.status === STATUS.CONFLICT || item.status === STATUS.BLOCKED) return Object.freeze(clone(item));
+      // SYNCED is an authoritative, verified receipt: never create a
+      // second network write by re-clicking the same previously saved draft.
+      if (item.status === STATUS.SYNCED || item.status === STATUS.CONFLICT ||
+          item.status === STATUS.BLOCKED) return Object.freeze(clone(item));
       if (!sessionToken) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
       if (workspaceId !== null && item.scope.workspace_id !== workspaceId)
         return setStatus(item, STATUS.BLOCKED, 'SYNC_WORKSPACE_MISMATCH');
@@ -487,7 +490,11 @@
       });
       const pulled = await pullChanges();
       if (epoch !== sessionEpoch) return sessionChanged();
-      if (pulled.status === STATUS.BLOCKED) return { pull: pulled, drafts: [] };
+      // A failed/unverified feed does not prove connectivity, membership or
+      // the last durable sequence. Do not send a batch of pending writes until
+      // an authenticated and integrity-checked read succeeds.
+      if (pulled.status !== STATUS.SYNCED)
+        return { pull: pulled, drafts: [] };
       const drafts = [];
       for (const id of retryIds) {
         if (epoch !== sessionEpoch) return sessionChanged();
