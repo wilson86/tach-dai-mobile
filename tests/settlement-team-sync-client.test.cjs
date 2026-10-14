@@ -65,7 +65,7 @@ test('401 blocks drafts and logout blocks unsent drafts without persisting crede
   client.setSessionToken('z'.repeat(43));
   const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
   assert.equal((await client.syncDraft(draft.id)).status, Sync.STATUS.BLOCKED);
-  assert.equal(client.clearSession().authenticated, false);
+  assert.equal(client.clearSession({discardPending:true}).authenticated, false);
   assert.equal(client.snapshot().drafts.length, 0); // Prior account's drafts are no longer visible.
 });
 
@@ -156,7 +156,7 @@ test('new workspace login cannot inherit prior cursor or draft data', async () =
   await client.pullChanges();
   assert.equal(client.snapshot().cursor, 'cursor_from_a');
   assert.equal(client.snapshot().drafts.length, 1);
-  assert.equal(client.clearSession().cursor, null);
+  assert.equal(client.clearSession({discardPending:true}).cursor, null);
   assert.equal(client.snapshot().drafts.length, 0);
   await client.login('user_b', 'synthetic-pass', 'group_b');
   assert.equal(client.snapshot().workspace_id, 'group_b');
@@ -174,7 +174,7 @@ test('late previous-session draft result cannot be marked SYNCED for the next pe
   client.setSessionToken('a'.repeat(43), 'group_a');
   const item = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { private: 'synthetic-a' });
   const delayed = client.syncDraft(item.id);
-  client.clearSession();
+  client.clearSession({discardPending:true});
   client.setSessionToken('b'.repeat(43), 'group_b');
   finish(response(200, { event_id: 'a_done', new_revision: 1, sync_status: 'SYNCED' }));
   const result = await delayed;
@@ -639,7 +639,8 @@ test('review lost response is blocked from account switch until explicit discard
  await client.reviewScope('submit_review',scope,1);
  assert.throws(()=>client.setSessionToken('b'.repeat(43),'group_b'),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
  await assert.rejects(()=>client.logout(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
- client.clearSession();
+ assert.throws(()=>client.clearSession(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+ client.clearSession({discardPending:true});
  assert.equal(client.snapshot().review_attempts.length,0);
  assert.equal(client.snapshot().authenticated,false);
 });
@@ -1136,7 +1137,9 @@ test('logout in flight rejects new drafts, review intents and duplicate revokes 
  assert.equal((await started).authenticated,false);
  assert.equal(client.snapshot().authenticated,false);
  // The logout flight guard must release even on a successful remote revoke.
- const again=client.queueDraft(scope,{synthetic:true});
+ assert.throws(()=>client.queueDraft(scope,{synthetic:true}),/AUTH_SESSION_REQUIRED/);
+ client.setSessionToken('b'.repeat(43),'group_b');
+ const again=client.queueDraft({...scope,workspace_id:'group_b'},{synthetic:true});
  assert.equal(again.status,'PENDING');
 });
 
@@ -1150,9 +1153,9 @@ test('failed remote logout also releases write gate but never claims remote revo
  done(response(503,{error:'NETWORK_FAILURE'}));
  await assert.rejects(started,/SYNC_LOGOUT_REVOKE_UNVERIFIED/);
  assert.equal(client.snapshot().authenticated,false);
- // A new synthetic local intent can be created after the old flight ends.
- assert.equal(client.queueDraft({workspace_id:'group_a',business_date:'2026-10-14'},
-   {synthetic:true}).status,'PENDING');
+ // Remote logout ended, but no unowned draft may be queued while logged out.
+ assert.throws(()=>client.queueDraft({workspace_id:'group_a',business_date:'2026-10-14'},
+   {synthetic:true}),/AUTH_SESSION_REQUIRED/);
 });
 
 test('bearer preflight rejects control characters and noncanonical tokens before state mutation',()=>{
@@ -1172,7 +1175,7 @@ test('bearer preflight rejects control characters and noncanonical tokens before
  assert.equal(calls,0);
 });
 
-test('new login must not send a previously logged-in account bearer',async()=>{
+test('active login requires previous account logout before another account can authenticate',async()=>{
  const calls=[];
  const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
    calls.push({url,headers:options.headers});
@@ -1181,9 +1184,55 @@ test('new login must not send a previously logged-in account bearer',async()=>{
    throw Error('UNEXPECTED_URL');
  }});
  client.setSessionToken('a'.repeat(43),'group_a');
- assert.equal((await client.login('synthetic_b','test-password','group_b')).authenticated,true);
- assert.equal(client.snapshot().workspace_id,'group_b');
- assert.equal(Object.prototype.hasOwnProperty.call(calls[0].headers,'authorization'),false);
+ await assert.rejects(client.login('synthetic_b','test-password','group_b'),
+   /SYNC_ACTIVE_SESSION_LOGOUT_REQUIRED/);
+ assert.equal(calls.length,0); // Never create a still-live orphan account session.
  await client.logout();
- assert.equal(calls[1].headers.authorization,'Bearer '+'b'.repeat(43));
+ assert.equal(calls[0].headers.authorization,'Bearer '+'a'.repeat(43));
+ assert.equal((await client.login('synthetic_b','test-password','group_b')).authenticated,true);
+ assert.equal(Object.prototype.hasOwnProperty.call(calls[1].headers,'authorization'),false);
+ assert.equal(client.snapshot().workspace_id,'group_b');
+});
+
+test('public clearSession refuses silent loss of pending financial intents',()=>{
+ const client=Sync.createSyncClient({fetchImpl:async()=>{throw Error('UNEXPECTED_REQUEST');}});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const epoch=client.snapshot().session_epoch;
+ const draft=client.queueDraft({workspace_id:'group_a',partner_id:'fake_partner_1',
+   business_date:'2026-10-15',region:'mn'},{synthetic:true});
+ assert.throws(()=>client.clearSession(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+ assert.equal(client.snapshot().session_epoch,epoch);
+ assert.equal(client.snapshot().drafts[0].id,draft.id);
+ assert.equal(client.snapshot().authenticated,true);
+ assert.equal(client.clearSession({discardPending:true}).authenticated,false);
+ assert.equal(client.snapshot().drafts.length,0);
+});
+
+test('logged-out clients cannot queue unowned draft intents',()=>{
+ let requests=0;
+ const client=Sync.createSyncClient({fetchImpl:async()=>{requests++;return response(503,{});}});
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-15',region:'mn'};
+ assert.throws(()=>client.queueDraft(scope,{synthetic:true}),/AUTH_SESSION_REQUIRED/);
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal(client.queueDraft(scope,{synthetic:true}).status,'PENDING');
+ assert.throws(()=>client.clearSession(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
+ client.clearSession({discardPending:true});
+ assert.throws(()=>client.queueDraft(scope,{synthetic:true}),/AUTH_SESSION_REQUIRED/);
+ assert.equal(requests,0);
+});
+
+test('logging in during an unresolved remote logout is refused without new HTTP',async()=>{
+ let resolveLogout;const calls=[];
+ const client=Sync.createSyncClient({fetchImpl:(url)=>{
+   calls.push(url);
+   if(url.endsWith('/v1/logout'))return new Promise(resolve=>{resolveLogout=resolve;});
+   throw Error('UNEXPECTED_IDENTITY_REQUEST');
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const old=client.logout();
+ assert.equal(typeof resolveLogout,'function');
+ await assert.rejects(client.login('new_operator','synthetic-pass','group_b'),/SYNC_LOGOUT_IN_FLIGHT/);
+ assert.equal(calls.length,1);
+ resolveLogout(response(204,{}));
+ assert.equal((await old).authenticated,false);
 });

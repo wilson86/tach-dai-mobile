@@ -174,6 +174,8 @@
     }
 
     async function login(authSubject, password, workspaceId) {
+      if (logoutInFlight) throw new Error('SYNC_LOGOUT_IN_FLIGHT');
+      if (sessionToken) throw new Error('SYNC_ACTIVE_SESSION_LOGOUT_REQUIRED');
       if (loginInFlight) throw new Error('SYNC_LOGIN_IN_FLIGHT');
       if (hasUnsyncedDrafts()) throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       if (typeof authSubject !== 'string' || !authSubject || typeof password !== 'string' ||
@@ -201,7 +203,7 @@
       if (logoutInFlight) throw new Error('SYNC_LOGOUT_IN_FLIGHT');
       if (hasUnsyncedDrafts() && discardPending !== true)
         throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
-      if (!sessionToken) return clearSession();
+      if (!sessionToken) return clearSession({discardPending});
       const epoch = sessionEpoch;
       logoutInFlight = true;
       try {
@@ -216,7 +218,7 @@
         // A delayed logout response from a previous identity may not log out a
         // newer, independently authenticated session.
         if (epoch !== sessionEpoch) return snapshot();
-        const localState = clearSession(); // Always discard memory-only bearer locally.
+        const localState = clearSession({discardPending:true}); // After explicit decision.
         if (!revokeVerified) throw new Error('SYNC_LOGOUT_REVOKE_UNVERIFIED');
         return localState;
       } finally {
@@ -224,7 +226,10 @@
       }
     }
 
-    function clearSession() {
+    function clearSession({ discardPending = false } = {}) {
+      // A public reset must not bypass the unsent financial-intent decision.
+      if (hasUnsyncedDrafts() && discardPending !== true)
+        throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       sessionEpoch += 1;
       sessionToken = null;
       workspaceId = null;
@@ -248,6 +253,7 @@
 
     function queueDraft(scope, payload, baseRevision = 0) {
       if (logoutInFlight) throw new Error('SYNC_LOGOUT_IN_FLIGHT');
+      if (!sessionToken) throw new Error('AUTH_SESSION_REQUIRED');
       if (!scope || typeof scope !== 'object' || !payload || typeof payload !== 'object' || Array.isArray(payload))
         throw new Error('SYNC_DRAFT_INVALID');
       if (!Number.isSafeInteger(baseRevision) || baseRevision < 0 ||

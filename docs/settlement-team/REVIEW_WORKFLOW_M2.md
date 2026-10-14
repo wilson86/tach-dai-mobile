@@ -325,3 +325,19 @@ rejected before replacing a session or preparing request headers. Login
 requests no longer attach the previous user's existing bearer in the
 Authorization header when switching accounts. This does not authorize
 persistent tokens or automatic account switching.
+
+## Public reset, logged-out queue and actor-switch safety
+
+Low-level `clearSession()` no longer silently wipes an unsent draft or
+uncertain review attempt: unless the operator explicitly sets
+`{discardPending:true}`, it refuses with
+`SYNC_UNSENT_DRAFTS_REQUIRE_DECISION` and retains all current state.
+Explicitly acknowledged discard still supports emergency recovery after
+lost credentials, but **does not prove the former server session was revoked**.
+
+A logged-out browser cannot create unowned `MEMORY_ONLY` drafts. New
+`login()` attempts are rejected while another user is still authenticated
+(`SYNC_ACTIVE_SESSION_LOGOUT_REQUIRED`) or its remote logout is in flight.
+The operator must close the old session first rather than leaving two
+valid accounts running under one browser client. No persistent offline
+queue, session storage or monetary permission is introduced.
