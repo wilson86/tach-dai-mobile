@@ -15,6 +15,7 @@
     const REVIEW_STATES = Object.freeze(['DRAFT','PENDING_REVIEW','REVIEWED','CLOSED','REOPEN_REQUESTED']);
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
   const MAX_SIGNED_BIGINT = 9223372036854775807n;
+  const RECENT_EVENT_ID_LIMIT = 500; // Bounded client-only replay cross-check.
   function verifiedFeedSequence(value) {
     if (typeof value === 'number') return Number.isSafeInteger(value) && value > 0;
     if (typeof value !== 'string' || !/^[1-9][0-9]{0,18}$/.test(value)) return false;
@@ -22,14 +23,20 @@
   }
 
   const FEED_EVENT_ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-  function verifiedFeedItems(items, workspaceId, limit, afterSequence = null) {
+  function verifiedFeedItems(items, workspaceId, limit, afterSequence = null, rememberedIds = null) {
     if (!Array.isArray(items) || items.length>limit) return false;
+    // Immutable event IDs must not repeat within a page or the recent session
+    // memory; a duplicate could otherwise consume a valid cursor invisibly.
+    const pageIds=new Set();
     // The synthetic durable ledger allocates one immutable event per tenant
     // sequence. Missing rows are not allowed to become a verified cursor.
     let previous=afterSequence === null ? 0n : afterSequence;
     for(const item of items){
       if(!item || typeof item!=='object' || Array.isArray(item) ||
-         typeof item.event_id!=='string' || !FEED_EVENT_ID.test(item.event_id))return false;
+         typeof item.event_id!=='string' || !FEED_EVENT_ID.test(item.event_id) ||
+         pageIds.has(item.event_id) ||
+         (rememberedIds && rememberedIds.has(item.event_id)))return false;
+      pageIds.add(item.event_id);
       // Strict tenant checks on authenticated browser sessions; never render
       // another workspace's event even if the server misroutes a feed.
       if(workspaceId!==null){
@@ -102,6 +109,7 @@
     let cursor = null;
     // The last verified tenant sequence persists across pages, never across sessions.
     let lastAcceptedFeedSequence = null;
+    const recentFeedEventIds = new Set();
     const pending = new Map();
     const draftFlights = new Set();
     const reviewAttempts = new Map(); // Volatile; same-key retries within this session.
@@ -153,6 +161,7 @@
       reviewAttempts.clear();
       cursor = null;
       lastAcceptedFeedSequence = null;
+      recentFeedEventIds.clear();
       emit();
       return snapshot();
     }
@@ -208,6 +217,7 @@
       workspaceId = null;
       cursor = null;
       lastAcceptedFeedSequence = null;
+      recentFeedEventIds.clear();
       // Prototype drafts are volatile. Do not display a previous user's data
       // after logout or let a later login submit it under another identity.
       pending.clear();
@@ -380,15 +390,21 @@
         // A partial/forged 200 response must not skip unconsumed financial events.
         const page = result.body;
         if (!page || page.sync_status !== STATUS.SYNCED ||
-            !verifiedFeedItems(page.items,requestedWorkspace,limit,lastAcceptedFeedSequence) ||
+            !verifiedFeedItems(page.items,requestedWorkspace,limit,lastAcceptedFeedSequence,recentFeedEventIds) ||
             (page.has_more != null && typeof page.has_more !== 'boolean') ||
             (page.has_more === true && page.items.length !== limit) ||
-            (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
+            (page.items.length > 0 && (typeof page.next_cursor !== 'string' ||
+              !page.next_cursor || page.next_cursor === requestedCursor)) ||
             (page.items.length === 0 && page.next_cursor != null))
           return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };
         // Until per-user/per-workspace durable cursors are independently
         // authenticated, keep the change cursor only in this session's memory.
         if (page.items.length > 0) {
+          for(const item of page.items){
+            recentFeedEventIds.add(item.event_id);
+            if(recentFeedEventIds.size > RECENT_EVENT_ID_LIMIT)
+              recentFeedEventIds.delete(recentFeedEventIds.values().next().value);
+          }
           cursor = page.next_cursor;
           if (requestedWorkspace !== null)
             lastAcceptedFeedSequence = BigInt(page.items[page.items.length - 1].feed_seq);

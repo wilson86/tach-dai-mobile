@@ -1026,3 +1026,38 @@ test('omitted has_more must remain UNKNOWN rather than falsely claiming terminal
  assert.equal(page.has_more,false);
  assert.equal(client.snapshot().cursor,'c3');
 });
+
+test('duplicate immutable event IDs or a nonadvancing page cursor cannot consume tenant history',async()=>{
+ let page={sync_status:'SYNCED',items:[
+   {workspace_id:'group_a',event_id:'same_id',feed_seq:'1'},
+   {workspace_id:'group_a',event_id:'same_id',feed_seq:'2'}],next_cursor:'page_2'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,page)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ let r=await client.pullChanges(2);
+ assert.equal(r.status,'BLOCKED');
+ assert.equal(r.error,'SYNC_FEED_UNVERIFIED');
+ assert.equal(client.snapshot().cursor,null);
+ page={sync_status:'SYNCED',items:[
+   {workspace_id:'group_a',event_id:'same_id',feed_seq:'1'}],next_cursor:'page_1'};
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'page_1');
+ page={sync_status:'SYNCED',items:[
+   {workspace_id:'group_a',event_id:'same_id',feed_seq:'2'}],next_cursor:'page_2'};
+ r=await client.pullChanges();
+ assert.equal(r.error,'SYNC_FEED_UNVERIFIED');
+ assert.equal(client.snapshot().cursor,'page_1');
+ page={sync_status:'SYNCED',items:[
+   {workspace_id:'group_a',event_id:'new_id',feed_seq:'2'}],next_cursor:'page_1'};
+ r=await client.pullChanges();
+ assert.equal(r.error,'SYNC_FEED_UNVERIFIED');
+ assert.equal(client.snapshot().cursor,'page_1');
+ page={...page,next_cursor:'page_2'};
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'page_2');
+ client.clearSession();
+ client.setSessionToken('b'.repeat(43),'group_a');
+ page={sync_status:'SYNCED',items:[
+   {workspace_id:'group_a',event_id:'same_id',feed_seq:'1'}],next_cursor:'new_login_page_1'};
+ assert.equal((await client.pullChanges()).status,'SYNCED');
+ assert.equal(client.snapshot().cursor,'new_login_page_1');
+});

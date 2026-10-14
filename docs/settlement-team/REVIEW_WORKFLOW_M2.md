@@ -276,3 +276,14 @@ accepts an otherwise validated legacy page but now explicitly returns
 and never infers that the server's authoritative history is exhausted. Only
 an explicit verified `false` may support "end at last poll", and even then
 new events could arrive immediately. Modern PostgreSQL emits a boolean.
+
+## Session-bounded immutable event identity and cursor advancement
+
+The authenticated browser feed refuses duplicate immutable event IDs within
+a page or its rolling memory of the last 500 accepted events; a new feed
+page also cannot return the **same** cursor value while claiming new rows.
+Both cases are `SYNC_FEED_UNVERIFIED` before the client changes its cursor.
+Event-ID memory resets on account/logout transitions, allowing a new session
+to begin from the original feed sequence. The rolling guard is supplementary
+to PostgreSQL workspace-scoped UNIQUE constraints; it is not a durable
+complete audit index, and financial release remains blocked.
