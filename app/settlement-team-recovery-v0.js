@@ -41,6 +41,13 @@ function passphraseOrFail(value){
      /[\r\n\u0000]/.test(value))deny('TEAM_RECOVERY_PASSPHRASE_INVALID');
   return value;
 }
+function deepFreeze(value){
+  if(value!==null && typeof value==='object' && !Object.isFrozen(value)){
+    for(const item of Object.values(value))deepFreeze(item);
+    Object.freeze(value);
+  }
+  return value;
+}
 function toB64(bytes){
   let raw='';
   for(let i=0;i<bytes.length;i+=4096)
@@ -150,20 +157,52 @@ async function seal({drafts,actor,passphrase,cryptoProvider}={}){
     cipher:'AES-256-GCM',kdf:'PBKDF2-SHA256',iterations:ITERATIONS,
     salt:toB64(salt),iv:toB64(iv),ciphertext:toB64(encrypted)});
 }
+const ENVELOPE_KEYS=Object.freeze(['kind','version','cipher','kdf',
+  'iterations','salt','iv','ciphertext']);
+function checkedEnvelope(envelope){
+  if(!envelope||typeof envelope!=='object'||Array.isArray(envelope)||
+     (Object.getPrototypeOf(envelope)!==Object.prototype &&
+      Object.getPrototypeOf(envelope)!==null)||
+     Object.keys(envelope).length!==ENVELOPE_KEYS.length)
+    deny('TEAM_RECOVERY_FORMAT_INVALID');
+  const canonical={};
+  for(const name of ENVELOPE_KEYS){
+    const field=Object.getOwnPropertyDescriptor(envelope,name);
+    if(!field||!Object.prototype.hasOwnProperty.call(field,'value'))
+      deny('TEAM_RECOVERY_FORMAT_INVALID');
+    canonical[name]=field.value;
+  }
+  if(Object.keys(envelope).some(name=>!ENVELOPE_KEYS.includes(name))||
+     canonical.kind!==KIND||canonical.version!==0||
+     canonical.cipher!=='AES-256-GCM'||canonical.kdf!=='PBKDF2-SHA256'||
+     canonical.iterations!==ITERATIONS||
+     JSON.stringify(canonical).length>MAX_ENVELOPE_BYTES)
+    deny('TEAM_RECOVERY_FORMAT_INVALID');
+  const salt=fromB64(canonical.salt),iv=fromB64(canonical.iv),
+    cipher=fromB64(canonical.ciphertext);
+  if(salt.length!==16||iv.length!==12||cipher.length<17||
+     cipher.length>MAX_PLAINTEXT_BYTES+16)
+    deny('TEAM_RECOVERY_FORMAT_INVALID');
+  return {canonical,salt,iv,cipher};
+}
+function serializeEnvelope(envelope){
+  return JSON.stringify(checkedEnvelope(envelope).canonical);
+}
+function parseEnvelope(text){
+  if(typeof text!=='string'||text.length>MAX_ENVELOPE_BYTES)
+    deny('TEAM_RECOVERY_FORMAT_INVALID');
+  let parsed;
+  try{parsed=JSON.parse(text);}
+  catch(_){deny('TEAM_RECOVERY_FORMAT_INVALID');}
+  // Canonical roundtrip rejects duplicate keys, reordered fields and trailing
+  // content, before expensive PBKDF2 and before a recovery decision exists.
+  const canonical=checkedEnvelope(parsed).canonical;
+  if(JSON.stringify(canonical)!==text)deny('TEAM_RECOVERY_FORMAT_INVALID');
+  return Object.freeze(canonical);
+}
 async function open({envelope,actor,passphrase,cryptoProvider}={}){
   const who=binding(actor),secret=passphraseOrFail(passphrase);
-  if(!envelope||typeof envelope!=='object'||Array.isArray(envelope)||
-     JSON.stringify(envelope).length>MAX_ENVELOPE_BYTES||
-     Object.keys(envelope).sort().join('|')!==
-       'cipher|ciphertext|iterations|iv|kdf|kind|salt|version'||
-     envelope.kind!==KIND||envelope.version!==0||
-     envelope.cipher!=='AES-256-GCM'||envelope.kdf!=='PBKDF2-SHA256'||
-     envelope.iterations!==ITERATIONS)
-    deny('TEAM_RECOVERY_FORMAT_INVALID');
-  const salt=fromB64(envelope.salt),iv=fromB64(envelope.iv),
-    cipher=fromB64(envelope.ciphertext);
-  if(salt.length!==16||iv.length!==12||cipher.length<17||
-     cipher.length>MAX_PLAINTEXT_BYTES+16)deny('TEAM_RECOVERY_FORMAT_INVALID');
+  const {salt,iv,cipher}=checkedEnvelope(envelope);
   const c=cryptoOrFail(cryptoProvider);
   const key=await keyFor(c,secret,salt);
   let content;
@@ -173,13 +212,19 @@ async function open({envelope,actor,passphrase,cryptoProvider}={}){
     if(bytes.length>MAX_PLAINTEXT_BYTES)deny('TEAM_RECOVERY_SIZE_LIMIT');
     content=JSON.parse(decoder.decode(bytes));
   }catch(_){deny('TEAM_RECOVERY_AUTH_FAILED');}
-  if(!content||content.kind!==KIND||!Array.isArray(content.items))
+  if(!content||typeof content!=='object'||Array.isArray(content)||
+     Object.keys(content).sort().join('|')!=='items|kind'||
+     content.kind!==KIND||!Array.isArray(content.items))
     deny('TEAM_RECOVERY_DRAFT_INVALID');
-  const reconstructed=content.items.map(x=>({
-    id:x.id,status:x.original_status,scope:x.scope,
-    base_revision:x.base_revision,payload:x.payload
-  }));
-  const items=sanitizeDrafts(reconstructed,who).map(item=>Object.freeze({
+  const recoveredKeys='base_revision|id|original_status|payload|scope';
+  const reconstructed=content.items.map(x=>{
+    if(!x||typeof x!=='object'||Array.isArray(x)||
+       Object.keys(x).sort().join('|')!==recoveredKeys)
+      deny('TEAM_RECOVERY_DRAFT_INVALID');
+    return {id:x.id,status:x.original_status,scope:x.scope,
+      base_revision:x.base_revision,payload:x.payload};
+  });
+  const items=sanitizeDrafts(reconstructed,who).map(item=>deepFreeze({
     ...item,status:'QUARANTINED',auto_retry:false
   }));
   // Absolutely no auto-resume path. Reauthenticate + reconcile original
@@ -188,5 +233,5 @@ async function open({envelope,actor,passphrase,cryptoProvider}={}){
     needs_manual_receipt_reconciliation:true,auto_send_enabled:false,
     items:Object.freeze(items)});
 }
-return Object.freeze({seal,open,KIND,ITERATIONS,MAX_ITEMS});
+return Object.freeze({seal,open,serializeEnvelope,parseEnvelope,KIND,ITERATIONS,MAX_ITEMS});
 }));

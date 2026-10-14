@@ -113,3 +113,63 @@ test('recovery remains default-off in browser and its source is a CI path trigge
  assert.match(workflow,/app\/settlement-team-recovery-v0\.js/);
  assert.match(workflow,/node --test tests\/settlement-team-\*\.test\.cjs/);
 });
+
+test('strict transport roundtrip preserves only canonical encrypted envelope after cold start',async()=>{
+ const encrypted=await seal([draft()]);
+ const serialized=Recovery.serializeEnvelope(encrypted);
+ assert.equal(serialized,JSON.stringify(encrypted));
+ assert.equal(serialized.includes('fake_partner_1'),false);
+ assert.equal(serialized.includes('demo'),false);
+ assert.equal(serialized.includes(secret),false);
+ const payload=Recovery.parseEnvelope(serialized);
+ assert.equal(Object.isFrozen(payload),true);
+ assert.equal(Recovery.serializeEnvelope(payload),serialized);
+ // Instantiate a second copy to model a new JS runtime without browser memory.
+ const modulePath=require.resolve('../app/settlement-team-recovery-v0.js');
+ delete require.cache[modulePath];
+ const independent=require(modulePath);
+ const recovered=await independent.open({envelope:independent.parseEnvelope(serialized),
+   actor,passphrase:secret,cryptoProvider:webcrypto});
+ assert.equal(recovered.status,'QUARANTINED');
+ assert.equal(recovered.items[0].id,draft().id);
+ assert.equal(recovered.auto_send_enabled,false);
+ assert.equal(recovered.items[0].auto_retry,false);
+ assert.equal(Object.isFrozen(recovered.items[0].scope),true);
+ assert.equal(Object.isFrozen(recovered.items[0].payload),true);
+ assert.equal(Object.isFrozen(recovered.items[0].payload.nested||{}),false);
+ assert.throws(()=>{recovered.items[0].payload.device='changed';},TypeError);
+ assert.equal(recovered.items[0].payload.device,'phone_a');
+});
+
+test('serialized recovery transport rejects injected, duplicate, reordered or oversized envelopes',async()=>{
+ const valid=Recovery.serializeEnvelope(await seal([draft()]));
+ const malformed=[
+   valid+' ', ' '+valid,valid+'{}', valid.replace('"version":0','"version":1'),
+   valid.replace('"version":0','"version":0,"version":0'),
+   valid.replace('"kind":','"unexpected":null,"kind":'),
+   'null','[]','{}',
+   JSON.stringify({version:0,...JSON.parse(valid)}),
+   'x'.repeat(120001)
+ ];
+ for(const entry of malformed)
+   await assert.rejects(async()=>Recovery.parseEnvelope(entry),
+     /TEAM_RECOVERY_FORMAT_INVALID/,entry.slice(0,45));
+ const original=JSON.parse(valid);
+ const accessor=Object.defineProperty({...original},'salt',{get(){throw Error('CALLED');}});
+ await assert.rejects(async()=>Recovery.serializeEnvelope(accessor),
+   /TEAM_RECOVERY_FORMAT_INVALID/);
+});
+
+test('quarantined nested payload data is immutable without external state mutation',async()=>{
+ const nested={synthetic:true, details:{notes:['demo',{marker:'synthetic'}]}};
+ const env=await seal([{...draft(),payload:nested}]);
+ const out=await open(env);
+ assert.equal(Object.isFrozen(out.items[0]),true);
+ assert.equal(Object.isFrozen(out.items[0].scope),true);
+ assert.equal(Object.isFrozen(out.items[0].payload.details),true);
+ assert.equal(Object.isFrozen(out.items[0].payload.details.notes),true);
+ assert.equal(Object.isFrozen(out.items[0].payload.details.notes[1]),true);
+ assert.throws(()=>out.items[0].payload.details.notes.push('tamper'),TypeError);
+ assert.throws(()=>{out.items[0].scope.region='mt';},TypeError);
+ assert.deepEqual(out.items[0].payload,nested);
+});

@@ -53,3 +53,23 @@ Node test asserts the pilot HTML/start/UI and live sync client never import
 this prototype; only the synthetic test harness exercises its API. Releasing
 a browser download/import workflow requires a separate approved security and
 device-qualification change, not a hidden new script tag.
+
+## Bounded cold-start encrypted-envelope transport (UNWIRED)
+
+`serializeEnvelope(envelope)` returns a canonical UTF-8-compatible JSON
+**string of ciphertext only**, suitable for an explicit future
+operator-approved transfer channel. `parseEnvelope(text)` accepts only the
+exact canonical structure, rejects duplicate/unknown/reordered properties
+and oversized data, and performs no password prompt, file IO, storage or
+network call. A fresh JavaScript runtime can load a serialized envelope,
+decrypt it with the separately supplied recovery secret and exact
+user/workspace binding, and inspect **quarantined, deeply immutable**
+original intent fields. The integration still cannot save an envelope
+to a phone or automatically restore a draft queue. Loss of the envelope or
+recovery passphrase means loss of the draft: no new platform retention or
+backup guarantee is implied.
+
+Tests cover cold-start module reinitialization, ciphertext-only transport,
+canonical decoding, tampering and malformed input, and recursive immutability
+of decrypted payload/scope. These are synthetic crypto-contract tests,
+not device crash/restart, persistence or server receipt reconciliation proof.
