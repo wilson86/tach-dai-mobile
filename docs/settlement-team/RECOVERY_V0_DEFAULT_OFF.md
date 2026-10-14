@@ -105,3 +105,35 @@ seed/gates. It verifies one original receipt for the tenant/actor, no
 other-user or cross-tenant read, and denial of UPDATE even by a role that
 normally has UPDATE permission. No migration, grant to an operational
 account, real finance, browser integration or backup is performed.
+
+## Injected encrypted recovery vault (DEFAULT OFF — synthetic contract)
+
+The isolated Node module `team-settlement/recovery-vault.cjs` exercises the
+**next interface**, rather than enabling storage in the browser. Its
+`createSyntheticRecoveryVault` constructor requires `syntheticOnly:true`,
+server-supplied active identity and an injected adapter with two operations:
+`read(slot)` and atomic `writeIfAbsent(slot,ciphertext)`. There is NO
+bundled adapter for IndexedDB, files, cloud storage or real group financial
+data. All save and inspect operations also require explicit individual
+`explicitConsent:true` and a recovery secret independent of the login
+password.
+
+A manual `save` encrypts fake-only pending drafts, re-verifies the session
+after key derivation, and refuses to overwrite an existing opaque backup.
+A reported store acknowledgement is **not** proof that browser storage or
+the operating system durably flushed any bytes; the result says
+`durability=UNVERIFIED`. On manual `inspect`, the adapter returns the
+ciphertext only; the user must authenticate again and supply the separate
+passphrase. After a second live server-identity verification, decrypted
+items remain `QUARANTINED`, never in an active send queue. The method
+**cannot** issue a financial POST or automatically reconcile a ledger; a
+separate approved read-only server reconciliation is still required.
+
+Synthetic Node tests reuse one in-memory adapter across independently
+created vault instances and cover wrong account, wrong secret, tampering,
+revocation during an asynchronous operation, write-if-absent race, attempted
+overwrite and unknown storage durability. This is **not** evidence of phone
+crash survival, encryption key recovery, backup media durability, user-facing
+consent/UI, database receipts or independent on-device authorization. The
+existing PWA/pilot continues to use `MEMORY_ONLY` drafts; module remains
+unwired and no filesystem, production or external account was touched.
