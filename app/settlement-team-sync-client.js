@@ -368,7 +368,7 @@
             (page.has_more != null && typeof page.has_more !== 'boolean') ||
             (page.has_more === true && page.items.length !== limit) ||
             (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
-            (page.items.length === 0 && page.next_cursor != null)
+            (page.items.length === 0 && page.next_cursor != null))
           return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };
         // Until per-user/per-workspace durable cursors are independently
         // authenticated, keep the change cursor only in this session's memory.
