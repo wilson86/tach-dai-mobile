@@ -212,7 +212,8 @@
     function queueDraft(scope, payload, baseRevision = 0) {
       if (!scope || typeof scope !== 'object' || !payload || typeof payload !== 'object' || Array.isArray(payload))
         throw new Error('SYNC_DRAFT_INVALID');
-      if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) throw new Error('SYNC_REVISION_INVALID');
+      if (!Number.isSafeInteger(baseRevision) || baseRevision < 0 ||
+          !Number.isSafeInteger(baseRevision + 1)) throw new Error('SYNC_REVISION_INVALID');
       if (workspaceId !== null && scope.workspace_id !== workspaceId)
         throw new Error('SYNC_WORKSPACE_MISMATCH');
       const id = newDraftId();
@@ -343,6 +344,8 @@
 
     async function pullChanges(limit = 100) {
       if (!sessionToken) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED', items: [] };
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
+        return { status: STATUS.BLOCKED, error: 'SYNC_LIMIT_INVALID', items: [] };
       const epoch = sessionEpoch;
       const requestedCursor = cursor;
       const requestedWorkspace = workspaceId;
@@ -362,8 +365,10 @@
         const page = result.body;
         if (!page || page.sync_status !== STATUS.SYNCED ||
             !verifiedFeedItems(page.items,requestedWorkspace,limit,lastAcceptedFeedSequence) ||
+            (page.has_more != null && typeof page.has_more !== 'boolean') ||
+            (page.has_more === true && page.items.length !== limit) ||
             (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
-            (page.items.length === 0 && page.next_cursor != null && page.next_cursor !== cursor))
+            (page.items.length === 0 && page.next_cursor != null)
           return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };
         // Until per-user/per-workspace durable cursors are independently
         // authenticated, keep the change cursor only in this session's memory.

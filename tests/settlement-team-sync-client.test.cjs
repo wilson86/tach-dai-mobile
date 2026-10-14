@@ -831,3 +831,46 @@ test('browser refuses missing initial, intra-page and next-page tenant feed even
   assert.equal((await client.pullChanges()).status,'SYNCED');
   assert.equal(client.snapshot().cursor,'page_2');
 });
+
+
+test('draft rejects unsafe next revision before creating an idempotency intent',()=>{
+  let requests=0;
+  const client=Sync.createSyncClient({fetchImpl:async()=>{requests++;return response(200,{});}});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+  assert.throws(()=>client.queueDraft(scope,{synthetic:true},Number.MAX_SAFE_INTEGER),/SYNC_REVISION_INVALID/);
+  assert.throws(()=>client.queueDraft(scope,{synthetic:true},Number.MAX_SAFE_INTEGER+1),/SYNC_REVISION_INVALID/);
+  assert.equal(client.snapshot().drafts.length,0);
+  assert.equal(requests,0);
+  assert.equal(client.queueDraft(scope,{synthetic:true},Number.MAX_SAFE_INTEGER-1).base_revision,
+    Number.MAX_SAFE_INTEGER-1);
+});
+
+test('feed limit and contradictory has_more metadata fail closed before cursor advancement',async()=>{
+  let requests=0;
+  let page={sync_status:'SYNCED',has_more:true,items:[],next_cursor:null};
+  const client=Sync.createSyncClient({fetchImpl:async()=>{requests++;return response(200,page);}});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  for(const limit of [0,-1,501,1.5,NaN,Infinity,'5',null]){
+    const denied=await client.pullChanges(limit);
+    assert.equal(denied.status,'BLOCKED');
+    assert.equal(denied.error,'SYNC_LIMIT_INVALID');
+  }
+  assert.equal(requests,0);
+  for(page of [
+    {sync_status:'SYNCED',has_more:true,items:[],next_cursor:null},
+    {sync_status:'SYNCED',has_more:true,items:[{workspace_id:'group_a',event_id:'e1',feed_seq:1}],next_cursor:'c1'},
+    {sync_status:'SYNCED',has_more:'true',items:[{workspace_id:'group_a',event_id:'e1',feed_seq:1}],next_cursor:'c1'},
+    {sync_status:'SYNCED',has_more:false,items:[],next_cursor:'non_null_cursor'}
+  ]){
+    const denied=await client.pullChanges(2);
+    assert.equal(denied.status,'BLOCKED',JSON.stringify(page));
+    assert.equal(denied.error,'SYNC_FEED_UNVERIFIED');
+    assert.equal(client.snapshot().cursor,null);
+  }
+  page={sync_status:'SYNCED',has_more:true,items:[
+    {workspace_id:'group_a',event_id:'e1',feed_seq:1},
+    {workspace_id:'group_a',event_id:'e2',feed_seq:2}],next_cursor:'page_2'};
+  assert.equal((await client.pullChanges(2)).status,'SYNCED');
+  assert.equal(client.snapshot().cursor,'page_2');
+});

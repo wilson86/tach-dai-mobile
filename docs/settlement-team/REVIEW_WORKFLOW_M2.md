@@ -176,3 +176,14 @@ sequence is **not** valid pagination: it fails `TEAM_FEED_RESPONSE_UNVERIFIED`
 before a server cursor is returned, rather than silently skipping evidence.
 This is fail-closed integrity validation, not a claim that the historical
 money/oracle or live deployment has been qualified.
+
+## Bounded cursor paging and revision preflight (2026-10-14)
+
+Before sending a browser feed request, `pullChanges` requires a whole-number
+limit of 1–500. Contradictory pagination metadata (nonboolean supplied
+`has_more`, claimed additional pages without a full current page, or a
+non-null cursor on an empty page) is `SYNC_FEED_UNVERIFIED`, without cursor
+movement. Missing optional `has_more` is tolerated only for older synthetic
+contract responses. Draft queue creation also rejects a base revision if
+incrementing it would lose JavaScript integer precision, before allocating
+an idempotency key or issuing a write. These guards do not authorize money.
