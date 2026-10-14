@@ -299,3 +299,12 @@ session. A draft already labeled SYNCED with a validated durable receipt is
 inert on a later manual `syncDraft(id)` invocation; a second POST is not
 emitted. This is a fail-closed browser behavior, not proof of money accuracy,
 offline durability, or authorization for automatic future retries.
+
+## Pilot explicitly warns that unverified reconnect did not retry drafts
+
+When the authenticated feed is not SYNCED, reconnect skips pending financial
+POST requests. The pilot now displays the number of **PENDING drafts left
+unattempted** in volatile memory instead of misleadingly reporting that no
+drafts remain to send. Even with later connectivity, this remains a
+manual/synthetic-only operation; unverified pending drafts cannot be treated
+as committed or safely durable.

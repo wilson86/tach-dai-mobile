@@ -334,8 +334,12 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     const r=await sync.reconnect();
     const states=r&&Array.isArray(r.drafts)?r.drafts:[];
     const progress=acceptFeedPage(r&&r.pull);
+    const pullVerified=r&&r.pull&&r.pull.status==='SYNCED';
+    const unattempted=!pullVerified?sync.snapshot().drafts.filter(x=>x.status==='PENDING').length:0;
     tell('Kết nối lại — change feed: '+(progress.ok?'SYNCED':'CHƯA XÁC MINH')+
       '; '+progress.message+'; DRAFT: '+draftOutcome(states)+
+      (unattempted?'; CHƯA THỬ LẠI '+unattempted+
+       ' bản nháp PENDING vì chưa xác minh kết nối/máy chủ':'')+
       '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   for(const id of ['team-partner','team-date','team-region']){

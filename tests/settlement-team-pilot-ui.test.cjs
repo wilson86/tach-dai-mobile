@@ -512,3 +512,18 @@ test('missing page-completeness metadata never tells pilot viewer it reached the
  assert.doesNotMatch(h.els['team-feed-progress'].textContent,/Đã đến cuối/);
  h.mounted.dispose();
 });
+
+test('pilot reconnect warns when offline feed prevents retrying memory-only pending drafts',async()=>{
+ const h=harness({reconnectStatus:'PENDING',reconnectDrafts:[]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ assert.equal(h.state.drafts.length,1);
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ assert.match(h.els['team-notice'].textContent,/CHƯA THỬ LẠI 1 bản nháp PENDING/);
+ assert.match(h.els['team-notice'].textContent,/chưa xác minh kết nối/);
+ assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
+ assert.match(h.els['team-feed-progress'].textContent,/CHƯA XÁC MINH/);
+ h.mounted.dispose();
+});
