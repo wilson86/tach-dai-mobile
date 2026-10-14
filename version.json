@@ -1,6 +1,6 @@
 {
-  "version": "2.0.23",
-  "updated": "2026-10-13",
-  "notes": "Literal DX/ĐX requires two distinct source numbers; standalone Telegram separators remain ignored while malformed mixed content fails closed.",
+  "version": "2.0.24",
+  "updated": "2026-10-14",
+  "notes": "Grouped checkbox result selection preserves source, money and fail-closed semantics; literal DX/ĐX still requires two distinct source numbers.",
   "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb"
 }
