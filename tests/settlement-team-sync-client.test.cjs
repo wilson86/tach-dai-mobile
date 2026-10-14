@@ -527,7 +527,7 @@ test('logout with HTTP 503 or network failure clears local bearer but does not c
 test('scope read fails closed when review state is absent, unknown, or forged',async()=>{
  const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
  let state='PENDING_REVIEW';
- const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{...scope,revision:3,state})});
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{...scope,revision:3,state,submitted_by:'fake_operator'})});
  client.setSessionToken('a'.repeat(43),'group_a');
  const valid=await client.readScope(scope);
  assert.equal(valid.status,'SYNCED');
@@ -671,4 +671,29 @@ test('client rejects forged reviewer audit metadata before cursor advancement',a
    assert.equal(blocked.error,'SYNC_FEED_UNVERIFIED');
    assert.equal(client.snapshot().cursor,'cursor_good');
  }
+});
+
+test('readScope requires coherent submitter/reviewer provenance before confirming review',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',
+   business_date:'2026-10-14',region:'mn'};
+ let row={...scope,state:'REVIEWED',revision:3,
+   submitted_by:'fake_operator',reviewed_by:'fake_reviewer'};
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,row)});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.readScope(scope)).status,'SYNCED');
+ for(const invalid of [
+   {...row,submitted_by:null},
+   {...row,reviewed_by:null},
+   {...row,reviewed_by:'fake_operator'},
+   {...row,submitted_by:'invalid/user'},
+   {...row,state:'PENDING_REVIEW',reviewed_by:'fake_reviewer'}
+ ]){
+   row=invalid;
+   const denied=await client.readScope(scope);
+   assert.equal(denied.status,'BLOCKED');
+   assert.equal(denied.error,'SYNC_SCOPE_UNVERIFIED');
+ }
+ row={...scope,state:'PENDING_REVIEW',revision:2,
+   submitted_by:'fake_operator',reviewed_by:null};
+ assert.equal((await client.readScope(scope)).status,'SYNCED');
 });

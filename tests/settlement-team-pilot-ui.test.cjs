@@ -55,7 +55,9 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      if(draft){draft.status=syncStatus;if(syncStatus!=='SYNCED')draft.error='SYNC_NETWORK_UNAVAILABLE';}
      notify();return {...draft};
    },
-   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState}};},
+   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState,
+      ...(reviewState==='PENDING_REVIEW'?{submitted_by:'fake_operator'}:{}),
+      ...(reviewState==='REVIEWED'?{submitted_by:'fake_operator',reviewed_by:'fake_checker'}:{})}};},
    async reviewScope(action,selected,revision,options={}){
      calls.push('reviewScope');let attempt=state.review_attempts.find(
        x=>x.action===action&&x.expected_revision===revision);
@@ -368,4 +370,18 @@ test('audit validation failure cannot show forged reviewer or clear previous ver
  assert.doesNotMatch(h.els['team-review-audit'].children[0].textContent,/fake_forged/);
  assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH/);
  h.mounted.dispose();
+});
+
+test('read-only scope exposes server-derived submitter and independent reviewer',async()=>{
+ for(const [status,mustMatch] of [
+   ['PENDING_REVIEW',/người gửi duyệt fake_operator/],
+   ['REVIEWED',/người duyệt fake_checker/]
+ ]){
+   const h=harness({reviewState:status});
+   h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+   h.els['team-read'].fire('click');await tick();
+   assert.match(h.els['team-review-readonly'].textContent,mustMatch);
+   assert.match(h.els['team-review-readonly'].textContent,/Không có chốt tiền/);
+   h.mounted.dispose();
+ }
 });

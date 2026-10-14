@@ -118,3 +118,14 @@ replaces previously verified history and is marked stale. The visible
 review list covers *only the current change-feed page*, not a complete
 financial audit trail; no durable review history is stored on the browser.
 This remains opt-in synthetic-only, not finance release authorization.
+
+## Read-only scope actor provenance gate
+
+For server-side `readScope()` responses, `PENDING_REVIEW` is accepted only
+with a safe `submitted_by` actor and without a `reviewed_by` actor.
+`REVIEWED` / `CLOSED` requires both valid actor IDs and distinct
+submitter/reviewer IDs. Missing or contradictory provenance is displayed
+as `SYNC_SCOPE_UNVERIFIED` rather than approved financial state. The UI
+shows the server-derived IDs as read-only `textContent`; no permission to
+finalize a scope is added. PostgreSQL transactional role and RLS checks
+remain authoritative.

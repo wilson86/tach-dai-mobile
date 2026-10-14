@@ -392,7 +392,15 @@
             row.partner_id !== scope.partner_id ||
             row.business_date !== scope.business_date ||
             row.region !== scope.region || !numericRevision ||
-            !REVIEW_STATES.includes(row.state))
+            !REVIEW_STATES.includes(row.state) ||
+            (['PENDING_REVIEW','REVIEWED','CLOSED'].includes(row.state) &&
+              (typeof row.submitted_by !== 'string' ||
+               !FEED_EVENT_ID.test(row.submitted_by))) ||
+            (['REVIEWED','CLOSED'].includes(row.state) &&
+              (typeof row.reviewed_by !== 'string' ||
+               !FEED_EVENT_ID.test(row.reviewed_by) ||
+               row.reviewed_by === row.submitted_by)) ||
+            (row.state === 'PENDING_REVIEW' && row.reviewed_by != null))
           return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_UNVERIFIED' };
         return { status: STATUS.SYNCED, scope: clone(row) };
       } catch (error) {

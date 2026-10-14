@@ -184,7 +184,10 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     verifiedScope={...r.scope};
     e['team-review-readonly'].textContent=
       'MÁY CHỦ (đã xác minh): '+REVIEW_LABELS[r.scope.state]+
-      ' • revision '+String(r.scope.revision)+'. Chưa có chức năng duyệt/khóa trong pilot.';
+      ' • revision '+String(r.scope.revision)+
+      (r.scope.submitted_by?' • người gửi duyệt '+String(r.scope.submitted_by):'')+
+      (r.scope.reviewed_by?' • người duyệt '+String(r.scope.reviewed_by):'')+
+      '. Không có chốt tiền trong pilot.';
     tell('Đã đọc trạng thái từ máy chủ; KHÔNG phải xác nhận quyết toán tiền.');
     render(sync.snapshot());
   }));
