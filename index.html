@@ -1001,6 +1001,34 @@ function checkedAliveRecordIndexes(){
     .filter(i=>Number.isInteger(i) && outputRecords[i] && outputRecords[i].alive)
     .sort((a,b)=>a-b);
 }
+// Semantic wager groups are number+bet clauses, not entire physical chat
+// lines. Projection is strictly observational: reuse the existing processLine
+// for each source clause and annotate ONLY if concatenating those projections
+// reproduces the authoritative whole-line output byte-for-byte.
+function identifySemanticOutputGroups(line,region,stations,generated){
+  const normalized=normalizeInput(line).replace(/^(mn|mt|mb)\s+/u,"");
+  const m=normalized.match(/^(2dphu|2d|3d|4d)\s+(.+)$/u);
+  if(!m)return null;
+  const clauses=splitNumberGroups(m[2].trim());
+  if(clauses.length<2)return null;
+  const annotated=[];
+  try{
+    for(let n=0;n<clauses.length;n++){
+      const clause=clauses[n];
+      const outputs=processLine(`${m[1]} ${clause}`,region,stations);
+      if(!outputs.length)return null;
+      for(const text of outputs) annotated.push({
+        text,
+        sourceGroupNo:n+1,
+        sourceGroupText:`${m[1]} ${clause}`
+      });
+    }
+  }catch(_){return null;}
+  if(annotated.length!==generated.length || annotated.some((r,i)=>r.text!==generated[i]))
+    return null;
+  return annotated;
+}
+
 function renderGroupedResults(){
   if(!groupedResultReady) return;
   const list=$("resultGroups"),summary=$("resultGroupsSummary");
@@ -1018,11 +1046,13 @@ function renderGroupedResults(){
   if(!error){
     const groups=new Map();
     for(const row of visible){
-      if(!groups.has(row.sourceLine)) groups.set(row.sourceLine,[]);
-      groups.get(row.sourceLine).push(row);
+      const key=`${row.sourceLine}:${row.sourceGroupNo||0}`;
+      if(!groups.has(key)) groups.set(key,[]);
+      groups.get(key).push(row);
     }
     let groupNo=0;
-    for(const [lineNo,records] of groups){
+    for(const records of groups.values()){
+      const lineNo=records[0].sourceLine;
       groupNo++;
       const section=document.createElement("section");section.className="result-group";
       const header=document.createElement("label");header.className="result-group-header";
@@ -1037,7 +1067,7 @@ function renderGroupedResults(){
         }
         renderGroupedResults();
       });
-      const source=String(lastSourceLines[lineNo-1]||"").slice(0,80);
+      const source=String(records[0].sourceGroupText||lastSourceLines[lineNo-1]||"").slice(0,80);
       const title=document.createElement("span");title.className="result-group-title";
       title.textContent=`Nhóm ${groupNo} · Dòng ${lineNo} · ${records.length} kết quả${source?" · "+source:""}`;
       header.append(all,title);section.appendChild(header);
@@ -1339,8 +1369,11 @@ function run(options={}){
   lines.forEach((line,idx)=>{
     if(!line || isStandaloneSeparator(line)) return;
     const generated=processLine(line,region,stations);
-    generated.forEach(text=>outputRecords.push({
+    const semantic=identifySemanticOutputGroups(line,region,stations,generated);
+    generated.forEach((text,rowIndex)=>outputRecords.push({
       sourceLine:idx+1,
+      sourceGroupNo:semantic?semantic[rowIndex].sourceGroupNo:0,
+      sourceGroupText:semantic?semantic[rowIndex].sourceGroupText:"",
       text,
       alive:true
     }));
