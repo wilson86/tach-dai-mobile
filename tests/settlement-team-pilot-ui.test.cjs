@@ -18,18 +18,20 @@ function element(){
    fire(type,event={}){const fn=listeners.get(type);if(!fn)throw Error('MISSING_HANDLER');return fn(event);}
  };
 }
-function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false}={}){
+function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
+ syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED']}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
-  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly'];
+  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
+  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts'];
  const els=Object.fromEntries(ids.map(id=>[id,element()]));
  const doc={
    getElementById:id=>els[id]||null,
    createElement:tag=>{assert.equal(tag,'li');return element();}
  };
  const win=element();win.confirm=()=>false;
- const state={authenticated:false,workspace_id:null,drafts:[]};
+ const state={authenticated:false,workspace_id:null,drafts:[],review_attempts:[]};
  let listener=null,requestCount=0;const calls=[];
  const notify=()=>{if(listener)listener({...state,drafts:state.drafts.slice()});};
  const client={
@@ -52,7 +54,20 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      if(draft){draft.status=syncStatus;if(syncStatus!=='SYNCED')draft.error='SYNC_NETWORK_UNAVAILABLE';}
      notify();return {...draft};
    },
-   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1,state:'DRAFT'}};},
+   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState}};},
+   async reviewScope(action,selected,revision,options={}){
+     calls.push('reviewScope');let attempt=state.review_attempts.find(
+       x=>x.action===action&&x.expected_revision===revision);
+     if(!attempt){
+       if(options.retryOnly)throw Error('RETRY_WITHOUT_INTENT');
+       attempt={action,scope:selected,expected_revision:revision,idempotency_key:'fake_same_key',status:'PENDING'};
+       state.review_attempts.push(attempt);
+     }
+     const choice=reviewOutcomes[Math.min(calls.filter(x=>x==='reviewScope').length-1,reviewOutcomes.length-1)];
+     attempt.status=choice;
+     if(choice==='SYNCED')attempt.server_result={event_id:'event_review'};
+     notify();return {...attempt};
+   },
    async pullChanges(){
      calls.push('pullChanges');requestCount++;
      const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
@@ -73,7 +88,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
  Object.assign(els['team-partner'],{value:'fake_partner_1'});
  Object.assign(els['team-date'],{value:'2026-10-12'});
  Object.assign(els['team-region'],{value:'mn'});
- const mounted=UI.mount({doc,win,client});
+ const mounted=UI.mount({doc,win,client,syntheticReviewUiEnabled});
  return {mounted,els,win,calls,state,notify,get requests(){return requestCount;}};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -227,7 +242,7 @@ test('read-only reviewer status comes only from verified scope; no approval cont
  h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
  assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
  h.els['team-read'].fire('click');await tick();
- assert.match(h.els['team-review-readonly'].textContent,/MÁY CHỦ \(chỉ đọc\): DRAFT/);
+ assert.match(h.els['team-review-readonly'].textContent,/MÁY CHỦ \(đã xác minh\): DRAFT/);
  assert.match(h.els['team-review-readonly'].textContent,/revision 1/);
  h.els['team-partner'].fire('change');
  assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
@@ -236,6 +251,67 @@ test('read-only reviewer status comes only from verified scope; no approval cont
  h.els['team-logout'].fire('click');await tick();
  assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
  const html=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.html'),'utf8');
- assert.doesNotMatch(html,/id="team-(?:approve|finalize|close|submit-review)"/);
+ assert.doesNotMatch(html,/id="team-(?:finalize|close|reopen)"/);
+ h.mounted.dispose();
+});
+
+test('review buttons remain hidden and inert by default despite source markup',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-review-controls'].hidden,true);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ assert.equal(h.els['team-approve-review'].disabled,true);
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.includes('reviewScope'),false);
+ assert.equal(h.els['team-notice'].textContent,'TEAM_REVIEW_UI_NOT_ENABLED');
+ h.mounted.dispose();
+});
+test('opt-in synthetic review requires fresh scope read and explicit human confirmation',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ assert.equal(h.els['team-review-controls'].hidden,false);
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.includes('reviewScope'),false);
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.includes('reviewScope'),false);
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ h.win.confirm=()=>true;
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='readScope').length,2);
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,1);
+ assert.match(h.els['team-notice'].textContent,/receipt event_review/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('phone lost response keeps review PENDING and retries identical in-memory request only by human confirmation',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true,reviewOutcomes:['PENDING','SYNCED']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.win.confirm=()=>true;
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/PENDING/);
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ assert.equal(h.state.review_attempts.length,1);
+ assert.equal(h.state.review_attempts[0].idempotency_key,'fake_same_key');
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='readScope').length,2);
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,2);
+ assert.equal(h.state.review_attempts[0].idempotency_key,'fake_same_key');
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('approver button is only a gated test action for a freshly verified pending review',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true,reviewState:'PENDING_REVIEW'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ assert.equal(h.els['team-approve-review'].disabled,false);
+ h.win.confirm=()=>true;
+ h.els['team-approve-review'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,1);
+ assert.match(h.els['team-notice'].textContent,/PHÊ DUYỆT đã ghi nhận/);
  h.mounted.dispose();
 });

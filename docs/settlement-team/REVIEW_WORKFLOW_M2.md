@@ -79,3 +79,23 @@ Unsent review intents block automatic account switching/logout and increase
 the visible volatile_unsent_count/reload_loss_risk. This cannot guarantee
 survival after browser reload/close; no durable offline review queue exists.
 No production UI or endpoint was activated by this client-only change.
+
+## Opt-in manual review UI (2026-10-14)
+
+The standalone synthetic pilot HTML now contains a hidden, disabled review
+control group. `KtsTeamPilotUI.mount` keeps it inert unless its trusted caller
+explicitly passes `syntheticReviewUiEnabled:true`; default shipped bootstrap
+still passes no such flag. No public deployment is enabled by checked-in HTML.
+When explicitly opted into a disposable synthetic-only pilot, the user must:
+(1) log in; (2) select a fake partner and read its server-verified scope;
+(3) have zero unsent draft items; (4) confirm the exact action/scope/revision
+in a human modal; (5) receive an exact verified review receipt. A fresh
+server read is required for the first attempt; if the phone loses the
+response, manual retry uses the original in-memory idempotency key and
+revision without rebasing. The source remains MEMORY_ONLY, so lost browser
+documents cannot be recovered and no real settlement is authorized.
+
+Roles and separation of duties are enforced **server-side and in SQL**,
+never by visual button hiding. Review UI remains hidden by default and close,
+reopen or financial finalization remain inaccessible. This opt-in UI source
+has only GitHub synthetic tests, no new physical-device requalification.

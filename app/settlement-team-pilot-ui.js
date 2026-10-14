@@ -15,8 +15,9 @@ const REVIEW_LABELS=Object.freeze({
 const IDS=['team-login','team-subject','team-password','team-workspace',
  'team-logout','team-partner','team-date','team-region','team-create',
  'team-sync','team-pull','team-reconnect','team-read','team-context',
- 'team-warning','team-drafts','team-changes','team-notice','team-review-readonly'];
-function mount({doc,win,client,Sync}={}){
+ 'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
+ 'team-review-controls','team-submit-review','team-approve-review','team-review-attempts'];
+function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   const d=doc||(typeof document!=='undefined'?document:null);
   const w=win||(typeof window!=='undefined'?window:null);
   const f=Sync||(typeof globalThis!=='undefined'?globalThis.KtsSettlementSyncClient:null);
@@ -28,26 +29,57 @@ function mount({doc,win,client,Sync}={}){
     return [id,el];
   }));
   const sync=client||f.createSyncClient({baseUrl:''});
-  let busy=false,dead=false,notice='',unsubscribe;
+  if(typeof syntheticReviewUiEnabled!=='boolean')
+    throw Error('TEAM_PILOT_REVIEW_CONFIG_INVALID');
+  if(syntheticReviewUiEnabled && typeof sync.reviewScope!=='function')
+    throw Error('TEAM_PILOT_REVIEW_CLIENT_REQUIRED');
+  let busy=false,dead=false,notice='',unsubscribe,verifiedScope=null;
   const listeners=[];
   function on(el,name,handler){el.addEventListener(name,handler);listeners.push([el,name,handler]);}
   function clear(el){while(el.firstChild)el.removeChild(el.firstChild);}
   function row(el,value){const li=d.createElement('li');li.textContent=String(value);el.appendChild(li);}
   function tell(value){notice=String(value);e['team-notice'].textContent=notice;}
   function clearReview(){
+    verifiedScope=null;
     e['team-review-readonly'].textContent='CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.';
+    for(const id of ['team-submit-review','team-approve-review'])e[id].disabled=true;
+  }
+  function sameScope(a,b){
+    return Boolean(a&&b) && ['workspace_id','partner_id','business_date','region']
+      .every(key=>a[key]===b[key]);
   }
   function render(state){
     if(dead)return;
     e['team-context'].textContent=state.authenticated?
       'Đã đăng nhập: '+String(state.workspace_id||'unknown'):'Chưa đăng nhập';
-    const unsent=state.drafts.filter(x=>x.status!=='SYNCED').length;
+    const reviews=Array.isArray(state.review_attempts)?state.review_attempts:[];
+    const unsent=state.drafts.filter(x=>x.status!=='SYNCED').length+
+      reviews.filter(x=>x.status!=='SYNCED').length;
     e['team-warning'].textContent=unsent>0?
-      'CẢNH BÁO: '+unsent+' bản nháp MEMORY_ONLY CHƯA có receipt xác minh; có thể đã tới máy chủ, không được coi là đã lưu. Tải lại/đóng trang sẽ mất bản nháp cục bộ.':
+      'CẢNH BÁO: '+unsent+' bản nháp/yêu cầu duyệt MEMORY_ONLY CHƯA có receipt xác minh; có thể đã tới máy chủ, không được coi là đã lưu. Tải lại/đóng trang sẽ mất bản nháp cục bộ.':
       'MEMORY_ONLY — chưa có lưu ngoại tuyến bền vững; bản nháp mới có thể mất khi tải lại.';
     for(const id of ['team-logout','team-create','team-sync','team-pull','team-reconnect','team-read'])
       e[id].disabled=busy||!state.authenticated;
     e['team-login'].querySelector('button[type="submit"]').disabled=busy||state.authenticated;
+    e['team-review-controls'].hidden=!syntheticReviewUiEnabled;
+    const hasDrafts=state.drafts.some(x=>x.status!=='SYNCED');
+    const hasOtherPending=reviews.some(x=>x.status!=='SYNCED' &&
+      (!verifiedScope || !sameScope(x.scope,verifiedScope) ||
+       x.expected_revision!==Number(verifiedScope.revision)));
+    const reviewButton=(action,stateName)=>{
+      const hasPending=reviews.some(x=>x.status==='PENDING'&&x.action===action &&
+        sameScope(x.scope,verifiedScope) &&
+        x.expected_revision===Number(verifiedScope&&verifiedScope.revision));
+      e[action==='submit_review'?'team-submit-review':'team-approve-review'].disabled=
+        busy||!state.authenticated||!syntheticReviewUiEnabled||!verifiedScope||
+        verifiedScope.state!==stateName||hasDrafts||hasOtherPending||
+        (reviews.some(x=>x.status==='PENDING'&&x.action!==action) && !hasPending);
+    };
+    reviewButton('submit_review','DRAFT');
+    reviewButton('approve_review','PENDING_REVIEW');
+    clear(e['team-review-attempts']);
+    for(const x of reviews)row(e['team-review-attempts'],
+      x.action+' • '+x.status+(x.error?' • '+x.error:''));
     clear(e['team-drafts']);
     for(const x of state.drafts)row(e['team-drafts'],x.id+' • '+x.status+(x.error?' • '+x.error:''));
   }
@@ -97,7 +129,9 @@ function mount({doc,win,client,Sync}={}){
     tell('Đăng nhập pilot thành công. Chỉ dùng dữ liệu giả.');
   });});
   on(e['team-logout'],'click',()=>void action(async()=>{
-    const n=sync.snapshot().drafts.filter(x=>x.status!=='SYNCED').length;
+    const snap=sync.snapshot();
+    const n=snap.drafts.filter(x=>x.status!=='SYNCED').length+
+      (snap.review_attempts||[]).filter(x=>x.status!=='SYNCED').length;
     if(n>0&&!w.confirm('Có '+n+' nháp chưa ghi! Đăng xuất sẽ xóa nháp. Đồng ý?'))return;
     try{
       await sync.logout({discardPending:n>0});
@@ -142,11 +176,73 @@ function mount({doc,win,client,Sync}={}){
         (r.error?' • '+r.error:'')+'.');
       return;
     }
+    verifiedScope={...r.scope};
     e['team-review-readonly'].textContent=
-      'MÁY CHỦ (chỉ đọc): '+REVIEW_LABELS[r.scope.state]+
+      'MÁY CHỦ (đã xác minh): '+REVIEW_LABELS[r.scope.state]+
       ' • revision '+String(r.scope.revision)+'. Chưa có chức năng duyệt/khóa trong pilot.';
     tell('Đã đọc trạng thái từ máy chủ; KHÔNG phải xác nhận quyết toán tiền.');
+    render(sync.snapshot());
   }));
+
+  async function performReview(actionName,requiredState){
+    if(!syntheticReviewUiEnabled)throw Error('TEAM_REVIEW_UI_NOT_ENABLED');
+    const selected=scope(),previous=verifiedScope;
+    if(!previous||!sameScope(selected,previous)||previous.state!==requiredState)
+      throw Error('TEAM_REVIEW_SCOPE_READ_REQUIRED');
+    if(!Number.isSafeInteger(Number(previous.revision))||
+       Number(previous.revision)<0)throw Error('TEAM_REVIEW_REVISION_UNVERIFIED');
+    const snapshot=sync.snapshot();
+    if(snapshot.drafts.some(x=>x.status!=='SYNCED'))
+      throw Error('TEAM_REVIEW_UNSENT_DRAFTS');
+    const attempt=(snapshot.review_attempts||[]).find(x=>x.action===actionName &&
+      sameScope(x.scope,selected)&&x.expected_revision===Number(previous.revision));
+    if(attempt && attempt.status!=='PENDING')
+      throw Error('TEAM_REVIEW_REQUIRES_MANUAL_REFRESH');
+    if(!attempt){
+      // First submit must be based on a fresh server read. Retry after uncertain
+      // network result MUST preserve old revision/idempotency key, not rebase.
+      const fresh=await sync.readScope(selected);
+      let current;
+      try{current=scope();}catch(_){current=null;}
+      if(!sameScope(selected,current)||!verifiedScope||
+         !sameScope(selected,verifiedScope) ||
+         fresh.status!=='SYNCED'||!fresh.scope||
+         fresh.scope.state!==requiredState ||
+         Number(fresh.scope.revision)!==Number(previous.revision)){
+        clearReview();
+        tell('CHƯA GỬI: trạng thái/revision đã thay đổi; hãy đọc scope lại.');
+        return;
+      }
+    }
+    const label=actionName==='submit_review'?'GỬI DUYỆT':'PHÊ DUYỆT';
+    if(!w.confirm(label+' dữ liệu GIẢ '+selected.partner_id+' / '+selected.business_date+
+      ' / '+selected.region+' / revision '+previous.revision+
+      '? Chỉ SYNCED với server receipt mới được ghi nhận.'))return;
+    const outcome=await sync.reviewScope(actionName,selected,Number(previous.revision),
+      {retryOnly:Boolean(attempt)});
+    let current;
+    try{current=scope();}catch(_){current=null;}
+    if(!sameScope(selected,current)){
+      clearReview();
+      tell('Kết quả thuộc phạm vi trước; hãy đọc lại trước khi thao tác khác.');
+      return;
+    }
+    if(outcome.status==='SYNCED'){
+      clearReview();
+      tell(label+' đã ghi nhận bởi máy chủ (receipt '+String(outcome.server_result.event_id)+
+        '). Hãy đọc lại scope để xem trạng thái mới. KHÔNG phải chốt tiền thật.');
+    }else if(outcome.status==='PENDING'){
+      tell(label+' PENDING: chưa có receipt, có thể đã COMMIT; giữ trang mở và nhấn lại nút để thử cùng idempotency key.');
+    }else{
+      clearReview();
+      tell(label+' '+String(outcome.status||'BLOCKED')+' • '+
+        String(outcome.error||'TEAM_REVIEW_NOT_VERIFIED')+'. Không tự động thử lại.');
+    }
+  }
+  on(e['team-submit-review'],'click',()=>void action(()=>
+    performReview('submit_review','DRAFT')));
+  on(e['team-approve-review'],'click',()=>void action(()=>
+    performReview('approve_review','PENDING_REVIEW')));
   on(e['team-pull'],'click',()=>void action(async()=>{
     const r=await sync.pullChanges();
     if(r.status==='SYNCED'&&Array.isArray(r.items)){
@@ -166,11 +262,12 @@ function mount({doc,win,client,Sync}={}){
       '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   for(const id of ['team-partner','team-date','team-region'])
-    on(e[id],'change',clearReview);
-  on(e['team-workspace'],'change',clearReview);
+    on(e[id],'change',()=>{clearReview();render(sync.snapshot());});
+  on(e['team-workspace'],'change',()=>{clearReview();render(sync.snapshot());});
   clearReview();
   on(w,'beforeunload',event=>{
-    if(sync.snapshot().drafts.some(x=>x.status!=='SYNCED')){
+    if(sync.snapshot().volatile_unsent_count>0 ||
+       sync.snapshot().drafts.some(x=>x.status!=='SYNCED')){
       event.preventDefault();event.returnValue='';
     }
   });

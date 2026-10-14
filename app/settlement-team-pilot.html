@@ -39,8 +39,13 @@
 <button id="team-read" type="button" disabled>Đọc scope</button>
 <button id="team-pull" type="button" disabled>Đọc change feed</button></div>
 <p id="team-review-readonly" role="status">CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.</p>
-<p>Chỉ hiển thị trạng thái máy chủ: DRAFT → PENDING_REVIEW → REVIEWED → CLOSED.
-Không có nút phê duyệt hoặc chốt tiền trong pilot.</p>
+<p>Trạng thái máy chủ: DRAFT → PENDING_REVIEW → REVIEWED → CLOSED.
+Chức năng gửi/duyệt chỉ được bật bởi người vận hành pilot synthetic có phê duyệt;
+không có chốt tiền, close hoặc reopen.</p>
+<div id="team-review-controls" class="actions" hidden>
+<button id="team-submit-review" type="button" disabled>Gửi duyệt giả lập</button>
+<button id="team-approve-review" type="button" disabled>Phê duyệt giả lập (người khác)</button></div>
+<ul id="team-review-attempts" aria-label="Trạng thái yêu cầu xét duyệt thử nghiệm"></ul>
 <ul id="team-changes" aria-label="Lịch sử sự kiện"></ul></section>
 <section><h2>Thông báo</h2><p id="team-notice" aria-live="polite"></p>
 <p class="danger">Không dùng port 8787. Chỉ được truy cập HTTPS mạng riêng sau khi duyệt bảo mật. Chưa được triển khai sản xuất hoặc dùng tiền thật.</p>
