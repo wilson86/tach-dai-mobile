@@ -158,3 +158,24 @@ proof: even fsync cannot establish a phone's storage policy/backup retention,
 and a killed/corrupt test file remains quarantined without any automatic
 re-send. It does not activate backup/restore in the app or change the
 human release gates. `durability=UNVERIFIED` remains mandatory.
+
+## Unwired manual recovery-review composition (synthetic only)
+
+`team-settlement/recovery-review-flow.cjs` now composes the explicitly
+approved `vault.inspect` quarantine step and separately authenticated
+`reconciliation.inspect` read-only SQL receipt step. It is **not** an HTTP
+route or app feature. The vault's authenticated actor/workspace are included
+in its quarantine report so the second, freshly authenticated receipt stage
+can be matched exactly; mismatched sessions, missing/forged/duplicate receipt
+reports or inconsistent all-verified claims stop the workflow. Even a fully
+matched review is **REVIEW_ONLY**, `needs_human_resolution=true`,
+`auto_send_enabled=false` and `durability=UNVERIFIED`. A missing receipt
+remains explicitly UNKNOWN, not a resend instruction. Output contains only
+original IDs and statuses; decrypted draft payload never enters a send queue.
+
+Synthetic Node QA covers seal/save -> inspect/decrypt -> independent server
+membership and original-receipt digest check, no-backup state, missing receipts,
+login/account change between asynchronous boundaries, forged injected outputs,
+consent, and a static assertion that neither the PWA nor HTTP server imports
+this composition. No physical phone qualification, persistence policy,
+production interface or automatic replay exists.

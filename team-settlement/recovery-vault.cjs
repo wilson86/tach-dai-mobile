@@ -50,7 +50,8 @@ function createSyntheticRecoveryVault({auth,store,cryptoProvider,syntheticOnly=f
     const restored=await Recovery.open({envelope,actor,passphrase,cryptoProvider});
     sameActor(actor,await verified(sessionToken)); // recheck after any delayed IO/KDF
     return Object.freeze({...restored,durability:'UNVERIFIED',
-      status:'QUARANTINED',requires_server_receipt_review:true,
+      status:'QUARANTINED',authenticated_user_id:actor.user_id,
+      workspace_id:actor.workspace_id,requires_server_receipt_review:true,
       auto_send_enabled:false});
   }
   return Object.freeze({save,inspect});
