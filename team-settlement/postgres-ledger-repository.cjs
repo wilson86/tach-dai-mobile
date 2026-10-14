@@ -175,7 +175,10 @@ function createPostgresLedgerRepository({ db } = {}) {
         let sequence;
         try { sequence = BigInt(normalizedFeedSeq(row.feed_seq)); }
         catch { throw new Error('TEAM_FEED_RESPONSE_UNVERIFIED'); }
-        if (sequence <= previous) throw new Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+        // A per-workspace sequence is allocated only inside the event commit.
+        // A gap means the SQL adapter omitted an immutable event: reject the
+        // whole page instead of issuing a cursor that permanently skips it.
+        if (sequence !== previous + 1n) throw new Error('TEAM_FEED_RESPONSE_UNVERIFIED');
         previous = sequence;
       }
       const hasMore = result.rows.length > limit;

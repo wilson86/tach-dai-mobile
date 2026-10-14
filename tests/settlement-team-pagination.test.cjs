@@ -12,7 +12,7 @@ const events=[
   { workspace_id:'group_a',event_id:'e3', feed_seq:'3', recorded_at:'2026-10-12T01:00:01.000Z' }
 ];
 
-function fakeDb({ revoked = false, role = 'viewer' } = {}){
+function fakeDb({ revoked = false, role = 'viewer', feedRows = events } = {}){
   const requests=[];
   const db={transaction: async work=>work({
     query:async(sql,args=[])=>{
@@ -22,7 +22,7 @@ function fakeDb({ revoked = false, role = 'viewer' } = {}){
         return { rows: revoked ? [] : [{ team_role: role }] };
       if(!sql.includes('FROM kts_team.scope_events'))throw new Error('UNEXPECTED_QUERY');
       if(args[0]!=='group_a')throw new Error('CROSS_TENANT_QUERY');
-      const rows=events.filter(row=>BigInt(row.feed_seq)>BigInt(args[1]))
+      const rows=feedRows.filter(row=>BigInt(row.feed_seq)>BigInt(args[1]))
         .slice(0,args[2]);
       return {rows};
     }
@@ -64,4 +64,22 @@ test('a stale in-memory actor cannot read events after DB membership revoke or r
     assert.equal(x.requests.some(v=>v.sql.includes('FROM kts_team.scope_events')),false);
     assert.equal(x.requests.some(v=>v.sql.includes('FROM kts_team.memberships')),true);
   }
+});
+
+
+test('server refuses a gap in immutable workspace feed instead of skipping events',async()=>{
+  for(const feedRows of [
+    [events[1],events[2]],   // omitted first event when cursor starts at zero
+    [events[0],events[2]]    // omitted middle event on the same returned page
+  ]){
+    const x=fakeDb({feedRows});
+    const repository=createPostgresLedgerRepository({db:x.db});
+    await assert.rejects(repository.getChanges(ACTOR,{limit:2}),/TEAM_FEED_RESPONSE_UNVERIFIED/);
+    assert.equal(x.requests.some(q=>q.sql.includes('FROM kts_team.scope_events')),true);
+  }
+  const x=fakeDb({feedRows:[events[0],events[2]]});
+  const repository=createPostgresLedgerRepository({db:x.db});
+  await assert.rejects(repository.getChanges(ACTOR,{
+    cursor:encodeCursor('1','group_a'),limit:2
+  }),/TEAM_FEED_RESPONSE_UNVERIFIED/);
 });

@@ -163,3 +163,14 @@ produce `SYNCED`. A rejected 4xx remains `BLOCKED`. This behavior protects
 against duplicate intent creation but does not make offline browser memory
 durable. A read-only `DRAFT` scope is also denied if it improperly claims
 a `submitted_by` or `reviewed_by` identity before the review transition.
+
+## Immutable change-feed gap detection (2026-10-14)
+
+The PostgreSQL repository read path now requires every returned workspace
+`feed_seq` to equal the authenticated cursor's last sequence plus one.
+The feed sequence is allocated transactionally and immutable audit events
+are not deleted in the synthetic schema. A missing first, middle or later
+sequence is **not** valid pagination: it fails `TEAM_FEED_RESPONSE_UNVERIFIED`
+before a server cursor is returned, rather than silently skipping evidence.
+This is fail-closed integrity validation, not a claim that the historical
+money/oracle or live deployment has been qualified.
