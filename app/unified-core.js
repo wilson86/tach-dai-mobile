@@ -191,12 +191,19 @@
   }
   function installButtons(doc,inputId,outputId,inputButtonId,outputButtonId){
     const input=doc.getElementById(inputId), output=doc.getElementById(outputId);
-    if(input){
+    // Modern embedded PWAs own these actions. Their output select-all operates
+    // on grouped checkbox rows, not on the (hidden) legacy text area. Injecting
+    // a second select-all would bypass the selected wager rows.
+    const nativeInput=doc.getElementById('selectAllInputBtn');
+    const nativeOutput=doc.getElementById('selectAllOutputBtn');
+    if(nativeInput) doc.getElementById(inputButtonId)?.remove();
+    if(nativeOutput) doc.getElementById(outputButtonId)?.remove();
+    if(input&&!nativeInput){
       const actions=input.closest('.card')?.querySelector('.actions');
       const button=makeButton(doc,inputButtonId,input);
       if(actions&&button) actions.appendChild(button);
     }
-    if(output){
+    if(output&&!nativeOutput&&!doc.getElementById('resultGroups')){
       const actions=output.closest('.card')?.querySelector('.actions');
       const button=makeButton(doc,outputButtonId,output);
       if(actions&&button) actions.insertBefore(button,actions.firstChild);
