@@ -245,3 +245,13 @@ distinguishes `has_more=true` (read the next page), `has_more=false`
 (reached the end **at that poll only**), unknown page status and stale
 failed reads. This does not authenticate historical completeness, persist
 offline data or permit monetary finalization.
+
+## Review-audit clock and reviewer evidence display
+
+The read-only synthetic audit rejects timestamps with impossible calendar
+days, out-of-range clock fields or malformed timezone offsets before they
+can be shown as verified review events. Native JavaScript date parsing alone
+could normalize invalid days. The reviewer audit display now identifies the
+actual reviewer separately from the original submitter and displays the
+server-supplied exact decimal feed sequence; this is presentation-only and
+does not convert financial values or authorize real-money review.

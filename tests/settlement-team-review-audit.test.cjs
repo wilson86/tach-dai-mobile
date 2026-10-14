@@ -60,3 +60,32 @@ test('review audit rejects impossible business dates and accepts Gregorian leap 
  const observed=Audit.auditRows([{...sample(),business_date:'2028-02-29'}],'group_a');
  assert.equal(observed[0].business_date,'2028-02-29');
 });
+
+test('read-only review audit fails closed on normalized dates and out-of-range clock/zone',()=>{
+ const invalid=[
+   '2026-02-30T10:30:15.123Z','2026-04-31T10:30:15.123Z',
+   '2026-10-14T24:30:15Z','2026-10-14T10:60:15Z',
+   '2026-10-14T10:30:60Z','2026-10-14T10:30:15+24:00',
+   '2026-10-14T10:30:15+07:60'
+ ];
+ for(const recorded_at of invalid)
+   assert.throws(()=>Audit.auditRows([{...sample(),recorded_at}],'group_a'),
+     /SYNC_REVIEW_AUDIT_UNVERIFIED/,recorded_at);
+ const valid=[
+   '2028-02-29T23:59:59.123456Z',
+   '2028-02-29T23:59:59.123+07:00'
+ ];
+ for(const recorded_at of valid)
+   assert.equal(Audit.auditRows([{...sample(),recorded_at}],'group_a')[0].recorded_at,recorded_at);
+});
+
+test('review audit label names distinct reviewer and exact tenant feed sequence',()=>{
+ const approved={...sample(),event_id:'event_approved',event_kind:'REVIEWED',
+   actor_user_id:'fake_checker',feed_seq:'9223372036854775807',
+   result_snapshot:{synthetic_review_only:true,from_state:'PENDING_REVIEW',
+      to_state:'REVIEWED',actor_user_id:'fake_checker',submitted_by:'operator_1'}};
+ const display=Audit.displayRow(Audit.auditRows([approved],'group_a')[0]);
+ assert.match(display,/reviewer fake_checker/);
+ assert.match(display,/submitter operator_1/);
+ assert.match(display,/feed_seq 9223372036854775807/);
+});

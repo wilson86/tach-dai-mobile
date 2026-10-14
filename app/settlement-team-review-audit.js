@@ -13,7 +13,17 @@ function validBusinessDate(value) {
   const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
   return day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1];
 }
-const TIME=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/;
+const TIME=/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,6}))?(Z|([+-])(\d{2}):(\d{2}))$/;
+function validRecordedAt(value){
+  if(typeof value!=='string')return false;
+  const m=TIME.exec(value);
+  if(!m||!validBusinessDate(m[1])||
+     Number(m[2])>23||Number(m[3])>59||Number(m[4])>59||
+     (m[7]&&(Number(m[8])>23||Number(m[9])>59)))return false;
+  // Date.parse by itself may normalize impossible dates; the explicit
+  // calendar and clock-field checks above prevent counterfeit audit times.
+  return Number.isFinite(Date.parse(value));
+}
 const MAX=9223372036854775807n;
 function positive(value){
   if(typeof value==='number')return Number.isSafeInteger(value)&&value>0;
@@ -33,8 +43,7 @@ function auditRows(items,workspace){
        !validBusinessDate(x.business_date)||!['mn','mt','mb'].includes(x.region)||
        !positive(x.feed_seq)||!positive(x.scope_revision)||
        !ID.test(x.actor_user_id)||
-       typeof x.recorded_at!=='string'||!TIME.test(x.recorded_at)||
-       !Number.isFinite(Date.parse(x.recorded_at))||
+       !validRecordedAt(x.recorded_at)||
        !s||typeof s!=='object'||Array.isArray(s)||
        s.synthetic_review_only!==true||s.actor_user_id!==x.actor_user_id||
        !ID.test(s.submitted_by)){
@@ -62,7 +71,9 @@ function auditRows(items,workspace){
 function displayRow(x){
   return x.kind+' • '+x.partner+' / '+x.business_date+' / '+x.region+
     ' • actor '+x.actor+' • submitter '+x.submitted_by+
-    ' • revision '+x.revision+' • '+x.recorded_at+' • '+x.event_id;
+    (x.kind==='REVIEWED'?' • reviewer '+x.actor:'')+
+    ' • revision '+x.revision+' • feed_seq '+x.feed_seq+
+    ' • '+x.recorded_at+' • '+x.event_id;
 }
 return Object.freeze({auditRows,displayRow});
 }));
