@@ -106,3 +106,5 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-role-boundaries.sql
       - name: Prove separate credentialed PostgreSQL TCP login roles in disposable CI
         run: bash team-settlement/tests/postgres-ci-tcp-role-proof.sh
+      - name: Verify read-only tenant and actor recovery receipt SELECT (synthetic)
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-recovery-readonly.sql

@@ -111,6 +111,7 @@ function fakeDatabase({revoked=false,rows=[]}={}){
  const calls=[];
  const db={async transaction(run){return run({async query(sql,args=[]){
    calls.push({sql,args});
+   if(sql==='SET TRANSACTION READ ONLY')return {rows:[]};
    if(sql.includes('set_config'))return {rows:[]};
    if(sql.includes('FROM kts_team.memberships'))
      return {rows:revoked?[]:[{team_role:'operator'}]};
@@ -127,21 +128,23 @@ test('receipt repository uses one tenant-actor-scoped SELECT after membership re
  assert.equal(records[0].event_id,verified.event_id);
  assert.equal(Object.isFrozen(records),true);
  assert.equal(Object.isFrozen(records[0]),true);
- assert.equal(f.calls.length,3);
- assert.match(f.calls[0].sql,/set_config/);
- assert.match(f.calls[1].sql,/FROM kts_team.memberships/);
- assert.match(f.calls[2].sql,/^SELECT/);
- assert.match(f.calls[2].sql,/JOIN kts_team.scope_events/);
- assert.match(f.calls[2].sql,/r.workspace_id=\$1/);
- assert.match(f.calls[2].sql,/e.actor_user_id=\$2/);
- assert.deepEqual(f.calls[2].args,['group_a','fake_operator',[item.id]]);
+ assert.equal(f.calls.length,4);
+ assert.equal(f.calls[0].sql,'SET TRANSACTION READ ONLY');
+ assert.match(f.calls[1].sql,/set_config/);
+ assert.match(f.calls[2].sql,/FROM kts_team.memberships/);
+ assert.match(f.calls[3].sql,/^SELECT/);
+ assert.match(f.calls[3].sql,/JOIN kts_team.scope_events/);
+ assert.match(f.calls[3].sql,/r.workspace_id=\$1/);
+ assert.match(f.calls[3].sql,/e.actor_user_id=\$2/);
+ assert.deepEqual(f.calls[3].args,['group_a','fake_operator',[item.id]]);
 });
 test('revoked membership, bad id, forged SQL actor and duplicate receipt never pass',async()=>{
  const item=intent(),rec=rowFor(item);
  const revoked=fakeDatabase({revoked:true,rows:[rec]});
  await assert.rejects(createPostgresLedgerRepository({db:revoked.db})
    .lookupRecoveryReceipts(actor,[item.id]),/AUTH_SESSION_REVOKED/);
- assert.equal(revoked.calls.length,2);
+ assert.equal(revoked.calls.length,3);
+ assert.equal(revoked.calls[0].sql,'SET TRANSACTION READ ONLY');
  const preflight=fakeDatabase({rows:[rec]});
  const repository=createPostgresLedgerRepository({db:preflight.db});
  for(const keys of [[item.id,item.id],['invalid key'],[],Array(31).fill(item.id)])
@@ -170,4 +173,30 @@ test('default-off repository lookup plus review service preserves unknown on emp
  assert.equal(report.items[0].classification,'UNVERIFIED_NOT_SAFE_TO_RETRY');
  assert.equal(report.auto_send_enabled,false);
  assert.equal(db.calls.some(x=>/INSERT|UPDATE|DELETE/.test(x.sql)),false);
+});
+
+
+// The first SQL statement must enforce read-only mode. If the database rejects
+// that boundary (or it is not supported), refuse recovery rather than reading
+// under the weaker write-capable transaction.
+test('unsupported read-only transaction blocks membership and receipt SQL completely',async()=>{
+ const calls=[];
+ const db={transaction:async run=>run({query:async sql=>{
+   calls.push(sql);
+   if(sql==='SET TRANSACTION READ ONLY')throw Error('READ_ONLY_UNSUPPORTED');
+   throw Error('UNEXPECTED_QUERY_AFTER_READONLY_FAIL');
+ }})};
+ const repository=createPostgresLedgerRepository({db});
+ await assert.rejects(repository.lookupRecoveryReceipts(actor,[intent().id]),
+   /READ_ONLY_UNSUPPORTED/);
+ assert.deepEqual(calls,['SET TRANSACTION READ ONLY']);
+});
+
+test('viewers are denied recovery receipt SELECT before beginning a transaction',async()=>{
+ let transactions=0;
+ const db={transaction:async()=>{transactions++;throw Error('UNEXPECTED_DB');}};
+ await assert.rejects(createPostgresLedgerRepository({db})
+   .lookupRecoveryReceipts({...actor,role:'viewer'},[intent().id]),
+   /TEAM_RECOVERY_ROLE_DENIED/);
+ assert.equal(transactions,0);
 });

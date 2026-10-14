@@ -65,10 +65,14 @@ function createPostgresLedgerRepository({ db } = {}) {
     return inActorTransaction(actor, (tx, verifiedActor) => work(tx, checked, verifiedActor));
   }
 
-  async function inActorTransaction(actor, work) {
+  async function inActorTransaction(actor, work, { readOnly = false } = {}) {
     const trustedActor = C.actorFromServer(actor);
     return db.transaction(async tx => {
       if (!tx || typeof tx.query !== 'function') throw new Error('TEAM_DB_TRANSACTION_INVALID');
+      // Recovery reconciliation can never mutate a ledger even when called
+      // with an injected transaction adapter accidentally holding writer rights.
+      // PostgreSQL requires SET TRANSACTION before the first SELECT.
+      if (readOnly) await tx.query('SET TRANSACTION READ ONLY');
       await tx.query(
         "SELECT set_config('kts.workspace_id',$1,true), set_config('kts.actor_user_id',$2,true)",
         [trustedActor.workspace_id, trustedActor.user_id]
@@ -241,7 +245,7 @@ function createPostgresLedgerRepository({ db } = {}) {
         seen.add(row.idempotency_key);
         return Object.freeze({...row});
       });
-    });
+    }, {readOnly:true});
     return Object.freeze(result);
   }
   return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,

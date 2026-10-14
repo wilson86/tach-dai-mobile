@@ -90,3 +90,18 @@ A dedicated future disposable-PostgreSQL grant review and real-SQL
 read-only qualification remain blockers. This method does not provision
 database roles, grant SELECT, open connections, change migrations,
 expose an HTTP route, load user files, or commit any recovered draft.
+
+## Hard SQL read-only gate and disposable PostgreSQL proof
+
+The isolated `lookupRecoveryReceipts()` method now starts each injected
+transaction with `SET TRANSACTION READ ONLY` **before** the scoped identity
+GUC, membership recheck or receipt SELECT. An adapter that refuses that
+statement fails closed without looking up any receipt; writer-role
+credentials cannot turn this recovery operation into a mutation.
+
+The standard **disposable public GitHub Actions PostgreSQL** workflow
+runs `postgres-recovery-readonly.sql` only after the existing synthetic
+seed/gates. It verifies one original receipt for the tenant/actor, no
+other-user or cross-tenant read, and denial of UPDATE even by a role that
+normally has UPDATE permission. No migration, grant to an operational
+account, real finance, browser integration or backup is performed.
