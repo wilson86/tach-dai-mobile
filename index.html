@@ -1355,6 +1355,39 @@ async function writeClipboardText(text){
   }
 }
 
+
+function cutOutputMatchesExecutableSource(){
+  const expected=outputRecords.filter(r=>r.alive).map(r=>r.text);
+  const raw=inputEl.value.trim();
+  if(!raw)return expected.length===0;
+  // Keep source-envelope provenance; refuse ambiguous transformations.
+  if(looksLikeChatLog(raw))return false;
+  try{
+    const explicit=resolveExplicitSourceRegion(raw);
+    const region=explicit.region||regionEl.value;
+    const stations=getSchedule(region,parseLocalDate(dateEl.value||localDateISO()));
+    const clean=explicit.text;
+    if(validateBatch(clean,region,stations).length)return false;
+    const generated=[];
+    for(const rawLine of clean.split(/\r?\n/)){
+      const line=rawLine.trim();
+      if(!line||isStandaloneSeparator(line))continue;
+      generated.push(...processLine(line,region,stations));
+    }
+    return generated.length===expected.length &&
+      generated.every((row,i)=>row===expected[i]);
+  }catch(_){return false;}
+}
+
+function restoreCutDraft(receipt){
+  inputEl.value=receipt.input;
+  outputEl.value=receipt.output;
+  outputRecords=receipt.outputRecords.map(r=>({...r}));
+  lastSourceLines=receipt.sourceLines.slice();
+  undoStack.pop();
+  renderOutputRecords();
+}
+
 async function cutSelectedOutput(){
   rememberOutputSelection();
   const indexes=groupedResultReady?checkedAliveRecordIndexes():selectedAliveRecordIndexes();
@@ -1364,16 +1397,26 @@ async function cutSelectedOutput(){
   }
 
   snapshot();
+  const receipt=undoStack[undoStack.length-1];
   const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
-  const copied=await writeClipboardText(selectedText);
-  if(!copied){
-    setStatus("Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.","err");
-    return;
-  }
-
   const inputBefore=inputEl.value;
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
   deleteCompletedSourceLines();
+
+  // A successful Cut must never leave a source that regenerates removed rows.
+  // When a partial derived wager cannot be represented by a valid source,
+  // refuse the whole Cut instead of silently losing money or duplicating bets.
+  if(!cutOutputMatchesExecutableSource()){
+    restoreCutDraft(receipt);
+    setStatus("Không thể cắt riêng dòng này mà vẫn giữ đúng tin nguồn và tiền cược. Hãy chọn cả nhóm kết quả.","err");
+    return;
+  }
+  const copied=await writeClipboardText(selectedText);
+  if(!copied){
+    restoreCutDraft(receipt);
+    setStatus("Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.","err");
+    return;
+  }
   checkedResultRecordIndexes.clear();
   renderOutputRecords();
 
