@@ -376,7 +376,7 @@ test('two concurrent change polls never let a slower response roll the cursor ba
   const newer=client.pullChanges();
   assert.equal(resolveRequest.length,2);
   resolveRequest[1](response(200,{
-    sync_status:'SYNCED',items:[{event_id:'event_newer',workspace_id:'group_a',feed_seq:2}],
+    sync_status:'SYNCED',items:[{event_id:'event_newer',workspace_id:'group_a',feed_seq:1}],
     next_cursor:'cursor_newer',has_more:false
   }));
   assert.equal((await newer).status,'SYNCED');
@@ -648,7 +648,7 @@ test('client rejects forged reviewer audit metadata before cursor advancement',a
  let payload={sync_status:'SYNCED',next_cursor:'cursor_good',items:[{
    workspace_id:'group_a',event_id:'review_event_a',event_kind:'SUBMITTED',
    partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
-   actor_user_id:'fake_operator',feed_seq:'2',scope_revision:2,
+   actor_user_id:'fake_operator',feed_seq:'1',scope_revision:2,
    recorded_at:'2026-10-14T10:30:15.123Z',
    result_snapshot:{synthetic_review_only:true,actor_user_id:'fake_operator',
      submitted_by:'fake_operator',from_state:'DRAFT',to_state:'PENDING_REVIEW'}
@@ -718,8 +718,9 @@ test('change feed rejects replayed older sequences across pages without advancin
  assert.equal(blocked.error,'SYNC_FEED_UNVERIFIED');
  assert.equal(client.snapshot().cursor,'cursor_2');
  client.setSessionToken('b'.repeat(43),'group_a');
+ page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'first_after_login',feed_seq:'1'}],next_cursor:'cursor_restart'};
  assert.equal((await client.pullChanges()).status,'SYNCED'); // Fresh user session starts at feed origin.
- assert.equal(client.snapshot().cursor,'cursor_bad');
+ assert.equal(client.snapshot().cursor,'cursor_restart');
 });
 
 test('readScope blocks noncanonical or unsafe revision values before showing review status',async()=>{
@@ -802,4 +803,31 @@ test('DRAFT state cannot display counterfeit submitter or reviewer provenance',a
    assert.equal(result.status,'BLOCKED');
    assert.equal(result.error,'SYNC_SCOPE_UNVERIFIED');
  }
+});
+
+
+test('browser refuses missing initial, intra-page and next-page tenant feed events',async()=>{
+  let page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'e2',feed_seq:'2'}],next_cursor:'skip_first'};
+  const client=Sync.createSyncClient({fetchImpl:async()=>response(200,page)});
+  client.setSessionToken('a'.repeat(43),'group_a');
+  let r=await client.pullChanges();
+  assert.equal(r.status,'BLOCKED');
+  assert.equal(r.error,'SYNC_FEED_UNVERIFIED');
+  assert.equal(client.snapshot().cursor,null);
+  page={sync_status:'SYNCED',items:[
+    {workspace_id:'group_a',event_id:'e1',feed_seq:'1'},
+    {workspace_id:'group_a',event_id:'e3',feed_seq:'3'}],next_cursor:'skip_middle'};
+  r=await client.pullChanges();
+  assert.equal(r.error,'SYNC_FEED_UNVERIFIED');
+  assert.equal(client.snapshot().cursor,null);
+  page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'e1',feed_seq:'1'}],next_cursor:'page_1'};
+  assert.equal((await client.pullChanges()).status,'SYNCED');
+  assert.equal(client.snapshot().cursor,'page_1');
+  page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'e3',feed_seq:'3'}],next_cursor:'page_3'};
+  r=await client.pullChanges();
+  assert.equal(r.error,'SYNC_FEED_UNVERIFIED');
+  assert.equal(client.snapshot().cursor,'page_1');
+  page={sync_status:'SYNCED',items:[{workspace_id:'group_a',event_id:'e2',feed_seq:'2'}],next_cursor:'page_2'};
+  assert.equal((await client.pullChanges()).status,'SYNCED');
+  assert.equal(client.snapshot().cursor,'page_2');
 });

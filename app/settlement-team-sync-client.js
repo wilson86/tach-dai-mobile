@@ -15,9 +15,11 @@
   }
 
   const FEED_EVENT_ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
-  function verifiedFeedItems(items, workspaceId, limit) {
+  function verifiedFeedItems(items, workspaceId, limit, afterSequence = null) {
     if (!Array.isArray(items) || items.length>limit) return false;
-    let previous=0n;
+    // The synthetic durable ledger allocates one immutable event per tenant
+    // sequence. Missing rows are not allowed to become a verified cursor.
+    let previous=afterSequence === null ? 0n : afterSequence;
     for(const item of items){
       if(!item || typeof item!=='object' || Array.isArray(item) ||
          typeof item.event_id!=='string' || !FEED_EVENT_ID.test(item.event_id))return false;
@@ -26,7 +28,7 @@
       if(workspaceId!==null){
         if(item.workspace_id!==workspaceId || !verifiedFeedSequence(item.feed_seq))return false;
         const sequence=BigInt(item.feed_seq);
-        if(sequence<=previous)return false;
+        if(sequence!==previous+1n)return false;
         previous=sequence;
       }
     }
@@ -359,11 +361,7 @@
         // A partial/forged 200 response must not skip unconsumed financial events.
         const page = result.body;
         if (!page || page.sync_status !== STATUS.SYNCED ||
-            !verifiedFeedItems(page.items,requestedWorkspace,limit) ||
-            // A valid-looking replay on the NEXT page is not new history.
-            (requestedWorkspace !== null && page.items.length > 0 &&
-              lastAcceptedFeedSequence !== null &&
-              BigInt(page.items[0].feed_seq) <= lastAcceptedFeedSequence) ||
+            !verifiedFeedItems(page.items,requestedWorkspace,limit,lastAcceptedFeedSequence) ||
             (page.items.length > 0 && (typeof page.next_cursor !== 'string' || !page.next_cursor)) ||
             (page.items.length === 0 && page.next_cursor != null && page.next_cursor !== cursor))
           return { status: STATUS.BLOCKED, error: 'SYNC_FEED_UNVERIFIED', items: [] };

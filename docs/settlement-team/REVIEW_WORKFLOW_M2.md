@@ -132,8 +132,10 @@ remain authoritative.
 
 ## Browser exact-revision and cross-page audit guards
 
-The authenticated change-feed client refuses a later page whose first
-`feed_seq` is not greater than the last accepted sequence in that session.
+The authenticated change-feed client requires exact consecutive workspace
+`feed_seq` values from cursor zero and across all later accepted pages.
+A missing first, middle or next-page event is rejected, even if the response
+otherwise looks correctly authenticated.
 The cursor and sequence watermark reset together when the user or session
 changes; malformed/repeated pages cannot be labeled a verified update.
 Read-only `readScope` rejects revisions outside JavaScript's exact integer
