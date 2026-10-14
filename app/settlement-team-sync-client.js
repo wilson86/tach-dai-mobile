@@ -5,7 +5,14 @@
   'use strict';
 
   const STATUS = Object.freeze({ PENDING: 'PENDING', SYNCED: 'SYNCED', CONFLICT: 'CONFLICT', BLOCKED: 'BLOCKED' });
-  const REVIEW_STATES = Object.freeze(['DRAFT','PENDING_REVIEW','REVIEWED','CLOSED','REOPEN_REQUESTED']);
+  function validBusinessDate(value) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+    const [year, month, day] = value.split('-').map(Number);
+    if (year < 1 || month < 1 || month > 12) return false;
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return day >= 1 && day <= [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month-1];
+  }
+    const REVIEW_STATES = Object.freeze(['DRAFT','PENDING_REVIEW','REVIEWED','CLOSED','REOPEN_REQUESTED']);
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
   const MAX_SIGNED_BIGINT = 9223372036854775807n;
   function verifiedFeedSequence(value) {
@@ -223,6 +230,8 @@
           !Number.isSafeInteger(baseRevision + 1)) throw new Error('SYNC_REVISION_INVALID');
       if (workspaceId !== null && scope.workspace_id !== workspaceId)
         throw new Error('SYNC_WORKSPACE_MISMATCH');
+      if (!validBusinessDate(scope.business_date))
+        throw new Error('SYNC_SCOPE_INVALID');
       const id = newDraftId();
       const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING };
       pending.set(id, item);
@@ -294,7 +303,7 @@
           typeof scope.partner_id!=='string' ||
           !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(scope.partner_id) ||
           typeof scope.business_date!=='string' ||
-          !/^\d{4}-\d{2}-\d{2}$/.test(scope.business_date) ||
+          !validBusinessDate(scope.business_date) ||
           !['mn','mt','mb'].includes(scope.region))
         throw Error('SYNC_SCOPE_INVALID');
       if(!Number.isSafeInteger(expectedRevision) || expectedRevision<0 ||
@@ -400,7 +409,7 @@
           typeof scope.partner_id !== 'string' ||
           !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(scope.partner_id) ||
           typeof scope.business_date !== 'string' ||
-          !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(scope.business_date) ||
+          !validBusinessDate(scope.business_date) ||
           !['mn','mt','mb'].includes(scope.region))
         return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_INVALID' };
       const epoch = sessionEpoch;

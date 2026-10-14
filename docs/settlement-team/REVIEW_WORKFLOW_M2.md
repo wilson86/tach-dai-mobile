@@ -208,3 +208,12 @@ starts at sequence zero. Canonical encoding is **not a cryptographic signature**
 a malicious client with workspace access could still forge a sequence. Real
 financial audit/export needs signed or server-stored read checkpoints and
 independent authoritative comparison before release.
+
+## Exact Gregorian dates at client entrypoints
+
+The server's original core contract checks leap years and real month lengths.
+The synthetic PWA now applies equivalent calendar validation before allocating
+a new draft, preparing a review transition or issuing a read-only scope GET.
+Impossible dates return `SYNC_SCOPE_INVALID` without using the network.
+A valid Gregorian leap day is retained exactly; no implicit date rollover
+or real-money data processing is introduced.

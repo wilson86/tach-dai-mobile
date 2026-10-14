@@ -915,3 +915,32 @@ test('synthetic pilot refuses unimplemented CLOSED and REOPEN_REQUESTED scopes a
    assert.equal(denied.error,'SYNC_SCOPE_UNVERIFIED');
  }
 });
+
+test('invalid calendar dates never create draft intent, review request or readScope GET',async()=>{
+ let requests=0;
+ const client=Sync.createSyncClient({fetchImpl:async()=>{requests++;return response(503,{});}});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ for(const business_date of ['2026-02-29','2026-04-31','2026-00-10','0000-01-01','2026-13-01','2026-02-30']){
+   const bad={...scope,business_date};
+   assert.throws(()=>client.queueDraft(bad,{synthetic:true}),/SYNC_SCOPE_INVALID/);
+   assert.equal((await client.readScope(bad)).error,'SYNC_SCOPE_INVALID');
+   await assert.rejects(client.reviewScope('submit_review',bad,1),/SYNC_SCOPE_INVALID/);
+ }
+ assert.equal(requests,0);
+ assert.equal(client.snapshot().drafts.length,0);
+ assert.equal(client.snapshot().review_attempts.length,0);
+});
+test('leap-day scope passes calendar preflight without silently normalizing the date',async()=>{
+ let method=null,url=null;
+ const client=Sync.createSyncClient({fetchImpl:async(path,options)=>{url=path;method=options.method;return response(200,{
+   workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2028-02-29',
+   region:'mn',revision:0,state:'DRAFT',submitted_by:null,reviewed_by:null
+ });}});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2028-02-29',region:'mn'};
+ assert.equal((await client.readScope(scope)).status,'SYNCED');
+ assert.equal(method,'GET');
+ assert.match(url,/2028-02-29/);
+ assert.equal(client.queueDraft(scope,{synthetic:true}).status,'PENDING');
+});
