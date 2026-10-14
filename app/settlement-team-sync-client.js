@@ -5,6 +5,7 @@
   'use strict';
 
   const STATUS = Object.freeze({ PENDING: 'PENDING', SYNCED: 'SYNCED', CONFLICT: 'CONFLICT', BLOCKED: 'BLOCKED' });
+  const REVIEW_STATES = Object.freeze(['DRAFT','PENDING_REVIEW','REVIEWED','CLOSED','REOPEN_REQUESTED']);
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
   const MAX_SIGNED_BIGINT = 9223372036854775807n;
   function verifiedFeedSequence(value) {
@@ -293,7 +294,8 @@
         if (!row || row.workspace_id !== workspaceId ||
             row.partner_id !== scope.partner_id ||
             row.business_date !== scope.business_date ||
-            row.region !== scope.region || !numericRevision)
+            row.region !== scope.region || !numericRevision ||
+            !REVIEW_STATES.includes(row.state))
           return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_UNVERIFIED' };
         return { status: STATUS.SYNCED, scope: clone(row) };
       } catch (error) {

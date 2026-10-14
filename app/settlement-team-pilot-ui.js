@@ -5,10 +5,17 @@
 'use strict';
 // Opt-in, synthetic-only, no production or automatic server startup.
 const PARTNER=/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/;
+const REVIEW_LABELS=Object.freeze({
+  DRAFT:'DRAFT — bản nháp',
+  PENDING_REVIEW:'PENDING_REVIEW — chờ người duyệt',
+  REVIEWED:'REVIEWED — đã có người duyệt',
+  CLOSED:'CLOSED — đã khóa',
+  REOPEN_REQUESTED:'REOPEN_REQUESTED — yêu cầu mở lại'
+});
 const IDS=['team-login','team-subject','team-password','team-workspace',
  'team-logout','team-partner','team-date','team-region','team-create',
  'team-sync','team-pull','team-reconnect','team-read','team-context',
- 'team-warning','team-drafts','team-changes','team-notice'];
+ 'team-warning','team-drafts','team-changes','team-notice','team-review-readonly'];
 function mount({doc,win,client,Sync}={}){
   const d=doc||(typeof document!=='undefined'?document:null);
   const w=win||(typeof window!=='undefined'?window:null);
@@ -27,6 +34,9 @@ function mount({doc,win,client,Sync}={}){
   function clear(el){while(el.firstChild)el.removeChild(el.firstChild);}
   function row(el,value){const li=d.createElement('li');li.textContent=String(value);el.appendChild(li);}
   function tell(value){notice=String(value);e['team-notice'].textContent=notice;}
+  function clearReview(){
+    e['team-review-readonly'].textContent='CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.';
+  }
   function render(state){
     if(dead)return;
     e['team-context'].textContent=state.authenticated?
@@ -83,6 +93,7 @@ function mount({doc,win,client,Sync}={}){
     e['team-password'].value='';
     await sync.login(subject,pwd,workspace);
     clear(e['team-changes']); // Never display another session's previously read feed.
+    clearReview();
     tell('Đăng nhập pilot thành công. Chỉ dùng dữ liệu giả.');
   });});
   on(e['team-logout'],'click',()=>void action(async()=>{
@@ -93,6 +104,7 @@ function mount({doc,win,client,Sync}={}){
     }catch(err){
       if(!sync.snapshot().authenticated){
         clear(e['team-changes']); // Do not show former user's feed after local logout.
+        clearReview();
         if(err&&err.message==='SYNC_LOGOUT_REVOKE_UNVERIFIED'){
           tell('Đã xóa phiên trên trình duyệt. CHƯA XÁC MINH thu hồi phiên trên máy chủ vì lỗi mạng/phản hồi; không coi là đăng xuất máy chủ thành công.');
           return;
@@ -100,7 +112,8 @@ function mount({doc,win,client,Sync}={}){
       }
       throw err;
     }
-    clear(e['team-changes']);tell('Đã đăng xuất và xác nhận máy chủ thu hồi phiên.');
+    clear(e['team-changes']);clearReview();
+    tell('Đã đăng xuất và xác nhận máy chủ thu hồi phiên.');
   }));
   on(e['team-create'],'click',()=>void action(async()=>{
     const draft=sync.queueDraft(scope(),
@@ -114,8 +127,25 @@ function mount({doc,win,client,Sync}={}){
     tell('Kết quả gửi: '+draftOutcome(results)+'. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   on(e['team-read'],'click',()=>void action(async()=>{
-    const r=await sync.readScope(scope());
-    tell('Đọc scope: '+r.status+(r.scope?' • revision '+r.scope.revision:''));
+    const selected=scope();
+    clearReview(); // Never show a stale review while an async read is in flight.
+    const r=await sync.readScope(selected);
+    // The user may have edited the selected scope before this request finished.
+    let current;
+    try{current=scope();}catch(_){current=null;}
+    if(!current||Object.keys(selected).some(key=>selected[key]!==current[key])){
+      tell('CHƯA XÁC MINH: phạm vi đã thay đổi trong lúc đọc; hãy đọc lại.');
+      return;
+    }
+    if(r.status!=='SYNCED'||!r.scope||!Object.prototype.hasOwnProperty.call(REVIEW_LABELS,r.scope.state)){
+      tell('CHƯA XÁC MINH trạng thái xét duyệt: '+String(r.status||'BLOCKED')+
+        (r.error?' • '+r.error:'')+'.');
+      return;
+    }
+    e['team-review-readonly'].textContent=
+      'MÁY CHỦ (chỉ đọc): '+REVIEW_LABELS[r.scope.state]+
+      ' • revision '+String(r.scope.revision)+'. Chưa có chức năng duyệt/khóa trong pilot.';
+    tell('Đã đọc trạng thái từ máy chủ; KHÔNG phải xác nhận quyết toán tiền.');
   }));
   on(e['team-pull'],'click',()=>void action(async()=>{
     const r=await sync.pullChanges();
@@ -135,6 +165,10 @@ function mount({doc,win,client,Sync}={}){
     tell('Kết nối lại — change feed: '+feed+'; DRAFT: '+draftOutcome(states)+
       '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
+  for(const id of ['team-partner','team-date','team-region'])
+    on(e[id],'change',clearReview);
+  on(e['team-workspace'],'change',clearReview);
+  clearReview();
   on(w,'beforeunload',event=>{
     if(sync.snapshot().drafts.some(x=>x.status!=='SYNCED')){
       event.preventDefault();event.returnValue='';

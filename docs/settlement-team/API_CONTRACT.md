@@ -101,3 +101,18 @@ production login, no credential lifecycle recovery/rotation/rate-limit
 persistence across processes and no 30-person account provisioning exists.
 No auth keys, passwords, real sessions or customer data go to public CI.
 Do not declare real team use ready or retire HIOSKT.
+
+## Read-only human-review state in synthetic pilot UI (2026-10-14)
+
+The pilot `GET /v1/scopes/{partner}/{date}/{region}` returns a server-derived
+`state` from the isolated PostgreSQL scopes table. The browser sync client
+now accepts only the exact known review states
+`DRAFT`, `PENDING_REVIEW`, `REVIEWED`, `CLOSED`, `REOPEN_REQUESTED`;
+an absent or unknown state blocks the read with `SYNC_SCOPE_UNVERIFIED`.
+The UI displays the validated state and revision **as read-only text**,
+clears the display on account switching/logout and scope edits, and rejects
+late reads if the selected scope changed during the request. It does not
+offer submit/approve/close/reopen buttons. The durable PostgreSQL pilot
+currently implements only DRAFT writes; a rendered review state is **not**
+proof that a human workflow transition was authorized or committed.
+No actual-money calculation, HIOSKT oracle, or release authority is included.

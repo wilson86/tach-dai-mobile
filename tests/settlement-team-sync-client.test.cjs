@@ -523,3 +523,18 @@ test('logout with HTTP 503 or network failure clears local bearer but does not c
    assert.equal(saved.data.has('session_token'),false);
  }
 });
+
+test('scope read fails closed when review state is absent, unknown, or forged',async()=>{
+ const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
+ let state='PENDING_REVIEW';
+ const client=Sync.createSyncClient({fetchImpl:async()=>response(200,{...scope,revision:3,state})});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const valid=await client.readScope(scope);
+ assert.equal(valid.status,'SYNCED');
+ assert.equal(valid.scope.state,'PENDING_REVIEW');
+ for(state of [undefined,'APPROVED','SYNCED','closed',null]){
+   const bad=await client.readScope(scope);
+   assert.equal(bad.status,'BLOCKED');
+   assert.equal(bad.error,'SYNC_SCOPE_UNVERIFIED');
+ }
+});

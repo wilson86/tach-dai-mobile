@@ -22,7 +22,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
-  'team-warning','team-drafts','team-changes','team-notice'];
+  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly'];
  const els=Object.fromEntries(ids.map(id=>[id,element()]));
  const doc={
    getElementById:id=>els[id]||null,
@@ -52,7 +52,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      if(draft){draft.status=syncStatus;if(syncStatus!=='SYNCED')draft.error='SYNC_NETWORK_UNAVAILABLE';}
      notify();return {...draft};
    },
-   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1}};},
+   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1,state:'DRAFT'}};},
    async pullChanges(){
      calls.push('pullChanges');requestCount++;
      const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
@@ -128,7 +128,7 @@ test('queued synthetic draft only becomes SYNCED after client-verified acknowled
  assert.equal(h.state.drafts[0].status,'SYNCED');
  assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
  h.els['team-read'].fire('click');await tick();
- assert.match(h.els['team-notice'].textContent,/revision 1/);
+ assert.match(h.els['team-review-readonly'].textContent,/revision 1/);
  h.els['team-pull'].fire('click');await tick();
  assert.equal(h.els['team-changes'].children[0].textContent,'synthetic_safe_event');
  h.mounted.dispose();
@@ -219,5 +219,23 @@ test('UI clears former user feed and warns when remote logout revocation is unve
  assert.equal(h.els['team-changes'].children.length,0);
  assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH thu hồi phiên/);
  assert.doesNotMatch(h.els['team-notice'].textContent,/^Đã đăng xuất và xác nhận máy chủ/);
+ h.mounted.dispose();
+});
+
+test('read-only reviewer status comes only from verified scope; no approval control exists',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ h.els['team-read'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/MÁY CHỦ \(chỉ đọc\): DRAFT/);
+ assert.match(h.els['team-review-readonly'].textContent,/revision 1/);
+ h.els['team-partner'].fire('change');
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ h.els['team-read'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/MÁY CHỦ/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ const html=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.html'),'utf8');
+ assert.doesNotMatch(html,/id="team-(?:approve|finalize|close|submit-review)"/);
  h.mounted.dispose();
 });
