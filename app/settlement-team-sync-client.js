@@ -104,6 +104,7 @@
     let workspaceId = null;
     let sessionEpoch = 0;
     let loginInFlight = false; // Only one pending identity exchange per browser client.
+    let logoutInFlight = false; // No new money intents while remote revoke is uncertain.
      // Cursor is session-specific. Never reuse a prior user's/workspace's cursor
     // from generic local storage: doing so can skip new user's change events.
     let cursor = null;
@@ -136,7 +137,10 @@
 
     async function request(path, options) {
       const headers = Object.assign({ accept: 'application/json' }, options && options.headers || {});
-      if (sessionToken) headers.authorization = 'Bearer ' + sessionToken;
+      // Login credentials may belong to a different account. An old bearer
+      // must never accompany a new identity exchange, even on the same origin.
+      if (sessionToken && path !== '/v1/login')
+        headers.authorization = 'Bearer ' + sessionToken;
       const response = await fetcher(endpoint + path, Object.assign({}, options, { headers }));
       return { response, body: await jsonResponse(response) };
     }
@@ -147,7 +151,10 @@
     }
 
     function setSessionToken(token, workspace = null, { discardPending = false } = {}) {
-      if (typeof token !== 'string' || token.length < 32) throw new Error('SYNC_SESSION_INVALID');
+      // Match durable PostgreSQL tokenHash's base64url-shaped input contract.
+      // Never place control characters or whitespace into an Authorization header.
+      if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(token))
+        throw new Error('SYNC_SESSION_INVALID');
       if (workspace !== null && (typeof workspace !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workspace)))
         throw new Error('SYNC_WORKSPACE_INVALID');
       if (hasUnsyncedDrafts() && discardPending !== true)
@@ -191,24 +198,30 @@
     }
 
     async function logout({ discardPending = false } = {}) {
+      if (logoutInFlight) throw new Error('SYNC_LOGOUT_IN_FLIGHT');
       if (hasUnsyncedDrafts() && discardPending !== true)
         throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       if (!sessionToken) return clearSession();
       const epoch = sessionEpoch;
-      let revokeVerified = false;
+      logoutInFlight = true;
       try {
-        const result = await request('/v1/logout', { method: 'POST' });
-        revokeVerified = result.response.status === 204;
-      } catch (_) {
-        // On network loss the server may or may not have revoked the bearer.
-        // Never claim a remote logout without a verified 204 response.
+        let revokeVerified = false;
+        try {
+          const result = await request('/v1/logout', { method: 'POST' });
+          revokeVerified = result.response.status === 204;
+        } catch (_) {
+          // On network loss the server may or may not have revoked the bearer.
+          // Never claim a remote logout without a verified 204 response.
+        }
+        // A delayed logout response from a previous identity may not log out a
+        // newer, independently authenticated session.
+        if (epoch !== sessionEpoch) return snapshot();
+        const localState = clearSession(); // Always discard memory-only bearer locally.
+        if (!revokeVerified) throw new Error('SYNC_LOGOUT_REVOKE_UNVERIFIED');
+        return localState;
+      } finally {
+        logoutInFlight = false;
       }
-      // A delayed logout response from a previous identity may not log out a
-      // newer, independently authenticated session.
-      if (epoch !== sessionEpoch) return snapshot();
-      const localState = clearSession(); // Always discard memory-only bearer locally.
-      if (!revokeVerified) throw new Error('SYNC_LOGOUT_REVOKE_UNVERIFIED');
-      return localState;
     }
 
     function clearSession() {
@@ -234,6 +247,7 @@
     }
 
     function queueDraft(scope, payload, baseRevision = 0) {
+      if (logoutInFlight) throw new Error('SYNC_LOGOUT_IN_FLIGHT');
       if (!scope || typeof scope !== 'object' || !payload || typeof payload !== 'object' || Array.isArray(payload))
         throw new Error('SYNC_DRAFT_INVALID');
       if (!Number.isSafeInteger(baseRevision) || baseRevision < 0 ||
@@ -250,6 +264,8 @@
     }
 
     async function syncDraft(id) {
+      if (logoutInFlight) return Object.freeze({id,status:STATUS.BLOCKED,
+        error:'SYNC_LOGOUT_IN_FLIGHT'});
       const item = pending.get(id);
       if (!item) throw new Error('SYNC_DRAFT_NOT_FOUND');
       if (draftFlights.has(id))
@@ -308,6 +324,7 @@
     // Only a deliberate human button press should create a review intent.
     // Never regenerate a key for a network-uncertain same-scope transition.
     async function reviewScope(action,scope,expectedRevision,{retryOnly=false}={}) {
+      if(logoutInFlight)throw Error('SYNC_LOGOUT_IN_FLIGHT');
       if(!['submit_review','approve_review'].includes(action))
         throw Error('SYNC_REVIEW_ACTION_INVALID');
       if(!sessionToken || workspaceId===null)
@@ -477,6 +494,8 @@
     }
 
     async function reconnect() {
+      if(logoutInFlight)return {pull:{status:STATUS.BLOCKED,
+        error:'SYNC_LOGOUT_IN_FLIGHT',items:[]},drafts:[]};
       // A reconnect started by user A must NEVER start writes for user B
       // after an async network await and a session/workspace switch.
       // Freeze the originally pending intents; Map's live iterator could

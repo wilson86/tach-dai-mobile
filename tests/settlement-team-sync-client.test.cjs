@@ -1110,3 +1110,80 @@ test('reconnect never retries pending financial write when change feed is unveri
    assert.equal(client.snapshot().cursor,null);
  }
 });
+
+test('logout in flight rejects new drafts, review intents and duplicate revokes without dropping data',async()=>{
+ let completeLogout;
+ const calls=[];
+ const client=Sync.createSyncClient({fetchImpl:(url,options)=>{
+   calls.push({url,headers:options.headers});
+   if(url.endsWith('/v1/logout'))
+     return new Promise(resolve=>{completeLogout=resolve;});
+   throw Error('REQUEST_DURING_LOGOUT');
+ }});
+ const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const started=client.logout();
+ assert.equal(typeof completeLogout,'function');
+ assert.throws(()=>client.queueDraft(scope,{synthetic:true}),/SYNC_LOGOUT_IN_FLIGHT/);
+ await assert.rejects(client.reviewScope('submit_review',scope,0),/SYNC_LOGOUT_IN_FLIGHT/);
+ await assert.rejects(client.logout(),/SYNC_LOGOUT_IN_FLIGHT/);
+ assert.equal((await client.syncDraft('never_queued')).error,'SYNC_LOGOUT_IN_FLIGHT');
+ const blocked=await client.reconnect();
+ assert.equal(blocked.pull.error,'SYNC_LOGOUT_IN_FLIGHT');
+ assert.equal(calls.length,1);
+ assert.equal(client.snapshot().drafts.length,0);
+ completeLogout(response(204,{}));
+ assert.equal((await started).authenticated,false);
+ assert.equal(client.snapshot().authenticated,false);
+ // The logout flight guard must release even on a successful remote revoke.
+ const again=client.queueDraft(scope,{synthetic:true});
+ assert.equal(again.status,'PENDING');
+});
+
+test('failed remote logout also releases write gate but never claims remote revoke',async()=>{
+ let done;
+ const client=Sync.createSyncClient({fetchImpl:()=>new Promise(resolve=>{done=resolve;})});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const started=client.logout();
+ assert.throws(()=>client.queueDraft({workspace_id:'group_a',business_date:'2026-10-14'},
+   {synthetic:true}),/SYNC_LOGOUT_IN_FLIGHT/);
+ done(response(503,{error:'NETWORK_FAILURE'}));
+ await assert.rejects(started,/SYNC_LOGOUT_REVOKE_UNVERIFIED/);
+ assert.equal(client.snapshot().authenticated,false);
+ // A new synthetic local intent can be created after the old flight ends.
+ assert.equal(client.queueDraft({workspace_id:'group_a',business_date:'2026-10-14'},
+   {synthetic:true}).status,'PENDING');
+});
+
+test('bearer preflight rejects control characters and noncanonical tokens before state mutation',()=>{
+ let calls=0;
+ const client=Sync.createSyncClient({fetchImpl:async()=>{calls++;return response(200,{});}});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ const earlierEpoch=client.snapshot().session_epoch;
+ for(const token of [
+   'x'.repeat(31),'x'.repeat(129),'a'.repeat(42)+'=',
+   'a'.repeat(40)+'\r\n','a'.repeat(40)+' ', 'a'.repeat(40)+'.',
+   'a'.repeat(40)+'á'
+ ]){
+   assert.throws(()=>client.setSessionToken(token,'group_b'),/SYNC_SESSION_INVALID/);
+   assert.equal(client.snapshot().session_epoch,earlierEpoch);
+   assert.equal(client.snapshot().workspace_id,'group_a');
+ }
+ assert.equal(calls,0);
+});
+
+test('new login must not send a previously logged-in account bearer',async()=>{
+ const calls=[];
+ const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+   calls.push({url,headers:options.headers});
+   if(url.endsWith('/v1/login'))return response(200,{session_token:'b'.repeat(43),expires_at:123});
+   if(url.endsWith('/v1/logout'))return response(204,{});
+   throw Error('UNEXPECTED_URL');
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal((await client.login('synthetic_b','test-password','group_b')).authenticated,true);
+ assert.equal(client.snapshot().workspace_id,'group_b');
+ assert.equal(Object.prototype.hasOwnProperty.call(calls[0].headers,'authorization'),false);
+ await client.logout();
+ assert.equal(calls[1].headers.authorization,'Bearer '+'b'.repeat(43));
+});

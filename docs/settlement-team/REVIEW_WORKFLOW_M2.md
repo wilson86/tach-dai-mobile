@@ -308,3 +308,20 @@ unattempted** in volatile memory instead of misleadingly reporting that no
 drafts remain to send. Even with later connectivity, this remains a
 manual/synthetic-only operation; unverified pending drafts cannot be treated
 as committed or safely durable.
+
+## In-flight logout and credential isolation (2026-10-15)
+
+An outstanding remote logout now holds a fail-closed browser write barrier:
+new drafts, review submissions, direct draft sync and reconnect cannot
+start a monetary operation, and duplicate logout requests are rejected.
+This prevents a user from queuing an unsent MEMORY_ONLY draft while a
+successful delayed revoke clears all local memory. The barrier is released
+after both successful and unverified remote outcomes, and delayed responses
+from a former session still cannot log out a newer one.
+
+A session bearer must be canonical 32–128 character URL-safe base64 alphabet,
+matching the durable auth backend; noncanonical/control-character values are
+rejected before replacing a session or preparing request headers. Login
+requests no longer attach the previous user's existing bearer in the
+Authorization header when switching accounts. This does not authorize
+persistent tokens or automatic account switching.
