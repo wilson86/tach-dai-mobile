@@ -7,7 +7,8 @@ const execFile=promisify(cp.execFile),ROOT=path.resolve(__dirname,'..');
 const proofHtml=fs.readFileSync(path.join(__dirname,'settlement-team-native-idb-proof.html'),'utf8');
 const routes={
  '/app/settlement-team-recovery-v0.js':'app/settlement-team-recovery-v0.js',
- '/app/settlement-team-recovery-idb-v0.js':'app/settlement-team-recovery-idb-v0.js'
+ '/app/settlement-team-recovery-idb-v0.js':'app/settlement-team-recovery-idb-v0.js',
+ '/app/settlement-team-manual-checkpoint-v0.js':'app/settlement-team-manual-checkpoint-v0.js'
 };
 function browser(){
  for(const name of ['google-chrome','google-chrome-stable','chromium','chromium-browser']){
@@ -152,9 +153,12 @@ async function main(){
   await new Promise((ok,bad)=>{server.once('error',bad);server.listen(0,'127.0.0.1',ok)});
   const port=server.address().port;
   if(port===8787)throw Error('RESERVED_PORT');
-  for(const stage of ['save','restore']){
-   // Wait for async native WebCrypto and IndexedDB using live DevTools DOM.
-   const obj=await chromeProof(bin,profile,
+  for(const stage of ['save','restore','manual-save','manual-restore']){
+   // Each pair restarts the test browser process with a shared profile.
+   // Manual evidence must not inherit the ordinary test's ciphertext slot.
+   const owned=stage.startsWith('manual-')?
+     path.join(temp,'manual-profile'):profile;
+   const obj=await chromeProof(bin,owned,
       'http://127.0.0.1:'+port+'/proof?stage='+stage);
    if(obj.status!=='PASS'||obj.stage!==stage||obj.native_indexeddb!==true||
       obj.auto_send_enabled!==false||obj.original_id!=='draft_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
