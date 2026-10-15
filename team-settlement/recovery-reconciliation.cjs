@@ -89,6 +89,14 @@ function createRecoveryReconciliation({auth,repository,syntheticOnly=false}={}){
         fail('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
       seen.set(row.idempotency_key,row);
     }
+    // Re-verify after the possibly slow SQL read. A role/session revoked
+    // between receipt lookup and final report must never be presented as
+    // a fresh, currently authorized review.
+    const latestActor=C.actorFromServer(await auth.verifySession(sessionToken));
+    if(latestActor.user_id!==actor.user_id||
+       latestActor.workspace_id!==actor.workspace_id||
+       latestActor.role!==actor.role)
+      fail('TEAM_RECOVERY_SESSION_CHANGED');
     const items=specs.map(spec=>seen.has(spec.id)?
       checkReceipt(seen.get(spec.id),spec,actor):
       Object.freeze({id:spec.id,classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',

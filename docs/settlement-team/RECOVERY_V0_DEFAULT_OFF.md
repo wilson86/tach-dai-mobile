@@ -279,3 +279,17 @@ extra scope fields) rather than quietly discarding it. Known transient
 financial intent. Three focused tests cover rejected edit intents,
 unrecognized fields and conflict-state round trips. This is not an
 enabling change for live IndexedDB/PWA, which stays DEFAULT OFF.
+
+## Receipt lookup post-query session reauthentication
+
+After the read-only PostgreSQL receipt lookup, the default-off synthetic
+server reconciliation independently verifies the same bearer a **second
+time**, before returning any matched/unknown report. Revoked membership,
+unverified server actor, switched user/workspace, role changes or an
+authenticator error after the asynchronous read fail closed; the report
+cannot describe previously fetched receipts as freshly authorized.
+
+This complements the repository's active database membership recheck *inside*
+the transaction. Adversarial tests specifically rotate credentials between
+the SQL lookup and final review; there is still no HTTP route, money write,
+browser artifact or release authorization.

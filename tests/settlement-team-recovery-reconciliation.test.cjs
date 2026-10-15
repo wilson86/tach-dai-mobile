@@ -35,7 +35,7 @@ function testService({who=actor,rows=[],read}={}){
 test('server-verified synthetic receipt matches original immutable digest, not client claim',async()=>{
  const x=intent(),h=testService({rows:[rowFor(x)]});
  const result=await h.service.inspect(token,[x]);
- assert.equal(h.verifies,1);assert.equal(h.reads,1);
+ assert.equal(h.verifies,2);assert.equal(h.reads,1);
  assert.equal(result.status,'REVIEW_ONLY');
  assert.equal(result.auto_send_enabled,false);
  assert.equal(result.all_receipts_verified,true);
@@ -221,4 +221,57 @@ test('one immutable server event cannot verify two different original draft keys
  assert.equal(legitimate.all_receipts_verified,true);
  assert.equal(legitimate.items.length,2);
  assert.equal(legitimate.auto_send_enabled,false);
+});
+
+test('revoked or switched identity after delayed receipt query cannot produce a matched review',async()=>{
+ const item=intent(),saved=rowFor(item);
+ for(const late of [
+  {...actor,server_verified:false},
+  {...actor,membership_active:false},
+  {...actor,role:'viewer'},
+  {...actor,role:'admin'},
+  {...actor,user_id:'fake_new_operator'},
+  {...actor,workspace_id:'group_b'}
+ ]){
+  let checks=0,reads=0;
+  const auth={async verifySession(t){
+    assert.equal(t,token);checks++;
+    return checks===1?actor:late;
+  }};
+  const repository={async lookupRecoveryReceipts(who,keys){
+    reads++;assert.equal(who.user_id,actor.user_id);
+    assert.deepEqual(keys,[item.id]);return [saved];
+  }};
+  const service=createRecoveryReconciliation({auth,repository,syntheticOnly:true});
+  await assert.rejects(service.inspect(token,[item]),
+   /TEAM_ACTOR_UNVERIFIED|TEAM_RECOVERY_SESSION_CHANGED/);
+  assert.equal(reads,1);
+  assert.equal(checks,2);
+ }
+});
+
+test('second session verification failure after SQL read does not return stale saved receipt',async()=>{
+ const item=intent();let count=0,readCount=0;
+ const service=createRecoveryReconciliation({syntheticOnly:true,
+  auth:{async verifySession(){
+   count++;
+   if(count===2)throw Error('AUTH_SESSION_REVOKED');
+   return actor;
+  }},
+  repository:{async lookupRecoveryReceipts(){
+   readCount++;return [rowFor(item)];
+  }}
+ });
+ await assert.rejects(service.inspect(token,[item]),/AUTH_SESSION_REVOKED/);
+ assert.equal(count,2);
+ assert.equal(readCount,1);
+});
+
+test('unverified receipt remains UNKNOWN even with a fresh reauthenticated actor',async()=>{
+ const h=testService({rows:[]});
+ const result=await h.service.inspect(token,[intent()]);
+ assert.equal(result.items[0].classification,'UNVERIFIED_NOT_SAFE_TO_RETRY');
+ assert.equal(result.auto_send_enabled,false);
+ assert.equal(h.verifies,2);
+ assert.equal(h.reads,1);
 });
