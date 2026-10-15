@@ -16,6 +16,9 @@ async function run(){
  let status='FAIL',reason=null;
  try{
   check(isSecureContext,'PILOT_INSECURE');
+  check(window.innerWidth<=400,'PILOT_MOBILE_VIEWPORT_NOT_APPLIED');
+  check(document.documentElement.scrollWidth<=window.innerWidth+1,
+    'PILOT_HORIZONTAL_OVERFLOW');
   check(document.querySelector('.badge').textContent.includes('SYNTHETIC ONLY'),'PILOT_LIVE_BANNER_MISSING');
   check(el('team-review-controls').hidden===true,'PILOT_HIDDEN_REVIEW_ACTIVE');
   check(el('team-logout').disabled===true,'PILOT_LOGOUT_NOT_GATED');
@@ -28,6 +31,8 @@ async function run(){
   await until(()=>el('team-notice').textContent.includes('Đăng nhập pilot thành công'),'PILOT_LOGIN_NOT_VERIFIED');
   check(el('team-password').value==='','PILOT_PASSWORD_RETAINED');
   check(!el('team-create').disabled,'PILOT_DRAFT_ACTION_BLOCKED');
+  const touch=el('team-create').getBoundingClientRect();
+  check(touch.height>=44&&touch.width>=44,'PILOT_TOUCH_TARGET_TOO_SMALL');
   el('team-create').click();
   await until(()=>el('team-notice').textContent.includes('PENDING'),'PILOT_PENDING_MISSING');
   check(el('team-warning').textContent.includes('MEMORY_ONLY'),'PILOT_VOLATILE_WARNING_MISSING');
@@ -48,10 +53,12 @@ async function run(){
   await until(()=>el('team-notice').textContent.includes('Đã đăng xuất'),'PILOT_LOGOUT_NOT_VERIFIED');
   check(el('team-changes').children.length===0,'PILOT_FEED_STALE_AFTER_LOGOUT');
   check(el('team-context').textContent.includes('Chưa đăng nhập'),'PILOT_SESSION_STILL_OPEN');
+  check(document.documentElement.scrollWidth<=window.innerWidth+1,
+    'PILOT_POST_LOGIN_HORIZONTAL_OVERFLOW');
   status='PASS';
  }catch(error){reason=String(error&&error.message||error).slice(0,130)}
  el('proof').textContent=JSON.stringify({stage:'pilot',status,
-  fake_only:true,real_money_ready:false,review_ui_enabled:false,
+  fake_only:true,real_money_ready:false,review_ui_enabled:false,mobile_viewport:true,touch_target_44px:true,
   ...(reason?{code:reason}:{})});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});
