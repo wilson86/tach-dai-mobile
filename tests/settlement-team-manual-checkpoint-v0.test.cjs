@@ -193,3 +193,33 @@ test('ambiguous storage success followed by session drift preserves ciphertext f
  await assert.rejects(h.make().save({passphrase:PASS,explicitConsent:true}),
   /TEAM_MANUAL_CHECKPOINT_ALREADY_EXISTS/);
 });
+
+test('real sync-client pending queue -> explicit encrypted backup -> new client quarantine, no import',async()=>{
+ const Sync=require('../app/settlement-team-sync-client.js');
+ const forbidden=async()=>{throw Error('FORBIDDEN_FINANCIAL_NETWORK_WRITE');};
+ const createClient=()=>{
+  const c=Sync.createSyncClient({fetchImpl:forbidden});
+  c.setSessionToken('a'.repeat(43),'group_a');
+  return c;
+ };
+ const original=createClient(),fake=setup();
+ const queued=original.queueDraft(row().scope,row().payload,0);
+ const backup=createSyntheticManualCheckpoint({sync:original,
+  store:fake.store,verifyActor:fake.verifyActor,
+  cryptoProvider:webcrypto,syntheticOnly:true});
+ const receipt=await backup.save({passphrase:PASS,explicitConsent:true});
+ assert.equal(receipt.status,'ENCRYPTED_ADAPTER_ACK');
+ original.clearSession({discardPending:true}); // explicit synthetic QA discard
+ const restarted=createClient();
+ const recovered=createSyntheticManualCheckpoint({sync:restarted,
+  store:fake.store,verifyActor:fake.verifyActor,
+  cryptoProvider:webcrypto,syntheticOnly:true});
+ const result=await recovered.inspect({passphrase:PASS,explicitConsent:true});
+ assert.equal(result.status,'QUARANTINED');
+ assert.equal(result.items[0].id,queued.id);
+ assert.equal(result.items[0].base_revision,queued.base_revision);
+ assert.equal(result.items[0].auto_retry,false);
+ assert.equal(result.durability,'UNVERIFIED');
+ assert.deepEqual(restarted.snapshot().drafts,[]);
+ assert.equal(fake.map.size,1);
+});
