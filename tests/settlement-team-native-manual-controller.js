@@ -14,6 +14,13 @@ async function main(){
  try{
   check(['manual-save','manual-restore'].includes(stage),'STAGE_INVALID');
   check(isSecureContext&&window.innerWidth<=400,'PREVIEW_UNSAFE_CONTEXT');
+  check(document.documentElement.scrollWidth<=window.innerWidth+1,
+    'PREVIEW_HORIZONTAL_OVERFLOW');
+  const consentBox=el('team-manual-consent').getBoundingClientRect();
+  check(consentBox.width>=18&&consentBox.width<=44&&consentBox.height>=18,
+    'PREVIEW_CONSENT_TOUCH_BOX_INVALID');
+  const saveBox=el('team-manual-save').getBoundingClientRect();
+  check(saveBox.width>=44&&saveBox.height>=44,'PREVIEW_BUTTON_TOO_SMALL');
   check(el('team-manual-save').disabled&&el('team-manual-inspect').disabled,
     'PREVIEW_NOT_LOGIN_GATED');
   check(el('team-manual-items').children.length===0,'PREVIEW_AUTO_IMPORT');
