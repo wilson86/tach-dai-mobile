@@ -109,12 +109,16 @@ async function chromeProof(bin,profile,url){
   // The second proof must use a genuinely closed/reopened Chrome profile.
   // Retaining a SingletonLock means another test-owned process can still
   // hold it, so never claim independent browser restart.
+  let lockReleased=false;
   for(let n=0;n<20;n++){
    try{await fsp.lstat(path.join(profile,'SingletonLock'));}
-   catch(e){if(e.code==='ENOENT')return;throw e;}
+   catch(e){
+    if(e.code==='ENOENT'){lockReleased=true;break;}
+    throw e;
+   }
    await sleep(150);
   }
-  throw Error('CHROME_PROFILE_LOCK_NOT_RELEASED');
+  if(!lockReleased)throw Error('CHROME_PROFILE_LOCK_NOT_RELEASED');
  }
 }
 async function main(){
