@@ -147,7 +147,7 @@ async function main(){
   release_readiness:'BLOCKED',real_money_ready:false,real_money_post_count:0,
   synthetic_draft_post_count:0,draft_post_attempts:0,replay_count:0,
   forged_feed_deliveries:0,auth_logins:0,denied_logins:0,
-  verified_session_gets:0,
+  verified_session_gets:0,receipt_inspections:0,
   auth_logouts:0,proofs:[]};
  let server=null,profileRoot=null;
  try{
@@ -231,6 +231,25 @@ async function main(){
       report.verified_session_gets++;
       send(res,200,{server_verified:true,membership_active:true,
        user_id:'fake_operator_a',workspace_id:'group_a',role:'operator'});return;
+    }
+    if(req.method==='POST'&&pathname==='/v1/recovery/receipts/inspect'){
+     let input;try{input=await body(req)}catch(_){send(res,400,{error:'AUTH_JSON_INVALID'});return}
+     const original=input&&Array.isArray(input.quarantined)?input.quarantined:[];
+     if(input?.explicit_consent!==true||original.length!==1||
+        !/^draft_[a-f0-9]{32}$/.test(original[0]?.id||'')||
+        original[0]?.status!=='QUARANTINED'||
+        original[0]?.auto_retry!==false||
+        original[0]?.scope?.workspace_id!=='group_a'||
+        original[0]?.scope?.partner_id!=='fake_partner_1'||
+        original[0]?.payload?.synthetic!==true){
+       send(res,422,{error:'TEAM_RECOVERY_QUARANTINE_REQUIRED'});return;
+     }
+     report.receipt_inspections++;
+     // A locally encrypted unsent fake draft has no authoritative receipt.
+     // No SQL write or fake append occurs in this read-only test route.
+     send(res,200,{status:'REVIEW_ONLY',auto_send_enabled:false,
+       all_receipts_verified:false,items:[{id:original[0].id,
+         classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',auto_retry:false}]});return;
     }
     if(req.method==='POST'&&pathname==='/v1/scopes/drafts'){
      let data;try{data=await body(req)}catch(_){send(res,400,{error:'AUTH_JSON_INVALID'});return}
@@ -325,6 +344,7 @@ async function main(){
   // response case legitimately replays a key, without a second event.
   if(report.auth_logins!==5||report.denied_logins!==1||
      report.auth_logouts!==5||report.verified_session_gets<5||
+     report.receipt_inspections!==1||
      report.synthetic_draft_post_count!==3||
      report.draft_post_attempts!==4||report.replay_count!==1||
      report.forged_feed_deliveries!==1||report.real_money_post_count!==0)

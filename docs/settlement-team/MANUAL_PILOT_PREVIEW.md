@@ -36,3 +36,23 @@ physical Android storage/restart/eviction validation, backup restoration,
 the approved independent HIOSKT 65-case money oracle and owner/security
 signoff. `GROUP_APP_READY=NO`; `REAL_MONEY_READY=NO`;
 `RELEASE_READINESS=BLOCKED`; no deployment/merge.
+
+## Authenticated server receipt check (fake-only, default OFF)
+
+The separate manual preview now exposes a **third explicit button** that
+performs a fresh recovery-password and checkbox-consent check, uses the
+original quarantined draft (never a new idempotency key), and asks the
+current authenticated actor's server to inspect immutable receipts. The
+browser transport is `inspectRecoveryReceipts` and the server route
+`POST /v1/recovery/receipts/inspect` is OFF unless separately enabled on
+an isolated synthetic HTTP composition with its own tenant-scoped read-only
+repository. Although the HTTP method is POST to carry bounded evidence, it
+**must not** execute a database write, append a new draft or auto retry.
+
+Only `MATCHED_SERVER_RECEIPT` or `UNVERIFIED_NOT_SAFE_TO_RETRY` and the
+original ID are rendered. MATCHED is **not** a payout/settlement. Unknown
+means never resend automatically. UI also clears previous actor results on
+logout. Disposable native Chrome CI proves a manually backed-up unsent
+fake draft remains UNKNOWN after a separate process restart, and checks
+that a missing consent is rejected before the server receives any request.
+No live network service or external HTTPS endpoint was deployed.

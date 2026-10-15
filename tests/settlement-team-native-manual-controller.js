@@ -62,6 +62,22 @@ async function main(){
    const hit=nodes[0].textContent.match(/draft_[a-f0-9]{32}/);
    check(hit,'PREVIEW_RECOVERED_ID_MISSING');original_id=hit[0];
    check(el('team-drafts').children.length===0,'PREVIEW_RECOVERY_AUTOSENT');
+   // Server receipt inspection is a SECOND explicit human action requiring
+   // fresh consent, recovery secret and authenticated server read.
+   check(!el('team-manual-review').disabled,'MANUAL_REVIEW_DISABLED');
+   el('team-manual-secret').value=secret;
+   el('team-manual-review').click();
+   await wait(()=>el('team-manual-notice').textContent.includes('TEAM_MANUAL_UI_CONSENT_REQUIRED'),
+     'MANUAL_REVIEW_WITHOUT_CONSENT');
+   el('team-manual-secret').value=secret;
+   el('team-manual-consent').checked=true;
+   el('team-manual-review').click();
+   await wait(()=>el('team-manual-notice').textContent.includes('KHÔNG an toàn để tự gửi lại'),
+     'MANUAL_UNKNOWN_RECEIPT_NOT_QUARANTINED');
+   check(el('team-manual-items').children.length===1&&
+     el('team-manual-items').children[0].textContent.includes('UNVERIFIED_NOT_SAFE_TO_RETRY'),
+     'MANUAL_FORGED_SERVER_RECEIPT_SHOWN');
+   check(el('team-drafts').children.length===0,'MANUAL_REVIEW_IMPORTED_DRAFT');
   }
   check(el('team-manual-secret').value===''&&!el('team-manual-consent').checked,
     'PREVIEW_SECRET_OR_CONSENT_RETAINED');
