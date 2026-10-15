@@ -130,17 +130,19 @@ async function main(){
  const report={source_sha:sha,status:'BLOCKED',native_browser_qa:'NOT_PROVEN',
  real_money_ready:false,release_readiness:'BLOCKED',pwa_enabled:false,
  financial_post_count:0,stages:[]};
- let server=null,temp=null;
+ let server=null,temp=null,blockedHttpMethods=0;
  try{
   const bin=browser();
   report.browser_version=(await run(bin,['--version'],8000)).trim();
   temp=await fsp.mkdtemp(path.join(process.env.RUNNER_TEMP,'kts-native-idb-'));
   const profile=path.join(temp,'test-profile');
   server=http.createServer((req,res)=>{
-   if(req.method!=='GET'){res.writeHead(405);res.end();return}
+   if(req.method!=='GET'){blockedHttpMethods++;res.writeHead(405);res.end();return}
    const key=new URL(req.url,'http://localhost').pathname;
    if(key==='/proof'){
-    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
+    res.writeHead(200,{'Content-Type':'text/html; charset=utf-8',
+     'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
+     'Content-Security-Policy':"default-src 'none'; script-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'"});
     res.end(proofHtml);return
    }
    if(!Object.prototype.hasOwnProperty.call(routes,key)){res.writeHead(404);res.end();return}
@@ -159,10 +161,15 @@ async function main(){
     throw Error('NATIVE_PROOF_INVALID_'+stage+'_'+String(obj.code||'NONE'));
    report.stages.push({stage,status:'PASS'});
   }
+  // Proof comes from the actual GET-only server's request counter, not from
+  // a hardcoded "zero" field in the artifact.
+  report.financial_post_count=blockedHttpMethods;
+  if(blockedHttpMethods!==0)throw Error('BROWSER_UNEXPECTED_HTTP_METHOD');
   report.status='PASS_SYNTHETIC_NATIVE_CHROME';
   report.native_browser_qa='PASS_CI_RESTART';
  }catch(e){report.error_code=String(e.message||e).slice(0,140)}
  finally{
+  report.financial_post_count=blockedHttpMethods;
   if(server)await new Promise(ok=>server.close(ok));
   if(temp)await fsp.rm(temp,{recursive:true,force:true});
   report.owned_profile_cleanup='COMPLETE';
