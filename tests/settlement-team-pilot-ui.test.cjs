@@ -20,7 +20,7 @@ function element(){
 }
 function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
  syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
- pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null}={}){
+ pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null,reviewGate=null,reviewNoReceipt=false}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
@@ -61,7 +61,8 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
       ...(reviewState==='PENDING_REVIEW'?{submitted_by:'fake_operator'}:{}),
       ...(reviewState==='REVIEWED'?{submitted_by:'fake_operator',reviewed_by:'fake_checker'}:{})}};},
    async reviewScope(action,selected,revision,options={}){
-     calls.push('reviewScope');let attempt=state.review_attempts.find(
+     calls.push('reviewScope');if(reviewGate)await reviewGate();
+     let attempt=state.review_attempts.find(
        x=>x.action===action&&x.expected_revision===revision);
      if(!attempt){
        if(options.retryOnly)throw Error('RETRY_WITHOUT_INTENT');
@@ -70,7 +71,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      }
      const choice=reviewOutcomes[Math.min(calls.filter(x=>x==='reviewScope').length-1,reviewOutcomes.length-1)];
      attempt.status=choice;
-     if(choice==='SYNCED')attempt.server_result={event_id:'event_review'};
+     if(choice==='SYNCED'&&!reviewNoReceipt)attempt.server_result={event_id:'event_review'};
      notify();return {...attempt};
    },
    async pullChanges(){
@@ -579,5 +580,45 @@ test('delayed reconnect never mixes original users change feed into next session
  gate.resume();await tick();await tick();
  assert.equal(h.els['team-changes'].children.length,0);
  assert.match(h.els['team-notice'].textContent,/phiên đã thay đổi/);
+ h.mounted.dispose();
+});
+
+test('delayed review result never confirms previous session after actor changes',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+  reviewGate:()=>gate.promise});
+ h.win.confirm=()=>true;
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.els['team-submit-review'].fire('click');await tick();await tick();
+ assert.equal(h.calls.includes('reviewScope'),true);
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
+ assert.match(h.els['team-notice'].textContent,/phiên hoặc phạm vi thay đổi/);
+ h.mounted.dispose();
+});
+test('review response after fake partner selection ABA does not show confirmed receipt',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+   reviewGate:()=>gate.promise});
+ h.win.confirm=()=>true;
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.els['team-submit-review'].fire('click');await tick();await tick();
+ const partner=h.els['team-partner'].value;
+ h.els['team-partner'].value='fake_partner_2';h.els['team-partner'].fire('input');
+ h.els['team-partner'].value=partner;h.els['team-partner'].fire('input');
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
+ h.mounted.dispose();
+});
+test('injected successful review without immutable event ID never displays verified completion',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true,reviewNoReceipt:true});
+ h.win.confirm=()=>true;
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.els['team-submit-review'].fire('click');await tick();await tick();
+ assert.match(h.els['team-notice'].textContent,/thiếu biên nhận/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
  h.mounted.dispose();
 });
