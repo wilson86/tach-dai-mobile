@@ -142,6 +142,8 @@ async function main(){
  if(process.env.GITHUB_ACTIONS!=='true'||process.platform!=='linux'||
     !process.env.RUNNER_TEMP||!/^[a-f0-9]{40}$/.test(sha||'')||!evidence)
    throw Error('PILOT_CI_NOT_AUTHORIZED');
+ const verifiedHead=(await run('git',['rev-parse','HEAD'],8000)).trim();
+ if(verifiedHead!==sha)throw Error('PILOT_CHECKOUT_SHA_MISMATCH');
  await fsp.mkdir(evidence,{recursive:true,mode:0o700});
  const report={source_sha:sha,status:'BLOCKED',pilot_ui_browser:'NOT_PROVEN',
   release_readiness:'BLOCKED',real_money_ready:false,real_money_post_count:0,

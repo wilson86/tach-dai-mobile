@@ -128,6 +128,8 @@ async function main(){
  if(process.env.GITHUB_ACTIONS!=='true'||process.platform!=='linux'||
  !process.env.RUNNER_TEMP||!evidence||!/^[a-f0-9]{40}$/.test(sha||''))
  throw Error('NATIVE_TEST_ENV_NOT_AUTHORIZED');
+ const verifiedHead=(await run('git',['rev-parse','HEAD'],8000)).trim();
+ if(verifiedHead!==sha)throw Error('NATIVE_CHECKOUT_SHA_MISMATCH');
  await fsp.mkdir(evidence,{recursive:true,mode:0o700});
  const report={source_sha:sha,status:'BLOCKED',native_browser_qa:'NOT_PROVEN',
  real_money_ready:false,release_readiness:'BLOCKED',pwa_enabled:false,

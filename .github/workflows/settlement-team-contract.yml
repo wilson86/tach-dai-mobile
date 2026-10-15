@@ -37,6 +37,8 @@ jobs:
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Node contract and schema source tests (synthetic only)
         run: |
           node --test tests/settlement-team-*.test.cjs tests/settlement-sync-contract.test.cjs
@@ -85,6 +87,8 @@ jobs:
       PGDATABASE: team_contract_test
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Apply isolated schema to disposable synthetic PostgreSQL
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/001_team_ledger.sql
       - name: Apply draft-only transactional SQL function in isolated database
@@ -119,6 +123,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Prove native Chrome ciphertext storage and browser process restart
         env:
           KTS_NATIVE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -138,6 +144,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Verify actual pilot UI against bounded same-origin synthetic HTTP fixture in real Chrome
         env:
           KTS_PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
