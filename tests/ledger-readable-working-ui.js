@@ -81,7 +81,7 @@ async function main(){
  const last=groups()[0].children[3].children[0];last.checked=true;last.events.change();
  await p.cutSelectedOutput();
  const previous=p.input.value;
- assert.ok(previous.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\\n"));
+ assert.ok(previous.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"));
  const key=p.parseExactOutputLedger(previous).app==="tach-dai-mobile"?
    "tachDaiMobileExactOutputLedgerV1":"tachDaiNgangExactOutputLedgerV1";
  assert.equal(storage.has(key),true);
