@@ -12,7 +12,9 @@ function make(server){
  const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
   calls.push({url,options});
   const result=await server(url,options);
-  return {status:result.status||200,ok:(result.status||200)===200,
+  // "REVIEW_ONLY" is a business status, NOT an HTTP status code.
+  const httpStatus=Number.isInteger(result.status)?result.status:200;
+  return {status:httpStatus,ok:httpStatus===200,
    async json(){return result.body||result;}};
  }});
  client.setSessionToken(token,'group_a');
