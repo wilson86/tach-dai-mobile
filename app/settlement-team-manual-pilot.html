@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'">
+<title>KTS — Pilot sao lưu thủ công, dữ liệu giả</title>
+<link rel="stylesheet" href="./settlement-team-pilot.css">
+<script src="./settlement-team-review-audit.js" defer></script>
+<script src="./settlement-team-sync-client.js" defer></script>
+<script src="./settlement-team-pilot-ui.js" defer></script>
+<script src="./settlement-team-recovery-v0.js" defer></script>
+<script src="./settlement-team-recovery-idb-v0.js" defer></script>
+<script src="./settlement-team-manual-checkpoint-v0.js" defer></script>
+<script src="./settlement-team-manual-ui.js" defer></script>
+<script src="./settlement-team-manual-start.js" defer></script>
+</head>
+<body><main>
+<header><div class="badge">SYNTHETIC ONLY — CHƯA ĐƯỢC DÙNG TIỀN THẬT</div>
+<h1>KTS Settlement — Pilot sao lưu thử nghiệm</h1>
+<p>Trang thử nghiệm riêng, không kết nối hệ thống KTS đang chạy. Không nhập dữ liệu khách hàng, thông tin cược hay tiền thật.</p>
+<p class="danger">Đã kiểm thử pilot HTTPS hai thiết bị bằng dữ liệu giả (SHA 718a84d, endpoint đã gỡ sau thử nghiệm). MEMORY_ONLY có thể mất khi tải lại; chưa được phép tính tiền thật.</p></header>
+<section><h2>Đăng nhập giả lập</h2>
+<form id="team-login" autocomplete="off">
+<label>Tài khoản giả <input id="team-subject" required maxlength="128" autocomplete="off"></label>
+<label>Workspace giả <input id="team-workspace" required maxlength="128" value="group_a" autocomplete="off"></label>
+<label>Mật khẩu pilot <input id="team-password" type="password" required autocomplete="off"></label>
+<button type="submit">Đăng nhập</button></form>
+<p id="team-context" role="status">Chưa đăng nhập</p>
+<button id="team-logout" type="button" disabled>Đăng xuất</button></section>
+<section><h2>Tạo DRAFT giả lập</h2>
+<p>Không có trường nhập tiền hoặc tin khách hàng. Chỉ mã fake_, demo_, synthetic_.</p>
+<label>Mã đối tác giả <input id="team-partner" value="fake_partner_1" required maxlength="72"></label>
+<label>Ngày <input id="team-date" type="date" required></label>
+<label>Miền <select id="team-region"><option value="mn">MN</option><option value="mt">MT</option><option value="mb">MB</option></select></label>
+<div class="actions">
+<button id="team-create" type="button" disabled>Tạo DRAFT giả</button>
+<button id="team-sync" type="button" disabled>Gửi các DRAFT PENDING</button>
+<button id="team-reconnect" type="button" disabled>Kết nối lại</button></div>
+<p class="danger" id="team-warning" role="alert">MEMORY_ONLY — chưa có lưu nháp bền vững.</p>
+<ul id="team-drafts" aria-label="Trạng thái bản nháp"></ul></section>
+<section><h2>Đọc máy chủ thử nghiệm</h2>
+<div class="actions">
+<button id="team-read" type="button" disabled>Đọc scope</button>
+<button id="team-pull" type="button" disabled>Đọc trang change feed tiếp theo</button></div>
+<p id="team-feed-progress" role="status">Chưa xác minh đã đọc hết các trang. MEMORY_ONLY, không phải toàn bộ lịch sử.</p>
+<p id="team-review-readonly" role="status">CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.</p>
+<p>Trạng thái máy chủ: DRAFT → PENDING_REVIEW → REVIEWED → CLOSED.
+Chức năng gửi/duyệt chỉ được bật bởi người vận hành pilot synthetic có phê duyệt;
+không có chốt tiền, close hoặc reopen.</p>
+<div id="team-review-controls" class="actions" hidden>
+<button id="team-submit-review" type="button" disabled>Gửi duyệt giả lập</button>
+<button id="team-approve-review" type="button" disabled>Phê duyệt giả lập (người khác)</button></div>
+<ul id="team-review-attempts" aria-label="Trạng thái yêu cầu xét duyệt thử nghiệm"></ul>
+<p>Lịch sử xét duyệt (chỉ đọc): người gửi, người duyệt, thời điểm và revision từ máy chủ. Các trang đã đọc được cộng dồn tạm thời tối đa 500 sự kiện trong phiên; không phải toàn bộ lịch sử và không phải lưu trữ bền vững.</p>
+<ul id="team-review-audit" aria-label="Lịch sử xét duyệt xác minh"></ul>
+<ul id="team-changes" aria-label="Mã sự kiện change feed"></ul></section>
+<section id="team-manual-area" aria-label="Sao lưu và xem bản nháp mã hóa thủ công">
+<h2>SAO LƯU NHÁP GIẢ — THỦ CÔNG</h2>
+<p class="danger">CHỈ DỮ LIỆU GIẢ. Chỉ sao lưu khi chủ động nhấn nút; bản nháp gốc vẫn MEMORY_ONLY.
+Bản mã lưu trong trình duyệt KHÔNG bảo đảm tồn tại sau khi xóa dữ liệu hoặc mất thiết bị.
+Khôi phục chỉ để xem QUARANTINED, TUYỆT ĐỐI KHÔNG gửi lại giao dịch.</p>
+<label>Mật khẩu khôi phục riêng (ít nhất 16 ký tự, không dùng mật khẩu đăng nhập)
+<input id="team-manual-secret" type="password" minlength="16" maxlength="256" autocomplete="new-password"></label>
+<label><input id="team-manual-consent" type="checkbox">
+Tôi xác nhận chỉ dùng dữ liệu giả; hiểu bản sao lưu chưa được xác minh độ bền và không được tự gửi lại.</label>
+<div class="actions">
+<button id="team-manual-save" type="button" disabled>Sao lưu nháp PENDING có mã hóa (thủ công)</button>
+<button id="team-manual-inspect" type="button" disabled>Kiểm tra bản mã (không khôi phục vào hàng đợi)</button></div>
+<p id="team-manual-notice" role="status" aria-live="polite">Chưa thao tác. Không có sao lưu nền.</p>
+<ul id="team-manual-items" aria-label="Bản nháp QUARANTINED, chỉ xem mã gốc"></ul>
+<p>Không có nút gửi lại hoặc xóa bản mã. Mỗi lần phải xác thực lại tài khoản với máy chủ.
+Không cung cấp token, payload hoặc nội dung bản nháp ra màn hình.</p>
+</section>
+<section><h2>Thông báo</h2><p id="team-notice" aria-live="polite"></p>
+<p class="danger">Không dùng port 8787. Chỉ được truy cập HTTPS mạng riêng sau khi duyệt bảo mật. Chưa được triển khai sản xuất hoặc dùng tiền thật.</p>
+</section></main></body></html>
