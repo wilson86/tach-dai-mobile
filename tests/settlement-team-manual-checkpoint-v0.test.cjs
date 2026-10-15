@@ -146,3 +146,50 @@ test('no import or auto-send wiring into live pilot HTML, sync client or start s
    /settlement-team-manual-checkpoint-v0|KtsTeamSyntheticManualCheckpointV0/);
  }
 });
+
+test('original edit action and authoritative metadata are not silently discarded',async()=>{
+ for(const added of [
+  {action:'edit_draft'},{action:'approve_review'},
+  {server_result:{event_id:'fake_forged_receipt'}},
+  {server_revision:1},{auto_retry:true},
+  {session_token:'fake_nonsecret_token'},
+  {opaque_unverified_field:'fake'}
+ ]){
+  const h=setup();
+  h.state.drafts[0]={...row(),...added};
+  await assert.rejects(h.make().save({passphrase:PASS,explicitConsent:true}),
+   /TEAM_RECOVERY_DRAFT_INVALID/);
+  assert.equal(h.map.size,0);
+  assert.equal(h.calls.includes('cas'),false);
+ }
+});
+test('voluntary checkpoint accepts original pending transient error without pretending receipt',async()=>{
+ const h=setup();
+ h.state.drafts[0].error='SYNC_DRAFT_RECEIPT_UNCERTAIN';
+ await h.make().save({passphrase:PASS,explicitConsent:true});
+ const r=await h.make().inspect({passphrase:PASS,explicitConsent:true});
+ assert.equal(r.status,'QUARANTINED');
+ assert.equal(r.items[0].original_status,'PENDING');
+ assert.equal(r.items[0].auto_retry,false);
+ assert.equal('error' in r.items[0],false);
+});
+test('ambiguous storage success followed by session drift preserves ciphertext for review',async()=>{
+ const h=setup();
+ const alteredStore={
+  ...h.store,
+  async writeIfAbsent(k,v){
+   const result=await h.store.writeIfAbsent(k,v);
+   h.state.session_epoch++;
+   return result;
+  }
+ };
+ const v=createSyntheticManualCheckpoint({sync:h.sync,store:alteredStore,
+  verifyActor:h.verifyActor,cryptoProvider:webcrypto,syntheticOnly:true});
+ await assert.rejects(v.save({passphrase:PASS,explicitConsent:true}),
+  /TEAM_MANUAL_CHECKPOINT_SESSION_CHANGED/);
+ assert.equal(h.map.size,1);
+ assert.equal([...h.map.values()][0].includes('fake sensitive backup content'),false);
+ // A second save cannot overwrite ambiguous encrypted evidence.
+ await assert.rejects(h.make().save({passphrase:PASS,explicitConsent:true}),
+  /TEAM_MANUAL_CHECKPOINT_ALREADY_EXISTS/);
+});
