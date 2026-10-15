@@ -293,3 +293,41 @@ This complements the repository's active database membership recheck *inside*
 the transaction. Adversarial tests specifically rotate credentials between
 the SQL lookup and final review; there is still no HTTP route, money write,
 browser artifact or release authorization.
+
+## Manual checkpoint of the actual volatile sync-client queue — DEFAULT OFF
+
+`app/settlement-team-manual-checkpoint-v0.js` accepts a read-only
+`sync.snapshot()` from the actual draft sync client, plus a separate,
+fresh **server-verified** synthetic actor callback, independent recovery
+passphrase, and an injected ciphertext-only store. It never automatically
+runs or imports saved data back into a sendable draft queue. Only an
+**explicitly consented** save or inspect may touch encrypted storage.
+It preserves the original draft ID and expected revision, including a
+previously uncertain 503 receipt, and rejects unsupported write actions
+and unrecognized authoritative fields **rather than silently dropping
+them**. Session generation, original queued bytes, actor membership and
+role are reverified around asynchronous encryption and storage. A
+changed session before write stops any write; if ambiguity occurs after a
+write, the ciphertext is **preserved** for manual forensic recovery.
+`ENCRYPTED_ADAPTER_ACK` means only read-back confirmed, with
+`durability=UNVERIFIED`. A restored backup is always `QUARANTINED`
+and requires fresh **read-only original server receipt reconciliation**
+and a human decision; zero automatic financial retries.
+
+The disposable GitHub Chrome job now uses a **separate actual native
+IndexedDB profile** to prove `manual-save` in one browser process and
+`manual-restore` in a second, alongside the older cryptography-only
+stages. Unit tests additionally exercise the actual `createSyncClient`
+pending queue rather than relying only on mocked `snapshot()` objects.
+These are technical candidate proofs, not a live PWA/storage rollout.
+
+**Crucial remaining implementation gate:** the current pilot has **no
+approved real server identity verifier in the browser** and does not
+load this module. Production must NEVER substitute the form's workspace
+name, browser session state or the synthetic CI callback for that
+independent server verification. A source-pinned approved private HTTPS
+physical Android pilot and server receipt read-only endpoint are needed
+before exposing a manual backup UI. No user-facing offline durability,
+phone power-loss/eviction, automated recovery or financial release is
+claimed. `GROUP_APP_READY=NO`, `REAL_MONEY_READY=NO`,
+`RELEASE_READINESS=BLOCKED`.
