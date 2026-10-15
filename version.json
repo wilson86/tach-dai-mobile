@@ -1,6 +1,6 @@
 {
-  "version": "2.0.21",
-  "updated": "2026-10-05",
-  "notes": "Fail closed when the same betting selector is repeated for one number group without a new number group; e.g. 322 b5n b30n is rejected. Existing mixed selectors such as b + da remain valid; business engine 6ce6 unchanged.",
-  "business_engine_sha256": "6ce6fca5adbaaf7604e21ac91e0fcb7759201b53afd0d7d1d5ef2a9bf546837c"
+  "version": "2.0.30",
+  "updated": "2026-10-15",
+  "notes": "Human-readable source ledger display with row Copy/Cut, raw-original audit and fail-closed isolated exact-row persistence; no engine/money change.",
+  "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb"
 }

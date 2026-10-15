@@ -271,36 +271,32 @@ const selectFirstVisibleOutput = () => {
   ui.output.selectionEnd = end === -1 ? ui.output.value.length : end;
 };
 
-// Cut 1/3: tin gốc vẫn còn nguyên.
+// A single derived DX row is retained in the explicit lossless ledger.
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstLines[0]);
-assert.equal(ui.input.value, initialInput);
-assert.equal(ui.output.value, `${firstLines[1]}\n${firstLines[2]}\n${secondOutput}`);
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
+assert.equal(ui.output.value, `${firstLines.slice(1).join("\n")}\n${secondOutput}`);
 assert.equal(outputRecords().filter(record => record.alive).length, 5);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
-
-// Cut 2/3: tin gốc vẫn còn nguyên.
-selectFirstVisibleOutput();
-await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstLines[1]);
+rules.run();
+assert.equal(ui.output.value, `${firstLines.slice(1).join("\n")}\n${secondOutput}`);
+rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
-assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
-assert.equal(outputRecords().filter(record => record.alive).length, 4);
+assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 
-// Cut 3/3: source đầu mới bị xóa, source sau được remap.
-selectFirstVisibleOutput();
+// Selecting the full source-equivalent group is executable and removes only it.
+ui.output.selectionStart = 0;
+ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(rules.clipboard.text, firstLines[2]);
 assert.equal(ui.input.value, "3d 64 51 dx 5n");
 assert.equal(ui.output.value, secondOutput);
 assert.equal(outputRecords().length, 3);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
 
-// Undo bước cut cuối phải khôi phục source, output và mapping trước CUT.
+// Undo restores the complete source/output bijection.
 rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
-assert.equal(ui.output.value, `${firstLines[2]}\n${secondOutput}`);
+assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1, 2, 2, 2]);
 
 // Cut toàn bộ 3 output và Undo phải quay về đầy đủ sáu output records.
@@ -315,15 +311,17 @@ assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 assert.equal(outputRecords().length, 6);
 
-// Nguồn có 2 output: CUT một phần vẫn giữ nguyên source.
+// A single station-derived DD row uses the lossless ledger, then the last
+// remaining row can still be cut normally.
 ui.input.value = "2d 22 10 dd 5n";
 rules.run();
 assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n");
 selectFirstVisibleOutput();
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "2d 22 10 dd 5n");
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
 assert.equal(ui.output.value, "qn 22 10 dd 5n");
-selectFirstVisibleOutput();
+ui.output.selectionStart = 0;
+ui.output.selectionEnd = ui.output.value.length;
 await rules.cutSelectedOutput();
 assert.equal(ui.input.value, "");
 assert.equal(ui.output.value, "");
@@ -337,6 +335,53 @@ ui.input.value = "3d 22 22 dx 5n";
 rules.run();
 assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
 assert.match(ui.output.value, /trùng số 22/);
+
+  // PWA direct-UI regression: this path must never depend on Router bridge.
+  ui.region.value = "mn";
+  ui.date.value = "2026-10-13";
+  ui.today.checked = false;
+  const separatorMessage = "2d. 52. 852. B10n.\n--//-----//--\n3d. 43. 83.b 10n";
+  ui.input.value = separatorMessage;
+  rules.run();
+  const separatorOutput = ui.output.value;
+  assert.ok(separatorOutput.length > 0 && !separatorOutput.includes("PHÁT HIỆN TIN SAI"));
+  assert.ok(!separatorOutput.includes("--//-----//--"));
+  assert.deepEqual(Array.from(new Set(rules.getOutputRecords().map(r => r.sourceLine))), [1, 3]);
+
+  // A separator is not an output row and cannot change money allocation.
+  ui.input.value = "2d. 52. 852. B10n.\n3d. 43. 83.b 10n";
+  rules.run();
+  assert.equal(ui.output.value, separatorOutput);
+
+  // Blank physical lines retain their original source spans even in Ngang.
+  ui.input.value = "2d 52 b10n\n\n--//-----//--\n3d 43 b10n";
+  rules.run();
+  assert.deepEqual(Array.from(new Set(rules.getOutputRecords().map(r => r.sourceLine))), [1, 4]);
+
+  // An all-separator input is HOLD/EMPTY, not successful empty output.
+  ui.input.value = "----\n////\n————";
+  rules.run();
+  assert.equal(ui.output.value, "");
+  assert.equal(rules.getOutputRecords().length, 0);
+
+  // Any mixed or unrecognized text is still an atomic parser error.
+  ui.input.value = "2d 52 b10n\n--//oops//--";
+  rules.run();
+  assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
+  assert.match(ui.output.value, /Dòng 2:/);
+  assert.equal(rules.getOutputRecords().length, 0);
+
+  // CUT all preserves clipboard/undo contract and removes orphan separators.
+  ui.input.value = separatorMessage;
+  rules.run();
+  ui.output.selectionStart = 0;
+  ui.output.selectionEnd = ui.output.value.length;
+  await rules.cutSelectedOutput();
+  assert.equal(ui.input.value, "");
+  assert.equal(ui.output.value, "");
+  rules.triggerUndo();
+  assert.equal(ui.input.value, separatorMessage);
+  assert.equal(ui.output.value, separatorOutput);
 
 // Standalone controls must exist without relying on the Unified iframe injector.
 assert.match(html, /id="selectAllInputBtn"/);

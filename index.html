@@ -40,6 +40,27 @@
   .result-card.ok{border-color:#a6e3c2;background:var(--okbg)}
   .hint{font-size:12px;color:var(--muted);line-height:1.4;margin-top:8px}
   .pill{display:inline-flex;align-items:center;border-radius:999px;padding:3px 8px;background:#eef2f7;font-size:12px;font-weight:700;margin-right:4px}
+  .result-groups{display:grid;gap:10px;margin:8px 0;user-select:none;-webkit-user-select:none}
+  .result-groups-summary{font-size:12px;font-weight:750;color:#475467;text-align:right;margin:4px 0 8px}
+  .result-group{border:1px solid #d7dde7;background:#fff;border-radius:12px;overflow:hidden}
+  .result-group-header{display:flex;gap:10px;align-items:center;background:#eef3fb;padding:11px;font-weight:800;font-size:13px}
+  .result-group-title{min-width:0;overflow-wrap:anywhere}
+  .result-group-row{display:flex;gap:10px;align-items:flex-start;border-top:1px solid #e8edf4;padding:13px 11px;font:15px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+  .result-group-row.checked{background:#eaf2ff}
+  .result-group input[type=checkbox]{width:23px;height:23px;flex:0 0 23px;accent-color:#0b57d0;margin:0;cursor:pointer}
+  .result-group label{cursor:pointer}
+  .result-group-row span{min-width:0}
+  #resultGroups:empty{display:none}
+
+  .ledger-work{background:#f3f8ff;border:1px solid #c1d4ef;border-radius:11px;padding:10px;margin:4px 0}
+  .ledger-work-title{font-size:15px;font-weight:800;margin-bottom:6px}
+  .ledger-work-note{font-size:12px;line-height:1.5;color:#52647b;margin-bottom:8px}
+  .ledger-work-list{border:1px solid #dbe5f3;border-radius:9px;overflow:hidden}
+  .ledger-work-row{display:flex;gap:9px;align-items:flex-start;padding:11px;background:#fff;border-bottom:1px solid #edf0f5;font:14px/1.5 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+  .ledger-work-row:last-child{border:0}.ledger-work-row.selected{background:#e8f0ff}
+  .ledger-work-row input{height:23px;width:23px;flex-shrink:0;accent-color:#0b57d0;margin:0}
+  .ledger-original{font-size:12px;color:#48596f;margin-top:9px}
+  .ledger-original pre{background:#fff;white-space:pre-wrap;overflow-wrap:anywhere;padding:9px;border-radius:8px;user-select:text}
   @media (max-width:520px){
     .app{padding:8px 8px calc(18px + env(safe-area-inset-bottom))}
     .card{border-radius:12px;padding:10px}
@@ -68,7 +89,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.21</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.30</span></div>
 
   <div class="card">
     <div class="controls">
@@ -101,12 +122,26 @@
     <div class="label">Nhập tin / nguyên đoạn chat</div>
     <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
       placeholder="Dán tin hoặc đoạn chat vào đây..."></textarea>
+    <div id="ledgerWork" class="ledger-work" style="display:none">
+      <div class="ledger-work-title">Phần cược còn lại — đã tách</div>
+      <div class="ledger-work-note">Chọn dòng để Copy/Cắt. Đây là kết quả đã tách, không phải cú pháp tin khách; tin gốc được giữ riêng.</div>
+      <div id="ledgerWorkRows" class="ledger-work-list"></div>
+      <div class="actions">
+        <button id="ledgerWorkSelect" class="secondary" type="button">Chọn tất cả</button>
+        <button id="ledgerWorkCopy" class="secondary" type="button">Copy đã chọn</button>
+        <button id="ledgerWorkCut" class="secondary" type="button">Cắt đã chọn</button>
+      </div>
+      <details class="ledger-original"><summary>Xem tin gốc ban đầu</summary><pre id="ledgerWorkOrigin"></pre><button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button></details>
+    </div>
+
 
     <div class="actions">
       <button id="runBtn" class="primary">Kiểm tra + Tách</button>
       <button id="undoBtn" class="secondary">Hoàn tác</button>
       <button id="clearBtn" class="danger">Xóa</button>
       <button id="selectAllInputBtn" class="secondary">Chọn tất cả</button>
+      <button id="sourceCopyBtn" class="secondary">Copy nguồn</button>
+      <button id="sourceCutBtn" class="secondary">Cắt dòng nguồn</button>
     </div>
     <div id="status" class="status"></div>
     <div class="hint">Chat: bỏ ngày/giờ + tên người gửi; riêng <b>Vinh</b> xóa toàn bộ tin/block. Tên khác chỉ bỏ tên, giữ nội dung.</div>
@@ -114,6 +149,8 @@
 
   <div id="resultCard" class="card result-card">
     <div class="label">Kết quả</div>
+    <div id="resultGroupsSummary" class="result-groups-summary" aria-live="polite"></div>
+    <div id="resultGroups" class="result-groups" aria-label="Kết quả phân nhóm có ô chọn"></div>
     <textarea id="output" readonly spellcheck="false"></textarea>
     <div class="actions">
       <button id="cutBtn" class="secondary">Cắt phần chọn</button>
@@ -153,8 +190,59 @@ const inputEl=$("input"), outputEl=$("output"), runBtn=$("runBtn"), statusEl=$("
 const resultCard=$("resultCard");
 
 let undoStack=[];
-let outputRecords=[]; // [{sourceLine,text,alive}]
+let outputRecords=[]; // [{id,sourceLine,text,alive}]
 let lastOutputSelection={start:0,end:0};
+// A partial derived result is not always a valid customer message. Keep an
+// explicit local-only exact-output ledger rather than inventing a source that
+// would be parsed with different money semantics on the next Run.
+const EXACT_OUTPUT_LEDGER_PREFIX="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n";
+const EXACT_OUTPUT_LEDGER_STORAGE_KEY="tachDaiMobileExactOutputLedgerV1";
+const EXACT_OUTPUT_LEDGER_APP_ID="tach-dai-mobile";
+let workingLedger=null;
+function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
+function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
+function ledgerDate(){return String(dateEl.value||localDateISO());}
+function serializeExactOutputLedger(){
+  const origin=workingLedger?.origin||inputEl.value;
+  return EXACT_OUTPUT_LEDGER_PREFIX+JSON.stringify({
+    schema:"KTS_EXACT_OUTPUT_LEDGER_V1",app:EXACT_OUTPUT_LEDGER_APP_ID,
+    engine:engineSha(),region:regionEl.value,
+    date:ledgerDate(),origin,
+    rows:outputRecords.filter(r=>r.alive).map(r=>({id:r.id,sourceLine:r.sourceLine,
+      sourceGroupNo:r.sourceGroupNo||0,sourceGroupText:r.sourceGroupText||"",text:r.text}))
+  });
+}
+function parseExactOutputLedger(raw){
+  if(!raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX))return null;
+  try{
+    const ledger=JSON.parse(raw.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
+    if(ledger?.schema!=="KTS_EXACT_OUTPUT_LEDGER_V1"||
+       ledger.app!==EXACT_OUTPUT_LEDGER_APP_ID||ledger.engine!==engineSha()||
+      ledger.region!==regionEl.value||ledger.date!==ledgerDate()||!Array.isArray(ledger.rows)||
+      !ledger.rows.every(r=>typeof r.id==="string"&&typeof r.text==="string"&&Number.isInteger(r.sourceLine)))return false;
+    return ledger;
+  }catch(_){return false;}
+}
+function persistExactOutputLedger(){
+  try{
+    if(inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) localStorage.setItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY,inputEl.value);
+    else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
+  }catch(_){}
+}
+function restorePersistedExactOutputLedger(){
+  try{
+    const raw=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY)||"";
+    if(!raw)return;
+    if(parseExactOutputLedger(raw)) inputEl.value=raw;
+    else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
+  }catch(_){}
+}
+function announceWorkingSource(){
+  // Same-origin Unified listens to this local event; no postMessage or polling
+  // is used to publish a programmatic Cut.
+  try{if(typeof window!=="undefined"&&typeof window.dispatchEvent==="function"&&typeof CustomEvent==="function")
+    window.dispatchEvent(new CustomEvent("kts:working-source",{detail:{schema:"KTS_WORKING_SOURCE_V1",token:window.__KTS_UNIFIED_FRAME_TOKEN__||"",value:inputEl.value}}));}catch(_){}
+}
 
 // v2.0.5: source lines dùng để đồng bộ Input <-> Kết quả.
 // Giữ mapping riêng để xóa 1 tin trong Input thì chỉ xóa KQ của tin đó,
@@ -219,6 +307,7 @@ function loadSettings(){
     if(typeof s.today==="boolean") todayEl.checked=s.today;
     if(s.date) dateEl.value=s.date;
   }catch(_){}
+  restorePersistedExactOutputLedger();
   updateUI();
 }
 
@@ -463,7 +552,18 @@ function parseBetPayloadAst(rest){
 }
 
 function validateBetPayload(rest){
-  parseBetPayloadAst(rest); return true;
+  // The generated engine owns the money contract (half-unit precision and
+  // safe-integer range).  Validate every recognized stake before any PWA
+  // materialization so an invalid allocation is a normal atomic rejection,
+  // never an uncaught exception or a consumer-specific acceptance.
+  parseBetPayloadAst(rest);
+  for(const {amount} of KTS_BUSINESS_ENGINE.extractStakeOccurrences(rest)){
+    const parsed=KTS_BUSINESS_ENGINE.parseMoney(amount);
+    // Zero does not have a settled wager semantics in the corpus.  Hold it
+    // before processing rather than reporting success with no wager rows.
+    if(parsed.halfUnits===0) throw new Error("SỐ TIỀN 0 CẦN XÁC MINH NGHIỆP VỤ");
+  }
+  return true;
   const toks=rest.split(/\s+/).filter(Boolean);
   if(!toks.length) throw new Error("thiếu nội dung cược");
   let i=0;
@@ -927,10 +1027,15 @@ function processLine(line,region,stations){
   return out;
 }
 
+function isStandaloneSeparator(line){
+  // Match the Router bridge; separators are whole physical lines, never bet tokens.
+  return /^[\-—–_/\\|]{3,}$/u.test(String(line||"").trim());
+}
+
 function validateBatch(text,region,stations){
   const errors=[];
   text.split(/\r?\n/).forEach((raw,idx)=>{
-    raw=raw.trim(); if(!raw)return;
+    raw=raw.trim(); if(!raw || isStandaloneSeparator(raw))return;
     try{validateCheckOnlyLine(raw,region,stations);}
     catch(e){errors.push({line:idx+1,msg:e.message,raw});}
   });
@@ -943,7 +1048,8 @@ function snapshot(){
     status:statusEl.textContent,
     cls:statusEl.className,
     outputRecords:outputRecords.map(r=>({...r})),
-    sourceLines:lastSourceLines.slice()
+    sourceLines:lastSourceLines.slice(),
+    workingLedger:cloneLedger(workingLedger)
   });
   if(undoStack.length>30)undoStack.shift();
 }
@@ -958,18 +1064,241 @@ function selectLine(textarea,lineNo){
 function setStatus(text,type=""){
   statusEl.textContent=text;
   statusEl.className=`status ${type}`;
+  renderGroupedResults();
   resultCard.className=`card result-card ${type==="err"?"error":type==="ok"?"ok":""}`;
+  renderLedgerWork();
 }
 
 
+// View-only, source-line grouped checkbox selection. The authoritative wager
+// rows remain outputRecords and the legacy output textarea for clipboard/audit.
+const checkedResultRecordIndexes=new Set();
+let groupedResultReady=false;
+function checkedAliveRecordIndexes(){
+  return [...checkedResultRecordIndexes]
+    .filter(i=>Number.isInteger(i) && outputRecords[i] && outputRecords[i].alive)
+    .sort((a,b)=>a-b);
+}
+// Semantic wager groups are number+bet clauses, not entire physical chat
+// lines. Projection is strictly observational: reuse the existing processLine
+// for each source clause and annotate ONLY if concatenating those projections
+// reproduces the authoritative whole-line output byte-for-byte.
+function identifySemanticOutputGroups(line,region,stations,generated){
+  const normalized=normalizeInput(line).replace(/^(mn|mt|mb)\s+/u,"");
+  const m=normalized.match(/^(2dphu|2d|3d|4d)\s+(.+)$/u);
+  if(!m)return null;
+  const clauses=splitNumberGroups(m[2].trim());
+  if(clauses.length<2)return null;
+  const annotated=[];
+  try{
+    for(let n=0;n<clauses.length;n++){
+      const clause=clauses[n];
+      const outputs=processLine(`${m[1]} ${clause}`,region,stations);
+      if(!outputs.length)return null;
+      for(const text of outputs) annotated.push({
+        text,
+        sourceGroupNo:n+1,
+        sourceGroupText:`${m[1]} ${clause}`
+      });
+    }
+  }catch(_){return null;}
+  if(annotated.length!==generated.length || annotated.some((r,i)=>r.text!==generated[i]))
+    return null;
+  return annotated;
+}
+
+
+function renderLedgerWork(){
+  const panel=$("ledgerWork"),list=$("ledgerWorkRows");
+  if(!panel||!list||typeof list.replaceChildren!=="function")return;
+  const raw=String(inputEl.value||"");
+  const hasLedger=raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
+  inputEl.style.display=hasLedger?"none":"";
+  panel.style.display=hasLedger?"":"none";
+  // Raw-input action buttons are replaced by ledger row controls in this mode.
+  for(const id of ["sourceCopyBtn","sourceCutBtn","selectAllInputBtn"])$(id).style.display=hasLedger?"none":"";
+  if(!hasLedger)return;
+  const ledger=parseExactOutputLedger(raw);
+  list.replaceChildren();
+  if(!ledger){
+    const warning=document.createElement("div");
+    warning.className="ledger-work-note";
+    warning.textContent="Ledger không hợp lệ hoặc không khớp ứng dụng, ngày, miền hay engine. Không gửi dữ liệu này như tin khách.";
+    list.appendChild(warning);
+    $("ledgerWorkOrigin").textContent="";
+    $("ledgerCopyOriginal").disabled=true;
+    for(const id of ["ledgerWorkSelect","ledgerWorkCopy","ledgerWorkCut"])$(id).disabled=true;
+    return;
+  }
+  $("ledgerWorkOrigin").textContent=ledger.origin;
+  $("ledgerCopyOriginal").disabled=!ledger.origin;
+  const alive=outputRecords.filter(r=>r.alive);
+  const hydrated=alive.length===ledger.rows.length&&alive.every((r,i)=>
+    r.id===ledger.rows[i].id&&r.text===ledger.rows[i].text);
+  const view=hydrated?alive:ledger.rows;
+  for(const row of view){
+    const index=hydrated?outputRecords.findIndex(r=>r.alive&&r.id===row.id):-1;
+    const label=document.createElement("label");label.className="ledger-work-row";
+    const check=document.createElement("input");check.type="checkbox";check.disabled=index<0;
+    check.checked=index>=0&&checkedResultRecordIndexes.has(index);
+    if(check.checked)label.classList.add("selected");
+    check.setAttribute("aria-label","Chọn cược "+row.text);
+    check.addEventListener("change",()=>{
+      if(check.checked)checkedResultRecordIndexes.add(index);
+      else checkedResultRecordIndexes.delete(index);
+      renderGroupedResults();renderLedgerWork();
+    });
+    const text=document.createElement("span");text.textContent=row.text;
+    label.append(check,text);list.appendChild(label);
+  }
+  const selected=hydrated?checkedAliveRecordIndexes().length:0;
+  $("ledgerWorkSelect").disabled=!hydrated;
+  $("ledgerWorkCopy").disabled=selected===0;
+  $("ledgerWorkCut").disabled=selected===0;
+  $("ledgerWorkSelect").textContent=selected===view.length&&view.length?"Bỏ chọn tất cả":"Chọn tất cả";
+}
+
+async function copySourceView(){
+  if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
+    const selected=checkedAliveRecordIndexes();
+    const rows=selected.length?selected.map(i=>outputRecords[i].text):
+      outputRecords.filter(r=>r.alive).map(r=>r.text);
+    if(!rows.length){setStatus("Không có cược còn lại để copy.","err");return;}
+    const ok=await writeClipboardText(rows.join("\n"));
+    setStatus(ok?"Đã copy "+rows.length+" dòng cược còn lại":"Copy thất bại.",ok?"ok":"err");
+    return;
+  }
+  const a=inputEl.selectionStart??0,b=inputEl.selectionEnd??a;
+  const source=a<b?inputEl.value.slice(a,b):inputEl.value;
+  if(!source){setStatus("Không có tin nguồn để copy.","err");return;}
+  const ok=await writeClipboardText(source);
+  setStatus(ok?"Đã copy tin nguồn":"Copy tin nguồn thất bại.",ok?"ok":"err");
+}
+async function cutSelectedSourceLines(){
+  if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
+    await cutSelectedOutput();renderLedgerWork();return;
+  }
+  const text=inputEl.value;
+  const a=inputEl.selectionStart??0,b=inputEl.selectionEnd??a;
+  if(b<=a){setStatus("Bôi đen dòng tin nguồn cần Cắt hoặc dùng checkbox khi đã tách.","err");return;}
+  // Remove complete physical source lines, never arbitrary halves of amounts.
+  const start=text.lastIndexOf("\n",a-1)+1;
+  const found=text.indexOf("\n",b-1);
+  const lineEnd=found<0?text.length:found;
+  const next=found<0?text.length:found+1;
+  const picked=text.slice(start,lineEnd);
+  let remaining=text.slice(0,start)+text.slice(next);
+  if(!remaining.trim())remaining="";
+  if(!picked.trim()){setStatus("Chỉ chọn dòng cược có nội dung để Cắt.","err");return;}
+  if(!(await writeClipboardText(picked))){setStatus("Không thể copy dòng nguồn; chưa Cắt.","err");return;}
+  snapshot();
+  inputEl.value=remaining;
+  persistExactOutputLedger();
+  if(remaining.trim())run();
+  else{outputEl.value="";resetOutputRecords();setStatus("Đã cắt toàn bộ dòng nguồn","ok");}
+  announceWorkingSource();
+}
+
+async function copyLedgerWork(){
+  const selected=checkedAliveRecordIndexes();
+  if(!selected.length){setStatus("Hãy chọn dòng để Copy.","err");return;}
+  const copied=await writeClipboardText(selected.map(i=>outputRecords[i].text).join("\n"));
+  setStatus(copied?"Đã copy "+selected.length+" dòng còn lại":"Copy thất bại; không thay đổi dữ liệu.",copied?"ok":"err");
+}
+
+function renderGroupedResults(){
+  if(!groupedResultReady) return;
+  const list=$("resultGroups"),summary=$("resultGroupsSummary");
+  if(!list || typeof list.replaceChildren!=="function") return;
+  const visible=outputRecords.map((r,i)=>({...r,index:i})).filter(r=>r.alive);
+  const visibleIndices=new Set(visible.map(r=>r.index));
+  for(const index of checkedResultRecordIndexes)
+    if(!visibleIndices.has(index)) checkedResultRecordIndexes.delete(index);
+  const chosen=checkedAliveRecordIndexes();
+  const error=!visible.length && /^PHÁT HIỆN TIN SAI:/u.test(outputEl.value);
+  outputEl.style.display=error?"":"none";
+  list.style.display=error?"none":"";
+  summary.style.display=error?"none":"";
+  list.replaceChildren();
+  if(!error){
+    const groups=new Map();
+    for(const row of visible){
+      const key=`${row.sourceLine}:${row.sourceGroupNo||0}`;
+      if(!groups.has(key)) groups.set(key,[]);
+      groups.get(key).push(row);
+    }
+    let groupNo=0;
+    for(const records of groups.values()){
+      const lineNo=records[0].sourceLine;
+      groupNo++;
+      const section=document.createElement("section");section.className="result-group";
+      const header=document.createElement("label");header.className="result-group-header";
+      const all=document.createElement("input");all.type="checkbox";
+      all.setAttribute("aria-label",`Chọn cả nhóm ${groupNo}`);
+      all.checked=records.every(r=>checkedResultRecordIndexes.has(r.index));
+      all.indeterminate=!all.checked && records.some(r=>checkedResultRecordIndexes.has(r.index));
+      all.addEventListener("change",()=>{
+        for(const record of records){
+          if(all.checked)checkedResultRecordIndexes.add(record.index);
+          else checkedResultRecordIndexes.delete(record.index);
+        }
+        renderGroupedResults();
+      });
+      const source=String(records[0].sourceGroupText||lastSourceLines[lineNo-1]||"").slice(0,80);
+      const title=document.createElement("span");title.className="result-group-title";
+      title.textContent=`Nhóm ${groupNo} · Dòng ${lineNo} · ${records.length} kết quả${source?" · "+source:""}`;
+      header.append(all,title);section.appendChild(header);
+      for(const record of records){
+        const label=document.createElement("label");label.className="result-group-row";
+        if(checkedResultRecordIndexes.has(record.index)) label.classList.add("checked");
+        const checkbox=document.createElement("input");checkbox.type="checkbox";
+        checkbox.checked=checkedResultRecordIndexes.has(record.index);
+        checkbox.setAttribute("aria-label",`Chọn kết quả ${record.index+1}`);
+        checkbox.addEventListener("change",()=>{
+          if(checkbox.checked)checkedResultRecordIndexes.add(record.index);
+          else checkedResultRecordIndexes.delete(record.index);
+          renderGroupedResults();
+        });
+        const text=document.createElement("span");text.textContent=record.text;
+        label.append(checkbox,text);section.appendChild(label);
+      }
+      list.appendChild(section);
+    }
+    summary.textContent=visible.length?`Đã chọn ${chosen.length}/${visible.length} kết quả · ${groups.size} nhóm`:"Chưa có kết quả";
+  }
+  const cut=$("cutBtn");
+  if(cut){cut.disabled=chosen.length===0;cut.textContent=`Cắt đã chọn (${chosen.length})`;}
+  const all=$("selectAllOutputBtn");
+  if(all)all.textContent=visible.length&&chosen.length===visible.length?"Bỏ chọn tất cả":"Chọn tất cả";
+  renderLedgerWork();
+}
+function toggleAllGroupedResults(){
+  const visible=outputRecords.map((r,i)=>({...r,index:i})).filter(r=>r.alive);
+  const all=visible.length>0 && visible.every(r=>checkedResultRecordIndexes.has(r.index));
+  checkedResultRecordIndexes.clear();
+  if(!all)for(const record of visible)checkedResultRecordIndexes.add(record.index);
+  renderGroupedResults();
+}
+function initGroupedResults(){
+  const list=$("resultGroups"),summary=$("resultGroupsSummary");
+  if(!list || !summary || typeof list.replaceChildren!=="function")return;
+  groupedResultReady=true;
+  renderGroupedResults();
+  renderLedgerWork();
+}
+
 function resetOutputRecords(){
+  checkedResultRecordIndexes.clear();
   outputRecords=[];
   lastSourceLines=[];
   lastOutputSelection={start:0,end:0};
+  workingLedger=null;
 }
 
 function renderOutputRecords(){
   outputEl.value=outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n");
+  renderGroupedResults();
+  renderLedgerWork();
 }
 
 function currentPlainInputLines(){
@@ -977,7 +1306,7 @@ function currentPlainInputLines(){
   // Chat log cần đi qua preprocess đầy đủ bằng run().
   const raw=inputEl.value;
   if(looksLikeChatLog(raw)) return null;
-  return raw.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  return raw.split(/\r?\n/).map(x=>x.trim());
 }
 
 function mapPureDeletion(oldLines,newLines){
@@ -1022,6 +1351,7 @@ function syncPureInputDeletionNow(){
 
   // Giữ nguyên alive/dead của output các source còn lại.
   // Nhờ vậy các dòng đã Cut trước đó KHÔNG bị sinh lại.
+  checkedResultRecordIndexes.clear();
   outputRecords=outputRecords
     .filter(r=>oldToNew.has(r.sourceLine))
     .map(r=>({...r,sourceLine:oldToNew.get(r.sourceLine)}));
@@ -1050,6 +1380,7 @@ function scheduleFullInputSync(){
 }
 
 function syncAfterAnyInputEdit(){
+  if(!inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) persistExactOutputLedger();
   // Fast path: xóa nguyên dòng/tin -> KQ đổi ngay, không cần debounce.
   if(syncPureInputDeletionNow()) return;
 
@@ -1090,8 +1421,68 @@ function selectedAliveRecordIndexes(){
   return picked;
 }
 
+// If every output of a logical number-group has been cut, remove only that
+// number-group from the editable source **when** replay proves an exact
+// conservation match. Otherwise preserve the original full line (fail closed).
+// This never rewrites Telegram chat envelopes or station-specific text.
+function trimCompletedSemanticSourceGroups(){
+  if(looksLikeChatLog(inputEl.value)) return;
+  const rawLines=inputEl.value.split("\n");
+  const regions=resolveExplicitSourceRegion(inputEl.value);
+  if(regions.explicit) return;
+  const region=regionEl.value,stations=getSchedule(region,parseLocalDate(dateEl.value||localDateISO()));
+  let changed=false;
+  for(let lineIndex=0;lineIndex<rawLines.length;lineIndex++){
+    const sourceLine=lineIndex+1;
+    const lineRecords=outputRecords.filter(r=>r.sourceLine===sourceLine);
+    if(!lineRecords.length || lineRecords.some(r=>!r.sourceGroupNo||!r.sourceGroupText)) continue;
+    const original=normalizeInput(rawLines[lineIndex]);
+    const head=original.match(/^(2dphu|2d|3d|4d)\s+(.+)$/u);
+    if(!head)continue;
+    const originalClauses=splitNumberGroups(head[2]);
+    if(originalClauses.length<2)continue;
+    const groups=new Map();
+    for(const record of lineRecords){
+      if(!groups.has(record.sourceGroupNo))groups.set(record.sourceGroupNo,[]);
+      groups.get(record.sourceGroupNo).push(record);
+    }
+    if(groups.size!==originalClauses.length)continue;
+    if([...groups].some(([no,records])=>
+      no<1||no>originalClauses.length||
+      records.some(r=>r.sourceGroupText!==`${head[1]} ${originalClauses[no-1]}`)
+    ))continue;
+    const keep=[];
+    const keptOriginalNumbers=[];
+    let removed=false;
+    for(let n=1;n<=originalClauses.length;n++){
+      const records=groups.get(n);
+      if(!records) {removed=false;break;}
+      if(records.every(r=>!r.alive))removed=true;
+      else {keep.push(originalClauses[n-1]);keptOriginalNumbers.push(n);}
+    }
+    if(!removed||!keep.length)continue; // full-line deletion handled separately
+    const rewritten=`${head[1]} ${keep.join(" ")}`;
+    try{
+      validateCheckOnlyLine(rewritten,region,stations);
+      const expected=processLine(rewritten,region,stations);
+      const current=lineRecords.filter(r=>r.alive).map(r=>r.text);
+      if(expected.length!==current.length||expected.some((v,i)=>v!==current[i]))continue;
+    }catch(_){continue;}
+    rawLines[lineIndex]=rewritten;
+    lastSourceLines[lineIndex]=normalizeInput(rewritten);
+    outputRecords=outputRecords.filter(r=>r.sourceLine!==sourceLine||r.alive);
+    for(const record of outputRecords)if(record.sourceLine===sourceLine){
+      const newIndex=keptOriginalNumbers.indexOf(record.sourceGroupNo);
+      if(newIndex>=0)record.sourceGroupNo=newIndex+1;
+    }
+    changed=true;
+  }
+  if(changed)inputEl.value=rawLines.join("\n");
+}
+
 function deleteCompletedSourceLines(){
   if(!outputRecords.length) return;
+  trimCompletedSemanticSourceGroups();
 
   const grouped=new Map();
   outputRecords.forEach(r=>{
@@ -1108,11 +1499,12 @@ function deleteCompletedSourceLines(){
   const oldLines=inputEl.value.split("\n");
   const kept=[];
   const oldToNew=new Map();
+  const wagerStillAlive=outputRecords.some(r=>r.alive && !completed.has(r.sourceLine));
   let newNo=0;
 
   oldLines.forEach((line,idx)=>{
     const oldNo=idx+1;
-    if(completed.has(oldNo)) return;
+    if(completed.has(oldNo) || (!wagerStillAlive && (!line.trim() || isStandaloneSeparator(line)))) return;
     kept.push(line);
     newNo++;
     oldToNew.set(oldNo,newNo);
@@ -1145,26 +1537,79 @@ async function writeClipboardText(text){
   }
 }
 
+
+function cutOutputMatchesExecutableSource(){
+  const expected=outputRecords.filter(r=>r.alive).map(r=>r.text);
+  const raw=inputEl.value.trim();
+  if(!raw)return expected.length===0;
+  // Keep source-envelope provenance; refuse ambiguous transformations.
+  if(looksLikeChatLog(raw))return false;
+  try{
+    const explicit=resolveExplicitSourceRegion(raw);
+    const region=explicit.region||regionEl.value;
+    const stations=getSchedule(region,parseLocalDate(dateEl.value||localDateISO()));
+    const clean=explicit.text;
+    if(validateBatch(clean,region,stations).length)return false;
+    const generated=[];
+    for(const rawLine of clean.split(/\r?\n/)){
+      const line=rawLine.trim();
+      if(!line||isStandaloneSeparator(line))continue;
+      generated.push(...processLine(line,region,stations));
+    }
+    return generated.length===expected.length &&
+      generated.every((row,i)=>row===expected[i]);
+  }catch(_){return false;}
+}
+
+function restoreCutDraft(receipt){
+  inputEl.value=receipt.input;
+  outputEl.value=receipt.output;
+  outputRecords=receipt.outputRecords.map(r=>({...r}));
+  lastSourceLines=receipt.sourceLines.slice();
+  workingLedger=cloneLedger(receipt.workingLedger);
+  undoStack.pop();
+  renderOutputRecords();
+}
+
 async function cutSelectedOutput(){
   rememberOutputSelection();
-  const indexes=selectedAliveRecordIndexes();
+  const indexes=groupedResultReady?checkedAliveRecordIndexes():selectedAliveRecordIndexes();
   if(!indexes.length){
-    setStatus("Hãy bôi đen dòng kết quả cần cắt trước.","err");
+    setStatus(groupedResultReady?"Hãy đánh dấu checkbox kết quả cần cắt.":"Hãy bôi đen dòng kết quả cần cắt trước.","err");
     return;
   }
 
-  snapshot();
   const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
-  const copied=await writeClipboardText(selectedText);
-  if(!copied){
+  // Clipboard failure must be a true no-op, not a transient hidden mutation.
+  if(!(await writeClipboardText(selectedText))){
     setStatus("Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.","err");
     return;
   }
-
+  snapshot();
+  const receipt=undoStack[undoStack.length-1];
   const inputBefore=inputEl.value;
+  const wasExactLedger=inputBefore.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
-  deleteCompletedSourceLines();
+  const hasAlive=outputRecords.some(r=>r.alive);
+  if(!hasAlive){
+    inputEl.value="";outputRecords=[];lastSourceLines=[];workingLedger=null;
+  }else if(wasExactLedger){
+    inputEl.value=serializeExactOutputLedger();lastSourceLines=[];
+  }else{
+    deleteCompletedSourceLines();
+  }
+
+  // Prefer a normal wager source where exact replay proves conservation. If
+  // that is impossible (for example one DX row), persist the exact surviving
+  // rows in a labelled local ledger; never fake a new customer message.
+  if(hasAlive&&!wasExactLedger&&!cutOutputMatchesExecutableSource()){
+    inputEl.value=serializeExactOutputLedger();
+    lastSourceLines=[];
+  }
+  checkedResultRecordIndexes.clear();
   renderOutputRecords();
+  persistExactOutputLedger();
+  announceWorkingSource();
 
   lastOutputSelection={start:0,end:0};
   if(inputEl.value!==inputBefore){
@@ -1179,8 +1624,23 @@ function resolveExplicitSourceRegion(text){
 }
 
 function run(options={}){
-  const raw=inputEl.value.trim();
+  const submittedRaw=inputEl.value;
+  const raw=submittedRaw.trim();
   if(!raw){outputEl.value="";resetOutputRecords();setStatus("Chưa có tin.","err");return;}
+
+  const exactLedger=parseExactOutputLedger(raw);
+  if(exactLedger!==null){
+    if(!exactLedger){
+      resetOutputRecords();outputEl.value="PHÁT HIỆN TIN SAI:\n\nLedger kết quả cục bộ không hợp lệ hoặc không khớp engine/ngày/miền.";
+      setStatus("Ledger kết quả bị từ chối an toàn","err");return;
+    }
+    workingLedger={origin:exactLedger.origin};
+    checkedResultRecordIndexes.clear();
+    outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
+    lastSourceLines=[];renderOutputRecords();
+    setStatus(`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`,"ok");
+    return;
+  }
 
   const wasChat=looksLikeChatLog(raw);
   const clean=wasChat?preprocessChatText(raw):raw;
@@ -1205,13 +1665,26 @@ function run(options={}){
     return;
   }
 
-  const lines=source.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  const lines=source.split(/\r?\n/).map(x=>x.trim());
+  if(!lines.some(line=>line && !isStandaloneSeparator(line))){
+    outputEl.value="";
+    resetOutputRecords();
+    setStatus("Tin chỉ có dấu phân cách; không có dòng cược.","err");
+    return;
+  }
   lastSourceLines=lines.slice();
+  workingLedger={origin:submittedRaw};
+  checkedResultRecordIndexes.clear();
   outputRecords=[];
   lines.forEach((line,idx)=>{
+    if(!line || isStandaloneSeparator(line)) return;
     const generated=processLine(line,region,stations);
-    generated.forEach(text=>outputRecords.push({
+    const semantic=identifySemanticOutputGroups(line,region,stations,generated);
+    generated.forEach((text,rowIndex)=>outputRecords.push({
+      id:`${idx+1}:${rowIndex+1}:${text}`,
       sourceLine:idx+1,
+      sourceGroupNo:semantic?semantic[rowIndex].sourceGroupNo:0,
+      sourceGroupText:semantic?semantic[rowIndex].sourceGroupText:"",
       text,
       alive:true
     }));
@@ -1229,8 +1702,9 @@ function selectAllText(textarea){
 }
 
 async function copyOutput(){
-  const text=outputEl.value;
-  if(!text)return;
+  const checked=groupedResultReady?checkedAliveRecordIndexes():[];
+  const text=checked.length?checked.map(i=>outputRecords[i].text).join("\n"):outputEl.value;
+  if(!text || /^PHÁT HIỆN TIN SAI:/u.test(text))return;
   try{
     await navigator.clipboard.writeText(text);
     setStatus("Đã copy kết quả","ok");
@@ -1243,8 +1717,22 @@ async function copyOutput(){
   }
 }
 
-$("selectAllInputBtn").addEventListener("click",()=>selectAllText(inputEl));
-$("selectAllOutputBtn").addEventListener("click",()=>selectAllText(outputEl));
+$("selectAllInputBtn").addEventListener("click",()=>{
+  if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){toggleAllGroupedResults();renderLedgerWork();}
+  else selectAllText(inputEl);
+});
+$("ledgerWorkSelect").addEventListener("click",()=>{toggleAllGroupedResults();renderLedgerWork();});
+$("ledgerWorkCopy").addEventListener("click",copyLedgerWork);
+$("ledgerCopyOriginal").addEventListener("click",async()=>{
+  const ledger=parseExactOutputLedger(inputEl.value);
+  if(!ledger||!ledger.origin){setStatus("Không có tin gốc hợp lệ để copy.","err");return;}
+  const ok=await writeClipboardText(ledger.origin);
+  setStatus(ok?"Đã copy tin gốc ban đầu":"Không thể copy tin gốc.",ok?"ok":"err");
+});
+$("sourceCopyBtn").addEventListener("click",copySourceView);
+$("sourceCutBtn").addEventListener("click",cutSelectedSourceLines);
+$("ledgerWorkCut").addEventListener("click",async()=>{await cutSelectedOutput();renderLedgerWork();});
+$("selectAllOutputBtn").addEventListener("click",()=>groupedResultReady?toggleAllGroupedResults():selectAllText(outputEl));
 
 outputEl.addEventListener("select",rememberOutputSelection);
 outputEl.addEventListener("mouseup",rememberOutputSelection);
@@ -1266,7 +1754,10 @@ runBtn.addEventListener("click",run);
 $("copyBtn").addEventListener("click",copyOutput);
 $("clearBtn").addEventListener("click",()=>{
   if(inputEl.value||outputEl.value)snapshot();
-  inputEl.value="";outputEl.value="";resetOutputRecords();setStatus("");
+  inputEl.value="";outputEl.value="";resetOutputRecords();
+  persistExactOutputLedger(); // Clear stale local ledger on explicit Xóa; Undo can restore snapshot.
+  announceWorkingSource();
+  setStatus("");
   inputEl.focus();
 });
 $("undoBtn").addEventListener("click",()=>{
@@ -1274,11 +1765,17 @@ $("undoBtn").addEventListener("click",()=>{
   inputEl.value=s.input;
   outputEl.value=s.output;
   outputRecords=(s.outputRecords||[]).map(r=>({...r}));
+  workingLedger=cloneLedger(s.workingLedger);
+  checkedResultRecordIndexes.clear();
   lastSourceLines=(s.sourceLines||inputEl.value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean)).slice();
   lastOutputSelection={start:0,end:0};
   statusEl.textContent=s.status;
   statusEl.className=s.cls;
   resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
+  renderGroupedResults();
+  renderLedgerWork();
+  persistExactOutputLedger();
+  announceWorkingSource();
 });
 regionEl.addEventListener("change",updateUI);
 dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
@@ -1296,11 +1793,14 @@ inputEl.addEventListener("beforeinput",(ev)=>{
 inputEl.addEventListener("input",syncAfterAnyInputEdit);
 
 loadSettings();
+initGroupedResults();
+// Rehydrate only a validated mode-local ledger; no source re-splitting.
+if(parseExactOutputLedger(inputEl.value))run();
 
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.21";
+const APP_VERSION = "2.0.30";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
