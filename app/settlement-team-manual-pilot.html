@@ -66,10 +66,12 @@ Khôi phục chỉ để xem QUARANTINED, TUYỆT ĐỐI KHÔNG gửi lại giao
 Tôi xác nhận chỉ dùng dữ liệu giả; hiểu bản sao lưu chưa được xác minh độ bền và không được tự gửi lại.</label>
 <div class="actions">
 <button id="team-manual-save" type="button" disabled>Sao lưu nháp PENDING có mã hóa (thủ công)</button>
-<button id="team-manual-inspect" type="button" disabled>Kiểm tra bản mã (không khôi phục vào hàng đợi)</button></div>
+<button id="team-manual-inspect" type="button" disabled>Kiểm tra bản mã (không khôi phục vào hàng đợi)</button>
+<button id="team-manual-review" type="button" disabled>Đối chiếu biên nhận máy chủ (chỉ đọc, dữ liệu giả)</button></div>
 <p id="team-manual-notice" role="status" aria-live="polite">Chưa thao tác. Không có sao lưu nền.</p>
 <ul id="team-manual-items" aria-label="Bản nháp QUARANTINED, chỉ xem mã gốc"></ul>
-<p>Không có nút gửi lại hoặc xóa bản mã. Mỗi lần phải xác thực lại tài khoản với máy chủ.
+<p>Đối chiếu biên nhận cần nhập lại mật khẩu khôi phục, đồng ý và xác thực riêng từng lần.
+Chỉ có MATCHED / UNVERIFIED; không có nút gửi lại hoặc xóa bản mã. Mỗi lần phải xác thực lại tài khoản với máy chủ.
 Không cung cấp token, payload hoặc nội dung bản nháp ra màn hình.</p>
 </section>
 <section><h2>Thông báo</h2><p id="team-notice" aria-live="polite"></p>

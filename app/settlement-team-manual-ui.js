@@ -6,12 +6,12 @@
 // Isolated DEFAULT-OFF fake-only manual UI. No HTTP POST, import, auto-sync,
 // timers, auto-save, plaintext local storage, or access to production PWA.
 const IDS=['team-manual-secret','team-manual-consent','team-manual-save',
- 'team-manual-inspect','team-manual-notice','team-manual-items'];
+ 'team-manual-inspect','team-manual-review','team-manual-notice','team-manual-items'];
 function deny(code){throw Error(code);}
 function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
  if(syntheticOnly!==true||!doc||!win||!client||
     typeof client.snapshot!=='function'||typeof client.subscribe!=='function'||
-    typeof client.verifyActor!=='function'||!Checkpoint||
+    typeof client.verifyActor!=='function'||typeof client.inspectRecoveryReceipts!=='function'||!Checkpoint||
     typeof Checkpoint.createSyntheticManualCheckpoint!=='function'||!Idb||
     typeof Idb.createSyntheticIndexedDbStore!=='function'||
     win.isSecureContext!==true)
@@ -42,6 +42,7 @@ function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
      ['PENDING','CONFLICT','BLOCKED'].includes(x.status));
    els['team-manual-save'].disabled=busy||!authenticated||!unsent;
    els['team-manual-inspect'].disabled=busy||!authenticated;
+   els['team-manual-review'].disabled=busy||!authenticated;
  }
  async function act(mode){
    if(dead||busy)return;
@@ -59,7 +60,9 @@ function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
         phrase.length>256)deny('TEAM_RECOVERY_PASSPHRASE_INVALID');
      if(typeof win.confirm!=='function'||win.confirm(
        'DỮ LIỆU GIẢ: '+(mode==='save'?'lưu bản mã thủ công?':
-       'chỉ xem bản nháp đã cách ly, không gửi lại?'))!==true)
+       mode==='server-review'?
+         'Chỉ gửi DỮ LIỆU GIẢ để ĐỐI CHIẾU BIÊN NHẬN (chỉ đọc)?':
+         'chỉ xem bản nháp đã cách ly, không gửi lại?'))!==true)
        deny('TEAM_MANUAL_UI_CONFIRM_REQUIRED');
      const result=mode==='save'?
        await bridge.save({passphrase:phrase,explicitConsent:true}):
@@ -75,6 +78,32 @@ function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
          ' nháp giả • độ bền CHƯA XÁC MINH • không tự gửi.');
      }else if(result.status==='NO_ENCRYPTED_BACKUP'){
        tell('Chưa tìm thấy bản mã thử nghiệm. Không có bản nháp nào được nhập.');
+     }else if(mode==='server-review'){
+       if(result.status!=='QUARANTINED'||result.auto_send_enabled!==false||
+          result.durability!=='UNVERIFIED'||!Array.isArray(result.items)||
+          result.items.length<1||result.items.length>30)
+         deny('TEAM_MANUAL_UI_UNVERIFIED_RESTORE');
+       const review=await client.inspectRecoveryReceipts(result.items,
+         {syntheticOnly:true,explicitConsent:true});
+       if(dead||client.snapshot().session_epoch!==atStart||
+          client.snapshot().authenticated!==true)
+         deny('TEAM_MANUAL_CHECKPOINT_SESSION_CHANGED');
+       if(!review||review.status!=='REVIEW_ONLY'||review.auto_send_enabled!==false||
+          !Array.isArray(review.items)||review.items.length!==result.items.length)
+         deny('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+       for(let i=0;i<review.items.length;i++){
+         const item=review.items[i];
+         if(!item||item.id!==result.items[i].id||item.auto_retry!==false||
+            !['MATCHED_SERVER_RECEIPT','UNVERIFIED_NOT_SAFE_TO_RETRY'].includes(item.classification))
+           deny('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+         const li=doc.createElement('li');
+         li.textContent=item.id+' • '+item.classification+
+           ' • KHÔNG gửi lại / không chốt tiền';
+         els['team-manual-items'].appendChild(li);
+       }
+       tell(review.all_receipts_verified===true?
+         'BIÊN NHẬN MÁY CHỦ KHỚP DỮ LIỆU GIẢ • vẫn cần người duyệt • KHÔNG chốt tiền.':
+         'CHƯA XÁC MINH biên nhận máy chủ • KHÔNG an toàn để tự gửi lại.');
      }else{
        if(result.status!=='QUARANTINED'||result.auto_send_enabled!==false||
           result.durability!=='UNVERIFIED'||!Array.isArray(result.items))
@@ -99,9 +128,10 @@ function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
      busy=false;render(client.snapshot());
    }
  }
- const save=()=>void act('save'),inspect=()=>void act('inspect');
+ const save=()=>void act('save'),inspect=()=>void act('inspect'),review=()=>void act('server-review');
  els['team-manual-save'].addEventListener('click',save);
  els['team-manual-inspect'].addEventListener('click',inspect);
+ els['team-manual-review'].addEventListener('click',review);
  const unsubscribe=client.subscribe(render);
  return Object.freeze({dispose(){
    if(dead)return;dead=true;clear();
@@ -109,6 +139,7 @@ function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
    els['team-manual-consent'].checked=false;
    els['team-manual-save'].removeEventListener('click',save);
    els['team-manual-inspect'].removeEventListener('click',inspect);
+   els['team-manual-review'].removeEventListener('click',review);
    unsubscribe();
  }});
 }

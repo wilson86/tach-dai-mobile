@@ -14,7 +14,7 @@ function elem(){
  };
 }
 const ids=['team-manual-secret','team-manual-consent','team-manual-save',
- 'team-manual-inspect','team-manual-notice','team-manual-items'];
+ 'team-manual-inspect','team-manual-review','team-manual-notice','team-manual-items'];
 function setup(){
  const nodes=Object.fromEntries(ids.map(k=>[k,elem()]));
  const state={authenticated:false,workspace_id:null,session_epoch:0,drafts:[]};
@@ -22,7 +22,13 @@ function setup(){
  const client={
   snapshot:()=>structuredClone(state),
   subscribe(fn){notify=fn;fn(client.snapshot());return()=>{notify=null;};},
-  verifyActor:async()=>({server_verified:true})
+  verifyActor:async()=>({server_verified:true}),
+  async inspectRecoveryReceipts(items,opts){
+   seen.push(['review',opts]);
+   return {status:'REVIEW_ONLY',auto_send_enabled:false,
+    all_receipts_verified:false,items:items.map(x=>({
+     id:x.id,classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',auto_retry:false}))};
+  }
  };
  const seen=[];
  const bridge={
@@ -124,4 +130,25 @@ test('dispose removes manual actions and scrubs typed secret',async()=>{
  assert.equal(n['team-manual-secret'].value,'');
  n['team-manual-consent'].checked=true;n['team-manual-save'].click();
  await flush();assert.deepEqual(h.seen,[]);
+});
+
+test('receipt review is explicit and never presents an unknown receipt as paid or sendable',async()=>{
+ const h=setup(),n=h.nodes;
+ assert.equal(n['team-manual-review'].disabled,true);
+ h.login();
+ assert.equal(n['team-manual-review'].disabled,false);
+ n['team-manual-secret'].value='synthetic-separate-secret-123';
+ n['team-manual-consent'].checked=true;
+ n['team-manual-review'].click();await flush();
+ assert.equal(h.seen.map(x=>x[0]).join(','),'inspect,review');
+ assert.equal(h.seen[1][1].explicitConsent,true);
+ assert.equal(n['team-manual-items'].children.length,1);
+ assert.match(n['team-manual-items'].children[0].textContent,/UNVERIFIED_NOT_SAFE_TO_RETRY/);
+ assert.match(n['team-manual-notice'].textContent,/KHÔNG an toàn để tự gửi lại/);
+ assert.doesNotMatch(n['team-manual-notice'].textContent,/chốt tiền thành công/i);
+ assert.equal(n['team-manual-secret'].value,'');
+ assert.equal(n['team-manual-consent'].checked,false);
+ h.logout();
+ assert.equal(n['team-manual-items'].children.length,0);
+ h.mounted.dispose();
 });
