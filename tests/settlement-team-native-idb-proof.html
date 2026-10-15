@@ -2,6 +2,7 @@
 <body><pre id="proof">PENDING</pre>
 <script src="/app/settlement-team-recovery-v0.js"></script>
 <script src="/app/settlement-team-recovery-idb-v0.js"></script>
+<script src="/app/settlement-team-manual-checkpoint-v0.js"></script>
 <script>
 (async()=>{
 const stage=new URL(location.href).searchParams.get('stage');
@@ -10,11 +11,17 @@ const item={id:'draft_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',status:'PENDING',base_re
 scope:{workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-15',region:'mn'},
 payload:{synthetic:true,memo:'disposable-native-idb-test'}};
 const recovery=globalThis.KtsTeamSyntheticRecoveryV0,IDB=globalThis.KtsTeamSyntheticIndexedDbV0;
+const Manual=globalThis.KtsTeamSyntheticManualCheckpointV0;
+const fakeSync={snapshot:()=>({authenticated:true,workspace_id:'group_a',
+ session_epoch:7,drafts:[item]})};
+const fakeActor={...actor,role:'operator',server_verified:true,membership_active:true};
+const store=IDB.createSyntheticIndexedDbStore({indexedDB,syntheticOnly:true});
+const manual=Manual.createSyntheticManualCheckpoint({syntheticOnly:true,sync:fakeSync,
+ store,verifyActor:async()=>fakeActor,cryptoProvider:crypto});
 const yes=(cond,code)=>{if(!cond)throw Error(code)};
 const denied=async fn=>{try{await fn();return false}catch(_){return true}};
 try{
 yes(isSecureContext===true&&recovery&&IDB,'NO_SECURE_BROWSER_DEPENDENCIES');
-const store=IDB.createSyntheticIndexedDbStore({indexedDB,syntheticOnly:true});
 if(stage==='save'){
  yes(await store.read(IDB.SLOT)===null,'BACKUP_ALREADY_EXISTS');
  const sealed=await recovery.seal({drafts:[item],actor,passphrase:secret,cryptoProvider:crypto});
@@ -24,6 +31,31 @@ if(stage==='save'){
  yes(await store.writeIfAbsent(IDB.SLOT,bytes)===true,'FIRST_WRITE_NOT_COMMITTED');
  yes(await store.read(IDB.SLOT)===bytes,'READBACK_MISMATCH');
  yes(await store.writeIfAbsent(IDB.SLOT,bytes)===false,'DUPLICATE_OVERWRITE');
+}else if(stage==='manual-save'){
+ yes(await store.read(IDB.SLOT)===null,'MANUAL_OLD_BACKUP');
+ const saved=await manual.save({passphrase:secret,explicitConsent:true});
+ yes(saved.status==='ENCRYPTED_ADAPTER_ACK'&&saved.auto_send_enabled===false&&
+  saved.durability==='UNVERIFIED'&&saved.draft_count===1,'MANUAL_SAVE_UNVERIFIED');
+ const bytes=await store.read(IDB.SLOT);
+ yes(typeof bytes==='string'&&!bytes.includes(item.scope.partner_id)&&
+  !bytes.includes(item.payload.memo),'MANUAL_PLAINTEXT_LEAK');
+ yes(await denied(()=>manual.save({passphrase:secret,explicitConsent:true})),
+  'MANUAL_OVERWRITE_ALLOWED');
+}else if(stage==='manual-restore'){
+ const restored=await manual.inspect({passphrase:secret,explicitConsent:true});
+ yes(restored.status==='QUARANTINED'&&restored.auto_send_enabled===false&&
+  restored.durability==='UNVERIFIED'&&restored.requires_manual_review===true,
+  'MANUAL_RESTORE_UNVERIFIED');
+ yes(restored.items.length===1&&restored.items[0].id===item.id&&
+  restored.items[0].original_status==='PENDING'&&
+  restored.items[0].auto_retry===false,'MANUAL_ID_CHANGED');
+ yes(await denied(()=>manual.inspect({passphrase:'wrong-synthetic-passphrase',
+  explicitConsent:true})),'MANUAL_WRONG_SECRET_ACCEPTED');
+ const other=Manual.createSyntheticManualCheckpoint({syntheticOnly:true,
+  sync:fakeSync,store,cryptoProvider:crypto,
+  verifyActor:async()=>({...fakeActor,user_id:'fake_other'})});
+ yes(await denied(()=>other.inspect({passphrase:secret,explicitConsent:true})),
+  'MANUAL_WRONG_ACTOR_ACCEPTED');
 }else if(stage==='restore'){
  const bytes=await store.read(IDB.SLOT);
  yes(typeof bytes==='string'&&bytes.length>100,'BACKUP_MISSING_AFTER_RESTART');
