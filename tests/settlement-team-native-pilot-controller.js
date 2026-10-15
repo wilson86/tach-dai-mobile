@@ -25,6 +25,15 @@ async function run(){
   check(document.title.includes('Pilot nhóm'),'PILOT_WRONG_PAGE');
   el('team-subject').value='fake_operator_a';
   el('team-workspace').value='group_a';
+  // An invalid credential is rejected by the fake HTTP endpoint without
+  // creating an authenticated browser session.
+  el('team-password').value='wrong-synthetic-secret';
+  el('team-login').requestSubmit();
+  await until(()=>el('team-notice').textContent.includes('AUTH_LOGIN_DENIED'),
+    'BAD_LOGIN_NOT_DENIED');
+  check(el('team-create').disabled,'BAD_LOGIN_UNLOCKED_CREATE');
+  check(el('team-context').textContent.includes('Chưa đăng nhập'),
+    'BAD_LOGIN_CHANGED_CONTEXT');
   el('team-password').value='synthetic-secret';
   el('team-date').value='2026-10-15';
   el('team-login').requestSubmit();
@@ -33,6 +42,14 @@ async function run(){
   check(!el('team-create').disabled,'PILOT_DRAFT_ACTION_BLOCKED');
   const touch=el('team-create').getBoundingClientRect();
   check(touch.height>=44&&touch.width>=44,'PILOT_TOUCH_TARGET_TOO_SMALL');
+  // The synthetic pilot must refuse actual/non-fake partner IDs on the
+  // client BEFORE trying to create any financial-looking draft.
+  el('team-partner').value='real_customer';
+  el('team-create').click();
+  await until(()=>el('team-notice').textContent.includes('TEAM_PILOT_SCOPE_INVALID'),
+    'REAL_COUNTERPARTY_NOT_BLOCKED');
+  check(el('team-drafts').children.length===0,'INVALID_PARTNER_CREATED_DRAFT');
+  el('team-partner').value='fake_partner_1';
   el('team-create').click();
   await until(()=>el('team-notice').textContent.includes('PENDING'),'PILOT_PENDING_MISSING');
   check(el('team-warning').textContent.includes('MEMORY_ONLY'),'PILOT_VOLATILE_WARNING_MISSING');
@@ -58,7 +75,9 @@ async function run(){
   status='PASS';
  }catch(error){reason=String(error&&error.message||error).slice(0,130)}
  el('proof').textContent=JSON.stringify({stage:'pilot',status,
-  fake_only:true,real_money_ready:false,review_ui_enabled:false,mobile_viewport:true,touch_target_44px:true,
+  fake_only:true,real_money_ready:false,review_ui_enabled:false,
+  mobile_viewport:true,touch_target_44px:true,
+  bad_login_denied:true,real_counterparty_denied:true,
   ...(reason?{code:reason}:{})});
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',run,{once:true});
