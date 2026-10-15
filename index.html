@@ -51,6 +51,16 @@
   .result-group label{cursor:pointer}
   .result-group-row span{min-width:0}
   #resultGroups:empty{display:none}
+
+  .ledger-work{background:#f3f8ff;border:1px solid #c1d4ef;border-radius:11px;padding:10px;margin:4px 0}
+  .ledger-work-title{font-size:15px;font-weight:800;margin-bottom:6px}
+  .ledger-work-note{font-size:12px;line-height:1.5;color:#52647b;margin-bottom:8px}
+  .ledger-work-list{border:1px solid #dbe5f3;border-radius:9px;overflow:hidden}
+  .ledger-work-row{display:flex;gap:9px;align-items:flex-start;padding:11px;background:#fff;border-bottom:1px solid #edf0f5;font:14px/1.5 ui-monospace,Consolas,monospace;overflow-wrap:anywhere;white-space:pre-wrap}
+  .ledger-work-row:last-child{border:0}.ledger-work-row.selected{background:#e8f0ff}
+  .ledger-work-row input{height:23px;width:23px;flex-shrink:0;accent-color:#0b57d0;margin:0}
+  .ledger-original{font-size:12px;color:#48596f;margin-top:9px}
+  .ledger-original pre{background:#fff;white-space:pre-wrap;overflow-wrap:anywhere;padding:9px;border-radius:8px;user-select:text}
   @media (max-width:520px){
     .app{padding:8px 8px calc(18px + env(safe-area-inset-bottom))}
     .card{border-radius:12px;padding:10px}
@@ -112,6 +122,18 @@
     <div class="label">Nhập tin / nguyên đoạn chat</div>
     <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
       placeholder="Dán tin hoặc đoạn chat vào đây..."></textarea>
+    <div id="ledgerWork" class="ledger-work" style="display:none">
+      <div class="ledger-work-title">Phần cược còn lại — đã tách</div>
+      <div class="ledger-work-note">Chọn dòng để Copy/Cắt. Đây là kết quả đã tách, không phải cú pháp tin khách; tin gốc được giữ riêng.</div>
+      <div id="ledgerWorkRows" class="ledger-work-list"></div>
+      <div class="actions">
+        <button id="ledgerWorkSelect" class="secondary" type="button">Chọn tất cả</button>
+        <button id="ledgerWorkCopy" class="secondary" type="button">Copy đã chọn</button>
+        <button id="ledgerWorkCut" class="secondary" type="button">Cắt đã chọn</button>
+      </div>
+      <details class="ledger-original"><summary>Xem tin gốc ban đầu</summary><pre id="ledgerWorkOrigin"></pre></details>
+    </div>
+
 
     <div class="actions">
       <button id="runBtn" class="primary">Kiểm tra + Tách</button>
@@ -1042,6 +1064,7 @@ function setStatus(text,type=""){
   statusEl.className=`status ${type}`;
   renderGroupedResults();
   resultCard.className=`card result-card ${type==="err"?"error":type==="ok"?"ok":""}`;
+  renderLedgerWork();
 }
 
 
@@ -1080,6 +1103,59 @@ function identifySemanticOutputGroups(line,region,stations,generated){
   if(annotated.length!==generated.length || annotated.some((r,i)=>r.text!==generated[i]))
     return null;
   return annotated;
+}
+
+
+function renderLedgerWork(){
+  const panel=$("ledgerWork"),list=$("ledgerWorkRows");
+  if(!panel||!list||typeof list.replaceChildren!=="function")return;
+  const raw=String(inputEl.value||"");
+  const hasLedger=raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
+  inputEl.style.display=hasLedger?"none":"";
+  panel.style.display=hasLedger?"":"none";
+  if(!hasLedger)return;
+  const ledger=parseExactOutputLedger(raw);
+  list.replaceChildren();
+  if(!ledger){
+    const warning=document.createElement("div");
+    warning.className="ledger-work-note";
+    warning.textContent="Ledger không hợp lệ hoặc không khớp ứng dụng, ngày, miền hay engine. Không gửi dữ liệu này như tin khách.";
+    list.appendChild(warning);
+    $("ledgerWorkOrigin").textContent="";
+    for(const id of ["ledgerWorkSelect","ledgerWorkCopy","ledgerWorkCut"])$(id).disabled=true;
+    return;
+  }
+  $("ledgerWorkOrigin").textContent=ledger.origin;
+  const alive=outputRecords.filter(r=>r.alive);
+  const hydrated=alive.length===ledger.rows.length&&alive.every((r,i)=>
+    r.id===ledger.rows[i].id&&r.text===ledger.rows[i].text);
+  const view=hydrated?alive:ledger.rows;
+  for(const row of view){
+    const index=hydrated?outputRecords.findIndex(r=>r.alive&&r.id===row.id):-1;
+    const label=document.createElement("label");label.className="ledger-work-row";
+    const check=document.createElement("input");check.type="checkbox";check.disabled=index<0;
+    check.checked=index>=0&&checkedResultRecordIndexes.has(index);
+    if(check.checked)label.classList.add("selected");
+    check.setAttribute("aria-label","Chọn cược "+row.text);
+    check.addEventListener("change",()=>{
+      if(check.checked)checkedResultRecordIndexes.add(index);
+      else checkedResultRecordIndexes.delete(index);
+      renderGroupedResults();renderLedgerWork();
+    });
+    const text=document.createElement("span");text.textContent=row.text;
+    label.append(check,text);list.appendChild(label);
+  }
+  const selected=hydrated?checkedAliveRecordIndexes().length:0;
+  $("ledgerWorkSelect").disabled=!hydrated;
+  $("ledgerWorkCopy").disabled=selected===0;
+  $("ledgerWorkCut").disabled=selected===0;
+  $("ledgerWorkSelect").textContent=selected===view.length&&view.length?"Bỏ chọn tất cả":"Chọn tất cả";
+}
+async function copyLedgerWork(){
+  const selected=checkedAliveRecordIndexes();
+  if(!selected.length){setStatus("Hãy chọn dòng để Copy.","err");return;}
+  const copied=await writeClipboardText(selected.map(i=>outputRecords[i].text).join("\n"));
+  setStatus(copied?"Đã copy "+selected.length+" dòng còn lại":"Copy thất bại; không thay đổi dữ liệu.",copied?"ok":"err");
 }
 
 function renderGroupedResults(){
@@ -1159,6 +1235,7 @@ function initGroupedResults(){
   if(!list || !summary || typeof list.replaceChildren!=="function")return;
   groupedResultReady=true;
   renderGroupedResults();
+  renderLedgerWork();
 }
 
 function resetOutputRecords(){
@@ -1172,6 +1249,7 @@ function resetOutputRecords(){
 function renderOutputRecords(){
   outputEl.value=outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n");
   renderGroupedResults();
+  renderLedgerWork();
 }
 
 function currentPlainInputLines(){
@@ -1590,7 +1668,13 @@ async function copyOutput(){
   }
 }
 
-$("selectAllInputBtn").addEventListener("click",()=>selectAllText(inputEl));
+$("selectAllInputBtn").addEventListener("click",()=>{
+  if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){toggleAllGroupedResults();renderLedgerWork();}
+  else selectAllText(inputEl);
+});
+$("ledgerWorkSelect").addEventListener("click",()=>{toggleAllGroupedResults();renderLedgerWork();});
+$("ledgerWorkCopy").addEventListener("click",copyLedgerWork);
+$("ledgerWorkCut").addEventListener("click",async()=>{await cutSelectedOutput();renderLedgerWork();});
 $("selectAllOutputBtn").addEventListener("click",()=>groupedResultReady?toggleAllGroupedResults():selectAllText(outputEl));
 
 outputEl.addEventListener("select",rememberOutputSelection);
@@ -1629,6 +1713,7 @@ $("undoBtn").addEventListener("click",()=>{
   statusEl.className=s.cls;
   resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
   renderGroupedResults();
+  renderLedgerWork();
   persistExactOutputLedger();
   announceWorkingSource();
 });
@@ -1649,6 +1734,8 @@ inputEl.addEventListener("input",syncAfterAnyInputEdit);
 
 loadSettings();
 initGroupedResults();
+// Rehydrate only a validated mode-local ledger; no source re-splitting.
+if(parseExactOutputLedger(inputEl.value))run();
 
 // =========================
 // PWA / AUTO UPDATE
