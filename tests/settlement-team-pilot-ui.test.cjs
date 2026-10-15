@@ -20,7 +20,7 @@ function element(){
 }
 function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
  syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
- pullHasMore=false,reconnectItems=[],reconnectHasMore=false}={}){
+ pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
@@ -56,7 +56,8 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      if(draft){draft.status=syncStatus;if(syncStatus!=='SYNCED')draft.error='SYNC_NETWORK_UNAVAILABLE';}
      notify();return {...draft};
    },
-   async readScope(scope){calls.push('readScope');return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState,
+   async readScope(scope){calls.push('readScope');if(readGate)await readGate();
+     return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState,
       ...(reviewState==='PENDING_REVIEW'?{submitted_by:'fake_operator'}:{}),
       ...(reviewState==='REVIEWED'?{submitted_by:'fake_operator',reviewed_by:'fake_checker'}:{})}};},
    async reviewScope(action,selected,revision,options={}){
@@ -73,12 +74,13 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      notify();return {...attempt};
    },
    async pullChanges(){
-     calls.push('pullChanges');requestCount++;
+     calls.push('pullChanges');requestCount++;if(pullGate)await pullGate();
      const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
      return status==='SYNCED'?{status,has_more:pullHasMore,items:feedPages?feedPages[Math.min(requestCount-1,feedPages.length-1)]:(feedItems||[{event_id:'synthetic_safe_event'}])}:
        {status,error:'SYNC_NETWORK_UNAVAILABLE',items:[]};
    },
-   async reconnect(){calls.push('reconnect');return {pull:{status:reconnectStatus,
+   async reconnect(){calls.push('reconnect');if(reconnectGate)await reconnectGate();
+     return {pull:{status:reconnectStatus,
      items:reconnectStatus==='SYNCED'?reconnectItems:[],has_more:reconnectHasMore},drafts:reconnectDrafts};},
    async logout(){
      calls.push('logout');state.authenticated=false;state.workspace_id=null;state.session_epoch++;
@@ -525,5 +527,57 @@ test('pilot reconnect warns when offline feed prevents retrying memory-only pend
  assert.match(h.els['team-notice'].textContent,/chưa xác minh kết nối/);
  assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
  assert.match(h.els['team-feed-progress'].textContent,/CHƯA XÁC MINH/);
+ h.mounted.dispose();
+});
+
+function deferredPilotResponse(){
+ let resume;const promise=new Promise(ok=>{resume=ok;});
+ return {promise,resume};
+}
+test('in-flight scope read cannot revive review controls after edit-then-revert',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+   readGate:()=>gate.promise});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ const original=h.els['team-partner'].value;
+ h.els['team-partner'].value='fake_partner_2';h.els['team-partner'].fire('input');
+ h.els['team-partner'].value=original;h.els['team-partner'].fire('input');
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('in-flight read from an old session cannot activate review after workspace ABA',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+   readGate:()=>gate.promise});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ h.state.session_epoch++;h.state.workspace_id='group_a';h.notify();
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('delayed feed from previous session never contaminates next workspace history',async()=>{
+ const gate=deferredPilotResponse(),h=harness({pullGate:()=>gate.promise,
+   feedItems:[{event_id:'fake_old_session_event'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/phiên đã thay đổi/);
+ h.mounted.dispose();
+});
+test('delayed reconnect never mixes original users change feed into next session',async()=>{
+ const gate=deferredPilotResponse(),h=harness({reconnectGate:()=>gate.promise,
+   reconnectItems:[{event_id:'fake_prior_session_event'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/phiên đã thay đổi/);
  h.mounted.dispose();
 });
