@@ -172,7 +172,7 @@ let lastOutputSelection={start:0,end:0};
 // explicit local-only exact-output ledger rather than inventing a source that
 // would be parsed with different money semantics on the next Run.
 const EXACT_OUTPUT_LEDGER_PREFIX="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n";
-const EXACT_OUTPUT_LEDGER_STORAGE_KEY="KTS_EXACT_OUTPUT_LEDGER_V1";
+const EXACT_OUTPUT_LEDGER_STORAGE_KEY="tachDaiMobileExactOutputLedgerV1";
 let workingLedger=null;
 function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
 function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
