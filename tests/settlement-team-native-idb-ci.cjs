@@ -8,7 +8,8 @@ const proofHtml=fs.readFileSync(path.join(__dirname,'settlement-team-native-idb-
 const routes={
  '/app/settlement-team-recovery-v0.js':'app/settlement-team-recovery-v0.js',
  '/app/settlement-team-recovery-idb-v0.js':'app/settlement-team-recovery-idb-v0.js',
- '/app/settlement-team-manual-checkpoint-v0.js':'app/settlement-team-manual-checkpoint-v0.js'
+ '/app/settlement-team-manual-checkpoint-v0.js':'app/settlement-team-manual-checkpoint-v0.js',
+ '/app/settlement-team-sync-client.js':'app/settlement-team-sync-client.js'
 };
 function browser(){
  for(const name of ['google-chrome','google-chrome-stable','chromium','chromium-browser']){
@@ -153,6 +154,7 @@ async function main(){
   await new Promise((ok,bad)=>{server.once('error',bad);server.listen(0,'127.0.0.1',ok)});
   const port=server.address().port;
   if(port===8787)throw Error('RESERVED_PORT');
+  let manualOriginalId=null;
   for(const stage of ['save','restore','manual-save','manual-restore']){
    // Each pair restarts the test browser process with a shared profile.
    // Manual evidence must not inherit the ordinary test's ciphertext slot.
@@ -160,10 +162,15 @@ async function main(){
      path.join(temp,'manual-profile'):profile;
    const obj=await chromeProof(bin,owned,
       'http://127.0.0.1:'+port+'/proof?stage='+stage);
+   const manualStage=stage.startsWith('manual-');
+   const validId=manualStage?/^draft_[a-f0-9]{32}$/.test(obj.original_id):
+     obj.original_id==='draft_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
    if(obj.status!=='PASS'||obj.stage!==stage||obj.native_indexeddb!==true||
-      obj.auto_send_enabled!==false||obj.original_id!=='draft_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+      obj.auto_send_enabled!==false||!validId||
+      (stage==='manual-restore'&&obj.original_id!==manualOriginalId))
     throw Error('NATIVE_PROOF_INVALID_'+stage+'_'+String(obj.code||'NONE'));
-   report.stages.push({stage,status:'PASS'});
+   if(stage==='manual-save')manualOriginalId=obj.original_id;
+   report.stages.push({stage,status:'PASS',original_id:obj.original_id});
   }
   // Proof comes from the actual GET-only server's request counter, not from
   // a hardcoded "zero" field in the artifact.
