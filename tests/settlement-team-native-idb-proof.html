@@ -3,6 +3,7 @@
 <script src="/app/settlement-team-recovery-v0.js"></script>
 <script src="/app/settlement-team-recovery-idb-v0.js"></script>
 <script src="/app/settlement-team-manual-checkpoint-v0.js"></script>
+<script src="/app/settlement-team-sync-client.js"></script>
 <script>
 (async()=>{
 const stage=new URL(location.href).searchParams.get('stage');
@@ -12,8 +13,13 @@ scope:{workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10
 payload:{synthetic:true,memo:'disposable-native-idb-test'}};
 const recovery=globalThis.KtsTeamSyntheticRecoveryV0,IDB=globalThis.KtsTeamSyntheticIndexedDbV0;
 const Manual=globalThis.KtsTeamSyntheticManualCheckpointV0;
-const fakeSync={snapshot:()=>({authenticated:true,workspace_id:'group_a',
- session_epoch:7,drafts:[item]})};
+// Real unmodified browser sync-client generates the original idempotency key.
+const Sync=globalThis.KtsSettlementSyncClient;
+const fakeSync=Sync.createSyncClient({
+ fetchImpl:async()=>{throw Error('FINANCIAL_HTTP_FORBIDDEN');}
+});
+fakeSync.setSessionToken('a'.repeat(43),'group_a');
+let checkpointId=item.id;
 const fakeActor={...actor,role:'operator',server_verified:true,membership_active:true};
 const store=IDB.createSyntheticIndexedDbStore({indexedDB,syntheticOnly:true});
 const manual=Manual.createSyntheticManualCheckpoint({syntheticOnly:true,sync:fakeSync,
@@ -33,6 +39,9 @@ if(stage==='save'){
  yes(await store.writeIfAbsent(IDB.SLOT,bytes)===false,'DUPLICATE_OVERWRITE');
 }else if(stage==='manual-save'){
  yes(await store.read(IDB.SLOT)===null,'MANUAL_OLD_BACKUP');
+ const pending=fakeSync.queueDraft(item.scope,item.payload,item.base_revision);
+ checkpointId=pending.id;
+ yes(fakeSync.snapshot().drafts.length===1,'REAL_SYNC_DRAFT_MISSING');
  const saved=await manual.save({passphrase:secret,explicitConsent:true});
  yes(saved.status==='ENCRYPTED_ADAPTER_ACK'&&saved.auto_send_enabled===false&&
   saved.durability==='UNVERIFIED'&&saved.draft_count===1,'MANUAL_SAVE_UNVERIFIED');
@@ -46,9 +55,11 @@ if(stage==='save'){
  yes(restored.status==='QUARANTINED'&&restored.auto_send_enabled===false&&
   restored.durability==='UNVERIFIED'&&restored.requires_manual_review===true,
   'MANUAL_RESTORE_UNVERIFIED');
- yes(restored.items.length===1&&restored.items[0].id===item.id&&
+ yes(restored.items.length===1&&/^draft_[a-f0-9]{32}$/.test(restored.items[0].id)&&
   restored.items[0].original_status==='PENDING'&&
   restored.items[0].auto_retry===false,'MANUAL_ID_CHANGED');
+ checkpointId=restored.items[0].id;
+ yes(fakeSync.snapshot().drafts.length===0,'MANUAL_BACKUP_IMPORTED_ACTIVE_QUEUE');
  yes(await denied(()=>manual.inspect({passphrase:'wrong-synthetic-passphrase',
   explicitConsent:true})),'MANUAL_WRONG_SECRET_ACCEPTED');
  const other=Manual.createSyntheticManualCheckpoint({syntheticOnly:true,
@@ -71,7 +82,7 @@ if(stage==='save'){
  yes(await store.writeIfAbsent(IDB.SLOT,bytes)===false,'RESTART_OVERWRITE');
 }else throw Error('UNKNOWN_STAGE');
 document.getElementById('proof').textContent=JSON.stringify({stage,status:'PASS',
-native_indexeddb:true,auto_send_enabled:false,original_id:item.id});
+native_indexeddb:true,auto_send_enabled:false,original_id:checkpointId});
 }catch(e){document.getElementById('proof').textContent=JSON.stringify({
 stage,status:'FAIL',code:String(e.message||e).slice(0,100)})}
 })().catch(()=>{document.getElementById('proof').textContent=
