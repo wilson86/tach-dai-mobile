@@ -7,6 +7,8 @@ const {promisify}=require('node:util');const execFile=promisify(cp.execFile);
 const ROOT=path.resolve(__dirname,'..'),controller=fs.readFileSync(path.join(__dirname,'settlement-team-native-pilot-controller.js'),'utf8');
 const html=fs.readFileSync(path.join(ROOT,'app/settlement-team-pilot.html'),'utf8');
 const TOKEN='a'.repeat(43);
+const offlineController=fs.readFileSync(
+ path.join(__dirname,'settlement-team-native-offline-controller.js'),'utf8');
 const ASSETS=new Map([
  ['settlement-team-review-audit.js','app/settlement-team-review-audit.js'],
  ['settlement-team-sync-client.js','app/settlement-team-sync-client.js'],
@@ -135,13 +137,14 @@ async function main(){
  await fsp.mkdir(evidence,{recursive:true,mode:0o700});
  const report={source_sha:sha,status:'BLOCKED',pilot_ui_browser:'NOT_PROVEN',
   release_readiness:'BLOCKED',real_money_ready:false,real_money_post_count:0,
-  synthetic_draft_post_count:0,auth_logins:0,auth_logouts:0,proof:null};
+  synthetic_draft_post_count:0,draft_post_attempts:0,replay_count:0,
+  forged_feed_deliveries:0,auth_logins:0,auth_logouts:0,proofs:[]};
  let server=null,profileRoot=null;
  try{
   const binary=browser();
   report.browser_version=(await run(binary,['--version'],8000)).trim();
   profileRoot=await fsp.mkdtemp(path.join(process.env.RUNNER_TEMP,'kts-pilot-native-'));
-  let created=false;
+  let created=false,acceptedKey=null,attempts=0,scenario='happy';
   const receiptId='fake_event_1';
   const send=(res,status,payload)=>{
     const body=JSON.stringify(payload);
@@ -157,9 +160,19 @@ async function main(){
    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   }
   server=http.createServer(async(req,res)=>{
-   const pathname=new URL(req.url,'http://127.0.0.1').pathname;
+   const incoming=new URL(req.url,'http://127.0.0.1');
+   const pathname=incoming.pathname;
    if(req.method==='GET'&&pathname==='/proof'){
-    const injected=html.replace('</head>',`<script src="./settlement-team-native-pilot-controller.js" defer></script></head>`)
+    const requested=incoming.searchParams.get('scenario')||'happy';
+    if(!['happy','lost_ack','unverified_feed'].includes(requested)){
+      send(res,404,{error:'PILOT_SCENARIO_NOT_ALLOWED'});return;
+    }
+    scenario=requested;created=false;acceptedKey=null;attempts=0;
+    const controllerFile=scenario==='happy'
+      ?'settlement-team-native-pilot-controller.js'
+      :'settlement-team-native-offline-controller.js';
+    const injected=html.replace('</head>',
+      '<script src="./'+controllerFile+'" defer></script></head>')
       .replace('</body>','<pre id="proof">PENDING</pre></body>');
     res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
     res.end(injected);return;
@@ -167,6 +180,10 @@ async function main(){
    if(req.method==='GET'&&pathname==='/settlement-team-native-pilot-controller.js'){
     res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});
     res.end(controller);return;
+   }
+   if(req.method==='GET'&&pathname==='/settlement-team-native-offline-controller.js'){
+    res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});
+    res.end(offlineController);return;
    }
    if(req.method==='GET'&&pathname.startsWith('/')){
     const file=ASSETS.get(pathname.slice(1));
@@ -185,15 +202,34 @@ async function main(){
    if(req.headers.authorization==='Bearer '+TOKEN){
     if(req.method==='POST'&&pathname==='/v1/scopes/drafts'){
      let data;try{data=await body(req)}catch(_){send(res,400,{error:'AUTH_JSON_INVALID'});return}
-     if(created||!data||data.scope?.workspace_id!=='group_a'||
-        !/^fake_/.test(data.scope?.partner_id||'')||
+     report.draft_post_attempts++;
+     if(!data||data.scope?.workspace_id!=='group_a'||
+        data.scope?.partner_id!=='fake_partner_1'||
         data.scope?.business_date!=='2026-10-15'||data.scope?.region!=='mn'||
         data.payload?.synthetic!==true||data.expected_revision!==0||
         !/^draft_[a-f0-9]{32}$/.test(data.idempotency_key||'')){
        send(res,422,{error:'TEAM_SYNTHETIC_INTENT_DENIED'});return;
      }
-     created=true;report.synthetic_draft_post_count++;
-     send(res,200,{sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-10-15:mn',
+     attempts++;
+     if(created){
+       if(scenario!=='lost_ack'||attempts!==2||
+          data.idempotency_key!==acceptedKey){
+         send(res,409,{error:'TEAM_IDEMPOTENCY_CHANGED_OR_DUPLICATE'});return;
+       }
+       report.replay_count++;
+       send(res,200,{sync_status:'SYNCED',
+         scope_key:'group_a:fake_partner_1:2026-10-15:mn',
+         event_id:receiptId,feed_seq:'1',new_revision:1,replayed:true});return;
+     }
+     created=true;acceptedKey=data.idempotency_key;
+     report.synthetic_draft_post_count++;
+     // The fake DB committed, but the browser never received a verified
+     // receipt. A 503 cannot authorize minting a new idempotency key.
+     if(scenario!=='happy'){
+       send(res,503,{error:'TEAM_RECEIPT_ACK_LOST'});return;
+     }
+     send(res,200,{sync_status:'SYNCED',
+       scope_key:'group_a:fake_partner_1:2026-10-15:mn',
        event_id:receiptId,feed_seq:'1',new_revision:1,replayed:false});return;
     }
     if(req.method==='GET'&&pathname==='/v1/scopes/fake_partner_1/2026-10-15/mn'){
@@ -201,9 +237,11 @@ async function main(){
        business_date:'2026-10-15',region:'mn',revision:1,state:'DRAFT'});return;
     }
     if(req.method==='GET'&&pathname==='/v1/changes'){
+     const forged=scenario==='unverified_feed'&&created;
+     if(forged)report.forged_feed_deliveries++;
      send(res,200,{sync_status:'SYNCED',
-      items:created?[{workspace_id:'group_a',event_id:receiptId,
-        feed_seq:'1',event_kind:'DRAFT_CREATED'}]:[],
+      items:created?[{workspace_id:forged?'group_b':'group_a',
+        event_id:receiptId,feed_seq:'1',event_kind:'DRAFT_CREATED'}]:[],
       next_cursor:created?'fake_cursor_1':null,has_more:false});return;
     }
     if(req.method==='POST'&&pathname==='/v1/logout'){
@@ -217,16 +255,29 @@ async function main(){
   await new Promise((ok,bad)=>{server.once('error',bad);server.listen(0,'127.0.0.1',ok)});
   const port=server.address().port;
   if(port===8787)throw Error('RESERVED_PORT_COLLISION');
-  const proof=await chromeProof(binary,path.join(profileRoot,'chrome-profile'),
-    'http://127.0.0.1:'+port+'/proof');
-  report.proof=proof;
-  if(!proof||proof.status!=='PASS'||proof.stage!=='pilot'||
-     proof.fake_only!==true||proof.real_money_ready!==false||
-     proof.review_ui_enabled!==false||proof.mobile_viewport!==true||
-     proof.touch_target_44px!==true||report.auth_logins!==1||
-     report.auth_logouts!==1||report.synthetic_draft_post_count!==1||
-     report.real_money_post_count!==0)
-    throw Error('PILOT_NATIVE_UI_PROOF_UNVERIFIED_'+String(proof&&proof.code||'NO_RECEIPT'));
+  for(const scenarioName of ['happy','lost_ack','unverified_feed']){
+   const proof=await chromeProof(binary,
+     path.join(profileRoot,'chrome-profile-'+scenarioName),
+     'http://127.0.0.1:'+port+'/proof?scenario='+scenarioName);
+   report.proofs.push(proof);
+   if(!proof||proof.status!=='PASS'||
+      proof.stage!==(scenarioName==='happy'?'pilot':scenarioName)||
+      (scenarioName==='happy'&&
+       (proof.fake_only!==true||proof.real_money_ready!==false||
+        proof.review_ui_enabled!==false||proof.mobile_viewport!==true||
+        proof.touch_target_44px!==true))||
+      (scenarioName!=='happy'&&
+       (proof.synthetic_only!==true||proof.auto_send_enabled!==false)))
+     throw Error('PILOT_NATIVE_UI_PROOF_UNVERIFIED_'+scenarioName+'_'+
+       String(proof&&(proof.code||proof.error_code)||'NO_RECEIPT'));
+  }
+  // The fake backend has one immutable event per scenario; only the lost
+  // response case legitimately replays a key, without a second event.
+  if(report.auth_logins!==3||report.auth_logouts!==3||
+     report.synthetic_draft_post_count!==3||
+     report.draft_post_attempts!==4||report.replay_count!==1||
+     report.forged_feed_deliveries!==1||report.real_money_post_count!==0)
+    throw Error('PILOT_IDEMPOTENCY_OR_TENANCY_EVIDENCE_MISSING');
   report.pilot_ui_browser='PASS_SYNTHETIC_CHROME_REAL_UI';
   report.status='PASS_SYNTHETIC_NATIVE_PILOT';
  }catch(e){report.error_code=String(e.message||e).slice(0,160)}
