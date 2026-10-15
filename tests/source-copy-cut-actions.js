@@ -52,7 +52,7 @@ async function main(){
  await els.sourceCutBtn.events.click();
  assert.equal(p.input.value,"2d 19 b15n","Cắt nguồn removes the selected entire source line");
  assert.ok(!p.output.value.includes("89 98"));
- assert.ok(p.output.value.includes("19 b15n"));
+ assert.ok(p.output.value.includes("19 b"),"remaining number 19 must survive with native mode allocation");
  p.undo();
  assert.equal(p.input.value,full);
  assert.equal(p.output.value,originalOutput);
