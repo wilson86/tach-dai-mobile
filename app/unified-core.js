@@ -175,7 +175,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.14';
+  const UX_VERSION='1.0.15';
 
   function selectAllText(el){
     if(!el) return;
@@ -399,6 +399,8 @@
   let syncing=false;
   const seen=new WeakMap();
   const frameTokens=new WeakMap();
+  const modeLocalLedger=new Map();
+  const isExactLedger=value=>String(value||'').trim().startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]');
   function saved(){try{return sessionStorage.getItem(SESSION_KEY)||''}catch(_){return ''}}
   function persist(value){try{sessionStorage.setItem(SESSION_KEY,value)}catch(_){}}
   function activeMode(){return document.querySelector('.tab.active')?.dataset?.mode||'tach'}
@@ -411,7 +413,17 @@
   }
   function publish(value,origin){
     if(syncing)return;
-    shared=String(value??'');persist(shared);syncing=true;
+    const text=String(value??'');
+    const originItem=sources().find(item=>item.el===origin);
+    // Exact-output ledgers are mode-local state, never shared source text.
+    // Propagating one would overwrite a sibling's valid raw message.
+    if(isExactLedger(text)){
+      if(originItem)modeLocalLedger.set(originItem.mode,text);
+      seen.set(origin,text);
+      return;
+    }
+    if(originItem)modeLocalLedger.delete(originItem.mode);
+    shared=text;persist(shared);syncing=true;
     try{
       for(const item of sources()){
         if(item.el!==origin&&String(item.el.value||'')!==shared)item.el.value=shared;
@@ -440,6 +452,9 @@
     }
     if(!seen.has(el)){
       const now=String(el.value||'');
+      if(isExactLedger(now)){
+        modeLocalLedger.set(item.mode,now);seen.set(el,now);return;
+      }
       if(!shared&&now)publish(now,el);else if(now!==shared)el.value=shared;
       seen.set(el,String(el.value||''));
     }
