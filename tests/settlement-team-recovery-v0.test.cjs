@@ -173,3 +173,42 @@ test('quarantined nested payload data is immutable without external state mutati
  assert.throws(()=>{out.items[0].scope.region='mt';},TypeError);
  assert.deepEqual(out.items[0].payload,nested);
 });
+
+test('v0 rejects edit_draft instead of silently relabeling intent as create_draft',async()=>{
+ for(const row of [
+  {...draft(),action:'edit_draft'},
+  {...draft(),action:'approve_review'},
+  {...draft(),action:null},
+  {...draft(),action:'DELETE'}
+ ])await assert.rejects(seal([row]),/TEAM_RECOVERY_DRAFT_INVALID/);
+ // Explicit create_draft is accepted and reopens with the original key and
+ // base revision, still quarantined for external receipt verification.
+ const restored=await open(await seal([{...draft(),action:'create_draft'}]));
+ assert.equal(restored.items[0].id,draft().id);
+ assert.equal(restored.items[0].base_revision,1);
+ assert.equal(restored.items[0].auto_retry,false);
+});
+
+test('unknown or server-authoritative draft metadata is never silently dropped in v0 seal',async()=>{
+ for(const row of [
+  {...draft(),offline:true},
+  {...draft(),auto_retry:true},
+  {...draft(),server_revision:2},
+  {...draft(),actor_user_id:'fake_intruder'},
+  {...draft(),session_token:'token_should_not_enter_vault'},
+  {...draft(),error:{code:'ERROR_NOT_A_STRING'}},
+  {...draft(),scope:{...draft().scope,actor_user_id:'fake_operator'}},
+  {...draft(),scope:{...draft().scope,action:'edit_draft'}}
+ ])await assert.rejects(seal([row]),/TEAM_RECOVERY_DRAFT_INVALID/);
+});
+
+test('allowed synthetic volatile error metadata never changes original idempotency intent',async()=>{
+ const original={...draft(),status:'CONFLICT',error:'TEAM_REVISION_CONFLICT'};
+ const decoded=await open(await seal([original]));
+ assert.equal(decoded.items[0].original_status,'CONFLICT');
+ assert.equal(decoded.items[0].id,original.id);
+ assert.equal(decoded.items[0].base_revision,original.base_revision);
+ assert.equal(decoded.items[0].payload.synthetic,true);
+ assert.equal(decoded.items[0].error,undefined); // excludes transient UI text
+ assert.equal(decoded.items[0].auto_retry,false);
+});

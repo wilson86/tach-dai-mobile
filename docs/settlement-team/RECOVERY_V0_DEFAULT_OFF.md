@@ -261,3 +261,21 @@ using one event. Synthetic adversarial tests cover event reuse and
 feed-sequence reuse across two plausible hashes, plus a distinct-event
 success case. This is **not** new money verification, browser persistence
 or authorization to resend any transaction.
+
+## Recovery envelope v0 action and metadata guard
+
+The v0 ciphertext schema intentionally carries **only create_draft**
+intent and not a full write-action enum. Consequently `seal()` now
+refuses an explicit `edit_draft` (or any other non-`create_draft`)
+instead of silently dropping that field and later computing an incorrect
+`create_draft` receipt SHA. A future feature supporting edit intent must
+introduce an explicitly reviewed versioned envelope; it cannot be
+inferred from the original revision.
+
+The same synthetic-only guard rejects unexpected authoritative metadata
+(`server_revision`, actor/session fields, `auto_retry`, `offline`,
+extra scope fields) rather than quietly discarding it. Known transient
+`error` strings may be supplied but do not become part of the sealed
+financial intent. Three focused tests cover rejected edit intents,
+unrecognized fields and conflict-state round trips. This is not an
+enabling change for live IndexedDB/PWA, which stays DEFAULT OFF.

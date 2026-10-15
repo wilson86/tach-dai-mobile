@@ -105,7 +105,23 @@ function sanitizeDrafts(drafts,actor){
     deny('TEAM_RECOVERY_DRAFT_INVALID');
   const ids=new Set();
   const items=drafts.map(row=>{
+    // v0 only stores the canonical create_draft HTTP intent. An edit_draft
+    // would use a DIFFERENT server request SHA, but v0 carries no action
+    // field after decryption: never silently relabel it as create_draft.
+    const keys=row&&typeof row==='object'&&!Array.isArray(row)?
+      Object.keys(row):[];
+    const allowed=['id','status','scope','base_revision','payload','error','action'];
+    const scopeKeys=row&&row.scope&&typeof row.scope==='object'&&
+      !Array.isArray(row.scope)?Object.keys(row.scope):[];
+    const requiredScope=['workspace_id','partner_id','business_date','region'];
     if(!row||typeof row!=='object'||Array.isArray(row)||
+       (Object.getPrototypeOf(row)!==Object.prototype&&
+        Object.getPrototypeOf(row)!==null)||
+       keys.some(key=>!allowed.includes(key))||
+       (row.action!==undefined&&row.action!=='create_draft')||
+       (row.error!==undefined&&typeof row.error!=='string')||
+       scopeKeys.length!==requiredScope.length||
+       scopeKeys.some(key=>!requiredScope.includes(key))||
        !DRAFT_ID.test(row.id)||ids.has(row.id)||
        !['PENDING','CONFLICT','BLOCKED'].includes(row.status)||
        !Number.isSafeInteger(row.base_revision)||row.base_revision<0||
