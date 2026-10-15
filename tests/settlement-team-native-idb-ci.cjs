@@ -19,6 +19,84 @@ async function run(bin,args,timeout=50000){
  const r=await execFile(bin,args,{encoding:'utf8',timeout,maxBuffer:300000});
  return r.stdout;
 }
+const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
+async function chromeProof(bin,profile,url){
+ const proc=cp.spawn(bin,['--headless=new','--disable-gpu','--disable-dev-shm-usage',
+  '--disable-background-networking','--disable-extensions','--no-first-run',
+  '--no-default-browser-check','--remote-debugging-port=0',
+  '--remote-allow-origins=*','--user-data-dir='+profile,'about:blank'],
+  {stdio:['ignore','ignore','ignore']});
+ let ws=null;
+ try{
+  if(typeof WebSocket!=='function')throw Error('NATIVE_NODE_WEBSOCKET_MISSING_'+process.version);
+  let port=0;
+  for(let n=0;n<80;n++){
+   if(proc.exitCode!==null)throw Error('CHROME_EXIT_BEFORE_DEVTOOLS');
+   try{
+    const text=await fsp.readFile(path.join(profile,'DevToolsActivePort'),'utf8');
+    port=Number(text.split('\n')[0]);if(port>0)break;
+   }catch(_){}
+   await sleep(150);
+  }
+  if(!port)throw Error('CHROME_DEVTOOLS_PORT_MISSING');
+  let target;
+  for(let n=0;n<40;n++){
+   try{
+    const res=await fetch('http://127.0.0.1:'+port+'/json/list');
+    target=(await res.json()).find(x=>x.type==='page'&&x.webSocketDebuggerUrl);
+    if(target)break;
+   }catch(_){}
+   await sleep(150);
+  }
+  if(!target)throw Error('CHROME_DEVTOOLS_PAGE_MISSING');
+  ws=new WebSocket(target.webSocketDebuggerUrl);
+  await new Promise((ok,bad)=>{
+   const t=setTimeout(()=>bad(Error('CHROME_WEBSOCKET_TIMEOUT')),8000);
+   ws.addEventListener('open',()=>{clearTimeout(t);ok()},{once:true});
+   ws.addEventListener('error',()=>{clearTimeout(t);bad(Error('CHROME_WEBSOCKET_ERROR'))},{once:true});
+  });
+  const pending=new Map();let counter=0;
+  ws.addEventListener('message',e=>{
+   let msg;try{msg=JSON.parse(e.data)}catch(_){return}
+   if(pending.has(msg.id)){pending.get(msg.id)(msg);pending.delete(msg.id)}
+  });
+  async function call(method,params={}){
+   const id=++counter;
+   const v=await Promise.race([
+    new Promise((ok,bad)=>{pending.set(id,ok);
+     try{ws.send(JSON.stringify({id,method,params}))}
+     catch(e){pending.delete(id);bad(e)}}),
+    sleep(8000).then(()=>{throw Error('CDP_TIMEOUT_'+method)})
+   ]);
+   pending.delete(id);
+   if(v.error)throw Error('CDP_ERROR_'+method+'_'+v.error.code);
+   return v.result;
+  }
+  await call('Page.enable');
+  await call('Page.navigate',{url});
+  const end=Date.now()+35000;
+  while(Date.now()<end){
+   const r=await call('Runtime.evaluate',{expression:
+    "document.getElementById('proof')?.textContent",returnByValue:true});
+   const output=r&&r.result&&r.result.value;
+   if(typeof output==='string'&&output!=='PENDING'){
+    try{return JSON.parse(output)}catch(_){throw Error('NATIVE_PROOF_NOT_JSON')}
+   }
+   await sleep(200);
+  }
+  throw Error('NATIVE_PROOF_TIMEOUT');
+ }finally{
+  try{ws?.close()}catch(_){}
+  if(proc.exitCode===null){
+   proc.kill('SIGTERM');
+   await Promise.race([new Promise(ok=>proc.once('close',ok)),sleep(3000)]);
+   if(proc.exitCode===null){
+    proc.kill('SIGKILL');
+    await Promise.race([new Promise(ok=>proc.once('close',ok)),sleep(1500)]);
+   }
+  }
+ }
+}
 async function main(){
  const evidence=process.env.KTS_NATIVE_EVIDENCE_DIR,sha=process.env.KTS_NATIVE_SOURCE_SHA;
  if(process.env.GITHUB_ACTIONS!=='true'||process.platform!=='linux'||
@@ -49,14 +127,9 @@ async function main(){
   const port=server.address().port;
   if(port===8787)throw Error('RESERVED_PORT');
   for(const stage of ['save','restore']){
-   const output=await run(bin,['--headless=new','--disable-gpu','--disable-dev-shm-usage',
-    '--disable-background-networking','--disable-extensions','--no-first-run',
-    '--no-default-browser-check','--user-data-dir='+profile,
-    '--virtual-time-budget=15000','--dump-dom',
-    'http://127.0.0.1:'+port+'/proof?stage='+stage]);
-   const match=output.match(/<pre id="proof">([^<]*)<\/pre>/);
-   if(!match)throw Error('NATIVE_DOM_PROOF_MISSING_'+stage);
-   const obj=JSON.parse(match[1].replace(/&quot;/g,'"').replace(/&amp;/g,'&'));
+   // Wait for async native WebCrypto and IndexedDB using live DevTools DOM.
+   const obj=await chromeProof(bin,profile,
+      'http://127.0.0.1:'+port+'/proof?stage='+stage);
    if(obj.status!=='PASS'||obj.stage!==stage||obj.native_indexeddb!==true||
       obj.auto_send_enabled!==false||obj.original_id!=='draft_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     throw Error('NATIVE_PROOF_INVALID_'+stage+'_'+String(obj.code||'NONE'));
