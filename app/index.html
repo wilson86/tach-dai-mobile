@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.17</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.18</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div id="sharedSettings" class="card shared-settings">
     <div class="controls">
       <div><label class="small" for="sharedRegion">Miền dùng chung</label><select id="sharedRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -31,6 +31,7 @@
     </div>
     <label class="today"><input id="sharedToday" type="checkbox" checked> Hôm nay</label>
     <div id="sharedSchedule" class="schedule">Đang nạp lịch dùng chung…</div>
+    <div id="offlineEngineStatus" class="hint" role="status">Đang kiểm tra dữ liệu offline cho engine Đá Vòng…</div>
   </div>
   <div class="tabs" role="tablist">
     <button class="tab active" data-mode="tach">Tách Đài</button>
@@ -76,7 +77,7 @@
     </div>
   </section>
 </div>
-<script src="./unified-core.js?ux=1.0.17"></script>
+<script src="./unified-core.js?ux=1.0.18"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -152,7 +153,7 @@ function updateSharedSchedule(){
     const label={mn:'Miền Nam',mt:'Miền Trung',mb:'Miền Bắc'}[state.region];
     const names=stations.map((x,i)=>`${x[1]||x[0]} (${i<2?'chính':'phụ'})`).join(' - ');
     out.textContent=`${label} · ${day} · ${names||'Miền Bắc'}`;
-  }catch(_){out.textContent='Đang nạp lịch dùng chung…';}
+  }catch(_){out.textContent='Chưa nạp được lịch/engine Tách Đài. Cần kết nối mạng một lần để chuẩn bị offline.';}
 }
 function syncSharedSettings(){
   const date=$('sharedDate'), today=$('sharedToday');
@@ -201,7 +202,7 @@ function updateDvSchedule(){
     const day=['Chủ nhật','Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7'][d.getDay()];
     const names=stations.map((x,i)=>`${x[1]||x[0]} (${i<2?'chính':'phụ'})`).join(' - ');
     $('dvSchedule').textContent=`${region.toUpperCase()} · ${day} · ${names||'Miền Bắc'}`;
-  }catch(e){$('dvSchedule').textContent='Đang nạp engine 6ce6…'}
+  }catch(e){$('dvSchedule').textContent='Chưa nạp được engine. Kiểm tra kết nối và trạng thái lưu offline.'}
 }
 async function runDaVong(){
   if(window.KTS_DV_UI?.beforeRun?.())return;
@@ -218,8 +219,15 @@ async function runDaVong(){
     $('dvResultLabel').textContent=`Kết quả (${result.outputs.length})`;
     setDvStatus(`Đã tách · ${result.outputs.length} tin · ${result.group_count||0} nhóm đá${wasChat?' · đã lọc chat':''}`,'ok');
   }catch(e){
+    const msg=String(e&&e.message||e);
+    // The Mobile iframe owns the canonical engine. If its offline navigation
+    // fails, preserve existing rendered wagers/ledger rather than erasing them.
+    if(msg.includes('ENGINE_046935_NOT_READY')){
+      setDvStatus('Engine Tách Đài chưa nạp được (offline hoặc tải lại). Không thay đổi cược đang lưu. Hãy kết nối mạng để chuẩn bị bộ nhớ đệm và thử lại.','err');
+      return;
+    }
     $('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';
-    const msg=String(e&&e.message||e);setDvStatus(msg.startsWith('LỖI')?msg:'LỖI: '+msg,'err');
+    setDvStatus(msg.startsWith('LỖI')?msg:'LỖI: '+msg,'err');
   }
 }
 $('dvRun').addEventListener('click',runDaVong);
@@ -239,7 +247,45 @@ $('sharedToday').addEventListener('change',syncSharedSettings);
 $('tachFrame').addEventListener('load',()=>{syncSharedSettings();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine 046935 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
 $('ngangFrame').addEventListener('load',syncSharedSettings);
 loadSharedSettings();
-if('serviceWorker' in navigator&&location.protocol!=='file:') window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{}));
+// The Unified app-scope SW alone cannot intercept offline navigation to ../,
+// where the Tách Đài iframe and canonical engine live. Proactively ensure its
+// OWN root-scope SW is installed too; cache exact engine dependencies in the
+// Unified SW. Never clear existing browser ledger or SW data.
+async function prepareOfflineEngine(){
+  const el=$('offlineEngineStatus');
+  if(!('serviceWorker' in navigator)||!('caches' in window)||location.protocol==='file:'){
+    if(el)el.textContent='Offline chưa hỗ trợ trong trình duyệt này.';return false;
+  }
+  try{
+    const root=await navigator.serviceWorker.register('../sw.js',{scope:'../'});
+    await navigator.serviceWorker.register('./sw.js',{scope:'./'});
+    const cache=await caches.open('kts-tach-unified-v1.0.18-offline-engine-bootstrap-046935');
+    const expected=['../','../index.html','../station_calendar.generated.js',
+      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.18'];
+    for(const path of expected){
+      const request=new URL(path,location.href).href;
+      const response=await cache.match(request);
+      if(!response||!response.ok)throw Error('CACHE_MISSING:'+path);
+      if(path==='../business_engine.generated.js'){
+        const source=await response.text();
+        if(!source.includes(EXPECTED_ENGINE))throw Error('ENGINE_CACHE_MISMATCH');
+      }
+    }
+    const rootRegistration=await navigator.serviceWorker.getRegistration(new URL('../',location.href).href);
+    if(!rootRegistration||rootRegistration.scope!==new URL('../',location.href).href||!rootRegistration.active)
+      throw Error('ROOT_SW_NOT_ACTIVE');
+    if(el)el.textContent='Đã lưu engine và giao diện cơ bản. Hãy thử tải lại offline để nghiệm thu.';
+    return true;
+  }catch(e){
+    if(el)el.textContent='Offline chưa sẵn sàng: '+String(e&&e.message||e)+
+      '. Giữ nguyên dữ liệu; kết nối mạng và mở lại trang để chuẩn bị.';
+    return false;
+  }
+}
+if('serviceWorker' in navigator&&location.protocol!=='file:'){
+  window.addEventListener('load',()=>{void prepareOfflineEngine()});
+  window.addEventListener('online',()=>{void prepareOfflineEngine()});
+}
 </script>
 </body>
 </html>
