@@ -140,6 +140,8 @@
       <button id="undoBtn" class="secondary">Hoàn tác</button>
       <button id="clearBtn" class="danger">Xóa</button>
       <button id="selectAllInputBtn" class="secondary">Chọn tất cả</button>
+      <button id="sourceCopyBtn" class="secondary">Copy nguồn</button>
+      <button id="sourceCutBtn" class="secondary">Cắt dòng nguồn</button>
     </div>
     <div id="status" class="status"></div>
     <div class="hint">Chat: bỏ ngày/giờ + tên người gửi; riêng <b>Vinh</b> xóa toàn bộ tin/block. Tên khác chỉ bỏ tên, giữ nội dung.</div>
@@ -1151,6 +1153,48 @@ function renderLedgerWork(){
   $("ledgerWorkCut").disabled=selected===0;
   $("ledgerWorkSelect").textContent=selected===view.length&&view.length?"Bỏ chọn tất cả":"Chọn tất cả";
 }
+
+async function copySourceView(){
+  if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
+    const selected=checkedAliveRecordIndexes();
+    const rows=selected.length?selected.map(i=>outputRecords[i].text):
+      outputRecords.filter(r=>r.alive).map(r=>r.text);
+    if(!rows.length){setStatus("Không có cược còn lại để copy.","err");return;}
+    const ok=await writeClipboardText(rows.join("\n"));
+    setStatus(ok?"Đã copy "+rows.length+" dòng cược còn lại":"Copy thất bại.",ok?"ok":"err");
+    return;
+  }
+  const a=inputEl.selectionStart??0,b=inputEl.selectionEnd??a;
+  const source=a<b?inputEl.value.slice(a,b):inputEl.value;
+  if(!source){setStatus("Không có tin nguồn để copy.","err");return;}
+  const ok=await writeClipboardText(source);
+  setStatus(ok?"Đã copy tin nguồn":"Copy tin nguồn thất bại.",ok?"ok":"err");
+}
+async function cutSelectedSourceLines(){
+  if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
+    await cutSelectedOutput();renderLedgerWork();return;
+  }
+  const text=inputEl.value;
+  const a=inputEl.selectionStart??0,b=inputEl.selectionEnd??a;
+  if(b<=a){setStatus("Bôi đen dòng tin nguồn cần Cắt hoặc dùng checkbox khi đã tách.","err");return;}
+  // Remove complete physical source lines, never arbitrary halves of amounts.
+  const start=text.lastIndexOf("\n",a-1)+1;
+  const found=text.indexOf("\n",b-1);
+  const lineEnd=found<0?text.length:found;
+  const next=found<0?text.length:found+1;
+  const picked=text.slice(start,lineEnd);
+  let remaining=text.slice(0,start)+text.slice(next);
+  if(!remaining.trim())remaining="";
+  if(!picked.trim()){setStatus("Chỉ chọn dòng cược có nội dung để Cắt.","err");return;}
+  if(!(await writeClipboardText(picked))){setStatus("Không thể copy dòng nguồn; chưa Cắt.","err");return;}
+  snapshot();
+  inputEl.value=remaining;
+  persistExactOutputLedger();
+  if(remaining.trim())run();
+  else{outputEl.value="";resetOutputRecords();setStatus("Đã cắt toàn bộ dòng nguồn","ok");}
+  announceWorkingSource();
+}
+
 async function copyLedgerWork(){
   const selected=checkedAliveRecordIndexes();
   if(!selected.length){setStatus("Hãy chọn dòng để Copy.","err");return;}
@@ -1675,6 +1719,8 @@ $("selectAllInputBtn").addEventListener("click",()=>{
 });
 $("ledgerWorkSelect").addEventListener("click",()=>{toggleAllGroupedResults();renderLedgerWork();});
 $("ledgerWorkCopy").addEventListener("click",copyLedgerWork);
+$("sourceCopyBtn").addEventListener("click",copySourceView);
+$("sourceCutBtn").addEventListener("click",cutSelectedSourceLines);
 $("ledgerWorkCut").addEventListener("click",async()=>{await cutSelectedOutput();renderLedgerWork();});
 $("selectAllOutputBtn").addEventListener("click",()=>groupedResultReady?toggleAllGroupedResults():selectAllText(outputEl));
 
