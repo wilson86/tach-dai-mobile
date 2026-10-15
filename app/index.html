@@ -56,8 +56,11 @@
       <textarea id="dvInput" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Ví dụ: 3d 12 32 42 52 dx5n"></textarea>
       <div class="actions">
         <button id="dvRun" class="action primary">Kiểm tra + Đá Vòng</button>
+        <button id="dvUndo" class="action secondary" type="button">Hoàn tác</button>
         <button id="dvClear" class="action danger">Xóa</button>
         <button id="dvSelectAllInput" class="action secondary">Chọn tất cả</button>
+        <button id="dvSourceCopy" class="action secondary" type="button">Copy nguồn</button>
+        <button id="dvSourceCut" class="action secondary" type="button">Cắt dòng nguồn</button>
       </div>
       <div id="dvStatus" class="status"></div>
       <div class="hint">Sai độ dài số đá sẽ báo ngay, ví dụ <b>1 2 3 4</b> phải nhập <b>01 02 03 04</b>. Không tự thêm số 0 và không xuất kết quả một phần khi có lỗi.</div>
@@ -66,7 +69,7 @@
       <div id="dvResultLabel" class="label">Kết quả</div>
       <textarea id="dvOutput" readonly spellcheck="false"></textarea>
       <div class="actions">
-        <button id="dvCutSelection" class="action secondary">Cắt phần chọn</button>
+        <button id="dvCutSelection" class="action secondary">Cắt đã chọn (0)</button>
         <button id="dvSelectAllOutput" class="action secondary">Chọn tất cả</button>
         <button id="dvCopy" class="action secondary">Copy kết quả</button>
       </div>
@@ -201,6 +204,7 @@ function updateDvSchedule(){
   }catch(e){$('dvSchedule').textContent='Đang nạp engine 6ce6…'}
 }
 async function runDaVong(){
+  if(window.KTS_DV_UI?.beforeRun?.())return;
   const raw=$('dvInput').value.trim();
   if(!raw){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
   try{
