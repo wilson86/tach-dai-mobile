@@ -21,6 +21,9 @@ async function run(bin,args,timeout=50000){
 }
 const sleep=ms=>new Promise(ok=>setTimeout(ok,ms));
 async function chromeProof(bin,profile,url){
+ // The prior browser can leave a stale debugger port marker even after
+ // its process has exited. Never connect to that earlier browser by accident.
+ await fsp.rm(path.join(profile,'DevToolsActivePort'),{force:true});
  const proc=cp.spawn(bin,['--headless=new','--disable-gpu','--disable-dev-shm-usage',
   '--disable-background-networking','--disable-extensions','--no-first-run',
   '--no-default-browser-check','--remote-debugging-port=0',
@@ -86,6 +89,14 @@ async function chromeProof(bin,profile,url){
   }
   throw Error('NATIVE_PROOF_TIMEOUT');
  }finally{
+  // Request normal browser-wide shutdown before signalling only this owned
+  // Chrome child. A tab WebSocket close alone leaves browser child processes.
+  try{
+   if(ws&&ws.readyState===WebSocket.OPEN){
+    ws.send(JSON.stringify({id:999999,method:'Browser.close'}));
+    await sleep(450);
+   }
+  }catch(_){}
   try{ws?.close()}catch(_){}
   if(proc.exitCode===null){
    proc.kill('SIGTERM');
@@ -95,6 +106,15 @@ async function chromeProof(bin,profile,url){
     await Promise.race([new Promise(ok=>proc.once('close',ok)),sleep(1500)]);
    }
   }
+  // The second proof must use a genuinely closed/reopened Chrome profile.
+  // Retaining a SingletonLock means another test-owned process can still
+  // hold it, so never claim independent browser restart.
+  for(let n=0;n<20;n++){
+   try{await fsp.lstat(path.join(profile,'SingletonLock'));}
+   catch(e){if(e.code==='ENOENT')return;throw e;}
+   await sleep(150);
+  }
+  throw Error('CHROME_PROFILE_LOCK_NOT_RELEASED');
  }
 }
 async function main(){
