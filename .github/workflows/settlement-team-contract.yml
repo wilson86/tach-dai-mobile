@@ -109,3 +109,22 @@ jobs:
         run: bash team-settlement/tests/postgres-ci-tcp-role-proof.sh
       - name: Verify read-only tenant and actor recovery receipt SELECT (synthetic)
         run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-recovery-readonly.sql
+
+  native-indexeddb-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prove native Chrome ciphertext storage and browser process restart
+        env:
+          KTS_NATIVE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KTS_NATIVE_EVIDENCE_DIR: ${{ runner.temp }}/kts-native-idb-evidence
+        run: node tests/settlement-team-native-idb-ci.cjs
+      - name: Preserve bounded native-browser evidence on pass or fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kts-native-idb-synthetic-proof
+          path: ${{ runner.temp }}/kts-native-idb-evidence/NATIVE_IDB_PROOF.json
+          if-no-files-found: warn
+          retention-days: 7
