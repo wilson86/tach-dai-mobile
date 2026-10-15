@@ -1698,7 +1698,10 @@ runBtn.addEventListener("click",run);
 $("copyBtn").addEventListener("click",copyOutput);
 $("clearBtn").addEventListener("click",()=>{
   if(inputEl.value||outputEl.value)snapshot();
-  inputEl.value="";outputEl.value="";resetOutputRecords();setStatus("");
+  inputEl.value="";outputEl.value="";resetOutputRecords();
+  persistExactOutputLedger(); // Clear stale local ledger on explicit Xóa; Undo can restore snapshot.
+  announceWorkingSource();
+  setStatus("");
   inputEl.focus();
 });
 $("undoBtn").addEventListener("click",()=>{
