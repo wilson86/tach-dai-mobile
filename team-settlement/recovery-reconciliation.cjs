@@ -93,6 +93,13 @@ function createRecoveryReconciliation({auth,repository,syntheticOnly=false}={}){
       checkReceipt(seen.get(spec.id),spec,actor):
       Object.freeze({id:spec.id,classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',
         auto_retry:false}));
+    // Immutable server schema has UNIQUE(workspace_id,event_id) and
+    // UNIQUE(workspace_id,feed_seq). A compromised/incorrect read adapter
+    // must never manufacture two 'saved' intents from the same event.
+    const matched=items.filter(x=>x.classification==='MATCHED_SERVER_RECEIPT');
+    if(new Set(matched.map(x=>x.event_id)).size!==matched.length||
+       new Set(matched.map(x=>x.feed_seq)).size!==matched.length)
+      fail('TEAM_RECOVERY_RECEIPT_MISMATCH');
     return Object.freeze({status:'REVIEW_ONLY',authenticated_user_id:actor.user_id,
       workspace_id:actor.workspace_id,auto_send_enabled:false,
       all_receipts_verified:items.every(x=>x.classification==='MATCHED_SERVER_RECEIPT'),

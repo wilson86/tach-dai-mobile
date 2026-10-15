@@ -200,3 +200,25 @@ test('viewers are denied recovery receipt SELECT before beginning a transaction'
    /TEAM_RECOVERY_ROLE_DENIED/);
  assert.equal(transactions,0);
 });
+
+test('one immutable server event cannot verify two different original draft keys',async()=>{
+ const a=intent('draft_'+'a'.repeat(32));
+ const b=intent('draft_'+'b'.repeat(32));
+ const bRow=rowFor(b);
+ const good=rowFor(a);
+ // Both IDs and hashes are individually plausible. The immutable ledger
+ // nevertheless forbids reusing the same event or workspace feed sequence.
+ for(const forged of [
+  {...bRow,event_id:good.event_id,feed_seq:'2'},
+  {...bRow,event_id:'fake_unique_second_event',feed_seq:good.feed_seq}
+ ]){
+  const h=testService({rows:[good,forged]});
+  await assert.rejects(h.service.inspect(token,[a,b]),
+    /TEAM_RECOVERY_RECEIPT_MISMATCH/);
+ }
+ const valid={...bRow,event_id:'fake_unique_second_event',feed_seq:'2'};
+ const legitimate=await testService({rows:[good,valid]}).service.inspect(token,[a,b]);
+ assert.equal(legitimate.all_receipts_verified,true);
+ assert.equal(legitimate.items.length,2);
+ assert.equal(legitimate.auto_send_enabled,false);
+});

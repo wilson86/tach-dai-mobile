@@ -199,3 +199,39 @@ test('missing receipt cannot smuggle an event id or revision into UNKNOWN classi
  await assert.rejects(flow.review({explicitConsent:true}),
    /TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED/);
 });
+
+test('review composition independently refuses duplicate server event identity across keys',async()=>{
+ const a=draft('a'.repeat(32)),b=draft('b'.repeat(32));
+ const restored={status:'QUARANTINED',durability:'UNVERIFIED',
+   authenticated_user_id:'fake_op',workspace_id:'group_a',
+   needs_server_reauthentication:true,requires_server_receipt_review:true,
+   auto_send_enabled:false,
+   items:[a,b].map(x=>({id:x.id,status:'QUARANTINED',auto_retry:false}))};
+ const base={classification:'MATCHED_SERVER_RECEIPT',event_id:'fake_evt1',
+   feed_seq:'1',server_revision:'1',auto_retry:false};
+ for(const reports of [
+  [{id:a.id,...base},{id:b.id,...base,feed_seq:'2'}],
+  [{id:a.id,...base},{id:b.id,...base,event_id:'fake_evt2'}]
+ ]){
+  const f=createSyntheticRecoveryReviewFlow({syntheticOnly:true,
+   vault:{async inspect(){return restored;}},
+   reconciliation:{async inspect(){return {
+    status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
+    auto_send_enabled:false,all_receipts_verified:true,items:reports
+   };}}});
+  await assert.rejects(f.review({explicitConsent:true}),
+    /TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED/);
+ }
+ const success=createSyntheticRecoveryReviewFlow({syntheticOnly:true,
+  vault:{async inspect(){return restored;}},
+  reconciliation:{async inspect(){return {
+    status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
+    auto_send_enabled:false,all_receipts_verified:true,
+    items:[{id:a.id,...base},
+      {id:b.id,...base,event_id:'fake_evt2',feed_seq:'2'}]
+  };}}});
+ const r=await success.review({explicitConsent:true});
+ assert.equal(r.all_receipts_verified,true);
+ assert.equal(r.auto_send_enabled,false);
+ assert.equal(r.needs_human_resolution,true);
+});

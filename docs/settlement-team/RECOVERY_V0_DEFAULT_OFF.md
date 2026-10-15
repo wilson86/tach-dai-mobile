@@ -248,3 +248,16 @@ matched receipts with wrong/canonicalized sequences and revisions, and
 missing receipts disguised as committed events. The candidate remains
 unwired; these Node tests **do not** unlock native-browser QA, crash-safe
 IndexedDB, real-money use or the independent HIOSKT oracle.
+
+## Distinct immutable server event proof across recovered intents
+
+Both the separately authenticated `recovery-reconciliation.cjs` and
+the downstream default-off `recovery-review-flow.cjs` now reject a batch
+that claims two different original draft IDs were saved by the **same**
+server event ID or the same workspace feed sequence. That follows the
+PostgreSQL `scope_events` schema's per-workspace uniqueness constraints
+and stops injected adapter reports from manufacturing two confirmations
+using one event. Synthetic adversarial tests cover event reuse and
+feed-sequence reuse across two plausible hashes, plus a distinct-event
+success case. This is **not** new money verification, browser persistence
+or authorization to resend any transaction.

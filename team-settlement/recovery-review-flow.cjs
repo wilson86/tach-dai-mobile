@@ -63,6 +63,12 @@ function createSyntheticRecoveryReviewFlow({vault,reconciliation,syntheticOnly=f
              current.server_revision!==undefined)))
         deny('TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED');
     }
+    // Independently enforce global workspace event/feed uniqueness even if
+    // a forged injected reviewer reports two IDs as the same COMMIT.
+    const matched=review.items.filter(x=>x.classification==='MATCHED_SERVER_RECEIPT');
+    if(new Set(matched.map(x=>x.event_id)).size!==matched.length||
+       new Set(matched.map(x=>x.feed_seq)).size!==matched.length)
+      deny('TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED');
     const everyMatched=review.items.every(x=>x.classification==='MATCHED_SERVER_RECEIPT');
     if(review.all_receipts_verified!==everyMatched)
       deny('TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED');
