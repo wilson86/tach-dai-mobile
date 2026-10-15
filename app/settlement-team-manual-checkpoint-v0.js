@@ -51,12 +51,11 @@ function createSyntheticManualCheckpoint({
   if(!Array.isArray(state.drafts))deny('TEAM_MANUAL_CHECKPOINT_SOURCE_INVALID');
   const drafts=state.drafts.filter(x=>x&&ACCEPT.has(x.status));
   if(drafts.length<1||drafts.length>30)deny('TEAM_MANUAL_CHECKPOINT_SOURCE_INVALID');
-  // Preserve the exact original idempotency key, scope, payload and revision.
-  // All metadata and statuses are independently validated by Recovery.seal().
-  return drafts.map(x=>({
-   id:x.id,status:x.status,scope:x.scope,
-   base_revision:x.base_revision,payload:x.payload
-  }));
+  // Pass the complete original intent to the strict Recovery.seal()
+  // schema gate. Stripping unknown fields here would silently reclassify an
+  // edit_draft (or a purported server receipt) as a create_draft backup.
+  // Never persist or auto-send the unsealed source.
+  return drafts.map(x=>({...x}));
  }
  async function save({passphrase,explicitConsent=false}={}){
   consent(explicitConsent);
