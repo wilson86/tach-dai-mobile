@@ -73,6 +73,10 @@ function createSyntheticManualCheckpoint({
   if(JSON.stringify(originals(snapshot(actor,epoch)))!==signature)
    deny('TEAM_MANUAL_CHECKPOINT_DRAFTS_CHANGED');
   sameActor(actor,await identity());
+  // identity() awaits a remote/mocked verifier. Recheck the exact local
+  // generation AND original pending intents after that await, before write.
+  if(JSON.stringify(originals(snapshot(actor,epoch)))!==signature)
+   deny('TEAM_MANUAL_CHECKPOINT_DRAFTS_CHANGED');
   if(await store.writeIfAbsent(SLOT,ciphertext)!==true)
    deny('TEAM_MANUAL_CHECKPOINT_SAVE_UNVERIFIED');
   if(await store.read(SLOT)!==ciphertext)
