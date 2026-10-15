@@ -159,3 +159,15 @@ jobs:
           path: ${{ runner.temp }}/kts-native-pilot-ui-evidence/NATIVE_PILOT_UI_PROOF.json
           if-no-files-found: warn
           retention-days: 7
+      - name: Build exact-HEAD fake-only Android pilot handoff assets (no deployment)
+        env:
+          KTS_VAULT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KTS_VAULT_PACKET_DIR: ${{ runner.temp }}/kts-synthetic-vault-packet
+        run: node team-settlement/build-synthetic-vault-packet.cjs
+      - name: Preserve source-verified static Android pilot handoff packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: kts-android-vault-fake-only-source-packet
+          path: ${{ runner.temp }}/kts-synthetic-vault-packet/
+          if-no-files-found: error
+          retention-days: 7
