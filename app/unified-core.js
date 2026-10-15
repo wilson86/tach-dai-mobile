@@ -284,7 +284,8 @@
   function serial(){
     return {schema:SCHEMA,app:'tach-dai-davong',engine:ENGINE,origin,
       region:sourceRegion,date:sourceDate,
-      rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()}))};
+      rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()})),
+      undo:undoStack.slice(-30)};
   }
   function persist(){
     try{
@@ -449,6 +450,12 @@
     origin=data.origin;sourceRegion=data.region;sourceDate=data.date;
     rows=data.rows.map(r=>({...r}));groups=data.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();ledgerActive=true;$('dvInput').value=origin;
+    undoStack.splice(0,undoStack.length);
+    if(Array.isArray(data.undo))for(const old of data.undo.slice(-30)){
+      if(old&&typeof old.input==='string'&&typeof old.origin==='string'&&
+         Array.isArray(old.rows)&&Array.isArray(old.groups)&&Array.isArray(old.selected))
+        undoStack.push(old);
+    }
     render();
   }
   function swap(id,cb){
@@ -531,11 +538,11 @@
       run.click();
     });
     const clear=$('dvClear');
-    if(clear)clear.addEventListener('click',()=>{snapshot();groups=[];rows=[];selected.clear();origin='';ledgerActive=false;persist();render();});
+    if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();origin='';ledgerActive=false;persist();render();});
     run.addEventListener('click',()=>Promise.resolve().then(rebuild));
     input.addEventListener('input',()=>{if(ledgerActive){ledgerActive=false;persist();render();}});
     maybeRestore();render();
-    window.KTS_DV_UI={beforeRun};
+    window.KTS_DV_UI={beforeRun,beforeClear:snapshot};
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
