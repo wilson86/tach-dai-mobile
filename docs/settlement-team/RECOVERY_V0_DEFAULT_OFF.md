@@ -1,0 +1,333 @@
+# M2 synthetic encrypted draft recovery candidate — DEFAULT OFF
+
+**Not a release feature.** This bounded GitHub-only crypto contract is NOT loaded
+by the pilot HTML, Team PWA, server or auto-runner. It cannot read or write
+IndexedDB, localStorage, files, a network or the team ledger. It never imports
+drafts to the live pending queue. It uses only WebCrypto and ships no keys or
+passwords. Public GitHub fixtures contain fake identities and synthetic payloads.
+
+## Proposed manual two-step flow (not yet exposed in UI)
+
+1. A separately approved, server-authenticated caller supplies the exact
+   `user_id`, `workspace_id` binding from trusted membership, a **dedicated
+   recovery passphrase separate from the login password**, and an explicit
+   collection of **1–30 synthetic** unsynced drafts (PENDING/CONFLICT/BLOCKED).
+2. `seal()` validates fake-only scope/payload, safe revisions and original
+   idempotency IDs. It derives AES-256-GCM keys with PBKDF2-SHA256 (310,000
+   iterations), a new cryptographic random 16-byte salt and 12-byte nonce,
+   and authenticated additional data derived from the exact account/workspace.
+   The returned encrypted envelope is only an in-memory object; no automatic
+   save, unencrypted export or device retention is claimed.
+3. On a separate explicit recovery action, `open()` checks the fixed
+   version/algorithm/size and performs authenticated decryption with the
+   matching trusted identity and dedicated secret. Invalid keys, tampering,
+   fake-vs-other tenants, malformed records and oversize data fail closed.
+   Opened drafts are **QUARANTINED**, have `auto_retry:false`, and retain
+   their exact previous idempotency IDs, payload and revision.
+4. No `syncDraft()`, queue insertion, money calculation or financial
+   approval follows. Before any real integration, a human must reauthenticate,
+   reconcile every sealed intent's original receipt against the authoritative
+   PostgreSQL ledger, verify actor membership, and explicitly decide which
+   records are safe to retry. Retrying an unknown COMMIT with a **new** key is
+   prohibited; server CAS/idempotency remains the final authority.
+
+## Release blockers and limitations
+
+The **unwired** v0 module is only a reproducible cryptography proof; it does
+not satisfy M2 durable offline persistence, automatic crash recovery, key
+management, session-owned encrypted cache protection, mobile browser quota
+and eviction tests, user-account reauthentication, tamper-resistant signed
+recovery audits, two-device restart, PostgreSQL backup/restore or the 65-case
+independent HIOSKT financial oracle. PBKDF2 does not make a weak passphrase
+safe. A future product must independently approve its threat model and
+prove lifecycle recovery without storing the decryption secret alongside
+the ciphertext. `GROUP_APP_READY=NO`, `REAL_MONEY_READY=NO`,
+`RELEASE_READINESS=BLOCKED`.
+
+## Default-off guard and CI source path
+
+The contract workflow path filter explicitly includes
+`app/settlement-team-recovery-v0.js`, ensuring standalone future code
+changes cannot silently bypass the standard synthetic test job. A dedicated
+Node test asserts the pilot HTML/start/UI and live sync client never import
+this prototype; only the synthetic test harness exercises its API. Releasing
+a browser download/import workflow requires a separate approved security and
+device-qualification change, not a hidden new script tag.
+
+## Bounded cold-start encrypted-envelope transport (UNWIRED)
+
+`serializeEnvelope(envelope)` returns a canonical UTF-8-compatible JSON
+**string of ciphertext only**, suitable for an explicit future
+operator-approved transfer channel. `parseEnvelope(text)` accepts only the
+exact canonical structure, rejects duplicate/unknown/reordered properties
+and oversized data, and performs no password prompt, file IO, storage or
+network call. A fresh JavaScript runtime can load a serialized envelope,
+decrypt it with the separately supplied recovery secret and exact
+user/workspace binding, and inspect **quarantined, deeply immutable**
+original intent fields. The integration still cannot save an envelope
+to a phone or automatically restore a draft queue. Loss of the envelope or
+recovery passphrase means loss of the draft: no new platform retention or
+backup guarantee is implied.
+
+Tests cover cold-start module reinitialization, ciphertext-only transport,
+canonical decoding, tampering and malformed input, and recursive immutability
+of decrypted payload/scope. These are synthetic crypto-contract tests,
+not device crash/restart, persistence or server receipt reconciliation proof.
+
+## Tenant-scoped read-only PostgreSQL receipt adapter (still default OFF)
+
+The candidate `postgres-ledger-repository.cjs` now supplies the opt-in
+`lookupRecoveryReceipts(actor, keys)` interface. It is **not used** by any
+live route or PWA. Within the existing injected transaction adapter it
+revalidates active DB membership, then performs only a parameterized SELECT
+joining immutable `idempotency_receipts` to `scope_events` by the exact
+tenant and original event ID, further restricted to the current actor and
+at most 30 original `draft_...` keys. Forged, duplicated and cross-tenant
+adapter rows abort; missing keys remain UNKNOWN and unretryable. The
+read-only contract also works with a fake DB/actor in Node synthetic QA.
+
+A dedicated future disposable-PostgreSQL grant review and real-SQL
+read-only qualification remain blockers. This method does not provision
+database roles, grant SELECT, open connections, change migrations,
+expose an HTTP route, load user files, or commit any recovered draft.
+
+## Hard SQL read-only gate and disposable PostgreSQL proof
+
+The isolated `lookupRecoveryReceipts()` method now starts each injected
+transaction with `SET TRANSACTION READ ONLY` **before** the scoped identity
+GUC, membership recheck or receipt SELECT. An adapter that refuses that
+statement fails closed without looking up any receipt; writer-role
+credentials cannot turn this recovery operation into a mutation.
+
+The standard **disposable public GitHub Actions PostgreSQL** workflow
+runs `postgres-recovery-readonly.sql` only after the existing synthetic
+seed/gates. It verifies one original receipt for the tenant/actor, no
+other-user or cross-tenant read, and denial of UPDATE even by a role that
+normally has UPDATE permission. No migration, grant to an operational
+account, real finance, browser integration or backup is performed.
+
+## Injected encrypted recovery vault (DEFAULT OFF — synthetic contract)
+
+The isolated Node module `team-settlement/recovery-vault.cjs` exercises the
+**next interface**, rather than enabling storage in the browser. Its
+`createSyntheticRecoveryVault` constructor requires `syntheticOnly:true`,
+server-supplied active identity and an injected adapter with two operations:
+`read(slot)` and atomic `writeIfAbsent(slot,ciphertext)`. There is NO
+bundled adapter for IndexedDB, files, cloud storage or real group financial
+data. All save and inspect operations also require explicit individual
+`explicitConsent:true` and a recovery secret independent of the login
+password.
+
+A manual `save` encrypts fake-only pending drafts, re-verifies the session
+after key derivation, and refuses to overwrite an existing opaque backup.
+A reported store acknowledgement is **not** proof that browser storage or
+the operating system durably flushed any bytes; the result says
+`durability=UNVERIFIED`. On manual `inspect`, the adapter returns the
+ciphertext only; the user must authenticate again and supply the separate
+passphrase. After a second live server-identity verification, decrypted
+items remain `QUARANTINED`, never in an active send queue. The method
+**cannot** issue a financial POST or automatically reconcile a ledger; a
+separate approved read-only server reconciliation is still required.
+
+Synthetic Node tests reuse one in-memory adapter across independently
+created vault instances and cover wrong account, wrong secret, tampering,
+revocation during an asynchronous operation, write-if-absent race, attempted
+overwrite and unknown storage durability. This is **not** evidence of phone
+crash survival, encryption key recovery, backup media durability, user-facing
+consent/UI, database receipts or independent on-device authorization. The
+existing PWA/pilot continues to use `MEMORY_ONLY` drafts; module remains
+unwired and no filesystem, production or external account was touched.
+
+## CI-only disposable filesystem crash-boundary qualification — NOT a phone feature
+
+The new isolated `team-settlement/ci-recovery-file-store.cjs` supports only
+synthetic GitHub Actions CI when `GITHUB_ACTIONS=true`, with a private
+`RUNNER_TEMP` child directory. The module refuses all other paths or
+normal host/local environments. Its sole fixed file name contains **only**
+a canonical AES-256-GCM encrypted envelope, created atomically with O_EXCL,
+mode 0600 and an attempted file/directory fsync. Existing files (including
+uncertain partial writes) are never overwritten. Reads refuse symlinks,
+hardlinks, owner/mode violations, oversized records and malformed ciphertext.
+The tests create and remove an exclusive temporary test directory only on
+GitHub's disposable runner, reuse ciphertext from a new Node child process,
+and race 12 simultaneous exclusive writers. They NEVER touch E:/F:,
+operational Windows, browser IndexedDB or customer records.
+
+This is **not** a durable mobile storage implementation or a device power-loss
+proof: even fsync cannot establish a phone's storage policy/backup retention,
+and a killed/corrupt test file remains quarantined without any automatic
+re-send. It does not activate backup/restore in the app or change the
+human release gates. `durability=UNVERIFIED` remains mandatory.
+
+## Unwired manual recovery-review composition (synthetic only)
+
+`team-settlement/recovery-review-flow.cjs` now composes the explicitly
+approved `vault.inspect` quarantine step and separately authenticated
+`reconciliation.inspect` read-only SQL receipt step. It is **not** an HTTP
+route or app feature. The vault's authenticated actor/workspace are included
+in its quarantine report so the second, freshly authenticated receipt stage
+can be matched exactly; mismatched sessions, missing/forged/duplicate receipt
+reports or inconsistent all-verified claims stop the workflow. Even a fully
+matched review is **REVIEW_ONLY**, `needs_human_resolution=true`,
+`auto_send_enabled=false` and `durability=UNVERIFIED`. A missing receipt
+remains explicitly UNKNOWN, not a resend instruction. Output contains only
+original IDs and statuses; decrypted draft payload never enters a send queue.
+
+Synthetic Node QA covers seal/save -> inspect/decrypt -> independent server
+membership and original-receipt digest check, no-backup state, missing receipts,
+login/account change between asynchronous boundaries, forged injected outputs,
+consent, and a static assertion that neither the PWA nor HTTP server imports
+this composition. No physical phone qualification, persistence policy,
+production interface or automatic replay exists.
+
+## Post-write ciphertext read-back + final live membership check
+
+For manual synthetic `vault.save`, an adapter's `writeIfAbsent=true`
+alone no longer produces an `ENCRYPTED_ADAPTER_ACK`. The operation now
+**reads the same slot back and compares the exact canonical encrypted
+string**, then verifies the server-authenticated actor/role again after
+slow storage I/O. An ACK without bytes, replacement, read error or revoked
+identity produces NO positive saved status. Uncertain ciphertext is left
+untouched (never overwritten/deleted on error), allowing later
+human-controlled forensics. An empty-backup inspection also repeats
+membership verification before returning a no-backup state.
+
+A matching read-back proves only that this injected adapter returned the
+same bytes at that instant: it is NOT independent proof of fsync, power-loss
+durability, IndexedDB eviction policy or receipt reconciliation. This
+remains a separate **DEFAULT-OFF synthetic Node contract**, with no mobile
+UI activation or real customer data.
+
+## Browser IndexedDB encrypted store candidate — DEFAULT OFF, NOT PHYSICAL QA
+
+New isolated `app/settlement-team-recovery-idb-v0.js` is an opt-in browser
+candidate for a single synthetic encrypted vault slot. It is **not imported
+by the pilot HTML, start script, PWA sync client or server**. The adapter
+requires explicit `syntheticOnly:true`, an injected IndexedDB factory,
+and `isSecureContext===true`. All read/write input is authenticated AES-GCM
+envelope JSON, never a cleartext draft or token. It uses one IndexedDB
+transaction per operation and `objectStore.add` rather than `put`; only
+transaction completion acknowledges success. A duplicate key returns false;
+quota failure, transaction abort, blocked schema upgrade and malformed
+stored data fail closed. The adapter never deletes old/corrupt evidence.
+
+Seven Node synthetic contract tests use a controlled fake IndexedDB API for
+atomic add, repeated open, duplicate race, quota abort, wrong/unsafe slot,
+invalid ciphertext and default-off static browser wiring. **This fake is
+not an actual IndexedDB browser runtime**. Real device reload, app
+termination, storage eviction, quota policy, browser shutdown/power loss,
+authentication and secret management still require separately approved
+physical/browser QA. No real phone storage or operational money is accessed.
+
+## Synthetic IndexedDB + vault integration proof (not browser proof)
+
+The default-off IndexedDB adapter now validates the exact expected object
+store schema (`keyPath=null`, `autoIncrement=false`) before opening a
+read or add request; a foreign or corrupted schema fails closed. New
+Node fake-IndexedDB tests compose the actual `createSyntheticRecoveryVault`
+with the encrypted store across two vault instances, including
+post-write ciphertext read-back, renewed mock session verification, decrypt
+to QUARANTINED, wrong-secret denial, and no automatic sync. They also model
+the important distinction between an individual `add()` request success
+and a **later transaction abort**: only completed transactions may return
+a saved ACK. No actual browser disk persistence was measured.
+
+## Independent recovered-receipt composition guard (GitHub-only)
+
+The default-off `recovery-review-flow.cjs` now fails closed if a decrypted
+quarantine result repeats any original draft/idempotency ID, before asking
+the separately authenticated reviewer for receipts. When an injected reviewer
+labels an event matched, the composition additionally demands canonical
+positive PostgreSQL feed sequence and revision strings plus a valid event
+ID. An UNKNOWN event cannot carry an event ID, feed sequence or server
+revision as a misleading implied receipt. These are **second-boundary
+defenses**, independent of the existing receipt repository's own checks.
+
+New synthetic adversarial tests cover duplicate imported intent IDs, forged
+matched receipts with wrong/canonicalized sequences and revisions, and
+missing receipts disguised as committed events. The candidate remains
+unwired; these Node tests **do not** unlock native-browser QA, crash-safe
+IndexedDB, real-money use or the independent HIOSKT oracle.
+
+## Distinct immutable server event proof across recovered intents
+
+Both the separately authenticated `recovery-reconciliation.cjs` and
+the downstream default-off `recovery-review-flow.cjs` now reject a batch
+that claims two different original draft IDs were saved by the **same**
+server event ID or the same workspace feed sequence. That follows the
+PostgreSQL `scope_events` schema's per-workspace uniqueness constraints
+and stops injected adapter reports from manufacturing two confirmations
+using one event. Synthetic adversarial tests cover event reuse and
+feed-sequence reuse across two plausible hashes, plus a distinct-event
+success case. This is **not** new money verification, browser persistence
+or authorization to resend any transaction.
+
+## Recovery envelope v0 action and metadata guard
+
+The v0 ciphertext schema intentionally carries **only create_draft**
+intent and not a full write-action enum. Consequently `seal()` now
+refuses an explicit `edit_draft` (or any other non-`create_draft`)
+instead of silently dropping that field and later computing an incorrect
+`create_draft` receipt SHA. A future feature supporting edit intent must
+introduce an explicitly reviewed versioned envelope; it cannot be
+inferred from the original revision.
+
+The same synthetic-only guard rejects unexpected authoritative metadata
+(`server_revision`, actor/session fields, `auto_retry`, `offline`,
+extra scope fields) rather than quietly discarding it. Known transient
+`error` strings may be supplied but do not become part of the sealed
+financial intent. Three focused tests cover rejected edit intents,
+unrecognized fields and conflict-state round trips. This is not an
+enabling change for live IndexedDB/PWA, which stays DEFAULT OFF.
+
+## Receipt lookup post-query session reauthentication
+
+After the read-only PostgreSQL receipt lookup, the default-off synthetic
+server reconciliation independently verifies the same bearer a **second
+time**, before returning any matched/unknown report. Revoked membership,
+unverified server actor, switched user/workspace, role changes or an
+authenticator error after the asynchronous read fail closed; the report
+cannot describe previously fetched receipts as freshly authorized.
+
+This complements the repository's active database membership recheck *inside*
+the transaction. Adversarial tests specifically rotate credentials between
+the SQL lookup and final review; there is still no HTTP route, money write,
+browser artifact or release authorization.
+
+## Manual checkpoint of the actual volatile sync-client queue — DEFAULT OFF
+
+`app/settlement-team-manual-checkpoint-v0.js` accepts a read-only
+`sync.snapshot()` from the actual draft sync client, plus a separate,
+fresh **server-verified** synthetic actor callback, independent recovery
+passphrase, and an injected ciphertext-only store. It never automatically
+runs or imports saved data back into a sendable draft queue. Only an
+**explicitly consented** save or inspect may touch encrypted storage.
+It preserves the original draft ID and expected revision, including a
+previously uncertain 503 receipt, and rejects unsupported write actions
+and unrecognized authoritative fields **rather than silently dropping
+them**. Session generation, original queued bytes, actor membership and
+role are reverified around asynchronous encryption and storage. A
+changed session before write stops any write; if ambiguity occurs after a
+write, the ciphertext is **preserved** for manual forensic recovery.
+`ENCRYPTED_ADAPTER_ACK` means only read-back confirmed, with
+`durability=UNVERIFIED`. A restored backup is always `QUARANTINED`
+and requires fresh **read-only original server receipt reconciliation**
+and a human decision; zero automatic financial retries.
+
+The disposable GitHub Chrome job now uses a **separate actual native
+IndexedDB profile** to prove `manual-save` in one browser process and
+`manual-restore` in a second, alongside the older cryptography-only
+stages. Unit tests additionally exercise the actual `createSyncClient`
+pending queue rather than relying only on mocked `snapshot()` objects.
+These are technical candidate proofs, not a live PWA/storage rollout.
+
+**Crucial remaining implementation gate:** the current pilot has **no
+approved real server identity verifier in the browser** and does not
+load this module. Production must NEVER substitute the form's workspace
+name, browser session state or the synthetic CI callback for that
+independent server verification. A source-pinned approved private HTTPS
+physical Android pilot and server receipt read-only endpoint are needed
+before exposing a manual backup UI. No user-facing offline durability,
+phone power-loss/eviction, automated recovery or financial release is
+claimed. `GROUP_APP_READY=NO`, `REAL_MONEY_READY=NO`,
+`RELEASE_READINESS=BLOCKED`.

@@ -1,0 +1,114 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const {readFileSync}=require('node:fs');
+const {resolve}=require('node:path');
+
+const sql=readFileSync(resolve(__dirname,'../team-settlement/migrations/001_team_ledger.sql'),'utf8');
+const adr=readFileSync(resolve(__dirname,'../docs/settlement-team/ARCHITECTURE_30_USERS.md'),'utf8');
+const model=readFileSync(resolve(__dirname,'../docs/settlement-team/THREAT_MODEL.md'),'utf8');
+const api=readFileSync(resolve(__dirname,'../docs/settlement-team/API_CONTRACT.md'),'utf8');
+
+test('team database is separate and migration explicitly not deployed',()=>{
+  assert(sql.includes('CREATE SCHEMA IF NOT EXISTS kts_team'));
+  assert(sql.includes('BEGIN;')&&sql.includes('COMMIT;'));
+  assert(!sql.includes('kts_router.sqlite3'));
+  assert(adr.includes('Not approved for live finance'));
+  assert(adr.includes('not run')||adr.includes('not deployed'));
+});
+test('tenant-scoped composite keys and server-isolated membership',()=>{
+  for(const entity of ['workspaces','identities','memberships','counterparties','scopes','scope_events','idempotency_receipts'])
+    assert(sql.includes('CREATE TABLE IF NOT EXISTS kts_team.'+entity),entity);
+  for(const entity of ['workspaces','memberships','counterparties','scopes','scope_events','idempotency_receipts']){
+    assert(sql.includes('ALTER TABLE kts_team.'+entity+' ENABLE ROW LEVEL SECURITY'),entity);
+    assert(sql.includes('ALTER TABLE kts_team.'+entity+' FORCE ROW LEVEL SECURITY'),entity);
+  }
+  assert(sql.includes("workspace_id = current_setting('kts.workspace_id', true)"));
+  assert(sql.includes('PRIMARY KEY (workspace_id,partner_id,business_date,region)'));
+  assert(sql.includes('UNIQUE (workspace_id,partner_id,business_date,region,scope_revision)'));
+  assert(sql.includes('PRIMARY KEY (workspace_id,idempotency_key)'));
+  assert(sql.includes('feed_seq bigint NOT NULL DEFAULT 0'));
+  assert(sql.includes('UNIQUE (workspace_id,feed_seq)'));
+});
+test('append-only protections and strict role contracts are present',()=>{
+  assert(sql.includes('TEAM_AUDIT_APPEND_ONLY'));
+  assert(sql.includes('BEFORE UPDATE OR DELETE ON kts_team.scope_events'));
+  assert(sql.includes('BEFORE UPDATE OR DELETE ON kts_team.idempotency_receipts'));
+  assert(sql.includes("team_role IN ('admin','operator','reviewer','viewer')"));
+  assert(sql.includes("partner_kind IN ('customer','owner')"));
+  assert(!sql.includes('PASSWORD =') && !sql.includes('KTS_ROUTER'));
+  const draftMigration=readFileSync(resolve(__dirname,'../team-settlement/migrations/002_draft_transaction.sql'),'utf8');
+  assert(draftMigration.includes('REVOKE ALL ON FUNCTION kts_team.append_draft'));
+  assert(draftMigration.includes('FROM PUBLIC;'));
+  assert(draftMigration.includes('AND i.disabled_at IS NULL'));
+  assert(draftMigration.includes('AND m.revoked_at IS NULL'));
+  assert(draftMigration.includes('TEAM_REVISION_CONFLICT'));
+  assert(draftMigration.includes('TEAM_IDEMPOTENCY_CONFLICT'));
+  assert(draftMigration.includes('SET feed_seq=feed_seq+1'));
+  assert(draftMigration.includes('RETURNING feed_seq INTO v_feed_seq'));
+  assert(model.includes('Thirty-client')||model.includes('Thirty-client test'));
+});
+test('approval and offline reject are called out in API',()=>{
+  assert(api.includes('Idempotency-Key'));
+  assert(api.includes('TEAM_REVISION_CONFLICT'));
+  assert(api.includes('server session'));
+  assert(adr.includes('KQXS'));
+  assert(adr.includes('ROLLBACK'));
+  assert(model.includes('30 authenticated identities'));
+});
+
+test('authentication boundary is explicitly synthetic and separate from settlement SQL',()=>{
+  const auth=readFileSync(resolve(__dirname,'../team-settlement/auth-contract.cjs'),'utf8');
+  const http=readFileSync(resolve(__dirname,'../team-settlement/auth-http-contract.cjs'),'utf8');
+  const migration=readFileSync(resolve(__dirname,'../team-settlement/migrations/003_auth_session.sql'),'utf8');
+  assert(auth.includes('scrypt-v1'));
+  assert(auth.includes('AUTH_SESSION_REVOKED'));
+  assert(auth.includes('membershipKey'));
+  assert(auth.includes('not a deployed server'));
+  assert(http.includes('createAuthHttpServer'));
+  assert(http.includes('AUTH_BODY_TOO_LARGE'));
+  assert(http.includes('AUTH_RATE_LIMITED'));
+  assert(http.includes('maxLoginAttempts'));
+  assert(http.includes('/v1/admin/memberships'));
+  assert(http.includes('/v1/admin/disable'));
+  assert(http.includes('deployed service'));
+  const durable=readFileSync(resolve(__dirname,'../team-settlement/postgres-auth-service.cjs'),'utf8');
+  assert(durable.includes('kts_auth.sessions'));
+  assert(durable.includes('kts_auth.credentials'));
+  assert(durable.includes('AUTH_ADMIN_UNAVAILABLE'));
+  assert(durable.includes('FROM kts_team.memberships'));
+  assert(!durable.includes('kts_router.sqlite3'));
+  assert(migration.includes('CREATE SCHEMA IF NOT EXISTS kts_auth'));
+  assert(migration.includes('password_hash'));
+  assert(migration.includes('session_hash'));
+  assert(migration.includes('REVOKE ALL ON kts_auth.credentials,kts_auth.sessions FROM PUBLIC'));
+  assert(!migration.includes('session_token'));
+  assert(!auth.includes('kts_router.sqlite3'));
+  const ledger=readFileSync(resolve(__dirname,'../team-settlement/ledger-api-contract.cjs'),'utf8');
+  assert(ledger.includes('TEAM_IDEMPOTENCY_CONFLICT'));
+  assert(ledger.includes('checkMutationIntent'));
+  assert(ledger.includes('append-only')||ledger.includes('events.set'));
+  const repository=readFileSync(resolve(__dirname,'../team-settlement/postgres-ledger-repository.cjs'),'utf8');
+  assert(repository.includes('kts_team.append_draft'));
+  assert(repository.includes('set_config'));
+  assert(repository.includes('TEAM_DB_ADAPTER_REQUIRED'));
+  assert(!repository.includes('kts_router.sqlite3'));
+  const serverApi=readFileSync(resolve(__dirname,'../team-settlement/server-ledger-api.cjs'),'utf8');
+  assert(serverApi.includes('verifySession'));
+  assert(serverApi.includes('repository.appendDraft'));
+  assert(serverApi.includes('TEAM_OFFLINE_NOT_AUTHORITATIVE'));
+  const httpRoute=readFileSync(resolve(__dirname,'../team-settlement/auth-http-contract.cjs'),'utf8');
+  assert(httpRoute.includes('/v1/scopes/drafts'));
+  assert(httpRoute.includes('TEAM_BACKEND_UNAVAILABLE'));
+  assert(httpRoute.includes('/v1/changes'));
+  assert(httpRoute.includes('TEAM_CURSOR_INVALID'));
+  assert(httpRoute.includes('resolution'));
+  const sync=readFileSync(resolve(__dirname,'../team-settlement/sync-contract.cjs'),'utf8');
+  assert(sync.includes('MANUAL_REVIEW'));
+  assert(sync.includes('RETRY_WITH_CAS'));
+  assert(!sync.includes('last-writer-wins'));
+  const pwaSync=readFileSync(resolve(__dirname,'../app/settlement-team-sync-client.js'),'utf8');
+  assert(pwaSync.includes('AUTH_SESSION_REQUIRED'));
+  assert(pwaSync.includes('TEAM_REVISION_CONFLICT'));
+  assert(pwaSync.includes('memory-only'));
+});

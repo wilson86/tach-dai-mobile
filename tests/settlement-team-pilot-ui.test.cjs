@@ -1,0 +1,624 @@
+'use strict';
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const UI=require('../app/settlement-team-pilot-ui.js');
+
+function element(){
+ const listeners=new Map();
+ return {
+   value:'',textContent:'',disabled:false,children:[],
+   addEventListener(type,fn){listeners.set(type,fn);},
+   removeEventListener(type){listeners.delete(type);},
+   querySelector(){return {set disabled(v){this._disabled=v;}};},
+   appendChild(child){this.children.push(child);},
+   removeChild(child){const n=this.children.indexOf(child);if(n>=0)this.children.splice(n,1);},
+   get firstChild(){return this.children[0]||null;},
+   fire(type,event={}){const fn=listeners.get(type);if(!fn)throw Error('MISSING_HANDLER');return fn(event);}
+ };
+}
+function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
+ syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
+ pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null,reviewGate=null,reviewNoReceipt=false}={}){
+ const ids=['team-login','team-subject','team-password','team-workspace',
+  'team-logout','team-partner','team-date','team-region','team-create',
+  'team-sync','team-pull','team-reconnect','team-read','team-context',
+  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
+  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
+  'team-review-audit','team-feed-progress'];
+ const els=Object.fromEntries(ids.map(id=>[id,element()]));
+ const doc={
+   getElementById:id=>els[id]||null,
+   createElement:tag=>{assert.equal(tag,'li');return element();}
+ };
+ const win=element();win.confirm=()=>false;
+ const state={authenticated:false,workspace_id:null,drafts:[],review_attempts:[],session_epoch:0};
+ let listener=null,requestCount=0;const calls=[];
+ const notify=()=>{if(listener)listener({...state,drafts:state.drafts.slice()});};
+ const client={
+   snapshot:()=>({...state,drafts:state.drafts.map(v=>({...v}))}),
+   subscribe(fn){listener=fn;notify();return ()=>{listener=null;};},
+   async login(subject,password,workspace){
+     calls.push('login');assert.equal(password,'synthetic-secret');
+     state.authenticated=true;state.workspace_id=workspace;state.session_epoch++;notify();
+     return {authenticated:true};
+   },
+   queueDraft(scope,payload){
+     calls.push('queueDraft');
+     assert.match(scope.partner_id,/^(fake|demo|synthetic)_/);
+     assert.equal(payload.synthetic,true);
+     const item={id:'draft_synthetic_1',scope,status:'PENDING'};
+     state.drafts.push(item);notify();return item;
+   },
+   async syncDraft(id){
+     calls.push('syncDraft');const draft=state.drafts.find(x=>x.id===id);
+     if(draft){draft.status=syncStatus;if(syncStatus!=='SYNCED')draft.error='SYNC_NETWORK_UNAVAILABLE';}
+     notify();return {...draft};
+   },
+   async readScope(scope){calls.push('readScope');if(readGate)await readGate();
+     return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState,
+      ...(reviewState==='PENDING_REVIEW'?{submitted_by:'fake_operator'}:{}),
+      ...(reviewState==='REVIEWED'?{submitted_by:'fake_operator',reviewed_by:'fake_checker'}:{})}};},
+   async reviewScope(action,selected,revision,options={}){
+     calls.push('reviewScope');if(reviewGate)await reviewGate();
+     let attempt=state.review_attempts.find(
+       x=>x.action===action&&x.expected_revision===revision);
+     if(!attempt){
+       if(options.retryOnly)throw Error('RETRY_WITHOUT_INTENT');
+       attempt={action,scope:selected,expected_revision:revision,idempotency_key:'fake_same_key',status:'PENDING'};
+       state.review_attempts.push(attempt);
+     }
+     const choice=reviewOutcomes[Math.min(calls.filter(x=>x==='reviewScope').length-1,reviewOutcomes.length-1)];
+     attempt.status=choice;
+     if(choice==='SYNCED'&&!reviewNoReceipt)attempt.server_result={event_id:'event_review'};
+     notify();return {...attempt};
+   },
+   async pullChanges(){
+     calls.push('pullChanges');requestCount++;if(pullGate)await pullGate();
+     const status=pullStatuses[Math.min(requestCount-1,pullStatuses.length-1)];
+     return status==='SYNCED'?{status,has_more:pullHasMore,items:feedPages?feedPages[Math.min(requestCount-1,feedPages.length-1)]:(feedItems||[{event_id:'synthetic_safe_event'}])}:
+       {status,error:'SYNC_NETWORK_UNAVAILABLE',items:[]};
+   },
+   async reconnect(){calls.push('reconnect');if(reconnectGate)await reconnectGate();
+     return {pull:{status:reconnectStatus,
+     items:reconnectStatus==='SYNCED'?reconnectItems:[],has_more:reconnectHasMore},drafts:reconnectDrafts};},
+   async logout(){
+     calls.push('logout');state.authenticated=false;state.workspace_id=null;state.session_epoch++;
+     state.drafts=[];notify();
+     if(logoutRevokeUnverified)throw Error('SYNC_LOGOUT_REVOKE_UNVERIFIED');
+     return {authenticated:false};
+   }
+ };
+ Object.assign(els['team-subject'],{value:'fake_user'});
+ Object.assign(els['team-password'],{value:'synthetic-secret'});
+ Object.assign(els['team-workspace'],{value:'group_a'});
+ Object.assign(els['team-partner'],{value:'fake_partner_1'});
+ Object.assign(els['team-date'],{value:'2026-10-12'});
+ Object.assign(els['team-region'],{value:'mn'});
+ const mounted=UI.mount({doc,win,client,syntheticReviewUiEnabled});
+ return {mounted,els,win,calls,state,notify,get requests(){return requestCount;}};
+}
+const tick=()=>new Promise(resolve=>setImmediate(resolve));
+
+test('standalone pilot page uses restricted same-origin CSP and never wires legacy PWA',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.html'),'utf8');
+ for(const file of ['settlement-team-review-audit.js','settlement-team-sync-client.js','settlement-team-pilot-ui.js',
+   'settlement-team-pilot-start.js','settlement-team-pilot.css'])
+   assert.ok(html.includes(file),file);
+ assert.match(html,/Content-Security-Policy/);
+ assert.match(html,/connect-src 'self'/);
+ assert.match(html,/SYNTHETIC ONLY/);
+ assert.doesNotMatch(html,/8787:(?:[0-9]+)/);
+ const original=fs.readFileSync(path.join(__dirname,'../app/settlement.html'),'utf8');
+ assert.doesNotMatch(original,/settlement-team-pilot-(?:ui|start)\.js/);
+});
+test('Team UI logs in without keeping password input then queues fake-only pending draft',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});
+ await tick();
+ assert.equal(h.els['team-password'].value,'');
+ assert.equal(h.state.authenticated,true);
+ assert.match(h.els['team-context'].textContent,/group_a/);
+ h.els['team-create'].fire('click');
+ await tick();
+ assert.equal(h.state.drafts.length,1);
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
+ assert.match(h.els['team-warning'].textContent,/1 bản nháp/);
+ assert.equal(h.els['team-drafts'].children.length,1);
+ h.mounted.dispose();
+});
+test('UI requires fake partner prefix and refuses real-looking counterparties',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});
+ await tick();
+ h.els['team-partner'].value='customer_real';
+ h.els['team-create'].fire('click');
+ await tick();
+ assert.equal(h.state.drafts.length,0);
+ assert.equal(h.els['team-notice'].textContent,'TEAM_PILOT_SCOPE_INVALID');
+ h.mounted.dispose();
+});
+test('queued synthetic draft only becomes SYNCED after client-verified acknowledgement',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});
+ await tick();
+ h.els['team-create'].fire('click');
+ await tick();
+ h.els['team-sync'].fire('click');
+ await tick();
+ assert.equal(h.state.drafts[0].status,'SYNCED');
+ assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
+ h.els['team-read'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/revision 1/);
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children[0].textContent,'synthetic_safe_event');
+ h.mounted.dispose();
+});
+test('logout must ask before losing unsynced draft and beforeunload warns',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});
+ await tick();
+ h.els['team-create'].fire('click');await tick();
+ let prevented=false;
+ const ev={preventDefault(){prevented=true;},returnValue:undefined};
+ h.win.fire('beforeunload',ev);
+ assert.equal(prevented,true);
+ assert.equal(ev.returnValue,'');
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.state.authenticated,true);
+ assert.equal(h.calls.includes('logout'),false);
+ h.win.confirm=()=>true;
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.state.authenticated,false);
+ assert.equal(h.state.drafts.length,0);
+ h.mounted.dispose();
+});
+test('HTML remains inert without runtime: scripts have no network listener or database installer',()=>{
+ const start=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot-start.js'),'utf8');
+ assert.match(start,/KtsTeamPilotUI\.mount/);
+ assert.doesNotMatch(start,/listen\(|tailscale|spawn\(|postgres/);
+});
+
+
+test('offline PENDING cannot be presented as successfully saved',async()=>{
+ const h=harness({syncStatus:'PENDING'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ h.els['team-sync'].fire('click');await tick();
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ assert.match(h.els['team-notice'].textContent,/1 PENDING \(chưa có receipt\)/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/1 SYNCED/);
+ assert.match(h.els['team-warning'].textContent,/CHƯA có receipt/);
+ h.mounted.dispose();
+});
+test('conflict is explicitly distinguished from saved receipt',async()=>{
+ const h=harness({syncStatus:'CONFLICT'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ h.els['team-sync'].fire('click');await tick();
+ assert.equal(h.state.drafts[0].status,'CONFLICT');
+ assert.match(h.els['team-notice'].textContent,/1 CONFLICT \(cần người duyệt\)/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/1 SYNCED/);
+ h.mounted.dispose();
+});
+test('rejected BLOCKED draft remains visibly unverified',async()=>{
+ const h=harness({syncStatus:'BLOCKED'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ h.els['team-sync'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/1 BLOCKED \(chưa xác minh\)/);
+ assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
+ h.mounted.dispose();
+});
+test('reconnect never treats SYNCED change feed as proof that a PENDING draft was saved',async()=>{
+ const h=harness({reconnectStatus:'SYNCED',reconnectDrafts:[{status:'PENDING'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/change feed: SYNCED/);
+ assert.match(h.els['team-notice'].textContent,/1 PENDING \(chưa có receipt\)/);
+ h.mounted.dispose();
+});
+test('failed change-feed pull keeps last verified items but clearly marks them stale',async()=>{
+ const h=harness({pullStatuses:['SYNCED','PENDING']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children[0].textContent,'synthetic_safe_event');
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,1);
+ assert.match(h.els['team-notice'].textContent,/CHƯA CẬP NHẬT change feed/);
+ assert.match(h.els['team-notice'].textContent,/lần đọc trước/);
+ h.mounted.dispose();
+});
+
+test('UI clears former user feed and warns when remote logout revocation is unverified',async()=>{
+ const h=harness({logoutRevokeUnverified:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,1);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.state.authenticated,false);
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH thu hồi phiên/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/^Đã đăng xuất và xác nhận máy chủ/);
+ h.mounted.dispose();
+});
+
+test('read-only reviewer status comes only from verified scope; no approval control exists',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ h.els['team-read'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/MÁY CHỦ \(đã xác minh\): DRAFT/);
+ assert.match(h.els['team-review-readonly'].textContent,/revision 1/);
+ h.els['team-partner'].fire('change');
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ h.els['team-read'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/MÁY CHỦ/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ const html=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.html'),'utf8');
+ assert.doesNotMatch(html,/id="team-(?:finalize|close|reopen)"/);
+ h.mounted.dispose();
+});
+
+test('review buttons remain hidden and inert by default despite source markup',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-review-controls'].hidden,true);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ assert.equal(h.els['team-approve-review'].disabled,true);
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.includes('reviewScope'),false);
+ assert.equal(h.els['team-notice'].textContent,'TEAM_REVIEW_UI_NOT_ENABLED');
+ h.mounted.dispose();
+});
+test('opt-in synthetic review requires fresh scope read and explicit human confirmation',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ assert.equal(h.els['team-review-controls'].hidden,false);
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.includes('reviewScope'),false);
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.includes('reviewScope'),false);
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ h.win.confirm=()=>true;
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='readScope').length,2);
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,1);
+ assert.match(h.els['team-notice'].textContent,/receipt event_review/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('phone lost response keeps review PENDING and retries identical in-memory request only by human confirmation',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true,reviewOutcomes:['PENDING','SYNCED']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.win.confirm=()=>true;
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/PENDING/);
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ assert.equal(h.state.review_attempts.length,1);
+ assert.equal(h.state.review_attempts[0].idempotency_key,'fake_same_key');
+ h.els['team-submit-review'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='readScope').length,2);
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,2);
+ assert.equal(h.state.review_attempts[0].idempotency_key,'fake_same_key');
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('approver button is only a gated test action for a freshly verified pending review',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true,reviewState:'PENDING_REVIEW'});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ assert.equal(h.els['team-approve-review'].disabled,false);
+ h.win.confirm=()=>true;
+ h.els['team-approve-review'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,1);
+ assert.match(h.els['team-notice'].textContent,/PHÊ DUYỆT đã ghi nhận/);
+ h.mounted.dispose();
+});
+
+test('opt-in controls stay concealed when the HTML hidden flag is set',()=>{
+ const stylesheet=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.css'),'utf8');
+ assert.ok(stylesheet.includes('[hidden]{display:none!important}'));
+ const bootstrap=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot-start.js'),'utf8');
+ assert.equal(bootstrap.includes('syntheticReviewUiEnabled:true'),false);
+});
+
+test('verified human-review audit shows only server actor, submitter, time and revision',async()=>{
+ const submitted={
+   workspace_id:'group_a',event_id:'event_2',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'2',
+   recorded_at:'2026-10-14T11:00:00.123Z',
+   result_snapshot:{synthetic_review_only:true,from_state:'DRAFT',
+     to_state:'PENDING_REVIEW',actor_user_id:'fake_operator',submitted_by:'fake_operator'}
+ };
+ const reviewed={...submitted,event_id:'event_3',event_kind:'REVIEWED',
+   actor_user_id:'fake_reviewer',scope_revision:3,feed_seq:'3',
+   recorded_at:'2026-10-14T11:01:00.123Z',result_snapshot:{
+     synthetic_review_only:true,from_state:'PENDING_REVIEW',
+     to_state:'REVIEWED',actor_user_id:'fake_reviewer',submitted_by:'fake_operator'}};
+ const h=harness({feedItems:[submitted,reviewed]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,2);
+ assert.match(h.els['team-review-audit'].children[1].textContent,/fake_reviewer/);
+ assert.match(h.els['team-review-audit'].children[1].textContent,/fake_operator/);
+ assert.match(h.els['team-review-audit'].children[1].textContent,/revision 3/);
+ assert.match(h.els['team-notice'].textContent,/đã đọc trong phiên/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,0);
+ h.mounted.dispose();
+});
+test('audit validation failure cannot show forged reviewer or clear previous verified feed',async()=>{
+ const good={workspace_id:'group_a',event_id:'event_good',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'2',
+   recorded_at:'2026-10-14T11:00:00.123Z',result_snapshot:{
+     synthetic_review_only:true,from_state:'DRAFT',to_state:'PENDING_REVIEW',
+     actor_user_id:'fake_operator',submitted_by:'fake_operator'}};
+ const feed=[good];
+ const h=harness({feedItems:feed});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,1);
+ feed[0]={...good,workspace_id:'group_b',actor_user_id:'fake_forged'};
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-review-audit'].children.length,1);
+ assert.doesNotMatch(h.els['team-review-audit'].children[0].textContent,/fake_forged/);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH/);
+ h.mounted.dispose();
+});
+
+test('read-only scope exposes server-derived submitter and independent reviewer',async()=>{
+ for(const [status,mustMatch] of [
+   ['PENDING_REVIEW',/người gửi duyệt fake_operator/],
+   ['REVIEWED',/người duyệt fake_checker/]
+ ]){
+   const h=harness({reviewState:status});
+   h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+   h.els['team-read'].fire('click');await tick();
+   assert.match(h.els['team-review-readonly'].textContent,mustMatch);
+   assert.match(h.els['team-review-readonly'].textContent,/Không có chốt tiền/);
+   h.mounted.dispose();
+ }
+});
+
+test('pilot rejects impossible calendar date before queue or read, accepts leap day',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-date'].value='2026-02-29';
+ h.els['team-create'].fire('click');await tick();
+ assert.equal(h.calls.includes('queueDraft'),false);
+ assert.equal(h.els['team-notice'].textContent,'TEAM_PILOT_SCOPE_INVALID');
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.calls.includes('readScope'),false);
+ h.els['team-date'].value='2028-02-29';
+ h.els['team-create'].fire('click');await tick();
+ assert.equal(h.calls.includes('queueDraft'),true);
+ h.mounted.dispose();
+});
+
+test('read-only history accumulates successful pages and survives an empty poll, not logout',async()=>{
+ const submitted={
+   workspace_id:'group_a',event_id:'event_submit',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'1',
+   recorded_at:'2026-10-14T11:00:00.123Z',
+   result_snapshot:{synthetic_review_only:true,from_state:'DRAFT',
+     to_state:'PENDING_REVIEW',actor_user_id:'fake_operator',submitted_by:'fake_operator'}
+ };
+ const approved={...submitted,event_id:'event_approved',event_kind:'REVIEWED',
+   actor_user_id:'fake_checker',scope_revision:3,feed_seq:'2',
+   recorded_at:'2026-10-14T11:01:00.123Z',result_snapshot:{
+     synthetic_review_only:true,from_state:'PENDING_REVIEW',to_state:'REVIEWED',
+     actor_user_id:'fake_checker',submitted_by:'fake_operator'}};
+ const h=harness({feedPages:[[submitted],[approved],[]]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ for(let i=0;i<3;i++){h.els['team-pull'].fire('click');await tick();}
+ assert.deepEqual(h.els['team-changes'].children.map(x=>x.textContent),['event_submit','event_approved']);
+ assert.equal(h.els['team-review-audit'].children.length,2);
+ assert.match(h.els['team-notice'].textContent,/0 sự kiện mới/);
+ assert.match(h.els['team-notice'].textContent,/Không phải toàn bộ lịch sử/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.equal(h.els['team-review-audit'].children.length,0);
+ h.mounted.dispose();
+});
+
+test('read-only history is bounded to 500 recent events and rejects duplicated page identities',async()=>{
+ const pages=Array.from({length:6},(_,page)=>Array.from({length:100},(_,i)=>({
+   event_id:'fake_event_'+(page*100+i+1)
+ })));
+ const h=harness({feedPages:pages});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ for(let i=0;i<6;i++){h.els['team-pull'].fire('click');await tick();}
+ assert.equal(h.els['team-changes'].children.length,500);
+ assert.equal(h.els['team-changes'].children[0].textContent,'fake_event_101');
+ assert.equal(h.els['team-changes'].children[499].textContent,'fake_event_600');
+ assert.match(h.els['team-notice'].textContent,/chỉ giữ 500 gần nhất/);
+ // Mock returns a repeated event on a seventh poll. Never present it as new.
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,500);
+ assert.match(h.els['team-notice'].textContent,/trùng mã sự kiện/);
+ h.mounted.dispose();
+});
+
+test('editing partner before change/blur invalidates old read-only scope controls immediately',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ assert.equal(h.els['team-submit-review'].disabled,false);
+ h.els['team-partner'].value='fake_partner_2';
+ h.els['team-partner'].fire('input');
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+
+test('reconnect renders verified feed events it consumed instead of silently skipping them',async()=>{
+ const event={workspace_id:'group_a',event_id:'reconnected_submit',event_kind:'SUBMITTED',
+   partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn',
+   actor_user_id:'fake_operator',scope_revision:2,feed_seq:'1',
+   recorded_at:'2026-10-14T11:00:00.123Z',
+   result_snapshot:{synthetic_review_only:true,from_state:'DRAFT',
+     to_state:'PENDING_REVIEW',actor_user_id:'fake_operator',submitted_by:'fake_operator'}};
+ const h=harness({reconnectItems:[event],reconnectHasMore:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.deepEqual(h.els['team-changes'].children.map(x=>x.textContent),['reconnected_submit']);
+ assert.equal(h.els['team-review-audit'].children.length,1);
+ assert.match(h.els['team-feed-progress'].textContent,/CÒN TRANG/);
+ assert.match(h.els['team-notice'].textContent,/change feed: SYNCED/);
+ h.mounted.dispose();
+});
+
+test('reconnect with malformed review payload never labels its pulled feed verified',async()=>{
+ const h=harness({reconnectItems:[{workspace_id:'group_b',event_id:'fake_bad',
+   event_kind:'REVIEWED'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH/);
+ assert.match(h.els['team-feed-progress'].textContent,/Lần đọc gần nhất CHƯA XÁC MINH/);
+ h.mounted.dispose();
+});
+
+test('explicit page-progress indicator distinguishes more pages, terminal poll and stale retries',async()=>{
+ const h=harness({feedPages:[[ {event_id:'event_1'} ],[]],pullHasMore:true,
+   pullStatuses:['SYNCED','PENDING']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.match(h.els['team-feed-progress'].textContent,/CÒN TRANG/);
+ h.els['team-pull'].fire('click');await tick();
+ assert.match(h.els['team-feed-progress'].textContent,/CÒN TRANG/);
+ assert.match(h.els['team-feed-progress'].textContent,/CHƯA XÁC MINH/);
+ h.els['team-logout'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-feed-progress'].textContent,/Chưa xác minh đã đọc hết/);
+ h.mounted.dispose();
+});
+
+test('missing page-completeness metadata never tells pilot viewer it reached the end',async()=>{
+ const h=harness({pullHasMore:null});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ assert.equal(h.els['team-changes'].children.length,1);
+ assert.match(h.els['team-feed-progress'].textContent,/Chưa xác minh đã đọc hết/);
+ assert.doesNotMatch(h.els['team-feed-progress'].textContent,/Đã đến cuối/);
+ h.mounted.dispose();
+});
+
+test('pilot reconnect warns when offline feed prevents retrying memory-only pending drafts',async()=>{
+ const h=harness({reconnectStatus:'PENDING',reconnectDrafts:[]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-create'].fire('click');await tick();
+ assert.equal(h.state.drafts.length,1);
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.equal(h.state.drafts[0].status,'PENDING');
+ assert.match(h.els['team-notice'].textContent,/CHƯA THỬ LẠI 1 bản nháp PENDING/);
+ assert.match(h.els['team-notice'].textContent,/chưa xác minh kết nối/);
+ assert.match(h.els['team-warning'].textContent,/MEMORY_ONLY/);
+ assert.match(h.els['team-feed-progress'].textContent,/CHƯA XÁC MINH/);
+ h.mounted.dispose();
+});
+
+function deferredPilotResponse(){
+ let resume;const promise=new Promise(ok=>{resume=ok;});
+ return {promise,resume};
+}
+test('in-flight scope read cannot revive review controls after edit-then-revert',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+   readGate:()=>gate.promise});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ const original=h.els['team-partner'].value;
+ h.els['team-partner'].value='fake_partner_2';h.els['team-partner'].fire('input');
+ h.els['team-partner'].value=original;h.els['team-partner'].fire('input');
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('in-flight read from an old session cannot activate review after workspace ABA',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+   readGate:()=>gate.promise});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ h.state.session_epoch++;h.state.workspace_id='group_a';h.notify();
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.equal(h.els['team-submit-review'].disabled,true);
+ h.mounted.dispose();
+});
+test('delayed feed from previous session never contaminates next workspace history',async()=>{
+ const gate=deferredPilotResponse(),h=harness({pullGate:()=>gate.promise,
+   feedItems:[{event_id:'fake_old_session_event'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-pull'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/phiên đã thay đổi/);
+ h.mounted.dispose();
+});
+test('delayed reconnect never mixes original users change feed into next session',async()=>{
+ const gate=deferredPilotResponse(),h=harness({reconnectGate:()=>gate.promise,
+   reconnectItems:[{event_id:'fake_prior_session_event'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.equal(h.els['team-changes'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/phiên đã thay đổi/);
+ h.mounted.dispose();
+});
+
+test('delayed review result never confirms previous session after actor changes',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+  reviewGate:()=>gate.promise});
+ h.win.confirm=()=>true;
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.els['team-submit-review'].fire('click');await tick();await tick();
+ assert.equal(h.calls.includes('reviewScope'),true);
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
+ assert.match(h.els['team-notice'].textContent,/phiên hoặc phạm vi thay đổi/);
+ h.mounted.dispose();
+});
+test('review response after fake partner selection ABA does not show confirmed receipt',async()=>{
+ const gate=deferredPilotResponse(),h=harness({syntheticReviewUiEnabled:true,
+   reviewGate:()=>gate.promise});
+ h.win.confirm=()=>true;
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.els['team-submit-review'].fire('click');await tick();await tick();
+ const partner=h.els['team-partner'].value;
+ h.els['team-partner'].value='fake_partner_2';h.els['team-partner'].fire('input');
+ h.els['team-partner'].value=partner;h.els['team-partner'].fire('input');
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-review-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
+ h.mounted.dispose();
+});
+test('injected successful review without immutable event ID never displays verified completion',async()=>{
+ const h=harness({syntheticReviewUiEnabled:true,reviewNoReceipt:true});
+ h.win.confirm=()=>true;
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-read'].fire('click');await tick();
+ h.els['team-submit-review'].fire('click');await tick();await tick();
+ assert.match(h.els['team-notice'].textContent,/thiếu biên nhận/);
+ assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
+ h.mounted.dispose();
+});

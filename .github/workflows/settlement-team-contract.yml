@@ -1,0 +1,173 @@
+name: KTS Settlement Team M0 isolated contract QA
+on:
+  pull_request:
+    paths:
+      - 'team-settlement/**'
+      - 'app/settlement-team-sync-client.js'
+      - 'app/settlement-team-recovery-v0.js'
+      - 'app/settlement-team-recovery-idb-v0.js'
+      - 'app/settlement-team-manual-checkpoint-v0.js'
+      - 'app/settlement-team-review-audit.js'
+      - 'app/settlement-team-pilot*'
+      - 'app/settlement-team-manual*'
+      - 'tests/settlement-team-native-*.cjs'
+      - 'tests/settlement-team-native-*.html'
+      - 'docs/settlement-team/**'
+      - 'tests/settlement-team-*.test.cjs'
+      - 'tests/settlement-sync-contract.test.cjs'
+      - 'tests/settlement-auth-contract.test.cjs'
+      - 'tests/settlement-auth-http-contract.test.cjs'
+      - 'tests/settlement-ledger-api-contract.test.cjs'
+      - 'tests/settlement-changes-http-contract.test.cjs'
+      - 'tests/settlement-postgres-repository.test.cjs'
+      - 'tests/settlement-server-ledger-api.test.cjs'
+      - '.github/workflows/settlement-team-contract.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: team-contract-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  team-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Node contract and schema source tests (synthetic only)
+        run: |
+          node --test tests/settlement-team-*.test.cjs tests/settlement-sync-contract.test.cjs
+          node --test tests/settlement-auth-contract.test.cjs tests/settlement-auth-http-contract.test.cjs tests/settlement-ledger-api-contract.test.cjs tests/settlement-changes-http-contract.test.cjs tests/settlement-postgres-repository.test.cjs tests/settlement-server-ledger-api.test.cjs
+      - name: Existing Mobile + settlement engine regression
+        run: |
+          node tests/regression-tests.js
+          node tests/settlement-engine-tests.js
+          node tests/settlement-feature-gates-tests.js
+      - name: Canonical settlement history regression (synthetic)
+        run: node --test .github/scripts/settlement-feature-history-audit.test.cjs
+      - name: HIOSKT batch and Shadow exact-proof regressions (synthetic)
+        run: |
+          node tests/settlement-shadow-batch-tests.js
+          node tests/settlement-shadow-ui-tests.js
+      - name: No production or paid deploy tasks
+        run: |
+          echo "TEAM_CONTRACT_QA_ONLY=PASS"
+          echo "POSTGRES_DATABASE_TEST=SEE_SEPARATE_POSTGRES_JOB"
+          echo "AUTH_HTTP_TEST=SYNTHETIC_ONLY"
+          echo "REAL_HIOSKT_ORACLE=BLOCKED"
+          echo "RELEASE_READINESS=BLOCKED"
+
+  postgres-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: synthetic-ci-only
+          POSTGRES_DB: team_contract_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d team_contract_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: synthetic-ci-only
+      PGDATABASE: team_contract_test
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Apply isolated schema to disposable synthetic PostgreSQL
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/001_team_ledger.sql
+      - name: Apply draft-only transactional SQL function in isolated database
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/002_draft_transaction.sql
+      - name: Apply isolated auth/session persistence candidate
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/003_auth_session.sql
+      - name: Verify RLS tenant isolation, immutable events and idempotency constraints
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-smoke.sql
+      - name: Verify atomic draft idempotency, CAS and role denied
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-draft.sql
+      - name: Add disposable human-review state transitions (never production)
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/migrations/004_review_workflow.sql
+      - name: Prove distinct operator/reviewer durable workflow with audit
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-review-workflow.sql
+      - name: Race 30 synthetic clients on one scope revision
+        run: bash team-settlement/tests/concurrent-30.sh
+      - name: Prove commit-order feed for two parallel scopes in same workspace
+        run: bash team-settlement/tests/concurrent-workspace-feed.sh
+      - name: Verify synthetic auth/session persistence boundaries
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-auth.sql
+      - name: Verify least-privilege durable-auth SQL and revoked-session boundary
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-durable-auth-contract.sql
+      - name: Prove auth versus ledger database role separation (synthetic only)
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-role-boundaries.sql
+      - name: Prove separate credentialed PostgreSQL TCP login roles in disposable CI
+        run: bash team-settlement/tests/postgres-ci-tcp-role-proof.sh
+      - name: Verify read-only tenant and actor recovery receipt SELECT (synthetic)
+        run: psql -X -v ON_ERROR_STOP=1 -f team-settlement/tests/postgres-recovery-readonly.sql
+
+  native-indexeddb-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Prove native Chrome ciphertext storage and browser process restart
+        env:
+          KTS_NATIVE_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KTS_NATIVE_EVIDENCE_DIR: ${{ runner.temp }}/kts-native-idb-evidence
+        run: node tests/settlement-team-native-idb-ci.cjs
+      - name: Preserve bounded native-browser evidence on pass or fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kts-native-idb-synthetic-proof
+          path: ${{ runner.temp }}/kts-native-idb-evidence/NATIVE_IDB_PROOF.json
+          if-no-files-found: warn
+          retention-days: 7
+
+  native-pilot-ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Verify actual pilot UI against bounded same-origin synthetic HTTP fixture in real Chrome
+        env:
+          KTS_PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KTS_PILOT_EVIDENCE_DIR: ${{ runner.temp }}/kts-native-pilot-ui-evidence
+        run: node tests/settlement-team-native-pilot-ci.cjs
+      - name: Preserve source-pinned real browser pilot UI proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kts-native-pilot-ui-synthetic-proof
+          path: ${{ runner.temp }}/kts-native-pilot-ui-evidence/NATIVE_PILOT_UI_PROOF.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Build exact-HEAD fake-only Android pilot handoff assets (no deployment)
+        env:
+          KTS_VAULT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KTS_VAULT_PACKET_DIR: ${{ runner.temp }}/kts-synthetic-vault-packet
+        run: node team-settlement/build-synthetic-vault-packet.cjs
+      - name: Preserve source-verified static Android pilot handoff packet
+        uses: actions/upload-artifact@v4
+        with:
+          name: kts-android-vault-fake-only-source-packet
+          path: ${{ runner.temp }}/kts-synthetic-vault-packet/
+          if-no-files-found: error
+          retention-days: 7
