@@ -131,7 +131,7 @@ async function main(){
  await fsp.mkdir(evidence,{recursive:true,mode:0o700});
  const report={source_sha:sha,status:'BLOCKED',native_browser_qa:'NOT_PROVEN',
  real_money_ready:false,release_readiness:'BLOCKED',pwa_enabled:false,
- financial_post_count:0,stages:[]};
+ financial_post_count:0,verified_session_gets:0,stages:[]};
  let server=null,temp=null,blockedHttpMethods=0;
  try{
   const bin=browser();
@@ -141,10 +141,20 @@ async function main(){
   server=http.createServer((req,res)=>{
    if(req.method!=='GET'){blockedHttpMethods++;res.writeHead(405);res.end();return}
    const key=new URL(req.url,'http://localhost').pathname;
+   if(key==='/v1/session'){
+    if(req.headers.authorization!=='Bearer '+'a'.repeat(43)){
+      res.writeHead(401,{'Content-Type':'application/json','Cache-Control':'no-store'});
+      res.end('{"error":"AUTH_SESSION_INVALID"}');return;
+    }
+    report.verified_session_gets++;
+    res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});
+    res.end(JSON.stringify({server_verified:true,membership_active:true,
+      user_id:'fake_user_a',workspace_id:'group_a',role:'operator'}));return;
+   }
    if(key==='/proof'){
     res.writeHead(200,{'Content-Type':'text/html; charset=utf-8',
      'Cache-Control':'no-store','X-Content-Type-Options':'nosniff',
-     'Content-Security-Policy':"default-src 'none'; script-src 'self' 'unsafe-inline'; connect-src 'none'; form-action 'none'; object-src 'none'; base-uri 'none'"});
+     'Content-Security-Policy':"default-src 'none'; script-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'none'; object-src 'none'; base-uri 'none'"});
     res.end(proofHtml);return
    }
    if(!Object.prototype.hasOwnProperty.call(routes,key)){res.writeHead(404);res.end();return}
@@ -176,6 +186,7 @@ async function main(){
   // a hardcoded "zero" field in the artifact.
   report.financial_post_count=blockedHttpMethods;
   if(blockedHttpMethods!==0)throw Error('BROWSER_UNEXPECTED_HTTP_METHOD');
+  if(report.verified_session_gets<5)throw Error('BROWSER_REAL_SESSION_REAUTH_MISSING');
   report.status='PASS_SYNTHETIC_NATIVE_CHROME';
   report.native_browser_qa='PASS_CI_RESTART';
  }catch(e){report.error_code=String(e.message||e).slice(0,140)}
