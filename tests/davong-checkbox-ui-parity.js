@@ -34,6 +34,8 @@ function setup(existingStorage=new Map(),clipboardFailure=false){
     }if(this.id){other.id=this.id;nodes[this.id]=other}},
    cloneNode(){const cloned=element(this.tag,this.id);cloned.textContent=this.textContent;cloned.className=this.className;return cloned}
   };
+  Object.defineProperty(node,"id",{get(){return this._id||""},set(next){this._id=next;if(next)nodes[next]=this}});
+  if(id)node.id=id;
   Object.defineProperty(node,"innerHTML",{get(){return this.innerHTMLValue},set(value){
    this.innerHTMLValue=value;
    for(const m of String(value).matchAll(/id="([^"]+)"/g)){
