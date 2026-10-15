@@ -74,6 +74,8 @@ function createAuthHttpServer(auth, {
   maxLoginSourceAttempts = DEFAULT_MAX_LOGIN_SOURCE_ATTEMPTS,
   clock = () => Date.now(),
   ledger = null,
+  recoveryInspector = null,
+  enableSyntheticRecoveryInspectHttp = false,
   enableSyntheticReviewHttp = false
 } = {}) {
   if (!auth || typeof auth.login !== 'function' || typeof auth.verifySession !== 'function' ||
@@ -85,6 +87,9 @@ function createAuthHttpServer(auth, {
       !Number.isSafeInteger(maxLoginSourceAttempts) || maxLoginSourceAttempts < 1 ||
       maxLoginSourceAttempts > 100000 ||
       typeof clock !== 'function' || typeof enableSyntheticReviewHttp !== 'boolean' ||
+      typeof enableSyntheticRecoveryInspectHttp !== 'boolean' ||
+      (enableSyntheticRecoveryInspectHttp &&
+       (!recoveryInspector || typeof recoveryInspector.inspect !== 'function')) ||
       (enableSyntheticReviewHttp && (!ledger || typeof ledger.advanceReview !== 'function')) ||
       (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' &&
         typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function'))))
@@ -246,6 +251,63 @@ function createAuthHttpServer(auth, {
               'TEAM_IDEMPOTENCY_KEY_REQUIRED'].includes(code))
             return json(res,422,{error:code});
           return json(res,503,{error:'TEAM_REVIEW_NOT_VERIFIED'});
+        }
+      }
+      // Separate DEFAULT-OFF fake-only receipt lookup. A POST is used only
+      // for bounded review input; repository behind inspector must perform
+      // tenant-scoped SQL SET TRANSACTION READ ONLY. No draft append/retry.
+      if(req.url==='/v1/recovery/receipts/inspect' && req.method==='POST'){
+        if(!enableSyntheticRecoveryInspectHttp || !recoveryInspector)
+          return json(res,404,{error:'TEAM_ROUTE_NOT_ENABLED'});
+        const token=bearer(req);
+        if(!token)return json(res,401,{error:'AUTH_SESSION_INVALID'});
+        let input;
+        try{input=await readJson(req,maxBodyBytes);}
+        catch(error){
+          return error.code==='AUTH_BODY_TOO_LARGE'?
+            json(res,413,{error:'AUTH_BODY_TOO_LARGE'}):
+            json(res,400,{error:'AUTH_JSON_INVALID'});
+        }
+        if(Object.keys(input).some(k=>!['explicit_consent','quarantined'].includes(k))||
+           input.explicit_consent!==true||
+           !Array.isArray(input.quarantined)||input.quarantined.length<1||
+           input.quarantined.length>30||
+           input.quarantined.some(x=>!x||typeof x!=='object'||Array.isArray(x)||
+             x.status!=='QUARANTINED'||x.auto_retry!==false||
+             !x.payload||x.payload.synthetic!==true))
+          return json(res,422,{error:'TEAM_RECOVERY_QUARANTINE_REQUIRED'});
+        try{
+          const result=await recoveryInspector.inspect(token,input.quarantined);
+          if(!result||result.status!=='REVIEW_ONLY'||result.auto_send_enabled!==false||
+             typeof result.all_receipts_verified!=='boolean'||
+             !Array.isArray(result.items)||
+             result.items.length!==input.quarantined.length)
+            throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+          const items=[];
+          for(let i=0;i<result.items.length;i++){
+            const x=result.items[i],original=input.quarantined[i];
+            if(!x||x.id!==original.id||x.auto_retry!==false||
+               !['MATCHED_SERVER_RECEIPT','UNVERIFIED_NOT_SAFE_TO_RETRY'].includes(x.classification))
+              throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+            items.push({id:x.id,classification:x.classification,auto_retry:false});
+          }
+          const all=items.every(x=>x.classification==='MATCHED_SERVER_RECEIPT');
+          if(all!==result.all_receipts_verified)
+            throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+          // Minimize response: no payload, actor, event ID, feed cursor,
+          // server revision, secret or original financial-looking content.
+          return json(res,200,{status:'REVIEW_ONLY',auto_send_enabled:false,
+            all_receipts_verified:all,items});
+        }catch(error){
+          const code=error&&error.message;
+          if(['AUTH_SESSION_INVALID','AUTH_SESSION_REVOKED'].includes(code))
+            return json(res,401,{error:'AUTH_SESSION_INVALID'});
+          if(['TEAM_RECOVERY_ROLE_DENIED','TEAM_ACTOR_UNVERIFIED',
+             'TEAM_WORKSPACE_DENIED'].includes(code))
+            return json(res,403,{error:'TEAM_RECOVERY_ACCESS_DENIED'});
+          if(['TEAM_RECOVERY_QUARANTINE_REQUIRED','TEAM_RECOVERY_DUPLICATE_INTENT'].includes(code))
+            return json(res,422,{error:code});
+          return json(res,503,{error:'TEAM_RECOVERY_RECEIPT_UNVERIFIED'});
         }
       }
       // Read-only scope endpoint. Browser-supplied workspace IDs are ignored;
