@@ -560,6 +560,64 @@
         user_id:actor.user_id,workspace_id:actor.workspace_id,role:actor.role});
     }
 
+    // DEFAULT OFF: manual fake-only quarantine receipt review, never
+    // triggered by reconnection, restore, background sync or page load.
+    // POST transports read-only review data; server SQL transaction must be
+    // READ ONLY and never append or retry. No returned receipt grants resend.
+    async function inspectRecoveryReceipts(quarantined,
+      {syntheticOnly=false,explicitConsent=false}={}){
+      if(syntheticOnly!==true||explicitConsent!==true)
+        throw Error('TEAM_RECOVERY_INSPECT_DISABLED');
+      if(logoutInFlight||!sessionToken||!workspaceId)
+        throw Error('AUTH_SESSION_REQUIRED');
+      if(!Array.isArray(quarantined)||quarantined.length<1||quarantined.length>30)
+        throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED');
+      const ids=new Set();
+      for(const x of quarantined){
+        if(!x||typeof x!=='object'||Array.isArray(x)||
+           !/^draft_[a-f0-9]{32}$/.test(x.id||'')||ids.has(x.id)||
+           x.status!=='QUARANTINED'||x.auto_retry!==false||
+           !['PENDING','CONFLICT','BLOCKED'].includes(x.original_status)||
+           !Number.isSafeInteger(x.base_revision)||x.base_revision<0||
+           !x.scope||x.scope.workspace_id!==workspaceId||
+           typeof x.scope.partner_id!=='string'||
+           !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(x.scope.partner_id)||
+           !x.payload||x.payload.synthetic!==true)
+          throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED');
+        ids.add(x.id);
+      }
+      const epoch=sessionEpoch;
+      let response;
+      try{
+        response=await request('/v1/recovery/receipts/inspect',{method:'POST',
+          headers:{'content-type':'application/json'},
+          body:JSON.stringify({explicit_consent:true,quarantined})});
+      }catch(_){
+        if(epoch!==sessionEpoch)throw Error('SYNC_SESSION_CHANGED');
+        throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+      }
+      if(epoch!==sessionEpoch||logoutInFlight||!sessionToken)
+        throw Error('SYNC_SESSION_CHANGED');
+      const b=response.body;
+      if(!response.response.ok||!b||b.status!=='REVIEW_ONLY'||
+         b.auto_send_enabled!==false||typeof b.all_receipts_verified!=='boolean'||
+         !Array.isArray(b.items)||b.items.length!==quarantined.length)
+        throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+      const safe=b.items.map((x,i)=>{
+        if(!x||x.id!==quarantined[i].id||x.auto_retry!==false||
+           !['MATCHED_SERVER_RECEIPT','UNVERIFIED_NOT_SAFE_TO_RETRY'].includes(x.classification))
+          throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+        return Object.freeze({id:x.id,classification:x.classification,
+          auto_retry:false});
+      });
+      if(safe.every(x=>x.classification==='MATCHED_SERVER_RECEIPT')!==
+         b.all_receipts_verified)
+        throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+      return Object.freeze({status:'REVIEW_ONLY',
+        all_receipts_verified:b.all_receipts_verified,
+        auto_send_enabled:false,items:Object.freeze(safe)});
+    }
+
     function snapshot() {
       const volatileUnsentCount=Array.from(pending.values())
         .filter(item=>item.status!==STATUS.SYNCED).length+
@@ -579,7 +637,7 @@
       });
     }
 
-    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, reconnect, verifyActor, snapshot, STATUS });
+    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, reconnect, verifyActor, inspectRecoveryReceipts, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });
