@@ -1115,6 +1115,8 @@ function renderLedgerWork(){
   const hasLedger=raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
   inputEl.style.display=hasLedger?"none":"";
   panel.style.display=hasLedger?"":"none";
+  // Raw-input action buttons are replaced by ledger row controls in this mode.
+  for(const id of ["sourceCopyBtn","sourceCutBtn","selectAllInputBtn"])$(id).style.display=hasLedger?"none":"";
   if(!hasLedger)return;
   const ledger=parseExactOutputLedger(raw);
   list.replaceChildren();
