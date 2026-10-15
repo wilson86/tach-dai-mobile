@@ -128,3 +128,22 @@ jobs:
           path: ${{ runner.temp }}/kts-native-idb-evidence/NATIVE_IDB_PROOF.json
           if-no-files-found: warn
           retention-days: 7
+
+  native-pilot-ui-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify actual pilot UI against bounded same-origin synthetic HTTP fixture in real Chrome
+        env:
+          KTS_PILOT_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          KTS_PILOT_EVIDENCE_DIR: ${{ runner.temp }}/kts-native-pilot-ui-evidence
+        run: node tests/settlement-team-native-pilot-ci.cjs
+      - name: Preserve source-pinned real browser pilot UI proof
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kts-native-pilot-ui-synthetic-proof
+          path: ${{ runner.temp }}/kts-native-pilot-ui-evidence/NATIVE_PILOT_UI_PROOF.json
+          if-no-files-found: warn
+          retention-days: 7
