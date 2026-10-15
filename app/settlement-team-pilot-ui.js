@@ -47,6 +47,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   let busy=false,dead=false,notice='',unsubscribe,verifiedScope=null;
   let verifiedEventIds=[],verifiedAuditRows=[],historyTruncated=false,observedSessionEpoch=null;
   let feedHasMore=null,feedStale=false;
+  let selectionEpoch=0,identityEpoch=0; // Detect scope ABA and external session rotation.
   const listeners=[];
   function on(el,name,handler){el.addEventListener(name,handler);listeners.push([el,name,handler]);}
   function clear(el){while(el.firstChild)el.removeChild(el.firstChild);}
@@ -84,6 +85,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     if(Number.isSafeInteger(state.session_epoch)&&
        state.session_epoch!==observedSessionEpoch){
       observedSessionEpoch=state.session_epoch;
+      identityEpoch++;selectionEpoch++;
       clearVerifiedHistory();
       clearReview();
     }
@@ -198,17 +200,21 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     tell('Kết quả gửi: '+draftOutcome(results)+'. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   on(e['team-read'],'click',()=>void action(async()=>{
-    const selected=scope();
+    const selected=scope(),startSelection=selectionEpoch,startIdentity=identityEpoch;
     clearReview(); // Never show a stale review while an async read is in flight.
     const r=await sync.readScope(selected);
     // The user may have edited the selected scope before this request finished.
     let current;
     try{current=scope();}catch(_){current=null;}
-    if(!current||Object.keys(selected).some(key=>selected[key]!==current[key])){
-      tell('CHƯA XÁC MINH: phạm vi đã thay đổi trong lúc đọc; hãy đọc lại.');
+    if(dead||startIdentity!==identityEpoch||startSelection!==selectionEpoch||
+       !sync.snapshot().authenticated||!sameScope(selected,current)){
+      clearReview();
+      tell('CHƯA XÁC MINH: phiên hoặc phạm vi đã thay đổi trong lúc đọc; hãy đọc lại.');
       return;
     }
-    if(r.status!=='SYNCED'||!r.scope||!Object.prototype.hasOwnProperty.call(REVIEW_LABELS,r.scope.state)){
+    if(!r||r.status!=='SYNCED'||!r.scope||!sameScope(selected,r.scope)||
+       !Number.isSafeInteger(Number(r.scope.revision))||Number(r.scope.revision)<0||
+       !Object.prototype.hasOwnProperty.call(REVIEW_LABELS,r.scope.state)){
       tell('CHƯA XÁC MINH trạng thái xét duyệt: '+String(r.status||'BLOCKED')+
         (r.error?' • '+r.error:'')+'.');
       return;
@@ -227,6 +233,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   async function performReview(actionName,requiredState){
     if(!syntheticReviewUiEnabled)throw Error('TEAM_REVIEW_UI_NOT_ENABLED');
     const selected=scope(),previous=verifiedScope;
+    const startSelection=selectionEpoch,startIdentity=identityEpoch;
     if(!previous||!sameScope(selected,previous)||previous.state!==requiredState)
       throw Error('TEAM_REVIEW_SCOPE_READ_REQUIRED');
     if(!Number.isSafeInteger(Number(previous.revision))||
@@ -248,9 +255,10 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       const fresh=await sync.readScope(selected);
       let current;
       try{current=scope();}catch(_){current=null;}
-      if(!sameScope(selected,current)||!verifiedScope||
-         !sameScope(selected,verifiedScope) ||
-         fresh.status!=='SYNCED'||!fresh.scope||
+      if(dead||startSelection!==selectionEpoch||startIdentity!==identityEpoch||
+         !sync.snapshot().authenticated||!sameScope(selected,current)||!verifiedScope||
+         !sameScope(selected,verifiedScope)||
+         fresh.status!=='SYNCED'||!fresh.scope||!sameScope(selected,fresh.scope)||
          fresh.scope.state!==requiredState ||
          Number(fresh.scope.revision)!==Number(previous.revision)){
         clearReview();
@@ -327,11 +335,21 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       '. Không phải toàn bộ lịch sử máy chủ; đóng trang sẽ xóa.'};
   }
   on(e['team-pull'],'click',()=>void action(async()=>{
-    const result=acceptFeedPage(await sync.pullChanges());
-    tell(result.message);
+    const startIdentity=identityEpoch,workspace=sync.snapshot().workspace_id;
+    const page=await sync.pullChanges();
+    if(dead||startIdentity!==identityEpoch||!sync.snapshot().authenticated||
+       sync.snapshot().workspace_id!==workspace){
+      tell('CHƯA XÁC MINH change feed: phiên đã thay đổi trong lúc đọc.');return;
+    }
+    const result=acceptFeedPage(page);tell(result.message);
   }));
   on(e['team-reconnect'],'click',()=>void action(async()=>{
+    const startIdentity=identityEpoch,workspace=sync.snapshot().workspace_id;
     const r=await sync.reconnect();
+    if(dead||startIdentity!==identityEpoch||!sync.snapshot().authenticated||
+       sync.snapshot().workspace_id!==workspace){
+      tell('CHƯA XÁC MINH: phiên đã thay đổi trong lúc kết nối lại.');return;
+    }
     const states=r&&Array.isArray(r.drafts)?r.drafts:[];
     const progress=acceptFeedPage(r&&r.pull);
     const pullVerified=r&&r.pull&&r.pull.status==='SYNCED';
@@ -343,11 +361,11 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       '. Chỉ SYNCED có receipt mới được coi là đã lưu.');
   }));
   for(const id of ['team-partner','team-date','team-region']){
-    const invalidate=()=>{clearReview();render(sync.snapshot());};
+    const invalidate=()=>{selectionEpoch++;clearReview();render(sync.snapshot());};
     on(e[id],'input',invalidate);
     on(e[id],'change',invalidate);
   }
-  on(e['team-workspace'],'change',()=>{clearReview();render(sync.snapshot());});
+  on(e['team-workspace'],'change',()=>{selectionEpoch++;clearReview();render(sync.snapshot());});
   clearReview();
   on(w,'beforeunload',event=>{
     if(sync.snapshot().volatile_unsent_count>0 ||
