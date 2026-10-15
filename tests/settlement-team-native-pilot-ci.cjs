@@ -305,10 +305,26 @@ async function main(){
      throw Error('PILOT_NATIVE_UI_PROOF_UNVERIFIED_'+scenarioName+'_'+
        String(proof&&(proof.code||proof.error_code)||'NO_RECEIPT'));
   }
+  // A separate real browser profile is shared by two Chrome processes.
+  // These visit the separately named opt-in HTML page, not the live pilot.
+  const manualProfile=path.join(profileRoot,'manual-chrome-profile');
+  let savedOriginal=null;
+  for(const stage of ['manual-save','manual-restore']){
+   const result=await chromeProof(binary,manualProfile,
+     'http://127.0.0.1:'+port+'/manual-proof?stage='+stage);
+   report.proofs.push(result);
+   if(!result||result.status!=='PASS'||result.stage!==stage||
+      result.synthetic_only!==true||result.auto_send_enabled!==false||
+      !/^draft_[a-f0-9]{32}$/.test(result.original_id)||
+      (stage==='manual-restore'&&savedOriginal!==result.original_id))
+    throw Error('MANUAL_NATIVE_PREVIEW_UNVERIFIED_'+stage+'_'+
+      String(result&&result.error_code||'MISSING'));
+   if(stage==='manual-save')savedOriginal=result.original_id;
+  }
   // The fake backend has one immutable event per scenario; only the lost
   // response case legitimately replays a key, without a second event.
-  if(report.auth_logins!==3||report.denied_logins!==1||
-     report.auth_logouts!==3||
+  if(report.auth_logins!==5||report.denied_logins!==1||
+     report.auth_logouts!==5||report.verified_session_gets<5||
      report.synthetic_draft_post_count!==3||
      report.draft_post_attempts!==4||report.replay_count!==1||
      report.forged_feed_deliveries!==1||report.real_money_post_count!==0)
