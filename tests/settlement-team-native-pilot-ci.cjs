@@ -6,6 +6,9 @@ const http=require('node:http'),cp=require('node:child_process');
 const {promisify}=require('node:util');const execFile=promisify(cp.execFile);
 const ROOT=path.resolve(__dirname,'..'),controller=fs.readFileSync(path.join(__dirname,'settlement-team-native-pilot-controller.js'),'utf8');
 const html=fs.readFileSync(path.join(ROOT,'app/settlement-team-pilot.html'),'utf8');
+const manualHtml=fs.readFileSync(path.join(ROOT,'app/settlement-team-manual-pilot.html'),'utf8');
+const manualController=fs.readFileSync(
+ path.join(__dirname,'settlement-team-native-manual-controller.js'),'utf8');
 const TOKEN='a'.repeat(43);
 const offlineController=fs.readFileSync(
  path.join(__dirname,'settlement-team-native-offline-controller.js'),'utf8');
@@ -14,7 +17,12 @@ const ASSETS=new Map([
  ['settlement-team-sync-client.js','app/settlement-team-sync-client.js'],
  ['settlement-team-pilot-ui.js','app/settlement-team-pilot-ui.js'],
  ['settlement-team-pilot-start.js','app/settlement-team-pilot-start.js'],
- ['settlement-team-pilot.css','app/settlement-team-pilot.css']
+ ['settlement-team-pilot.css','app/settlement-team-pilot.css'],
+ ['settlement-team-recovery-v0.js','app/settlement-team-recovery-v0.js'],
+ ['settlement-team-recovery-idb-v0.js','app/settlement-team-recovery-idb-v0.js'],
+ ['settlement-team-manual-checkpoint-v0.js','app/settlement-team-manual-checkpoint-v0.js'],
+ ['settlement-team-manual-ui.js','app/settlement-team-manual-ui.js'],
+ ['settlement-team-manual-start.js','app/settlement-team-manual-start.js']
 ]);
 function browser(){
  for(const name of ['google-chrome','google-chrome-stable','chromium','chromium-browser']){
@@ -139,6 +147,7 @@ async function main(){
   release_readiness:'BLOCKED',real_money_ready:false,real_money_post_count:0,
   synthetic_draft_post_count:0,draft_post_attempts:0,replay_count:0,
   forged_feed_deliveries:0,auth_logins:0,denied_logins:0,
+  verified_session_gets:0,
   auth_logouts:0,proofs:[]};
  let server=null,profileRoot=null;
  try{
@@ -163,6 +172,16 @@ async function main(){
   server=http.createServer(async(req,res)=>{
    const incoming=new URL(req.url,'http://127.0.0.1');
    const pathname=incoming.pathname;
+   if(req.method==='GET'&&pathname==='/manual-proof'){
+    if(!['manual-save','manual-restore'].includes(incoming.searchParams.get('stage'))){
+     send(res,404,{error:'MANUAL_STAGE_DISABLED'});return;
+    }
+    const page=manualHtml.replace('</head>',
+     '<script src="./settlement-team-native-manual-controller.js" defer></script></head>')
+     .replace('</body>','<pre id="proof">PENDING</pre></body>');
+    res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
+    res.end(page);return;
+   }
    if(req.method==='GET'&&pathname==='/proof'){
     const requested=incoming.searchParams.get('scenario')||'happy';
     if(!['happy','lost_ack','unverified_feed'].includes(requested)){
@@ -177,6 +196,10 @@ async function main(){
       .replace('</body>','<pre id="proof">PENDING</pre></body>');
     res.writeHead(200,{'content-type':'text/html; charset=utf-8','cache-control':'no-store'});
     res.end(injected);return;
+   }
+   if(req.method==='GET'&&pathname==='/settlement-team-native-manual-controller.js'){
+    res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});
+    res.end(manualController);return;
    }
    if(req.method==='GET'&&pathname==='/settlement-team-native-pilot-controller.js'){
     res.writeHead(200,{'content-type':'text/javascript; charset=utf-8','cache-control':'no-store'});
@@ -204,6 +227,11 @@ async function main(){
     send(res,200,{session_token:TOKEN,expires_at:'2026-10-15T12:00:00Z'});return;
    }
    if(req.headers.authorization==='Bearer '+TOKEN){
+    if(req.method==='GET'&&pathname==='/v1/session'){
+      report.verified_session_gets++;
+      send(res,200,{server_verified:true,membership_active:true,
+       user_id:'fake_operator_a',workspace_id:'group_a',role:'operator'});return;
+    }
     if(req.method==='POST'&&pathname==='/v1/scopes/drafts'){
      let data;try{data=await body(req)}catch(_){send(res,400,{error:'AUTH_JSON_INVALID'});return}
      report.draft_post_attempts++;
