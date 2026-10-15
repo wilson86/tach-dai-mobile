@@ -16,7 +16,11 @@ const Manual=globalThis.KtsTeamSyntheticManualCheckpointV0;
 // Real unmodified browser sync-client generates the original idempotency key.
 const Sync=globalThis.KtsSettlementSyncClient;
 const fakeSync=Sync.createSyncClient({
- fetchImpl:async()=>{throw Error('FINANCIAL_HTTP_FORBIDDEN');}
+ fetchImpl:async(url,options)=>{
+  if(url!=='/v1/session'||options?.method!=='GET')
+   throw Error('FINANCIAL_HTTP_FORBIDDEN');
+  return fetch(url,options);
+ }
 });
 fakeSync.setSessionToken('a'.repeat(43),'group_a');
 let checkpointId=item.id;
