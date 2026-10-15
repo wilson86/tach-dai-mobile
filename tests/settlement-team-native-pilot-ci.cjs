@@ -138,7 +138,8 @@ async function main(){
  const report={source_sha:sha,status:'BLOCKED',pilot_ui_browser:'NOT_PROVEN',
   release_readiness:'BLOCKED',real_money_ready:false,real_money_post_count:0,
   synthetic_draft_post_count:0,draft_post_attempts:0,replay_count:0,
-  forged_feed_deliveries:0,auth_logins:0,auth_logouts:0,proofs:[]};
+  forged_feed_deliveries:0,auth_logins:0,denied_logins:0,
+  auth_logouts:0,proofs:[]};
  let server=null,profileRoot=null;
  try{
   const binary=browser();
@@ -195,7 +196,10 @@ async function main(){
    if(req.method==='POST'&&pathname==='/v1/login'){
     let data;try{data=await body(req)}catch(_){send(res,400,{error:'AUTH_JSON_INVALID'});return}
     if(data.auth_subject!=='fake_operator_a'||data.password!=='synthetic-secret'||
-       data.workspace_id!=='group_a'){send(res,401,{error:'AUTH_LOGIN_DENIED'});return}
+       data.workspace_id!=='group_a'){
+      report.denied_logins++;
+      send(res,401,{error:'AUTH_LOGIN_DENIED'});return;
+    }
     report.auth_logins++;
     send(res,200,{session_token:TOKEN,expires_at:'2026-10-15T12:00:00Z'});return;
    }
@@ -265,7 +269,9 @@ async function main(){
       (scenarioName==='happy'&&
        (proof.fake_only!==true||proof.real_money_ready!==false||
         proof.review_ui_enabled!==false||proof.mobile_viewport!==true||
-        proof.touch_target_44px!==true))||
+        proof.touch_target_44px!==true||
+        proof.bad_login_denied!==true||
+        proof.real_counterparty_denied!==true))||
       (scenarioName!=='happy'&&
        (proof.synthetic_only!==true||proof.auto_send_enabled!==false)))
      throw Error('PILOT_NATIVE_UI_PROOF_UNVERIFIED_'+scenarioName+'_'+
@@ -273,7 +279,8 @@ async function main(){
   }
   // The fake backend has one immutable event per scenario; only the lost
   // response case legitimately replays a key, without a second event.
-  if(report.auth_logins!==3||report.auth_logouts!==3||
+  if(report.auth_logins!==3||report.denied_logins!==1||
+     report.auth_logouts!==3||
      report.synthetic_draft_post_count!==3||
      report.draft_post_attempts!==4||report.replay_count!==1||
      report.forged_feed_deliveries!==1||report.real_money_post_count!==0)
