@@ -131,7 +131,7 @@
         <button id="ledgerWorkCopy" class="secondary" type="button">Copy đã chọn</button>
         <button id="ledgerWorkCut" class="secondary" type="button">Cắt đã chọn</button>
       </div>
-      <details class="ledger-original"><summary>Xem tin gốc ban đầu</summary><pre id="ledgerWorkOrigin"></pre></details>
+      <details class="ledger-original"><summary>Xem tin gốc ban đầu</summary><pre id="ledgerWorkOrigin"></pre><button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button></details>
     </div>
 
 
@@ -1126,10 +1126,12 @@ function renderLedgerWork(){
     warning.textContent="Ledger không hợp lệ hoặc không khớp ứng dụng, ngày, miền hay engine. Không gửi dữ liệu này như tin khách.";
     list.appendChild(warning);
     $("ledgerWorkOrigin").textContent="";
+    $("ledgerCopyOriginal").disabled=true;
     for(const id of ["ledgerWorkSelect","ledgerWorkCopy","ledgerWorkCut"])$(id).disabled=true;
     return;
   }
   $("ledgerWorkOrigin").textContent=ledger.origin;
+  $("ledgerCopyOriginal").disabled=!ledger.origin;
   const alive=outputRecords.filter(r=>r.alive);
   const hydrated=alive.length===ledger.rows.length&&alive.every((r,i)=>
     r.id===ledger.rows[i].id&&r.text===ledger.rows[i].text);
@@ -1721,6 +1723,12 @@ $("selectAllInputBtn").addEventListener("click",()=>{
 });
 $("ledgerWorkSelect").addEventListener("click",()=>{toggleAllGroupedResults();renderLedgerWork();});
 $("ledgerWorkCopy").addEventListener("click",copyLedgerWork);
+$("ledgerCopyOriginal").addEventListener("click",async()=>{
+  const ledger=parseExactOutputLedger(inputEl.value);
+  if(!ledger||!ledger.origin){setStatus("Không có tin gốc hợp lệ để copy.","err");return;}
+  const ok=await writeClipboardText(ledger.origin);
+  setStatus(ok?"Đã copy tin gốc ban đầu":"Không thể copy tin gốc.",ok?"ok":"err");
+});
 $("sourceCopyBtn").addEventListener("click",copySourceView);
 $("sourceCutBtn").addEventListener("click",cutSelectedSourceLines);
 $("ledgerWorkCut").addEventListener("click",async()=>{await cutSelectedOutput();renderLedgerWork();});
