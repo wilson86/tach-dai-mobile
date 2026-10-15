@@ -279,7 +279,16 @@
       typeof data.origin==='string'&&Array.isArray(data.rows)&&Array.isArray(data.groups)&&
       data.rows.every(r=>typeof r.id==='string'&&typeof r.text==='string'&&
         typeof r.groupId==='string'&&typeof r.alive==='boolean'&&r.text.length<4096)&&
-      data.rows.length<=10000&&data.groups.length<=10000;
+      data.rows.length<=10000&&data.groups.length<=10000&&
+      data.groups.every(g=>g&&/^g[0-9]+$/.test(g.id)&&
+        (g.type==='pair'||g.type==='plain')&&typeof g.key==='string'&&
+        Array.isArray(g.rowIds)&&g.rowIds.length<=10000)&&
+      new Set(data.rows.map(r=>r.id)).size===data.rows.length&&
+      new Set(data.groups.map(g=>g.id)).size===data.groups.length&&
+      data.rows.every(r=>/^r[0-9]+$/.test(r.id)&&
+        data.groups.some(g=>g.id===r.groupId&&g.rowIds.includes(r.id)))&&
+      data.groups.every(g=>g.rowIds.every(id=>
+        data.rows.some(r=>r.id===id&&r.groupId===g.id)));
   }
   function serial(){
     return {schema:SCHEMA,app:'tach-dai-davong',engine:ENGINE,origin,
@@ -299,6 +308,11 @@
       selected:[...selected],ledgerActive,sourceRegion,sourceDate});
     if(undoStack.length>30)undoStack.shift();
   }
+  function notifyRawChanged(){
+    const el=$('dvInput');
+    if(!el||typeof el.dispatchEvent!=='function'||typeof Event!=='function')return;
+    el.dispatchEvent(new Event('input',{bubbles:true}));
+  }
   function restore(){
     const old=undoStack.pop();if(!old){status('Chưa có thao tác để hoàn tác.','err');return;}
     origin=old.origin;sourceRegion=old.sourceRegion;sourceDate=old.sourceDate;
@@ -308,6 +322,7 @@
     ledgerActive=old.ledgerActive;
     $('dvInput').value=old.input;
     render();persist();
+    if(!ledgerActive)notifyRawChanged();
     status('Đã hoàn tác · khôi phục nguồn và kết quả','ok');
   }
   function parse(text){
@@ -417,6 +432,7 @@
     const left=live().length;
     if(!left){ledgerActive=false;$('dvInput').value='';}
     persist();render();
+    if(!left)notifyRawChanged();
     status('Đã cắt '+marked.length+' dòng · còn '+left+' dòng cược','ok');
   }
   async function copyResult(){
@@ -533,6 +549,7 @@
       snapshot();
       input.value=text.slice(0,start)+text.slice(found<0?text.length:found+1);
       origin=input.value;ledgerActive=false;persist();
+      notifyRawChanged();
       // A normal source Cut is a legitimate new source message. Recompute
       // immediately without treating its result as an exact-row ledger.
       run.click();
