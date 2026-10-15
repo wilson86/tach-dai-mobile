@@ -56,3 +56,15 @@ logout. Disposable native Chrome CI proves a manually backed-up unsent
 fake draft remains UNKNOWN after a separate process restart, and checks
 that a missing consent is rejected before the server receives any request.
 No live network service or external HTTPS endpoint was deployed.
+
+## Explicit disclosure before each fake-only receipt network request
+
+A recovery inspection uses an **HTTP POST to transmit the decrypted
+fake-only original intent** to an authenticated, separately approved HTTPS
+server so it can compare immutable transaction digests. HTTP POST here
+means *read-only receipt inspection*; it is NOT a financial append/retry.
+The new visible warning and synchronous operator confirmation say exactly
+what will be transmitted. The manual UI requires a new recovery passphrase,
+checkbox consent and account verification on each attempt. An unavailable
+or disabled server returns no trusted MATCHED result and does not change
+the local PENDING queue. No real identities or customer records are allowed.

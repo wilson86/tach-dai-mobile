@@ -61,7 +61,7 @@ function mount({doc,win,client,Checkpoint,Idb,syntheticOnly=false}={}){
      if(typeof win.confirm!=='function'||win.confirm(
        'DỮ LIỆU GIẢ: '+(mode==='save'?'lưu bản mã thủ công?':
        mode==='server-review'?
-         'Chỉ gửi DỮ LIỆU GIẢ để ĐỐI CHIẾU BIÊN NHẬN (chỉ đọc)?':
+         'Đối chiếu CHỈ DỮ LIỆU GIẢ: giải mã nháp rồi gửi bản nháp thử nghiệm qua HTTPS đến máy chủ để KIỂM TRA chỉ đọc; không ghi hoặc gửi lại. Đồng ý?':
          'chỉ xem bản nháp đã cách ly, không gửi lại?'))!==true)
        deny('TEAM_MANUAL_UI_CONFIRM_REQUIRED');
      const result=mode==='save'?
