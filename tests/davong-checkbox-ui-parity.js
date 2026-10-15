@@ -112,6 +112,28 @@ async function main(){
  assert.equal(loaded.nodes.dvOutput.value,originalRows.join("\n"),"persisted Undo restores full output");
  await loaded.nodes.dvClear.click();
  assert.equal(loaded.backing.has("KTS_DAVONG_WORKING_ROWS_V1"),false,"Xóa prevents stale wager reappearance");
+ // Pair-header checkbox selects exactly the corresponding wagers and does not
+ // erase other groups in either result or working-source display.
+ const selectedGroup=setup();
+ await selectedGroup.nodes.dvRun.click();await selectedGroup.wait();
+ const box=selectedGroup.nodes.dvTapResultList.children[0].children[0].children[0];
+ box.checked=true;box.emit("change");
+ assert.match(selectedGroup.nodes.dvTapSummary.textContent,/3\/6 kết quả · 3 nhóm/u);
+ await selectedGroup.nodes.dvCutSelection.click();
+ assert.equal(selectedGroup.nodes.dvOutput.value,originalRows.slice(3).join("\n"));
+ assert.equal(selectedGroup.nodes.dvTapResultList.children.length,2);
+ await selectedGroup.nodes.dvUndo.click();
+ assert.equal(selectedGroup.nodes.dvOutput.value,originalRows.join("\n"));
+ // Denied clipboard permissions must keep the source and result atomic.
+ const denied=setup(new Map(),true);
+ await denied.nodes.dvRun.click();await denied.wait();
+ const row=denied.nodes.dvTapResultList.children[0].children[1].children[0];
+ row.checked=true;row.emit("change");
+ await denied.nodes.dvCutSelection.click();
+ assert.equal(denied.nodes.dvOutput.value,originalRows.join("\n"));
+ assert.equal(denied.nodes.dvInput.value,sample);
+ assert.equal(denied.backing.has("KTS_DAVONG_WORKING_ROWS_V1"),false);
+
  console.log("DAVONG CHECKBOX GROUP, WORKING SOURCE, CUT/UNDO/RELOAD: PASS");
 }
 main().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
