@@ -533,6 +533,33 @@
       return { pull: pulled, drafts };
     }
 
+    // Explicit read-only live membership proof for DEFAULT-OFF manual
+    // encrypted checkpoint UI. Never expose or persist the bearer token.
+    // No GET happens until a caller explicitly invokes this method.
+    async function verifyActor(){
+      if(logoutInFlight||!sessionToken||!workspaceId)
+        throw Error('AUTH_SESSION_REQUIRED');
+      const epoch=sessionEpoch;
+      let response;
+      try{response=await request('/v1/session',{method:'GET'});}
+      catch(_){
+        if(epoch!==sessionEpoch)throw Error('SYNC_SESSION_CHANGED');
+        throw Error('SYNC_ACTOR_UNVERIFIED');
+      }
+      if(epoch!==sessionEpoch||logoutInFlight||!sessionToken)
+        throw Error('SYNC_SESSION_CHANGED');
+      const actor=response.body;
+      if(!response.response.ok||!actor||
+         actor.server_verified!==true||actor.membership_active!==true||
+         actor.workspace_id!==workspaceId||
+         typeof actor.user_id!=='string'||
+         !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(actor.user_id)||
+         !['operator','admin'].includes(actor.role))
+        throw Error('SYNC_ACTOR_UNVERIFIED');
+      return Object.freeze({server_verified:true,membership_active:true,
+        user_id:actor.user_id,workspace_id:actor.workspace_id,role:actor.role});
+    }
+
     function snapshot() {
       const volatileUnsentCount=Array.from(pending.values())
         .filter(item=>item.status!==STATUS.SYNCED).length+
@@ -552,7 +579,7 @@
       });
     }
 
-    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, reconnect, snapshot, STATUS });
+    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, reconnect, verifyActor, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });
