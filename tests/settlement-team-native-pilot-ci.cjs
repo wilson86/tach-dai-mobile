@@ -81,6 +81,7 @@ async function chromeProof(bin,profile,url){
    return v.result;
   }
   await call('Page.enable');
+  await call('Emulation.setDeviceMetricsOverride',{width:390,height:844,deviceScaleFactor:2,mobile:true});
   await call('Page.navigate',{url});
   const end=Date.now()+35000;
   while(Date.now()<end){
