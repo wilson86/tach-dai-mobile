@@ -7,7 +7,9 @@ const path=require("node:path");
 const vm=require("node:vm");
 const source=fs.readFileSync(path.join(__dirname,"../app/unified-core.js"),"utf8");
 const start=source.indexOf(";(function installUnifiedMobileUx(){");
-const end=source.indexOf("// Đá Vòng mobile result UX",start);
+// Delimit by the next installer, not a presentation comment: Da Vong's UI
+// implementation evolved from tap buttons to checkbox rows.
+const end=source.indexOf(";(function installDaVongCheckboxUx(){",start);
 assert.ok(start>=0 && end>start,"Unified frame UX installer must exist");
 const installer=source.slice(start,end);
 
