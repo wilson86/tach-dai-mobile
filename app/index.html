@@ -258,7 +258,19 @@ async function prepareOfflineEngine(){
   }
   try{
     const root=await navigator.serviceWorker.register('../sw.js',{scope:'../'});
-    await navigator.serviceWorker.register('./sw.js',{scope:'./'});
+    const app=await navigator.serviceWorker.register('./sw.js',{scope:'./'});
+    // Cache.addAll is asynchronous. Do not report a false "missing engine"
+    // while the new SW is still installing after this version update.
+    await Promise.all([root,app].map(reg=>new Promise(resolve=>{
+      const worker=reg.installing;
+      if(!worker||['installed','activated','redundant'].includes(worker.state)){resolve();return;}
+      const timer=setTimeout(resolve,12000);
+      worker.addEventListener('statechange',()=>{
+        if(['installed','activated','redundant'].includes(worker.state)){
+          clearTimeout(timer);resolve();
+        }
+      });
+    })));
     const cache=await caches.open('kts-tach-unified-v1.0.18-offline-engine-bootstrap-046935');
     const expected=['../','../index.html','../station_calendar.generated.js',
       '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.18'];
