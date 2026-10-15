@@ -52,7 +52,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   function on(el,name,handler){el.addEventListener(name,handler);listeners.push([el,name,handler]);}
   function clear(el){while(el.firstChild)el.removeChild(el.firstChild);}
   function row(el,value){const li=d.createElement('li');li.textContent=String(value);el.appendChild(li);}
-  function tell(value){notice=String(value);e['team-notice'].textContent=notice;}
+  function tell(value){if(dead)return;notice=String(value);e['team-notice'].textContent=notice;}
   function renderFeedProgress(){
     const next=feedHasMore===true?'CÒN TRANG: nhấn Đọc change feed để tiếp tục':
       feedHasMore===false?'Đã đến cuối tại lần kiểm tra (có thể có sự kiện mới)':
@@ -268,6 +268,12 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     }
     const outcome=await sync.reviewScope(actionName,selected,Number(previous.revision),
       {retryOnly:Boolean(attempt)});
+    if(dead||identityAtStart!==identityEpoch||
+       startSelection!==selectionEpoch||!sync.snapshot().authenticated){
+      clearReview();
+      tell('CHƯA XÁC MINH: phiên hoặc phạm vi thay đổi trong lúc gửi yêu cầu duyệt.');
+      return;
+    }
     let current;
     try{current=scope();}catch(_){current=null;}
     if(!sameScope(selected,current)){
@@ -276,8 +282,16 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       return;
     }
     if(outcome.status==='SYNCED'){
+      // Defense in depth against a compromised/injected client reporting
+      // SYNCED without the verified immutable event from the server.
+      const receipt=outcome.server_result;
+      if(!receipt||typeof receipt.event_id!=='string'||
+         !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(receipt.event_id)){
+        clearReview();tell('CHƯA XÁC MINH: thiếu biên nhận sự kiện máy chủ; không coi là đã duyệt.');
+        return;
+      }
       clearReview();
-      tell(label+' đã ghi nhận bởi máy chủ (receipt '+String(outcome.server_result.event_id)+
+      tell(label+' đã ghi nhận bởi máy chủ (receipt '+String(receipt.event_id)+
         '). Hãy đọc lại scope để xem trạng thái mới. KHÔNG phải chốt tiền thật.');
     }else if(outcome.status==='PENDING'){
       tell(label+' PENDING: chưa có receipt, có thể đã COMMIT; giữ trang mở và nhấn lại nút để thử cùng idempotency key.');
