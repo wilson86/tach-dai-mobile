@@ -223,7 +223,7 @@ async function runDaVong(){
   }
 }
 $('dvRun').addEventListener('click',runDaVong);
-$('dvClear').addEventListener('click',()=>{$('dvInput').value='';$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('');$('dvInput').focus()});
+$('dvClear').addEventListener('click',()=>{window.KTS_DV_UI?.beforeClear?.();$('dvInput').value='';$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('');$('dvInput').focus()});
 $('dvSelectAllInput').addEventListener('click',()=>selectAllText($('dvInput')));
 $('dvSelectAllOutput').addEventListener('click',()=>selectAllText($('dvOutput')));
 $('dvOutput').addEventListener('select',rememberDvSelection);
