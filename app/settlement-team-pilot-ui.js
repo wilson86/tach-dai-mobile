@@ -268,7 +268,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     }
     const outcome=await sync.reviewScope(actionName,selected,Number(previous.revision),
       {retryOnly:Boolean(attempt)});
-    if(dead||identityAtStart!==identityEpoch||
+    if(dead||startIdentity!==identityEpoch||
        startSelection!==selectionEpoch||!sync.snapshot().authenticated){
       clearReview();
       tell('CHƯA XÁC MINH: phiên hoặc phạm vi thay đổi trong lúc gửi yêu cầu duyệt.');
