@@ -77,6 +77,22 @@ async function main(){
  p.undo();assert.equal(p.input.value,original,"second undo restores original plaintext");
  assert.equal(els.ledgerWork.style.display,"none");
  assert.equal(p.output.value.split("\n").length,3);
+ // Explicit Xóa must remove persistent ledger; Undo restores both it and UI.
+ const last=groups()[0].children[3].children[0];last.checked=true;last.events.change();
+ await p.cutSelectedOutput();
+ const previous=p.input.value;
+ assert.ok(previous.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\\n"));
+ const key=p.parseExactOutputLedger(previous).app==="tach-dai-mobile"?
+   "tachDaiMobileExactOutputLedgerV1":"tachDaiNgangExactOutputLedgerV1";
+ assert.equal(storage.has(key),true);
+ await els.clearBtn.events.click();
+ assert.equal(p.input.value,"");
+ assert.equal(els.ledgerWork.style.display,"none");
+ assert.equal(storage.has(key),false,"explicit Clear must prevent stale ledger on reload");
+ p.undo();
+ assert.equal(p.input.value,previous);
+ assert.equal(els.ledgerWork.style.display,"");
+ assert.equal(storage.has(key),true,"Undo restores persisted exact ledger");
  console.log("READABLE EXACT LEDGER TOP SOURCE COPY CUT UNDO: PASS");
 }
 main().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
