@@ -173,6 +173,7 @@ let lastOutputSelection={start:0,end:0};
 // would be parsed with different money semantics on the next Run.
 const EXACT_OUTPUT_LEDGER_PREFIX="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n";
 const EXACT_OUTPUT_LEDGER_STORAGE_KEY="tachDaiMobileExactOutputLedgerV1";
+const EXACT_OUTPUT_LEDGER_APP_ID="tach-dai-mobile";
 let workingLedger=null;
 function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
 function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
@@ -180,7 +181,8 @@ function ledgerDate(){return String(dateEl.value||localDateISO());}
 function serializeExactOutputLedger(){
   const origin=workingLedger?.origin||inputEl.value;
   return EXACT_OUTPUT_LEDGER_PREFIX+JSON.stringify({
-    schema:"KTS_EXACT_OUTPUT_LEDGER_V1",engine:engineSha(),region:regionEl.value,
+    schema:"KTS_EXACT_OUTPUT_LEDGER_V1",app:EXACT_OUTPUT_LEDGER_APP_ID,
+    engine:engineSha(),region:regionEl.value,
     date:ledgerDate(),origin,
     rows:outputRecords.filter(r=>r.alive).map(r=>({id:r.id,sourceLine:r.sourceLine,
       sourceGroupNo:r.sourceGroupNo||0,sourceGroupText:r.sourceGroupText||"",text:r.text}))
@@ -190,7 +192,8 @@ function parseExactOutputLedger(raw){
   if(!raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX))return null;
   try{
     const ledger=JSON.parse(raw.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
-    if(ledger?.schema!=="KTS_EXACT_OUTPUT_LEDGER_V1"||ledger.engine!==engineSha()||
+    if(ledger?.schema!=="KTS_EXACT_OUTPUT_LEDGER_V1"||
+       ledger.app!==EXACT_OUTPUT_LEDGER_APP_ID||ledger.engine!==engineSha()||
       ledger.region!==regionEl.value||ledger.date!==ledgerDate()||!Array.isArray(ledger.rows)||
       !ledger.rows.every(r=>typeof r.id==="string"&&typeof r.text==="string"&&Number.isInteger(r.sourceLine)))return false;
     return ledger;
