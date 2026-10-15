@@ -222,7 +222,8 @@ async function main(){
   report.proof=proof;
   if(!proof||proof.status!=='PASS'||proof.stage!=='pilot'||
      proof.fake_only!==true||proof.real_money_ready!==false||
-     proof.review_ui_enabled!==false||report.auth_logins!==1||
+     proof.review_ui_enabled!==false||proof.mobile_viewport!==true||
+     proof.touch_target_44px!==true||report.auth_logins!==1||
      report.auth_logouts!==1||report.synthetic_draft_post_count!==1||
      report.real_money_post_count!==0)
     throw Error('PILOT_NATIVE_UI_PROOF_UNVERIFIED_'+String(proof&&proof.code||'NO_RECEIPT'));
