@@ -1222,6 +1222,7 @@ function renderGroupedResults(){
   if(cut){cut.disabled=chosen.length===0;cut.textContent=`Cắt đã chọn (${chosen.length})`;}
   const all=$("selectAllOutputBtn");
   if(all)all.textContent=visible.length&&chosen.length===visible.length?"Bỏ chọn tất cả":"Chọn tất cả";
+  renderLedgerWork();
 }
 function toggleAllGroupedResults(){
   const visible=outputRecords.map((r,i)=>({...r,index:i})).filter(r=>r.alive);
