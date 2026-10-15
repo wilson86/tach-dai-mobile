@@ -23,7 +23,7 @@ let checkpointId=item.id;
 const fakeActor={...actor,role:'operator',server_verified:true,membership_active:true};
 const store=IDB.createSyntheticIndexedDbStore({indexedDB,syntheticOnly:true});
 const manual=Manual.createSyntheticManualCheckpoint({syntheticOnly:true,sync:fakeSync,
- store,verifyActor:async()=>fakeActor,cryptoProvider:crypto});
+ store,verifyActor:()=>fakeSync.verifyActor(),cryptoProvider:crypto});
 const yes=(cond,code)=>{if(!cond)throw Error(code)};
 const denied=async fn=>{try{await fn();return false}catch(_){return true}};
 try{
