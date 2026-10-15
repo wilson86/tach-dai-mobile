@@ -71,7 +71,7 @@ function setup(existingStorage=new Map(),clipboardFailure=false){
  });
  vm.runInNewContext(code,ctx,{timeout:5000});
  const wait=()=>new Promise(resolve=>setImmediate(resolve));
- return {nodes,ctx,store,getCopied:()=>written,wait};
+ return {nodes,ctx,store,backing:existingStorage,getCopied:()=>written,wait};
 }
 async function main(){
  const x=setup();
@@ -92,7 +92,7 @@ async function main(){
  assert.equal(x.nodes.dvWorkingOrigin.textContent,sample,"immutable original available for review");
  assert.equal(x.nodes.dvWorkingRows.children.length,3,"working source retains semantic groups");
  assert.ok(!x.nodes.dvWorkingRows.textContent.includes("[[KTS_EXACT_OUTPUT_LEDGER"));
- const stored=JSON.parse(x.store.get("KTS_DAVONG_WORKING_ROWS_V1"));
+ const stored=JSON.parse(x.store.getItem("KTS_DAVONG_WORKING_ROWS_V1"));
  assert.equal(stored.app,"tach-dai-davong");
  assert.equal(stored.rows.filter(r=>r.alive).length,5);
  await x.nodes.dvRun.click();await x.wait();
@@ -105,13 +105,13 @@ async function main(){
  firstGroup.children[1].children[0].checked=true;
  firstGroup.children[1].children[0].emit("change");
  await x.nodes.dvCutSelection.click();
- const loaded=setup(x.store);
+ const loaded=setup(x.backing);
  assert.equal(loaded.nodes.dvOutput.value,originalRows.slice(1).join("\n"),"offline reload restores exact remaining bets");
  assert.equal(loaded.nodes.dvInput.style.display,"none");
  await loaded.nodes.dvUndo.click();
  assert.equal(loaded.nodes.dvOutput.value,originalRows.join("\n"),"persisted Undo restores full output");
  await loaded.nodes.dvClear.click();
- assert.equal(loaded.store.has("KTS_DAVONG_WORKING_ROWS_V1"),false,"Xóa prevents stale wager reappearance");
+ assert.equal(loaded.backing.has("KTS_DAVONG_WORKING_ROWS_V1"),false,"Xóa prevents stale wager reappearance");
  console.log("DAVONG CHECKBOX GROUP, WORKING SOURCE, CUT/UNDO/RELOAD: PASS");
 }
 main().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
