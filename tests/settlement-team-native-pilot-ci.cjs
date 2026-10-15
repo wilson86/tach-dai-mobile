@@ -8,11 +8,11 @@ const ROOT=path.resolve(__dirname,'..'),controller=fs.readFileSync(path.join(__d
 const html=fs.readFileSync(path.join(ROOT,'app/settlement-team-pilot.html'),'utf8');
 const TOKEN='a'.repeat(43);
 const ASSETS=new Map([
- ['app/settlement-team-review-audit.js','app/settlement-team-review-audit.js'],
- ['app/settlement-team-sync-client.js','app/settlement-team-sync-client.js'],
- ['app/settlement-team-pilot-ui.js','app/settlement-team-pilot-ui.js'],
- ['app/settlement-team-pilot-start.js','app/settlement-team-pilot-start.js'],
- ['app/settlement-team-pilot.css','app/settlement-team-pilot.css']
+ ['settlement-team-review-audit.js','app/settlement-team-review-audit.js'],
+ ['settlement-team-sync-client.js','app/settlement-team-sync-client.js'],
+ ['settlement-team-pilot-ui.js','app/settlement-team-pilot-ui.js'],
+ ['settlement-team-pilot-start.js','app/settlement-team-pilot-start.js'],
+ ['settlement-team-pilot.css','app/settlement-team-pilot.css']
 ]);
 function browser(){
  for(const name of ['google-chrome','google-chrome-stable','chromium','chromium-browser']){
