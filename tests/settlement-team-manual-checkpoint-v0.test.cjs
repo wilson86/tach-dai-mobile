@@ -223,3 +223,49 @@ test('real sync-client pending queue -> explicit encrypted backup -> new client 
  assert.deepEqual(restarted.snapshot().drafts,[]);
  assert.equal(fake.map.size,1);
 });
+
+test('explicit sync-client GET /v1/session returns only validated server actor',async()=>{
+ const Sync=require('../app/settlement-team-sync-client.js');
+ const calls=[];
+ const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+  calls.push({url,method:options.method,authorization:options.headers.authorization});
+  return {ok:true,status:200,async json(){return actor;}};
+ }});
+ client.setSessionToken('a'.repeat(43),'group_a');
+ assert.equal(calls.length,0); // no hidden polling or automatic verifier
+ const result=await client.verifyActor();
+ assert.deepEqual(result,actor);
+ assert.deepEqual(calls,[{url:'/v1/session',method:'GET',
+  authorization:'Bearer '+'a'.repeat(43)}]);
+ assert.equal(Object.hasOwn(client.snapshot(),'session_token'),false);
+});
+test('server actor proof rejects inactive identity, foreign workspace and non-operator',async()=>{
+ const Sync=require('../app/settlement-team-sync-client.js');
+ for(const invalid of [
+  {...actor,server_verified:false},
+  {...actor,membership_active:false},
+  {...actor,user_id:'invalid user'},
+  {...actor,workspace_id:'group_b'},
+  {...actor,role:'reviewer'}
+ ]){
+  const c=Sync.createSyncClient({fetchImpl:async()=>({
+   ok:true,status:200,async json(){return invalid;}
+  })});
+  c.setSessionToken('a'.repeat(43),'group_a');
+  await assert.rejects(c.verifyActor(),/SYNC_ACTOR_UNVERIFIED/);
+ }
+});
+test('session rotation during delayed GET cannot authorize old account checkpoint',async()=>{
+ const Sync=require('../app/settlement-team-sync-client.js');
+ let unblock;
+ const gate=new Promise(resolve=>{unblock=resolve;});
+ const c=Sync.createSyncClient({fetchImpl:async()=>{
+  await gate;
+  return {ok:true,status:200,async json(){return actor;}};
+ }});
+ c.setSessionToken('a'.repeat(43),'group_a');
+ const inFlight=c.verifyActor();
+ c.clearSession({discardPending:true});
+ unblock();
+ await assert.rejects(inFlight,/SYNC_SESSION_CHANGED/);
+});
