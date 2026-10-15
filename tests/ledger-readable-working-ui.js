@@ -60,6 +60,8 @@ async function main(){
  assert.deepEqual(rows().map(r=>r.children[1].textContent),p.output.value.split("\n"));
  assert.ok(!rows().some(r=>r.children[1].textContent.includes("KTS_EXACT_OUTPUT_LEDGER")));
  assert.equal(els.ledgerWorkOrigin.textContent,original,"raw original is still separately auditable");
+ await els.ledgerCopyOriginal.events.click();
+ assert.equal(clipboard.value,original,"Copy tin gốc cannot export internal JSON");
  assert.equal(els.ledgerWorkCut.disabled,true,"no accidental cut with zero selected");
  // Upper row selection is the same authoritative checkbox state as lower pane.
  const first=rows()[0].children[0];first.checked=true;first.events.change();
