@@ -68,3 +68,20 @@ what will be transmitted. The manual UI requires a new recovery passphrase,
 checkbox consent and account verification on each attempt. An unavailable
 or disabled server returns no trusted MATCHED result and does not change
 the local PENDING queue. No real identities or customer records are allowed.
+
+## Real synthetic PostgreSQL composition seam — isolated, default OFF
+
+`createIsolatedTeamPrototype({syntheticOnly:true,
+syntheticRecoveryInspectEnabled:true,...})` now wires the existing
+`createRecoveryReconciliation` service to the **same independently
+scoped PostgreSQL ledger repository** used by the prototype. This removes
+the previous synthetic API wiring gap. The flag defaults `false`, is
+independent of review mutations, and creating an instance does not
+connect to PostgreSQL or listen on a port. For accepted original
+QUARANTINED fake-only intents the repository uses `SET TRANSACTION
+READ ONLY` ahead of its membership and receipt SELECTs; a missing,
+revoked, mismatched or unknown receipt never authorizes resending.
+
+Real physical-phone use still requires a **separately approved** isolated
+HTTPS service and explicit reviewed PostgreSQL roles. This composition
+change is not that approval and does not create a public endpoint.
