@@ -124,6 +124,28 @@ async function main(){
  assert.equal(selectedGroup.nodes.dvTapResultList.children.length,2);
  await selectedGroup.nodes.dvUndo.click();
  assert.equal(selectedGroup.nodes.dvOutput.value,originalRows.join("\n"));
+ // Selecting a row in the UPPER remaining-wager panel must select the
+ // identical row below and allow Copy/Cut with no silent source regeneration.
+ const upper=setup();await upper.nodes.dvRun.click();await upper.wait();
+ let first=upper.nodes.dvTapResultList.children[0].children[1].children[0];
+ first.checked=true;first.emit("change");
+ await upper.nodes.dvCutSelection.click();
+ const working=upper.nodes.dvWorkingRows.children[0].children[1].children[0];
+ working.checked=true;working.emit("change");
+ assert.match(upper.nodes.dvTapSummary.textContent,/1\/5 kết quả/u);
+ await upper.nodes.dvWorkingCopy.click();
+ assert.equal(upper.getCopied(),originalRows[1]);
+ await upper.nodes.dvCopyOriginal.click();
+ assert.equal(upper.getCopied(),sample,"read-only original Copy never returns JSON");
+ await upper.nodes.dvWorkingCut.click();
+ assert.equal(upper.nodes.dvOutput.value,originalRows.slice(2).join("\n"));
+ await upper.nodes.dvRun.click();await upper.wait();
+ assert.equal(upper.nodes.dvOutput.value,originalRows.slice(2).join("\n"));
+ await upper.nodes.dvUndo.click();
+ assert.equal(upper.nodes.dvOutput.value,originalRows.slice(1).join("\n"));
+ await upper.nodes.dvUndo.click();
+ assert.equal(upper.nodes.dvOutput.value,originalRows.join("\n"));
+
  // Denied clipboard permissions must keep the source and result atomic.
  const denied=setup(new Map(),true);
  await denied.nodes.dvRun.click();await denied.wait();
