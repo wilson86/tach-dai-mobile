@@ -3,6 +3,12 @@
 // network, read/write HTTP route, automatic financial resend or PWA wiring.
 const ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const KEY=/^draft_[a-f0-9]{32}$/;
+const EVENT=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
+const POSITIVE=/^[1-9][0-9]{0,18}$/;
+function positiveBigInt(value){
+ return typeof value==='string'&&POSITIVE.test(value)&&
+   BigInt(value)<=9223372036854775807n;
+}
 function deny(code){throw Error(code);}
 function createSyntheticRecoveryReviewFlow({vault,reconciliation,syntheticOnly=false}={}){
   if(syntheticOnly!==true||!vault||typeof vault.inspect!=='function'||
@@ -29,6 +35,12 @@ function createSyntheticRecoveryReviewFlow({vault,reconciliation,syntheticOnly=f
        restored.items.some(x=>!x||x.status!=='QUARANTINED'||
          x.auto_retry!==false||typeof x.id!=='string'||!KEY.test(x.id)))
       deny('TEAM_RECOVERY_FLOW_UNVERIFIED_BACKUP');
+    // Independently fence even a forged/quasi-restored adapter result.
+    // Duplicated original keys must never manufacture an 'all matched'
+    // outcome by replaying one receipt twice.
+    const originalIds=restored.items.map(x=>x.id);
+    if(new Set(originalIds).size!==originalIds.length)
+      deny('TEAM_RECOVERY_FLOW_DUPLICATE_INTENT');
     const review=await reconciliation.inspect(sessionToken,restored.items);
     if(!review||typeof review!=='object'||Array.isArray(review)||
        review.status!=='REVIEW_ONLY'||review.auto_send_enabled!==false||
@@ -43,7 +55,12 @@ function createSyntheticRecoveryReviewFlow({vault,reconciliation,syntheticOnly=f
          current.id!==restored.items[i].id||!allowed.has(current.classification)||
          current.auto_retry!==false||
          (current.classification==='MATCHED_SERVER_RECEIPT'&&
-           (typeof current.event_id!=='string'||current.event_id.length<1)))
+           (!EVENT.test(current.event_id||'')||
+             !positiveBigInt(current.feed_seq)||
+             !positiveBigInt(current.server_revision)))||
+         (current.classification==='UNVERIFIED_NOT_SAFE_TO_RETRY'&&
+           (current.event_id!==undefined||current.feed_seq!==undefined||
+             current.server_revision!==undefined)))
         deny('TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED');
     }
     const everyMatched=review.items.every(x=>x.classification==='MATCHED_SERVER_RECEIPT');

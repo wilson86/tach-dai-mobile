@@ -104,17 +104,19 @@ test('injected forged success/duplicate/mismatched receipt reports are refused',
  for(const report of [
    {status:'REVIEW_ONLY',authenticated_user_id:'other',workspace_id:'group_a',
     auto_send_enabled:false,all_receipts_verified:true,
-    items:[{id,classification:'MATCHED_SERVER_RECEIPT',event_id:'saved',auto_retry:false}]},
+    items:[{id,classification:'MATCHED_SERVER_RECEIPT',event_id:'saved',
+     feed_seq:'1',server_revision:'1',auto_retry:false}]},
    {status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
     auto_send_enabled:false,all_receipts_verified:true,
     items:[{id,classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',auto_retry:false}]},
    {status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
     auto_send_enabled:false,all_receipts_verified:true,
     items:[{id:'draft_'+'b'.repeat(32),classification:'MATCHED_SERVER_RECEIPT',
-      event_id:'saved',auto_retry:false}]},
+      event_id:'saved',feed_seq:'1',server_revision:'1',auto_retry:false}]},
    {status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
     auto_send_enabled:true,all_receipts_verified:true,
-    items:[{id,classification:'MATCHED_SERVER_RECEIPT',event_id:'saved',auto_retry:false}]}
+    items:[{id,classification:'MATCHED_SERVER_RECEIPT',event_id:'saved',
+      feed_seq:'1',server_revision:'1',auto_retry:false}]}
  ]){
    const f=createSyntheticRecoveryReviewFlow({syntheticOnly:true,
      vault:{async inspect(){return restored;}},
@@ -130,4 +132,70 @@ test('review orchestrator remains unwired from active team PWA and HTTP routes',
    assert.doesNotMatch(fs.readFileSync(path.join(root,p),'utf8'),
      /recovery-review-flow|createSyntheticRecoveryReviewFlow/,p);
  }
+});
+
+test('duplicate restored original id never reaches independent SQL receipt reviewer',async()=>{
+ const id=draft().id;
+ let lookups=0;
+ const r={status:'QUARANTINED',durability:'UNVERIFIED',
+  authenticated_user_id:'fake_op',workspace_id:'group_a',
+  auto_send_enabled:false,requires_server_receipt_review:true,
+  needs_server_reauthentication:true,
+  items:[{id,status:'QUARANTINED',auto_retry:false},
+         {id,status:'QUARANTINED',auto_retry:false}]};
+ const flow=createSyntheticRecoveryReviewFlow({syntheticOnly:true,
+  vault:{async inspect(){return r;}},
+  reconciliation:{async inspect(){lookups++;throw Error('NEVER_LOOKUP');}}});
+ await assert.rejects(flow.review({explicitConsent:true}),
+   /TEAM_RECOVERY_FLOW_DUPLICATE_INTENT/);
+ assert.equal(lookups,0);
+});
+
+test('positive-sounding injected receipt with invalid event, feed or revision is not accepted',async()=>{
+ const id=draft().id;
+ const restored={status:'QUARANTINED',durability:'UNVERIFIED',
+  authenticated_user_id:'fake_op',workspace_id:'group_a',
+  auto_send_enabled:false,needs_server_reauthentication:true,
+  requires_server_receipt_review:true,
+  items:[{id,status:'QUARANTINED',auto_retry:false}]};
+ const verified={id,classification:'MATCHED_SERVER_RECEIPT',auto_retry:false,
+  event_id:'fake_event_1',feed_seq:'1',server_revision:'1'};
+ for(const item of [
+  {...verified,event_id:'bad whitespace'},
+  {...verified,feed_seq:'0'},
+  {...verified,feed_seq:'01'},
+  {...verified,feed_seq:'9223372036854775808'},
+  {...verified,feed_seq:1},
+  {...verified,server_revision:'0'},
+  {...verified,server_revision:'01'},
+  {...verified,server_revision:'9223372036854775808'},
+  {...verified,server_revision:1}
+ ]){
+  const flow=createSyntheticRecoveryReviewFlow({syntheticOnly:true,
+   vault:{async inspect(){return restored;}},
+   reconciliation:{async inspect(){return {
+    status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
+    auto_send_enabled:false,all_receipts_verified:true,items:[item]
+   };}}});
+  await assert.rejects(flow.review({explicitConsent:true}),
+   /TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED/);
+ }
+});
+
+test('missing receipt cannot smuggle an event id or revision into UNKNOWN classification',async()=>{
+ const id=draft().id;
+ const restored={status:'QUARANTINED',durability:'UNVERIFIED',
+  authenticated_user_id:'fake_op',workspace_id:'group_a',
+  auto_send_enabled:false,needs_server_reauthentication:true,
+  requires_server_receipt_review:true,items:[{id,status:'QUARANTINED',auto_retry:false}]};
+ const bad={id,classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',
+   event_id:'fake_looks_committed',auto_retry:false};
+ const flow=createSyntheticRecoveryReviewFlow({syntheticOnly:true,
+  vault:{async inspect(){return restored;}},
+  reconciliation:{async inspect(){return {
+   status:'REVIEW_ONLY',authenticated_user_id:'fake_op',workspace_id:'group_a',
+   auto_send_enabled:false,all_receipts_verified:false,items:[bad]
+  };}}});
+ await assert.rejects(flow.review({explicitConsent:true}),
+   /TEAM_RECOVERY_FLOW_RECEIPT_UNVERIFIED/);
 });

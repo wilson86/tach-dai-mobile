@@ -231,3 +231,20 @@ to QUARANTINED, wrong-secret denial, and no automatic sync. They also model
 the important distinction between an individual `add()` request success
 and a **later transaction abort**: only completed transactions may return
 a saved ACK. No actual browser disk persistence was measured.
+
+## Independent recovered-receipt composition guard (GitHub-only)
+
+The default-off `recovery-review-flow.cjs` now fails closed if a decrypted
+quarantine result repeats any original draft/idempotency ID, before asking
+the separately authenticated reviewer for receipts. When an injected reviewer
+labels an event matched, the composition additionally demands canonical
+positive PostgreSQL feed sequence and revision strings plus a valid event
+ID. An UNKNOWN event cannot carry an event ID, feed sequence or server
+revision as a misleading implied receipt. These are **second-boundary
+defenses**, independent of the existing receipt repository's own checks.
+
+New synthetic adversarial tests cover duplicate imported intent IDs, forged
+matched receipts with wrong/canonicalized sequences and revisions, and
+missing receipts disguised as committed events. The candidate remains
+unwired; these Node tests **do not** unlock native-browser QA, crash-safe
+IndexedDB, real-money use or the independent HIOSKT oracle.
