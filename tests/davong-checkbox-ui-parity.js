@@ -162,6 +162,18 @@ async function main(){
  assert.equal(denied.nodes.dvInput.value,sample);
  assert.equal(denied.backing.has("KTS_DAVONG_WORKING_ROWS_V1"),false);
 
+ // The Unified Đá Vòng source visibly strips the copied Telegram envelope,
+ // but Undo restores the exact bytes of the original paste.
+ const copiedChat='[10/16/2026 5:36 PM] Hiền: 92 82 da 10n';
+ const normalized='92 82 da 10n';
+ const chat=setup();
+ chat.nodes.dvInput.value=copiedChat;
+ chat.ctx.KTS_DV_UI.beforeChatNormalize(copiedChat,normalized);
+ assert.equal(chat.nodes.dvInput.value,normalized);
+ assert.equal(chat.ctx.KTS_DV_UI.beforeRun(),false);
+ await chat.nodes.dvUndo.click();
+ assert.equal(chat.nodes.dvInput.value,copiedChat,'Undo retains the full original chat line');
+
  console.log("DAVONG CHECKBOX GROUP, WORKING SOURCE, CUT/UNDO/RELOAD: PASS");
 }
 main().catch(error=>{console.error(error.stack||error);process.exitCode=1;});
