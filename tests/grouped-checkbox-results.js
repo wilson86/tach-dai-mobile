@@ -55,8 +55,12 @@ async function main(){
   assert.equal(baseline.split("\n").length,records().length);
   assert.equal(rules.els.output.style.display,"none","checkbox UI replaces selectable textarea, but leaves audited output intact");
   // Group 1 checkbox copies/cuts only group-1 rows; other group remains.
-  const first=groups()[0].children[0].children[0];
+  const firstGroupNode=groups()[0];
+  const first=firstGroupNode.children[0].children[0];
   first.checked=true;first.events.change();
+  assert.equal(groups()[0],firstGroupNode,"checking group does not replace/scroller-jump DOM");
+  assert.equal(groups()[0].children[0].children[0],first,"focused checkbox stays attached");
+  assert.equal(first.checked,true,"selection is reflected on same checkbox");
   const selected=records()[0].text;
   await rules.copyOutput();assert.equal(clipboard.text,selected);
   await rules.cutSelectedOutput();assert.equal(clipboard.text,selected);
