@@ -210,6 +210,13 @@ async function runDaVong(){
   if(!raw){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
   try{
     const w=engine(), wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
+    // Show the stripped chat envelope in the editable source on Run, even
+    // when wager validation subsequently fails. Undo retains the exact paste.
+    if(wasChat&&clean!==raw){
+      if(typeof window.KTS_DV_UI?.beforeChatNormalize!=='function')
+        throw Error('CHAT_SOURCE_PROVENANCE_NOT_READY');
+      window.KTS_DV_UI.beforeChatNormalize($('dvInput').value,clean);
+    }
     if(!clean) throw Error('Không còn tin sau khi lọc chat');
     const explicit=w.resolveExplicitSourceRegion(clean), region=explicit.region||$('dvRegion').value, source=explicit.text;
     const d=parseLocalDate($('dvDate').value||localDateISO()), stations=w.getSchedule(region,d)||[];
