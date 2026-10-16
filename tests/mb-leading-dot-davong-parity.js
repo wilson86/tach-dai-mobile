@@ -43,4 +43,11 @@ assert.deepEqual(Array.from(multi.outputs),[],"double prefix dot remains invalid
 assert.equal(r.normalizeInput("32 b10.50n"),"32 b10.50n","money decimals stay intact");
 assert.equal(r.KTS_BUSINESS_ENGINE.ENGINE_SHA256,
  "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb");
+const appHtml=read("app/index.html");
+const rawGate=appHtml.indexOf("const bad=w.findForbiddenRawBetPrefix(raw);");
+const sanitizer=appHtml.indexOf("const wasChat=w.looksLikeChatLog(raw)");
+assert.ok(rawGate>0 && sanitizer>rawGate,
+  "Unified must reject raw invalid bet prefix BEFORE child PWA chat sanitation");
+assert.ok(appHtml.includes("if(bad)throw Error("),
+  "Unified must fail closed and clear wager output on raw-prefix error");
 console.log("MB DOT TELEGRAM ĐÁ VÒNG PARITY: PASS");
