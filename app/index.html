@@ -209,7 +209,11 @@ async function runDaVong(){
   const raw=$('dvInput').value.trim();
   if(!raw){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
   try{
-    const w=engine(), wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
+    const w=engine();
+    if(typeof w.findForbiddenRawBetPrefix!=='function')throw Error('RAW_PREFIX_CHECK_NOT_READY');
+    const bad=w.findForbiddenRawBetPrefix(raw);
+    if(bad)throw Error('Dòng '+bad.line+': tiền tố không hợp lệ '+bad.prefix+' -> '+bad.source);
+    const wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
     // Show the stripped chat envelope in the editable source on Run, even
     // when wager validation subsequently fails. Undo retains the exact paste.
     if(wasChat&&clean!==raw){
