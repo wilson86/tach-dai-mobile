@@ -1,6 +1,6 @@
 {
-  "version": "2.0.30",
-  "updated": "2026-10-15",
-  "notes": "Human-readable source ledger display with row Copy/Cut, raw-original audit and fail-closed isolated exact-row persistence; no engine/money change.",
+  "version": "2.0.31",
+  "updated": "2026-10-16",
+  "notes": "Telegram sender/timestamp shown stripped after Run with exact original Undo; checkbox tap keeps scroll/focus; same engine and monetary rules.",
   "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb"
 }
