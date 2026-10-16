@@ -464,6 +464,9 @@ function normalizeInput(s){
   // `b20 n`, `dx 2,5 n`.  Do not globally join a number followed by a letter.
   s=s.replace(/\b((?:dathang|dat|bao|bl|lo|lô|duoi|đuôi|dau|đầu|dx|đx|da|đá|dd|đđ|xc|b|d|x)\s*\d+(?:[.,]\d+)?)\s+([nd])\b/giu,"$1$2");
   s=s.replace(/(^|\s)\.+(?=\d)/gu,"$1");
+  // A single standalone Telegram leading dot is delimiter metadata before a whole number.
+  // Scope: beginning of betting line only. Double dot/unknown prefix/decimals stay untouched.
+  s=s.replace(/^\.\s+(?=\d{1,4}(?:\s|[.,_]|$))/u,"");
   return s.replace(/[^\S\r\n]+/g," ").replace(/ *\n */g,"\n").trim();
 }
 function normalizeSenderName(s){
