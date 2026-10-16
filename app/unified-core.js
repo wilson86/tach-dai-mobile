@@ -255,7 +255,7 @@
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
   let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
-  const selected=new Set(),undoStack=[];
+  const selected=new Set(),undoStack=[],selectionBindings=[];
   const live=()=>rows.filter(r=>r.alive);
   const picked=()=>live().filter(r=>selected.has(r.id));
   const byId=id=>rows.find(r=>r.id===id);
@@ -358,14 +358,44 @@
     input.addEventListener('change',()=>change(input.checked));
     label.appendChild(input);return input;
   }
+  function syncSelection(){
+    // Checkbox taps must never replace a focused checkbox or scroll the page.
+    for(const binding of selectionBindings){
+      if(binding.row){
+        const active=selected.has(binding.row.id);
+        binding.box.checked=active;
+        binding.label.className='dv-checkbox-row'+(active?' checked':'');
+      }else{
+        const eligible=binding.rows.filter(r=>r.alive);
+        const every=eligible.length>0&&eligible.every(r=>selected.has(r.id));
+        const some=eligible.some(r=>selected.has(r.id));
+        binding.box.checked=every;
+        binding.box.indeterminate=!every&&some;
+      }
+    }
+    const liveRows=live(),chosen=picked(),active=activeGroups();
+    const summary=$('dvTapSummary');
+    if(summary)summary.textContent='Đã chọn '+chosen.length+'/'+liveRows.length+
+      ' kết quả · '+active.length+' nhóm';
+    const cut=$('dvCutSelection');
+    if(cut){cut.disabled=chosen.length===0;cut.textContent='Cắt đã chọn ('+chosen.length+')';}
+    const all=$('dvSelectAllOutput');
+    if(all)all.textContent=liveRows.length&&chosen.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
+    const select=$('dvWorkingSelect');
+    if(select)select.textContent=liveRows.length&&chosen.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
+    for(const id of ['dvWorkingCopy','dvWorkingCut']){
+      const button=$(id);if(button)button.disabled=chosen.length===0;
+    }
+  }
   function toggleAll(){
     const all=live(),everything=all.length&&all.every(r=>selected.has(r.id));
-    selected.clear();if(!everything)for(const r of all)selected.add(r.id);render();
+    selected.clear();if(!everything)for(const r of all)selected.add(r.id);
+    syncSelection();
   }
   function toggleGroup(group,checked){
     for(const id of group.rowIds){if(!byId(id)?.alive)continue;
       if(checked)selected.add(id);else selected.delete(id)}
-    render();
+    syncSelection();
   }
   function groupList(container,prefix,showGroups){
     container.replaceChildren();
@@ -383,6 +413,7 @@
       const headBox=checkbox(head,every,v=>toggleGroup(group,v),
         'Chọn cả nhóm '+(i+1));
       headBox.indeterminate=!every&&some;
+      selectionBindings.push({box:headBox,rows:groupRows});
       const title=document.createElement('span');title.className='dv-checkbox-title';
       title.textContent='Nhóm '+(i+1)+' · '+groupRows.length+' kết quả'+
         (group.type==='pair'?' · '+group.key+' đá':' · Tin thường');
@@ -390,8 +421,11 @@
       for(const row of groupRows){
         const label=document.createElement('label');label.className='dv-checkbox-row';
         if(selected.has(row.id))label.className+=' checked';
-        checkbox(label,selected.has(row.id),v=>{if(v)selected.add(row.id);else selected.delete(row.id);render();},
-          'Chọn kết quả '+row.text);
+        const rowBox=checkbox(label,selected.has(row.id),v=>{
+          if(v)selected.add(row.id);else selected.delete(row.id);
+          syncSelection();
+        },'Chọn kết quả '+row.text);
+        selectionBindings.push({box:rowBox,row,label});
         const text=document.createElement('span');text.textContent=row.text;
         label.appendChild(text);section.appendChild(label);
       }
@@ -399,6 +433,7 @@
     }
   }
   function render(){
+    selectionBindings.length=0;
     const liveRows=live(),pickedRows=picked(),active=activeGroups();
     groupList($('dvTapResultList'),'result',true);
     const summary=$('dvTapSummary');
