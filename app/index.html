@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.19</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.20</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div id="sharedSettings" class="card shared-settings">
     <div class="controls">
       <div><label class="small" for="sharedRegion">Miền dùng chung</label><select id="sharedRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -77,7 +77,7 @@
     </div>
   </section>
 </div>
-<script src="./unified-core.js?ux=1.0.19"></script>
+<script src="./unified-core.js?ux=1.0.20"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -209,7 +209,11 @@ async function runDaVong(){
   const raw=$('dvInput').value.trim();
   if(!raw){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
   try{
-    const w=engine(), wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
+    const w=engine();
+    if(typeof w.findForbiddenRawBetPrefix!=='function')throw Error('RAW_PREFIX_CHECK_NOT_READY');
+    const bad=w.findForbiddenRawBetPrefix(raw);
+    if(bad)throw Error('Dòng '+bad.line+': tiền tố không hợp lệ '+bad.prefix+' -> '+bad.source);
+    const wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
     // Show the stripped chat envelope in the editable source on Run, even
     // when wager validation subsequently fails. Undo retains the exact paste.
     if(wasChat&&clean!==raw){
@@ -278,9 +282,9 @@ async function prepareOfflineEngine(){
         }
       });
     })));
-    const cache=await caches.open('kts-tach-unified-v1.0.19-chat-scroll-focus-046935');
+    const cache=await caches.open('kts-tach-unified-v1.0.20-mb-raw-prefix-safe-046935');
     const expected=['../','../index.html','../station_calendar.generated.js',
-      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.19'];
+      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.20'];
     for(const path of expected){
       const request=new URL(path,location.href).href;
       const response=await cache.match(request);

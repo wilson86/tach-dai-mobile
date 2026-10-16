@@ -89,7 +89,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.31</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.32</span></div>
 
   <div class="card">
     <div class="controls">
@@ -494,6 +494,26 @@ function parseChatEnvelope(line){
 }
 function looksLikeChatLog(text){
   return (text||"").split(/\r?\n/).some(raw=>!!parseChatEnvelope(stripInvisible(raw).trim()));
+}
+// PWA standalone must see the raw physical line before normalization can
+// discard an unauthorised pipe or double-dot prefix. Return a diagnostic,
+// never a normalized money operation.
+function findForbiddenRawBetPrefix(text){
+  let inChat=false,keep=true;
+  const physical=String(text||"").split(/\r?\n/);
+  for(let i=0;i<physical.length;i++){
+    const original=stripInvisible(physical[i]||"").trim();
+    if(!original)continue;
+    const env=parseChatEnvelope(original);
+    if(env?.metadata)continue;
+    if(env){inChat=true;keep=!IGNORED_SENDERS.has(normalizeSenderName(env.sender));}
+    if(inChat&&!keep)continue;
+    const body=stripInvisible(env?env.body:original).replace(/^\s*>\s*/u,"").trim();
+    const match=body.match(/^([^\p{L}\p{N}\s]+)(\s*)(?=\d{1,4}(?:\s|[.,_]|$))/u);
+    if(match && (match[2] ? match[1]!=="." : /[^.]/u.test(match[1])))
+      return {line:i+1,source:body,prefix:match[1]};
+  }
+  return null;
 }
 function preprocessChatText(text){
   const lines=(text||"").split(/\r?\n/);
@@ -1689,6 +1709,15 @@ function run(options={}){
     return;
   }
 
+  const forbidden=findForbiddenRawBetPrefix(raw);
+  if(forbidden){
+    resetOutputRecords();
+    outputEl.value="PHÁT HIỆN TIN SAI:\n\nDòng "+forbidden.line+
+      ": ký tự đầu dòng không hợp lệ ("+forbidden.prefix+")\n→ "+forbidden.source;
+    setStatus("Có lỗi đầu dòng cược, chưa tạo kết quả","err");
+    if(!options.preserveInputSelection)selectLine(inputEl,forbidden.line);
+    return;
+  }
   const wasChat=looksLikeChatLog(raw);
   const clean=wasChat?preprocessChatText(raw):raw;
   if(wasChat&&clean!==raw){
@@ -1847,7 +1876,7 @@ if(parseExactOutputLedger(inputEl.value))run();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.31";
+const APP_VERSION = "2.0.32";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
