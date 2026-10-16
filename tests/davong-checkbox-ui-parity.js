@@ -81,8 +81,12 @@ async function main(){
  let firstGroup=x.nodes.dvTapResultList.children[0];
  assert.equal(firstGroup.children[0].children[0].tag,"input","group uses native checkbox");
  assert.equal(firstGroup.children[1].children[0].tag,"input","wager row uses native checkbox");
- firstGroup.children[1].children[0].checked=true;
- firstGroup.children[1].children[0].emit("change");
+ const firstRowCheckbox=firstGroup.children[1].children[0];
+ firstRowCheckbox.checked=true;
+ firstRowCheckbox.emit("change");
+ assert.equal(x.nodes.dvTapResultList.children[0],firstGroup,"checkbox tap keeps its group DOM node");
+ assert.equal(firstGroup.children[1].children[0],firstRowCheckbox,"checkbox focus must not be destroyed");
+ assert.equal(firstRowCheckbox.checked,true);
  assert.match(x.nodes.dvTapSummary.textContent,/1\/6 kết quả · 3 nhóm/u);
  await x.nodes.dvCutSelection.click();
  assert.equal(x.getCopied(),originalRows[0],"CUT clipboard only first selected wager");
@@ -118,6 +122,8 @@ async function main(){
  await selectedGroup.nodes.dvRun.click();await selectedGroup.wait();
  const box=selectedGroup.nodes.dvTapResultList.children[0].children[0].children[0];
  box.checked=true;box.emit("change");
+ assert.equal(selectedGroup.nodes.dvTapResultList.children[0].children[0].children[0],box,
+   "group checkbox focus and scroll anchor survive selection");
  assert.match(selectedGroup.nodes.dvTapSummary.textContent,/3\/6 kết quả · 3 nhóm/u);
  await selectedGroup.nodes.dvCutSelection.click();
  assert.equal(selectedGroup.nodes.dvOutput.value,originalRows.slice(3).join("\n"));
