@@ -1073,6 +1073,45 @@ function setStatus(text,type=""){
 // View-only, source-line grouped checkbox selection. The authoritative wager
 // rows remain outputRecords and the legacy output textarea for clipboard/audit.
 const checkedResultRecordIndexes=new Set();
+const resultCheckboxBindings=[];
+const ledgerCheckboxBindings=[];
+function syncGroupedSelectionUI(){
+  // No DOM replacement: preserve checkbox focus, finger scroll and result position.
+  for(const binding of resultCheckboxBindings){
+    if(binding.index!==undefined){
+      const active=checkedResultRecordIndexes.has(binding.index);
+      binding.box.checked=active;
+      binding.label.className='result-group-row'+(active?' checked':'');
+    }else{
+      const all=binding.indexes.every(i=>checkedResultRecordIndexes.has(i));
+      const some=binding.indexes.some(i=>checkedResultRecordIndexes.has(i));
+      binding.box.checked=all;
+      binding.box.indeterminate=!all&&some;
+    }
+  }
+  for(const binding of ledgerCheckboxBindings){
+    const active=checkedResultRecordIndexes.has(binding.index);
+    binding.box.checked=active;
+    binding.label.className='ledger-work-row'+(active?' selected':'');
+  }
+  const visible=outputRecords.map((r,i)=>({...r,index:i})).filter(r=>r.alive);
+  const chosen=checkedAliveRecordIndexes();
+  const summary=$('resultGroupsSummary');
+  if(summary&&groupedResultReady&&summary.style.display!=='none')
+    summary.textContent=visible.length
+      ?`Đã chọn ${chosen.length}/${visible.length} kết quả · ${resultCheckboxBindings.filter(r=>r.indexes).length} nhóm`
+      :'Chưa có kết quả';
+  const cut=$('cutBtn');
+  if(cut){cut.disabled=chosen.length===0;cut.textContent=`Cắt đã chọn (${chosen.length})`;}
+  const selectAll=$('selectAllOutputBtn');
+  if(selectAll)selectAll.textContent=visible.length&&chosen.length===visible.length?'Bỏ chọn tất cả':'Chọn tất cả';
+  const ledgerSelect=$('ledgerWorkSelect');
+  if(ledgerSelect)ledgerSelect.textContent=visible.length&&chosen.length===visible.length?'Bỏ chọn tất cả':'Chọn tất cả';
+  for(const id of ['ledgerWorkCopy','ledgerWorkCut']){
+    const button=$(id);if(button)button.disabled=chosen.length===0;
+  }
+}
+
 let groupedResultReady=false;
 function checkedAliveRecordIndexes(){
   return [...checkedResultRecordIndexes]
@@ -1120,6 +1159,7 @@ function renderLedgerWork(){
   if(!hasLedger)return;
   const ledger=parseExactOutputLedger(raw);
   list.replaceChildren();
+  ledgerCheckboxBindings.length=0;
   if(!ledger){
     const warning=document.createElement("div");
     warning.className="ledger-work-note";
@@ -1146,9 +1186,10 @@ function renderLedgerWork(){
     check.addEventListener("change",()=>{
       if(check.checked)checkedResultRecordIndexes.add(index);
       else checkedResultRecordIndexes.delete(index);
-      renderGroupedResults();renderLedgerWork();
+      syncGroupedSelectionUI();
     });
     const text=document.createElement("span");text.textContent=row.text;
+    ledgerCheckboxBindings.push({index,box:check,label});
     label.append(check,text);list.appendChild(label);
   }
   const selected=hydrated?checkedAliveRecordIndexes().length:0;
@@ -1220,6 +1261,7 @@ function renderGroupedResults(){
   list.style.display=error?"none":"";
   summary.style.display=error?"none":"";
   list.replaceChildren();
+  resultCheckboxBindings.length=0;
   if(!error){
     const groups=new Map();
     for(const row of visible){
@@ -1242,8 +1284,9 @@ function renderGroupedResults(){
           if(all.checked)checkedResultRecordIndexes.add(record.index);
           else checkedResultRecordIndexes.delete(record.index);
         }
-        renderGroupedResults();
+        syncGroupedSelectionUI();
       });
+      resultCheckboxBindings.push({indexes:records.map(r=>r.index),box:all});
       const source=String(records[0].sourceGroupText||lastSourceLines[lineNo-1]||"").slice(0,80);
       const title=document.createElement("span");title.className="result-group-title";
       title.textContent=`Nhóm ${groupNo} · Dòng ${lineNo} · ${records.length} kết quả${source?" · "+source:""}`;
@@ -1257,8 +1300,9 @@ function renderGroupedResults(){
         checkbox.addEventListener("change",()=>{
           if(checkbox.checked)checkedResultRecordIndexes.add(record.index);
           else checkedResultRecordIndexes.delete(record.index);
-          renderGroupedResults();
+          syncGroupedSelectionUI();
         });
+        resultCheckboxBindings.push({index:record.index,box:checkbox,label});
         const text=document.createElement("span");text.textContent=record.text;
         label.append(checkbox,text);section.appendChild(label);
       }
@@ -1277,7 +1321,7 @@ function toggleAllGroupedResults(){
   const all=visible.length>0 && visible.every(r=>checkedResultRecordIndexes.has(r.index));
   checkedResultRecordIndexes.clear();
   if(!all)for(const record of visible)checkedResultRecordIndexes.add(record.index);
-  renderGroupedResults();
+  syncGroupedSelectionUI();
 }
 function initGroupedResults(){
   const list=$("resultGroups"),summary=$("resultGroupsSummary");
