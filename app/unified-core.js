@@ -175,7 +175,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.18';
+  const UX_VERSION='1.0.19';
 
   function selectAllText(el){
     if(!el) return;
@@ -254,8 +254,8 @@
   const ENGINE='046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb';
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
-  let sourceRegion='',sourceDate='',skipRebuild=false;
-  const selected=new Set(),undoStack=[];
+  let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
+  const selected=new Set(),undoStack=[],selectionBindings=[];
   const live=()=>rows.filter(r=>r.alive);
   const picked=()=>live().filter(r=>selected.has(r.id));
   const byId=id=>rows.find(r=>r.id===id);
@@ -276,7 +276,8 @@
   function validateLedger(data){
     return !!data&&data.schema===SCHEMA&&data.app==='tach-dai-davong'&&
       data.engine===ENGINE&&data.region===currentRegion()&&data.date===currentDate()&&
-      typeof data.origin==='string'&&Array.isArray(data.rows)&&Array.isArray(data.groups)&&
+      typeof data.origin==='string'&&(data.raw_original===undefined||typeof data.raw_original==='string')&&
+      Array.isArray(data.rows)&&Array.isArray(data.groups)&&
       data.rows.every(r=>typeof r.id==='string'&&typeof r.text==='string'&&
         typeof r.groupId==='string'&&typeof r.alive==='boolean'&&r.text.length<4096)&&
       data.rows.length<=10000&&data.groups.length<=10000&&
@@ -292,7 +293,7 @@
   }
   function serial(){
     return {schema:SCHEMA,app:'tach-dai-davong',engine:ENGINE,origin,
-      region:sourceRegion,date:sourceDate,
+      region:sourceRegion,date:sourceDate,raw_original:originalChatText||origin,
       rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()})),
       undo:undoStack.slice(-30)};
   }
@@ -305,7 +306,7 @@
   function snapshot(){
     undoStack.push({origin,input:safeText($('dvInput')?.value),output:safeText($('dvOutput')?.value),
       rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()})),
-      selected:[...selected],ledgerActive,sourceRegion,sourceDate});
+      selected:[...selected],ledgerActive,sourceRegion,sourceDate,originalChatText});
     if(undoStack.length>30)undoStack.shift();
   }
   function notifyRawChanged(){
@@ -316,6 +317,7 @@
   function restore(){
     const old=undoStack.pop();if(!old){status('Chưa có thao tác để hoàn tác.','err');return;}
     origin=old.origin;sourceRegion=old.sourceRegion;sourceDate=old.sourceDate;
+    originalChatText=old.originalChatText||'';
     rows=old.rows.map(r=>({...r}));
     groups=old.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();for(const id of old.selected)selected.add(id);
@@ -324,6 +326,14 @@
     render();persist();
     if(!ledgerActive)notifyRawChanged();
     status('Đã hoàn tác · khôi phục nguồn và kết quả','ok');
+  }
+  function beforeChatNormalize(raw,clean){
+    if(safeText(raw)===safeText(clean))return;
+    snapshot(); // Undo always restores the exact copied chat text.
+    originalChatText=safeText(raw);
+    $('dvInput').value=safeText(clean);
+    normalizingChat=true;
+    try{notifyRawChanged()}finally{normalizingChat=false}
   }
   function parse(text){
     const nextGroups=[],nextRows=[];
@@ -348,14 +358,44 @@
     input.addEventListener('change',()=>change(input.checked));
     label.appendChild(input);return input;
   }
+  function syncSelection(){
+    // Checkbox taps must never replace a focused checkbox or scroll the page.
+    for(const binding of selectionBindings){
+      if(binding.row){
+        const active=selected.has(binding.row.id);
+        binding.box.checked=active;
+        binding.label.className='dv-checkbox-row'+(active?' checked':'');
+      }else{
+        const eligible=binding.rows.filter(r=>r.alive);
+        const every=eligible.length>0&&eligible.every(r=>selected.has(r.id));
+        const some=eligible.some(r=>selected.has(r.id));
+        binding.box.checked=every;
+        binding.box.indeterminate=!every&&some;
+      }
+    }
+    const liveRows=live(),chosen=picked(),active=activeGroups();
+    const summary=$('dvTapSummary');
+    if(summary)summary.textContent='Đã chọn '+chosen.length+'/'+liveRows.length+
+      ' kết quả · '+active.length+' nhóm';
+    const cut=$('dvCutSelection');
+    if(cut){cut.disabled=chosen.length===0;cut.textContent='Cắt đã chọn ('+chosen.length+')';}
+    const all=$('dvSelectAllOutput');
+    if(all)all.textContent=liveRows.length&&chosen.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
+    const select=$('dvWorkingSelect');
+    if(select)select.textContent=liveRows.length&&chosen.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
+    for(const id of ['dvWorkingCopy','dvWorkingCut']){
+      const button=$(id);if(button)button.disabled=chosen.length===0;
+    }
+  }
   function toggleAll(){
     const all=live(),everything=all.length&&all.every(r=>selected.has(r.id));
-    selected.clear();if(!everything)for(const r of all)selected.add(r.id);render();
+    selected.clear();if(!everything)for(const r of all)selected.add(r.id);
+    syncSelection();
   }
   function toggleGroup(group,checked){
     for(const id of group.rowIds){if(!byId(id)?.alive)continue;
       if(checked)selected.add(id);else selected.delete(id)}
-    render();
+    syncSelection();
   }
   function groupList(container,prefix,showGroups){
     container.replaceChildren();
@@ -373,6 +413,7 @@
       const headBox=checkbox(head,every,v=>toggleGroup(group,v),
         'Chọn cả nhóm '+(i+1));
       headBox.indeterminate=!every&&some;
+      selectionBindings.push({box:headBox,rows:groupRows});
       const title=document.createElement('span');title.className='dv-checkbox-title';
       title.textContent='Nhóm '+(i+1)+' · '+groupRows.length+' kết quả'+
         (group.type==='pair'?' · '+group.key+' đá':' · Tin thường');
@@ -380,8 +421,11 @@
       for(const row of groupRows){
         const label=document.createElement('label');label.className='dv-checkbox-row';
         if(selected.has(row.id))label.className+=' checked';
-        checkbox(label,selected.has(row.id),v=>{if(v)selected.add(row.id);else selected.delete(row.id);render();},
-          'Chọn kết quả '+row.text);
+        const rowBox=checkbox(label,selected.has(row.id),v=>{
+          if(v)selected.add(row.id);else selected.delete(row.id);
+          syncSelection();
+        },'Chọn kết quả '+row.text);
+        selectionBindings.push({box:rowBox,row,label});
         const text=document.createElement('span');text.textContent=row.text;
         label.appendChild(text);section.appendChild(label);
       }
@@ -389,6 +433,7 @@
     }
   }
   function render(){
+    selectionBindings.length=0;
     const liveRows=live(),pickedRows=picked(),active=activeGroups();
     groupList($('dvTapResultList'),'result',true);
     const summary=$('dvTapSummary');
@@ -410,7 +455,7 @@
         $(id).style.display=ledgerActive&&liveRows.length?'none':'';
       if(ledgerActive&&liveRows.length){
         groupList($('dvWorkingRows'),'source',true);
-        $('dvWorkingOrigin').textContent=origin;
+        $('dvWorkingOrigin').textContent=originalChatText||origin;
         $('dvWorkingSelect').textContent=liveRows.length&&pickedRows.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
         $('dvWorkingCopy').disabled=pickedRows.length===0;
         $('dvWorkingCut').disabled=pickedRows.length===0;
@@ -464,6 +509,7 @@
     if(value&&value!==data.origin)return;
     if(shared&&shared!==data.origin)return;
     origin=data.origin;sourceRegion=data.region;sourceDate=data.date;
+    originalChatText=data.raw_original||'';
     rows=data.rows.map(r=>({...r}));groups=data.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();ledgerActive=true;$('dvInput').value=origin;
     undoStack.splice(0,undoStack.length);
@@ -529,7 +575,7 @@
       status(ok?'Đã copy '+arr.length+' dòng cược còn lại':'Không thể copy.',ok?'ok':'err');
     });
     $('dvCopyOriginal').addEventListener('click',async()=>{
-      const ok=await copy(origin);
+      const ok=await copy(originalChatText||origin);
       status(ok?'Đã copy tin gốc':'Không thể copy tin gốc.',ok?'ok':'err');
     });
     $('dvSourceCopy').addEventListener('click',async()=>{
@@ -548,18 +594,21 @@
       if(!(await copy(pickedText))){status('Copy thất bại · chưa Cắt.','err');return;}
       snapshot();
       input.value=text.slice(0,start)+text.slice(found<0?text.length:found+1);
-      origin=input.value;ledgerActive=false;persist();
+      origin=input.value;originalChatText='';ledgerActive=false;persist();
       notifyRawChanged();
       // A normal source Cut is a legitimate new source message. Recompute
       // immediately without treating its result as an exact-row ledger.
       run.click();
     });
     const clear=$('dvClear');
-    if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();origin='';ledgerActive=false;persist();render();});
+    if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();origin='';originalChatText='';ledgerActive=false;persist();render();});
     run.addEventListener('click',()=>Promise.resolve().then(rebuild));
-    input.addEventListener('input',()=>{if(ledgerActive){ledgerActive=false;persist();render();}});
+    input.addEventListener('input',()=>{
+      if(!normalizingChat)originalChatText='';
+      if(ledgerActive){ledgerActive=false;persist();render();}
+    });
     maybeRestore();render();
-    window.KTS_DV_UI={beforeRun,beforeClear:snapshot};
+    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize};
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();

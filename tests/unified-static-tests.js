@@ -129,12 +129,19 @@ function loadActualRules(){
   const element=()=>({events:Object.create(null),addEventListener(type,handler){this.events[type]=handler},value:'',textContent:'',className:'',selectionStart:0,selectionEnd:0,style:{},focus(){},select(){this.selectionStart=0;this.selectionEnd=this.value.length},setSelectionRange(a,b){this.selectionStart=a;this.selectionEnd=b},remove(){}});
   const context={console,Set,Date,JSON,RegExp,String,Error,navigator:{clipboard:{async writeText(){}}},document:{getElementById(id){return elements[id]||(elements[id]=element())},createElement:element,body:{appendChild(){}},execCommand(){return true}}};
   vm.createContext(context);
-  vm.runInContext(`${calendar}\n${business}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,validateCheckOnlyLine,processLine,splitBetChunks,engine:KTS_BUSINESS_ENGINE};`,context);
+  vm.runInContext(`${calendar}\n${business}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,validateCheckOnlyLine,processLine,splitBetChunks,preprocessChatText,looksLikeChatLog,engine:KTS_BUSINESS_ENGINE};`,context);
   return context.__rules;
 }
 {
   const rules=loadActualRules();
   assert.equal(rules.engine.ENGINE_SHA256,expectedEngine);
+  const copiedChat='[10/16/2026 5:36 PM] Hiền: 92 82 da 10n\n'+
+    '[10/16/2026 5:37 PM] Hiền: 68 86 39 da 5n\n'+
+    '[10/16/2026 5:37 PM] Hiền: 26 68 da 3n\n26 86 da 3n';
+  assert.equal(rules.looksLikeChatLog(copiedChat),true,'US Telegram date+sender detected');
+  assert.equal(rules.preprocessChatText(copiedChat),
+    '92 82 da 10n\n68 86 39 da 5n\n26 68 da 3n\n26 86 da 3n',
+    'strip only envelope while retaining every wager line and stake');
   const realApi={normalizeInput:rules.normalizeInput.bind(rules),validateCheckOnlyLine:rules.validateCheckOnlyLine.bind(rules),processLine:rules.processLine.bind(rules),splitBetChunks:rules.splitBetChunks.bind(rules)};
   const date=new Date('2026-10-04T12:00:00');
   const mb=U.transformDaVongText('68 86 28 da 5n',realApi,'mb',rules.getSchedule('mb',date));
@@ -161,6 +168,8 @@ assert.match(app,/https:\/\/wilson86\.github\.io\/tach-dai-ngang\//);
 assert.match(app,/id="dvSelectAllInput"/);
 assert.match(app,/id="dvCutSelection"/);
 assert.match(app,/id="dvSelectAllOutput"/);
+assert.match(app,/beforeChatNormalize\(\$\('dvInput'\)\.value,clean\)/u,
+  'Đá Vòng displays stripped chat source before checking wagers');
 assert.match(app,/Kết quả \(\$\{result\.outputs\.length\}\)/);
 assert.match(version.version,/^\d+\.\d+\.\d+$/u);
 assert.equal(version.business_engine_sha256,expectedEngine);
@@ -186,4 +195,8 @@ assert.match(app,/id="dvLegacySettings" class="card mode-settings-legacy"/);
 const unifiedCore=fs.readFileSync(path.join(root,'app','unified-core.js'),'utf8');
 assert.match(unifiedCore,/KTS_UNIFIED_SHARED_INPUT_V1/);
 assert.match(unifiedCore,/installUnifiedSharedInput/);
+assert.match(unifiedCore,/function beforeChatNormalize\(raw,clean\)/u);
+assert.match(unifiedCore,/snapshot\(\); \/\/ Undo always restores the exact copied chat text/u);
+assert.match(unifiedCore,/raw_original:originalChatText\|\|origin/u);
+assert.match(unifiedCore,/copy\(originalChatText\|\|origin\)/u);
 

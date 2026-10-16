@@ -81,8 +81,12 @@ async function main(){
  let firstGroup=x.nodes.dvTapResultList.children[0];
  assert.equal(firstGroup.children[0].children[0].tag,"input","group uses native checkbox");
  assert.equal(firstGroup.children[1].children[0].tag,"input","wager row uses native checkbox");
- firstGroup.children[1].children[0].checked=true;
- firstGroup.children[1].children[0].emit("change");
+ const firstRowCheckbox=firstGroup.children[1].children[0];
+ firstRowCheckbox.checked=true;
+ firstRowCheckbox.emit("change");
+ assert.equal(x.nodes.dvTapResultList.children[0],firstGroup,"checkbox tap keeps its group DOM node");
+ assert.equal(firstGroup.children[1].children[0],firstRowCheckbox,"checkbox focus must not be destroyed");
+ assert.equal(firstRowCheckbox.checked,true);
  assert.match(x.nodes.dvTapSummary.textContent,/1\/6 kết quả · 3 nhóm/u);
  await x.nodes.dvCutSelection.click();
  assert.equal(x.getCopied(),originalRows[0],"CUT clipboard only first selected wager");
@@ -118,6 +122,8 @@ async function main(){
  await selectedGroup.nodes.dvRun.click();await selectedGroup.wait();
  const box=selectedGroup.nodes.dvTapResultList.children[0].children[0].children[0];
  box.checked=true;box.emit("change");
+ assert.equal(selectedGroup.nodes.dvTapResultList.children[0].children[0].children[0],box,
+   "group checkbox focus and scroll anchor survive selection");
  assert.match(selectedGroup.nodes.dvTapSummary.textContent,/3\/6 kết quả · 3 nhóm/u);
  await selectedGroup.nodes.dvCutSelection.click();
  assert.equal(selectedGroup.nodes.dvOutput.value,originalRows.slice(3).join("\n"));
@@ -155,6 +161,18 @@ async function main(){
  assert.equal(denied.nodes.dvOutput.value,originalRows.join("\n"));
  assert.equal(denied.nodes.dvInput.value,sample);
  assert.equal(denied.backing.has("KTS_DAVONG_WORKING_ROWS_V1"),false);
+
+ // The Unified Đá Vòng source visibly strips the copied Telegram envelope,
+ // but Undo restores the exact bytes of the original paste.
+ const copiedChat='[10/16/2026 5:36 PM] Hiền: 92 82 da 10n';
+ const normalized='92 82 da 10n';
+ const chat=setup();
+ chat.nodes.dvInput.value=copiedChat;
+ chat.ctx.KTS_DV_UI.beforeChatNormalize(copiedChat,normalized);
+ assert.equal(chat.nodes.dvInput.value,normalized);
+ assert.equal(chat.ctx.KTS_DV_UI.beforeRun(),false);
+ await chat.nodes.dvUndo.click();
+ assert.equal(chat.nodes.dvInput.value,copiedChat,'Undo retains the full original chat line');
 
  console.log("DAVONG CHECKBOX GROUP, WORKING SOURCE, CUT/UNDO/RELOAD: PASS");
 }

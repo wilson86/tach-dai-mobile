@@ -55,8 +55,12 @@ async function main(){
   assert.equal(baseline.split("\n").length,records().length);
   assert.equal(rules.els.output.style.display,"none","checkbox UI replaces selectable textarea, but leaves audited output intact");
   // Group 1 checkbox copies/cuts only group-1 rows; other group remains.
-  const first=groups()[0].children[0].children[0];
+  const firstGroupNode=groups()[0];
+  const first=firstGroupNode.children[0].children[0];
   first.checked=true;first.events.change();
+  assert.equal(groups()[0],firstGroupNode,"checking group does not replace/scroller-jump DOM");
+  assert.equal(groups()[0].children[0].children[0],first,"focused checkbox stays attached");
+  assert.equal(first.checked,true,"selection is reflected on same checkbox");
   const selected=records()[0].text;
   await rules.copyOutput();assert.equal(clipboard.text,selected);
   await rules.cutSelectedOutput();assert.equal(clipboard.text,selected);
@@ -85,6 +89,19 @@ async function main(){
   assert.equal(groups().length,0);
   assert.match(rules.els.output.value,/PHÁT HIỆN TIN SAI:/u);
   assert.equal(rules.els.output.style.display,"");
+  // Real Telegram exported chat: show stripped sender/time, preserve all wager
+  // lines and original input via Undo even if region validation rejects it.
+  const sourceChat="[10/16/2026 5:36 PM] Hiền: 92 82 da 10n\n"+
+    "[10/16/2026 5:37 PM] Hiền: 68 86 39 da 5n\n"+
+    "[10/16/2026 5:37 PM] Hiền: 26 68 da 3n\n26 86 da 3n";
+  rules.els.input.value=sourceChat;
+  rules.run();
+  assert.equal(rules.els.input.value,
+    "92 82 da 10n\n68 86 39 da 5n\n26 68 da 3n\n26 86 da 3n",
+    "sender/time removed, continuation and money unchanged");
+  rules.undo();
+  assert.equal(rules.els.input.value,sourceChat,"Undo restores exact exported chat");
+
   console.log("GROUPED CHECKBOX RESULTS: PASS");
 }
 main().catch(err=>{console.error(err.stack||err);process.exitCode=1;});
