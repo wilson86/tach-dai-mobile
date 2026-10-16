@@ -17,7 +17,7 @@ const ctx={console,Date,Set,Map,Math,RegExp,Error,String,JSON,
   navigator:{clipboard:{async writeText(){}}},document:doc};
 vm.createContext(ctx);
 vm.runInContext(calendar+"\n"+engine+"\n"+code+
- "\nglobalThis.rules={normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,getSchedule};",ctx);
+ "\nglobalThis.rules={normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,getSchedule,findForbiddenRawBetPrefix};",ctx);
 const rules=ctx.rules,region="mb",stations=rules.getSchedule(region,new Date("2026-10-16T12:00:00"));
 const original="[10/16/2026 5:37 PM] Thiên: . 32. B20n\n"+
  "[10/16/2026 5:42 PM] Thiên: 52.79.b50n.da10n";
@@ -39,4 +39,23 @@ for(const invalid of [".. 32 b20n","? 32 b20n",". 32 ? b20n",". 32","random . 32
 assert.throws(()=>rules.validateCheckOnlyLine(rules.normalizeInput(". 32 b20n"),"mn",
   rules.getSchedule("mn",new Date("2026-10-16T12:00:00"))),
   undefined,"MN without station remains invalid");
+const malformed=[
+ "32 b20n\n| 52.79.b50n.da10n",
+ "32 b20n\n|52.79.b50n.da10n",
+ "32 b20n\n||52.79.b50n.da10n",
+ "32 b20n\n|.52.79.b50n.da10n",
+ "32 b20n\n.. 52.79.b50n.da10n",
+ "[10/16/2026 5:37 PM] Thiên: 32 b20n\n"+
+   "[10/16/2026 5:42 PM] Thiên: | 52.79.b50n.da10n"
+];
+for(const raw of malformed){
+ const error=rules.findForbiddenRawBetPrefix(raw);
+ assert.ok(error,"raw-prefix must be rejected before UI normalization");
+ assert.equal(error.line,2,"physical source line must be preserved");
+ assert.ok(error.source.startsWith("|")||error.source.startsWith(".."));
+}
+assert.equal(rules.findForbiddenRawBetPrefix(original),null,
+ "operator approved single solitary dot must remain valid");
+assert.equal(rules.findForbiddenRawBetPrefix("32 b20n\n--//-----//--\n52 79 b50n da10n"),null,
+ "standalone approved divider must remain metadata");
 console.log("MB LEADING DOT CHAT — offline candidate PASS (still NEEDS_ORACLE for deployment)");
