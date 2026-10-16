@@ -254,7 +254,7 @@
   const ENGINE='046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb';
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
-  let sourceRegion='',sourceDate='',skipRebuild=false;
+  let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
   const selected=new Set(),undoStack=[];
   const live=()=>rows.filter(r=>r.alive);
   const picked=()=>live().filter(r=>selected.has(r.id));
@@ -276,7 +276,8 @@
   function validateLedger(data){
     return !!data&&data.schema===SCHEMA&&data.app==='tach-dai-davong'&&
       data.engine===ENGINE&&data.region===currentRegion()&&data.date===currentDate()&&
-      typeof data.origin==='string'&&Array.isArray(data.rows)&&Array.isArray(data.groups)&&
+      typeof data.origin==='string'&&(data.raw_original===undefined||typeof data.raw_original==='string')&&
+      Array.isArray(data.rows)&&Array.isArray(data.groups)&&
       data.rows.every(r=>typeof r.id==='string'&&typeof r.text==='string'&&
         typeof r.groupId==='string'&&typeof r.alive==='boolean'&&r.text.length<4096)&&
       data.rows.length<=10000&&data.groups.length<=10000&&
@@ -292,7 +293,7 @@
   }
   function serial(){
     return {schema:SCHEMA,app:'tach-dai-davong',engine:ENGINE,origin,
-      region:sourceRegion,date:sourceDate,
+      region:sourceRegion,date:sourceDate,raw_original:originalChatText||origin,
       rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()})),
       undo:undoStack.slice(-30)};
   }
@@ -305,7 +306,7 @@
   function snapshot(){
     undoStack.push({origin,input:safeText($('dvInput')?.value),output:safeText($('dvOutput')?.value),
       rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()})),
-      selected:[...selected],ledgerActive,sourceRegion,sourceDate});
+      selected:[...selected],ledgerActive,sourceRegion,sourceDate,originalChatText});
     if(undoStack.length>30)undoStack.shift();
   }
   function notifyRawChanged(){
@@ -316,6 +317,7 @@
   function restore(){
     const old=undoStack.pop();if(!old){status('Chưa có thao tác để hoàn tác.','err');return;}
     origin=old.origin;sourceRegion=old.sourceRegion;sourceDate=old.sourceDate;
+    originalChatText=old.originalChatText||'';
     rows=old.rows.map(r=>({...r}));
     groups=old.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();for(const id of old.selected)selected.add(id);
@@ -324,6 +326,14 @@
     render();persist();
     if(!ledgerActive)notifyRawChanged();
     status('Đã hoàn tác · khôi phục nguồn và kết quả','ok');
+  }
+  function beforeChatNormalize(raw,clean){
+    if(safeText(raw)===safeText(clean))return;
+    snapshot(); // Undo always restores the exact copied chat text.
+    originalChatText=safeText(raw);
+    $('dvInput').value=safeText(clean);
+    normalizingChat=true;
+    try{notifyRawChanged()}finally{normalizingChat=false}
   }
   function parse(text){
     const nextGroups=[],nextRows=[];
@@ -410,7 +420,7 @@
         $(id).style.display=ledgerActive&&liveRows.length?'none':'';
       if(ledgerActive&&liveRows.length){
         groupList($('dvWorkingRows'),'source',true);
-        $('dvWorkingOrigin').textContent=origin;
+        $('dvWorkingOrigin').textContent=originalChatText||origin;
         $('dvWorkingSelect').textContent=liveRows.length&&pickedRows.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
         $('dvWorkingCopy').disabled=pickedRows.length===0;
         $('dvWorkingCut').disabled=pickedRows.length===0;
@@ -464,6 +474,7 @@
     if(value&&value!==data.origin)return;
     if(shared&&shared!==data.origin)return;
     origin=data.origin;sourceRegion=data.region;sourceDate=data.date;
+    originalChatText=data.raw_original||'';
     rows=data.rows.map(r=>({...r}));groups=data.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();ledgerActive=true;$('dvInput').value=origin;
     undoStack.splice(0,undoStack.length);
@@ -529,7 +540,7 @@
       status(ok?'Đã copy '+arr.length+' dòng cược còn lại':'Không thể copy.',ok?'ok':'err');
     });
     $('dvCopyOriginal').addEventListener('click',async()=>{
-      const ok=await copy(origin);
+      const ok=await copy(originalChatText||origin);
       status(ok?'Đã copy tin gốc':'Không thể copy tin gốc.',ok?'ok':'err');
     });
     $('dvSourceCopy').addEventListener('click',async()=>{
@@ -548,18 +559,21 @@
       if(!(await copy(pickedText))){status('Copy thất bại · chưa Cắt.','err');return;}
       snapshot();
       input.value=text.slice(0,start)+text.slice(found<0?text.length:found+1);
-      origin=input.value;ledgerActive=false;persist();
+      origin=input.value;originalChatText='';ledgerActive=false;persist();
       notifyRawChanged();
       // A normal source Cut is a legitimate new source message. Recompute
       // immediately without treating its result as an exact-row ledger.
       run.click();
     });
     const clear=$('dvClear');
-    if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();origin='';ledgerActive=false;persist();render();});
+    if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();origin='';originalChatText='';ledgerActive=false;persist();render();});
     run.addEventListener('click',()=>Promise.resolve().then(rebuild));
-    input.addEventListener('input',()=>{if(ledgerActive){ledgerActive=false;persist();render();}});
+    input.addEventListener('input',()=>{
+      if(!normalizingChat)originalChatText='';
+      if(ledgerActive){ledgerActive=false;persist();render();}
+    });
     maybeRestore();render();
-    window.KTS_DV_UI={beforeRun,beforeClear:snapshot};
+    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize};
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
