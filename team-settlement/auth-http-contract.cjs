@@ -92,7 +92,8 @@ function createAuthHttpServer(auth, {
        (!recoveryInspector || typeof recoveryInspector.inspect !== 'function')) ||
       (enableSyntheticReviewHttp && (!ledger || typeof ledger.advanceReview !== 'function')) ||
       (ledger !== null && (!ledger || (typeof ledger.appendDraft !== 'function' &&
-        typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function'))))
+        typeof ledger.getChanges !== 'function' && typeof ledger.getScope !== 'function' &&
+        typeof ledger.listCounterparties !== 'function'))))
     throw new Error('AUTH_HTTP_CONFIG_INVALID');
   const loginAttempts = new Map();
   const sourceAttempts = new Map();
@@ -337,6 +338,40 @@ function createAuthHttpServer(auth, {
           if (code === 'TEAM_WORKSPACE_DENIED' || code === 'TEAM_ROLE_DENIED')
             return json(res, 403, { error: code });
           return json(res, 500, { error: 'TEAM_BACKEND_UNAVAILABLE' });
+        }
+      }
+      if(req.url.startsWith('/v1/counterparties')&&req.method==='GET'){
+        if(!ledger||typeof ledger.listCounterparties!=='function')
+          return json(res,404,{error:'TEAM_ROUTE_NOT_ENABLED'});
+        const token=bearer(req);
+        if(!token)return json(res,401,{error:'AUTH_SESSION_INVALID'});
+        let parsed;
+        try{parsed=new URL(req.url,'http://team.local');}
+        catch{return json(res,422,{error:'TEAM_COUNTERPARTY_QUERY_INVALID'});}
+        if(parsed.pathname!=='/v1/counterparties')
+          return json(res,404,{error:'AUTH_ROUTE_NOT_FOUND'});
+        const keys=[...parsed.searchParams.keys()];
+        if(keys.some(k=>!['kind','limit'].includes(k))||
+           parsed.searchParams.getAll('kind').length>1||parsed.searchParams.getAll('limit').length>1)
+          return json(res,422,{error:'TEAM_COUNTERPARTY_QUERY_INVALID'});
+        const kind=parsed.searchParams.get('kind');
+        const rawLimit=parsed.searchParams.get('limit');
+        const limit=rawLimit===null?100:Number(rawLimit);
+        if(kind!==null&&!['customer','owner'].includes(kind))
+          return json(res,422,{error:'TEAM_COUNTERPARTY_KIND_INVALID'});
+        if(!Number.isSafeInteger(limit)||limit<1||limit>200)
+          return json(res,422,{error:'TEAM_LIMIT_INVALID'});
+        try{return json(res,200,await ledger.listCounterparties(token,{kind,limit}));}
+        catch(error){
+          const code=error&&error.message;
+          if(code==='AUTH_SESSION_INVALID'||code==='AUTH_SESSION_REVOKED')
+            return json(res,401,{error:'AUTH_SESSION_INVALID'});
+          if(['TEAM_WORKSPACE_DENIED','TEAM_ROLE_DENIED','TEAM_ACTOR_UNVERIFIED'].includes(code))
+            return json(res,403,{error:code});
+          if(['TEAM_COUNTERPARTY_KIND_INVALID','TEAM_LIMIT_INVALID'].includes(code))
+            return json(res,422,{error:code});
+          if(code==='TEAM_ROUTE_NOT_ENABLED')return json(res,404,{error:code});
+          return json(res,500,{error:'TEAM_BACKEND_UNAVAILABLE'});
         }
       }
       if (req.url === '/v1/scopes/drafts' && req.method === 'POST') {

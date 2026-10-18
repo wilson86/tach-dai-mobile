@@ -120,13 +120,29 @@ function createServerLedgerApi({
     return result;
   }
 
+  async function listCounterparties(sessionToken,options={}){
+    const trustedActor=await actor(sessionToken);
+    if(typeof repository.listCounterparties!=='function')throw Error('TEAM_ROUTE_NOT_ENABLED');
+    const result=await repository.listCounterparties(trustedActor,options);
+    if(!Array.isArray(result))throw Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
+    for(const row of result){
+      if(!row||typeof row!=='object'||Array.isArray(row)||
+         row.workspace_id!==trustedActor.workspace_id||
+         !EVENT_ID_RE.test(row.partner_id)||
+         !['customer','owner'].includes(row.partner_kind)||
+         typeof row.display_name!=='string'||row.display_name.length<1||row.display_name.length>160)
+        throw Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
+    }
+    return Object.freeze(result.map(row=>Object.freeze({...row})));
+  }
+
   async function getChanges(sessionToken, options) {
     const trustedActor = await actor(sessionToken);
     if (typeof repository.getChanges !== 'function') throw new Error('TEAM_ROUTE_NOT_ENABLED');
     return repository.getChanges(trustedActor, options);
   }
 
-  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges });
+  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,listCounterparties });
 }
 
 module.exports = Object.freeze({ digest, createServerLedgerApi });

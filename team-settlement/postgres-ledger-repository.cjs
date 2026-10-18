@@ -160,6 +160,38 @@ function createPostgresLedgerRepository({ db } = {}) {
     });
   }
 
+  // Directory reads are intentionally separate from scopes: a partner may
+  // have no financial scope yet. Return active, tenant-scoped identity-free
+  // metadata only, so the browser can select a customer/owner without being
+  // trusted to enumerate another workspace or infer a settlement balance.
+  async function listCounterparties(actor,{kind=null,limit=100}={}){
+    if(kind!==null&&!['customer','owner'].includes(kind))
+      throw new Error('TEAM_COUNTERPARTY_KIND_INVALID');
+    if(!Number.isSafeInteger(limit)||limit<1||limit>200)
+      throw new Error('TEAM_LIMIT_INVALID');
+    return inActorTransaction(actor,async(tx,trustedActor)=>{
+      const result=await tx.query(
+        `SELECT workspace_id,partner_id,partner_kind,display_name
+           FROM kts_team.counterparties
+          WHERE workspace_id=$1 AND inactive_at IS NULL
+            AND ($2::text IS NULL OR partner_kind=$2)
+          ORDER BY partner_kind,partner_id
+          LIMIT $3::int`,[trustedActor.workspace_id,kind,limit]);
+      if(!result||!Array.isArray(result.rows)||result.rows.length>limit)
+        throw new Error('TEAM_DB_RESULT_INVALID');
+      return Object.freeze(result.rows.map(row=>{
+        if(!row||typeof row!=='object'||Array.isArray(row)||
+           row.workspace_id!==trustedActor.workspace_id||
+           !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(row.partner_id)||
+           !['customer','owner'].includes(row.partner_kind)||
+           typeof row.display_name!=='string'||row.display_name.length<1||
+           row.display_name.length>160)
+          throw new Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
+        return Object.freeze({...row});
+      }));
+    });
+  }
+
   async function getChanges(actor, { cursor = null, limit = 100 } = {}) {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('TEAM_LIMIT_INVALID');
     const verifiedActor = C.actorFromServer(actor);
@@ -248,7 +280,7 @@ function createPostgresLedgerRepository({ db } = {}) {
     }, {readOnly:true});
     return Object.freeze(result);
   }
-  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,
+  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,listCounterparties,
     lookupRecoveryReceipts });
 }
 

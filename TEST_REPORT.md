@@ -50,3 +50,13 @@ Changed modules: `team-settlement/postgres-auth-service.cjs`, `team-settlement/r
 - Role qualification now requires `kts_team` usage and membership SELECT/INSERT/UPDATE in addition to existing auth-session privileges, while preserving denials for ledger event reads, draft execution, superuser, and `BYPASSRLS`.
 
 Complete Node settlement-team suite: **286 passed, 0 failed, 4 skipped**. The four skips are CI-disposable filesystem concurrency checks whose required CI environment was not present; they were not treated as passes.
+
+## Batch 3 — active counterparty directory
+
+Added an authenticated read-only `GET /v1/counterparties` path through the existing PostgreSQL repository, server API, and HTTP boundary.
+
+- It lists only active customer/owner metadata for the workspace derived from the bearer session.
+- Browser-supplied workspace, duplicate query keys, unsupported filters, oversized limits, and malformed response rows fail closed.
+- It does not create counterparties, accept monetary values, create scopes, or expose inactive records.
+
+Focused run for the directory plus adjacent auth/receipt/CAS contracts: **23 passed, 0 failed, 0 skipped**.

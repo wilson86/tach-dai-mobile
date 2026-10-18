@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "checkpoint_id": "group-app-batch2-20261018T072000Z",
-  "created_at": "2026-10-18T07:20:00Z",
+  "checkpoint_id": "group-app-batch3-20261018T073000Z",
+  "created_at": "2026-10-18T07:30:00Z",
   "context_risk": "ELEVATED",
   "source_sha": "52f860a2a0bbb8b3e919d8541076e1ac90d3cdd4",
   "local_branch": "codex/b2-group-app-20261018",
   "worktree": "C:\\KTS-Settlement\\android-pilot-stage-a-52f860a\\tach-dai-mobile-b2-group-app",
   "source_checkout_preserved": true,
-  "batch": 2,
+  "batch": 3,
   "tasks_completed": [
     "Created isolated local C: worktree from exact pinned source SHA",
     "Audited existing durable ledger, auth, review, recovery, HTTP, UI and schema contracts",
@@ -16,7 +16,9 @@
     "Implemented durable tenant-scoped membership updates for existing identities",
     "Added current-admin, self-protection, cross-workspace and ambiguous-receipt tests",
     "Extended role qualification to prove membership privileges before runtime use",
-    "Ran complete settlement-team Node suite: 286 pass, 0 fail, 4 environment-dependent skips"
+    "Ran complete settlement-team Node suite: 286 pass, 0 fail, 4 environment-dependent skips",
+    "Implemented authenticated active counterparty directory across repository, server API and HTTP boundary",
+    "Added counterparty tenant-fencing, query-validation and forged-response tests"
   ],
   "tests": { "passed": 286, "failed": 0, "skipped": 4 },
   "reused_evidence": {
@@ -24,7 +26,7 @@
     "b2_android_vault_qa": "FULL_PASS_SYNTHETIC_ONLY_OWNER_REPORTED",
     "android_test_ca_removed": "OWNER_CONFIRMED"
   },
-  "next_priority": "Tenant-scoped counterparty discovery/create workflow and read-only group status surface, with fail-closed PostgreSQL receipts.",
+  "next_priority": "Private offline synthetic bootstrap manifest/validator for pre-existing identities, memberships and counterparties; no database connection or plaintext credential logging.",
   "safety": {
     "synthetic_only": true,
     "real_money_enabled": false,
