@@ -13,12 +13,13 @@
   ],
   "qualified": [
     "separate non-superuser auth and ledger roles",
+    "transactional bootstrap of a 10-user synthetic workspace",
     "role preflight rejects cross-domain access and RLS bypass",
     "durable current-admin membership update for an existing identity",
     "tenant-scoped active customer directory"
   ],
   "test_result": {
-    "passed": 1,
+    "passed": 2,
     "failed": 0,
     "skipped": 0
   },

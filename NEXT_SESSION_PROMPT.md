@@ -13,6 +13,8 @@ Next highest-priority safe work:
 
 Batch 7 completed a fresh loopback-only PostgreSQL qualification of changed membership/directory paths; see `GROUP_RUNTIME_QUALIFICATION_RECEIPT.json`. PostgreSQL is stopped and 55433 is closed. Environment policy blocked removal of the stopped disposable data directory.
 
+Batch 8 completed transactional synthetic bootstrap implementation and a real 10-user disposable PostgreSQL qualification. The autonomous loop reached its configured eight-batch limit.
+
 1. Remove only the exact stopped directory named in the runtime receipt, after confirming 55433 remains closed.
 2. Run the private 65-case process only when the independent HIOSKT source/mapping is supplied outside Git; resolve discrepancies and obtain human sign-off.
 3. For full changed-SHA workflow proof, obtain scoped approval for a new disposable runtime run covering draft/review/restart/backup; do not start a listener or external network service.

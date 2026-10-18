@@ -13,6 +13,7 @@ if(!configured){
   const {Pool}=require('pg');
   const {createIsolatedTeamPrototype}=require('../team-settlement/team-composition.cjs');
   const {hashPassword}=require('../team-settlement/auth-contract.cjs');
+  const {createSyntheticBootstrapExecutor}=require('../team-settlement/synthetic-bootstrap-executor.cjs');
   const port=Number(process.env.KTS_RUNTIME_PORT||55433);
   const pool=(user,password)=>new Pool({host:'127.0.0.1',port,database:process.env.KTS_RUNTIME_DB,
     user,password,max:2,connectionTimeoutMillis:8000,query_timeout:10000,
@@ -29,19 +30,25 @@ if(!configured){
       const app=createIsolatedTeamPrototype({authPool:auth,ledgerPool:ledger,syntheticOnly:true});
       assert.deepEqual(await app.verifyPools(),{qualified:true,
         auth_role:process.env.KTS_RUNTIME_AUTH_USER,ledger_role:process.env.KTS_RUNTIME_LEDGER_USER});
-      await admin.query('BEGIN');
-      try{
-        await admin.query('INSERT INTO kts_team.workspaces(workspace_id,display_name) VALUES($1,$2)',[workspace,'Runtime synthetic']);
-        await admin.query('INSERT INTO kts_team.identities(user_id,auth_subject) VALUES($1,$2),($3,$4)',
-          [administrator,administrator,member,member]);
-        await admin.query("INSERT INTO kts_team.memberships(workspace_id,user_id,team_role) VALUES($1,$2,'admin'),($1,$3,'operator')",
-          [workspace,administrator,member]);
-        await admin.query('INSERT INTO kts_team.counterparties(workspace_id,partner_id,partner_kind,display_name) VALUES($1,$2,$3,$4)',
-          [workspace,partner,'customer','Runtime synthetic customer']);
-        await admin.query('INSERT INTO kts_auth.credentials(user_id,password_hash) VALUES($1,$2)',
-          [administrator,hashPassword(password)]);
-        await admin.query('COMMIT');
-      }catch(error){try{await admin.query('ROLLBACK');}catch{}throw error;}
+      const identities=Array.from({length:10},(_,index)=>{
+        const user_id=index===0?administrator:index===1?member:`fake_member_${tag}_${index+1}`;
+        return {user_id,auth_subject:user_id,password_hash:hashPassword(password)};
+      });
+      const bootstrapDb={transaction:async work=>{
+        const client=await admin.connect();
+        try{await client.query('BEGIN');const value=await work(client);await client.query('COMMIT');return value;}
+        catch(error){try{await client.query('ROLLBACK');}catch{}throw error;}
+        finally{client.release();}
+      }};
+      const bootstrap=createSyntheticBootstrapExecutor({db:bootstrapDb});
+      const bootstrapResult=await bootstrap.apply({
+        workspaces:[{workspace_id:workspace,display_name:'Runtime synthetic'}],identities,
+        memberships:identities.map((identity,index)=>({workspace_id:workspace,user_id:identity.user_id,
+          role:index===0?'admin':'operator'})),
+        counterparties:[{workspace_id:workspace,partner_id:partner,partner_kind:'customer',display_name:'Runtime synthetic customer'},
+          {workspace_id:workspace,partner_id:`fake_owner_${tag}`,partner_kind:'owner',display_name:'Runtime synthetic owner'}]
+      });
+      assert.equal(bootstrapResult.identity_count,10);
       const login=await app.auth.login({auth_subject:administrator,password,workspace_id:workspace});
       const actor=await app.auth.verifySession(login.session_token);
       assert.equal(actor.role,'admin');
