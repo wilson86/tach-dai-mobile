@@ -26,7 +26,8 @@ test('isolated auth and ledger pool roles compose without connecting or opening 
     assert.equal(typeof app.ledger.getChanges,'function');
     assert.equal(typeof app.ledgerRepository.getScope,'function');
     assert.equal(typeof app.auth.manageMembership,'function');
-    assert.throws(()=>app.auth.manageMembership(),/AUTH_ADMIN_UNAVAILABLE/);
+    assert.equal(typeof app.auth.setIdentityDisabled,'function');
+    assert.throws(()=>app.auth.setIdentityDisabled(),/AUTH_ADMIN_UNAVAILABLE/);
   }finally{app.server.closeAllConnections?.();}
 });
 

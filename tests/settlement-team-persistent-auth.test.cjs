@@ -10,7 +10,9 @@ const {createServerLedgerApi}=require('../team-settlement/server-ledger-api.cjs'
 function fakeDatabase(){
   const data={
     identities:new Map([['demo_login',{user_id:'user_a',disabled_at:null,
-      password_hash:hashPassword('synthetic-private-password',Buffer.alloc(16,0x51))}]]),
+      password_hash:hashPassword('synthetic-private-password',Buffer.alloc(16,0x51))}],
+      ['member_login',{user_id:'user_b',disabled_at:null,
+        password_hash:hashPassword('synthetic-member-password',Buffer.alloc(16,0x52))}]]),
     members:new Map([['group_a:user_a',{team_role:'operator',revoked_at:null}]]),
     sessions:new Map()
   };
@@ -33,6 +35,15 @@ function fakeDatabase(){
         data.sessions.set(hash,{user_id:userId,workspace_id:ws,issued_at:issued,
           expires_at:expiry,revoked_at:null});
         return {rows:[{session_hash:hash}]};
+      }
+      if(sql.includes('INSERT INTO kts_team.memberships')){
+        const [targetWorkspace,userId,role,revokedAt]=args;
+        if(workspaceId!==targetWorkspace)throw Error('AUTH_DB_TENANT_NOT_SET');
+        const identity=[...data.identities.values()].find(x=>x.user_id===userId);
+        if(!identity)return {rows:[]};
+        const revokedAtMs=revokedAt===null?null:new Date(revokedAt).getTime();
+        data.members.set(targetWorkspace+':'+userId,{team_role:role,revoked_at:revokedAtMs});
+        return {rows:[{workspace_id:targetWorkspace,user_id:userId,team_role:role,revoked_at:revokedAtMs}]};
       }
       if(sql.includes('FROM kts_auth.sessions')){
         const session=data.sessions.get(args[0]);
@@ -136,12 +147,55 @@ test('async persisted auth interoperates with read-only HTTP route and session r
     assert.equal(session.status,200);
     assert.equal(session.body.role,'operator');
     const admin=await httpCall(server,{path:'/v1/admin/memberships',method:'POST',token,body:{}});
-    assert.equal(admin.status,404);
-    assert.equal(admin.body.error,'TEAM_ROUTE_NOT_ENABLED');
+    assert.equal(admin.status,400);
+    assert.equal(admin.body.error,'AUTH_MEMBERSHIP_INVALID');
     assert.equal((await httpCall(server,{path:'/v1/logout',method:'POST',token})).status,204);
     assert.equal((await httpCall(server,{path:'/v1/session',token})).status,401);
     assert.equal((await httpCall(server,{path:'/v1/scopes/customer_1/2026-10-12/mn',token})).status,401);
   }finally{await new Promise(resolve=>server.close(resolve));}
+});
+
+test('durable admin changes only an existing same-workspace membership and rechecks admin role',async()=>{
+  const f=fakeDatabase();
+  f.data.members.get('group_a:user_a').team_role='admin';
+  const auth=createPostgresAuthService({db:f.db,clock:()=>1000});
+  const signed=await auth.login(credentials);
+  const actor=await auth.verifySession(signed.session_token);
+  const changed=await auth.manageMembership(actor,{
+    workspace_id:'group_a',user_id:'user_b',role:'reviewer'
+  });
+  assert.deepEqual(changed,{workspace_id:'group_a',user_id:'user_b',role:'reviewer',revoked_at:null});
+  assert.equal(f.data.members.get('group_a:user_b').team_role,'reviewer');
+  await assert.rejects(auth.manageMembership(actor,{
+    workspace_id:'group_a',user_id:'user_a',role:'viewer'
+  }),/AUTH_SELF_ADMIN_CHANGE_DENIED/);
+  await assert.rejects(auth.manageMembership(actor,{
+    workspace_id:'group_b',user_id:'user_b',role:'viewer'
+  }),/AUTH_WORKSPACE_DENIED/);
+  await assert.rejects(auth.manageMembership(actor,{
+    workspace_id:'group_a',user_id:'missing_user',role:'viewer'
+  }),/AUTH_DATABASE_RESULT_INVALID/);
+  f.data.members.get('group_a:user_a').team_role='operator';
+  await assert.rejects(auth.manageMembership(actor,{
+    workspace_id:'group_a',user_id:'user_b',role:'viewer'
+  }),/AUTH_ROLE_DENIED/);
+  assert.throws(()=>auth.setIdentityDisabled(actor,'group_a','user_b',1000),/AUTH_ADMIN_UNAVAILABLE/);
+});
+
+test('durable membership update denies an ambiguous SQL receipt',async()=>{
+  const db={transaction:async work=>work({query:async(sql,args)=>{
+    if(sql.includes('set_config'))return {rows:[]};
+    if(sql.includes('FROM kts_team.memberships m'))return {rows:[{team_role:'admin'}]};
+    if(sql.includes('INSERT INTO kts_team.memberships'))return {rows:[
+      {workspace_id:'group_a',user_id:'user_b',team_role:'viewer',revoked_at:null},
+      {workspace_id:'group_a',user_id:'user_b',team_role:'viewer',revoked_at:null}
+    ]};
+    throw Error('UNEXPECTED_QUERY');
+  }})};
+  const auth=createPostgresAuthService({db});
+  await assert.rejects(auth.manageMembership({server_verified:true,membership_active:true,
+    user_id:'admin_a',workspace_id:'group_a',role:'admin'},
+    {workspace_id:'group_a',user_id:'user_b',role:'viewer'}),/AUTH_DATABASE_RESULT_INVALID/);
 });
 
 test('async scrypt verifier matches approved policy without synchronous per-login event-loop blocking',async()=>{

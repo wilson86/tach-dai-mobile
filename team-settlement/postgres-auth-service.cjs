@@ -4,7 +4,7 @@
 // exposes Router/Telegram/production data. Requires reviewed auth DB privileges.
 // Verify DB membership on every request, including after restart/role changes.
 const crypto=require('node:crypto');
-const {hashPassword,verifyPasswordAsync,PASSWORD_MIN,SESSION_TTL_MS}=require('./auth-contract.cjs');
+const {hashPassword,verifyPasswordAsync,PASSWORD_MIN,SESSION_TTL_MS,ROLES}=require('./auth-contract.cjs');
 const {actorFromServer}=require('./core-contract.cjs');
 const KEY=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 function error(code){throw new Error(code);}
@@ -107,8 +107,63 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
       return result.rowCount===1;
     });
   }
+
+  // This is deliberately limited to a membership that already has an identity.
+  // Creating identities / password verifiers is a separate, offline bootstrap
+  // concern: accepting those secrets through this runtime API would turn a
+  // tenant administrator into an account-provisioning authority. Recheck the
+  // caller inside this mutation transaction so a revoked/demoted session is
+  // never allowed to race a previously successful HTTP session check.
+  async function requireCurrentAdmin(tx,trustedActor,workspaceId){
+    const actor=actorFromServer(trustedActor);
+    key(workspaceId,'AUTH_WORKSPACE_ID_INVALID');
+    if(actor.workspace_id!==workspaceId)error('AUTH_WORKSPACE_DENIED');
+    await scoped(tx,workspaceId);
+    const current=rows(await tx.query(
+      `SELECT m.team_role
+         FROM kts_team.memberships m
+         JOIN kts_team.identities i ON i.user_id=m.user_id
+        WHERE m.workspace_id=$1 AND m.user_id=$2
+          AND m.revoked_at IS NULL AND i.disabled_at IS NULL`,
+      [workspaceId,actor.user_id]));
+    if(current.length!==1)error('AUTH_SESSION_REVOKED');
+    if(current[0]?.team_role!=='admin')error('AUTH_ROLE_DENIED');
+    return actor;
+  }
+
+  async function manageMembership(trustedActor,input={}){
+    if(!input||typeof input!=='object'||Array.isArray(input))error('AUTH_MEMBERSHIP_INVALID');
+    const {workspace_id,user_id,role,revoked_at=null}=input;
+    key(workspace_id,'AUTH_WORKSPACE_ID_INVALID');
+    key(user_id,'AUTH_USER_ID_INVALID');
+    if(!ROLES.includes(role)||
+       (revoked_at!==null&&(!Number.isSafeInteger(revoked_at)||revoked_at<0)))
+      error('AUTH_MEMBERSHIP_INVALID');
+    return db.transaction(async tx=>{
+      const actor=await requireCurrentAdmin(tx,trustedActor,workspace_id);
+      if(actor.user_id===user_id&&(revoked_at!==null||role!=='admin'))
+        error('AUTH_SELF_ADMIN_CHANGE_DENIED');
+      const result=rows(await tx.query(
+        `INSERT INTO kts_team.memberships(workspace_id,user_id,team_role,revoked_at)
+         SELECT $1,i.user_id,$3,$4::timestamptz
+           FROM kts_team.identities i WHERE i.user_id=$2
+         ON CONFLICT (workspace_id,user_id) DO UPDATE SET
+           team_role=EXCLUDED.team_role, revoked_at=EXCLUDED.revoked_at
+         RETURNING workspace_id,user_id,team_role,
+                   CASE WHEN revoked_at IS NULL THEN NULL
+                        ELSE (extract(epoch FROM revoked_at)*1000)::bigint END AS revoked_at`,
+        [workspace_id,user_id,role,revoked_at===null?null:new Date(revoked_at).toISOString()]));
+      if(result.length!==1||result[0]?.workspace_id!==workspace_id||
+         result[0]?.user_id!==user_id||result[0]?.team_role!==role||
+         result[0]?.revoked_at!==(revoked_at===null?null:revoked_at))
+        error('AUTH_DATABASE_RESULT_INVALID');
+      // Keep the durable response contract identical to the in-memory auth
+      // implementation; SQL's `team_role` is an internal storage name.
+      return Object.freeze({workspace_id,user_id,role,revoked_at});
+    });
+  }
   function unavailable(){error('AUTH_ADMIN_UNAVAILABLE');}
   return Object.freeze({login,verifySession,revokeSession,
-    manageMembership:unavailable,setIdentityDisabled:unavailable});
+    manageMembership,setIdentityDisabled:unavailable});
 }
 module.exports=Object.freeze({createPostgresAuthService,tokenHash});

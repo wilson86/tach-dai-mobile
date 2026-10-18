@@ -16,6 +16,10 @@ const AUTH_PROBE_SQL = PROBE_SQL.replace(
   'COALESCE((SELECT rolsuper',
   `has_table_privilege(current_user, 'kts_auth.credentials', 'SELECT') AS credential_read,
   has_table_privilege(current_user, 'kts_auth.sessions', 'SELECT') AS session_read,
+  has_schema_privilege(current_user, 'kts_team', 'USAGE') AS team_schema,
+  has_table_privilege(current_user, 'kts_team.memberships', 'SELECT') AS membership_read,
+  (has_table_privilege(current_user, 'kts_team.memberships', 'INSERT')
+   AND has_table_privilege(current_user, 'kts_team.memberships', 'UPDATE')) AS membership_write,
   (has_column_privilege(current_user, 'kts_auth.sessions', 'session_hash', 'INSERT')
    AND has_column_privilege(current_user, 'kts_auth.sessions', 'user_id', 'INSERT')
    AND has_column_privilege(current_user, 'kts_auth.sessions', 'workspace_id', 'INSERT')
@@ -51,9 +55,10 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
        auth.role===ledger.role ||
        auth.superuser!==false || auth.bypass_rls!==false ||
        ledger.superuser!==false || ledger.bypass_rls!==false ||
-       auth.auth_schema!==true ||
+       auth.auth_schema!==true || auth.team_schema!==true ||
        auth.credential_read!==true || auth.session_read!==true ||
        auth.session_insert!==true || auth.session_revoke!==true ||
+       auth.membership_read!==true || auth.membership_write!==true ||
        auth.event_read!==false || auth.draft_execute!==false ||
        ledger.auth_schema!==false || ledger.event_read!==true ||
        ledger.draft_execute!==true)deny();
