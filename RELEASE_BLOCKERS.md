@@ -12,6 +12,7 @@ Source SHA: `52f860a2a0bbb8b3e919d8541076e1ac90d3cdd4`
 
 - A fresh disposable PostgreSQL database, migrations, separately restricted auth and ledger roles, and a qualified bootstrap administrator.
 - A controlled offline initial identity/password bootstrap. Runtime membership administration supports only pre-existing identities.
+- Remove the stopped disposable runtime data directory recorded in `GROUP_RUNTIME_QUALIFICATION_RECEIPT.json`; no listener or process remains, but this environment prevented recursive deletion.
 - A private, operator-held source of synthetic user credentials; never commit passwords or bearer tokens.
 
 ## C. Requires HIOSKT source / independent oracle

@@ -91,3 +91,13 @@ Focused oracle/bootstrap run: **6 passed, 0 failed, 0 skipped**.
 ## Final session verification
 
 Complete settlement-team Node suite: **299 passed, 0 failed, 4 skipped**. The four skips remain CI-disposable filesystem concurrency checks requiring their dedicated CI environment; they are not treated as passes.
+
+## Batch 7 — disposable PostgreSQL runtime qualification
+
+`tests/settlement-team-postgres-runtime-qualification.test.cjs` passed once against a fresh PostgreSQL 16 cluster bound solely to `127.0.0.1:55433`.
+
+- Applied only candidate team migrations to a new synthetic database.
+- Qualified separate non-superuser auth and ledger roles, including no `BYPASSRLS` and no cross-domain ledger/auth access.
+- Verified a current administrator can durably update an existing member and that a ledger role reads only active same-tenant counterparties.
+- PostgreSQL was stopped and 55433 closed; 8787 remained untouched.
+- Recursive deletion of the stopped disposable data directory was blocked by the execution environment. This is an inert cleanup item, not a teardown pass.
