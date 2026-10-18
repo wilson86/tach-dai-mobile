@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "checkpoint_id": "group-app-batch8-20261018T083000Z",
-  "created_at": "2026-10-18T08:30:00Z",
+  "checkpoint_id": "group-app-recovery-audit-20261018T074809Z",
+  "created_at": "2026-10-18T07:48:09Z",
   "context_risk": "ELEVATED",
   "source_sha": "52f860a2a0bbb8b3e919d8541076e1ac90d3cdd4",
   "local_branch": "codex/b2-group-app-20261018",
@@ -36,7 +36,33 @@
     "b2_android_vault_qa": "FULL_PASS_SYNTHETIC_ONLY_OWNER_REPORTED",
     "android_test_ca_removed": "OWNER_CONFIRMED"
   },
-  "next_priority": "Loop limit reached. Remove stopped disposable runtime data directory if permitted; then obtain private independent 65-case HIOSKT evidence or scoped approval for changed-SHA draft/review/restart/backup runtime QA.",
+  "recovery_audit": {
+    "original_base_sha": "52f860a2a0bbb8b3e919d8541076e1ac90d3cdd4",
+    "local_head_at_audit": "79716020d3de8b9ad30b64826532314e666a8703",
+    "commits_since_base": 6,
+    "worktree_clean_at_audit": true,
+    "full_suite_reused": { "passed": 301, "failed": 0, "skipped": 5 },
+    "disposable_runtime": {
+      "path": "C:\\KTS-Settlement\\android-pilot-stage-a-52f860a\\phase-group-runtime-qualification-20261018-01",
+      "file_count": 1314,
+      "directory_count": 26,
+      "total_bytes": 50110151,
+      "postmaster_pid_present": false,
+      "owned_non_shell_process_count": 0,
+      "port_55433_listener_count": 0,
+      "preservation_status": "PRESERVE; stopped data may be runtime evidence and is not deleted under this recovery scope"
+    },
+    "hioskt_oracle": {
+      "independent_65_case_source_present": false,
+      "authorized_c_path_inventory": "Only the private hash-only workflow, implementation, and tests exist; no HIOSKT source rows, field mapping, expected calculations, or independent review evidence were found.",
+      "minimum_required_evidence": "Exactly 65 private source cases, field mapping, expected outcomes/calculations, provenance, discrepancy review, and independent human sign-off outside Git."
+    },
+    "port_8787_listener_count": 1,
+    "new_runtime_started": false,
+    "production_mutation": "NONE",
+    "cost_usd": 0
+  },
+  "next_priority": "All remaining P0 work requires either private independent 65-case HIOSKT evidence or a newly scoped disposable-runtime approval for changed-SHA draft/review/restart/backup qualification. Preserve the stopped runtime directory; do not delete, start a runtime, or change network state under this recovery scope.",
   "safety": {
     "synthetic_only": true,
     "real_money_enabled": false,
