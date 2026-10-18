@@ -501,6 +501,45 @@
       }
     }
 
+    // Explicit metadata-only directory read. It does not alter selected scope,
+    // drafts, cursors or retry state; callers must make a separate deliberate
+    // choice before a listed counterparty is used in a synthetic draft.
+    async function listCounterparties({kind=null,limit=100}={}){
+      if(!sessionToken||workspaceId===null)
+        return {status:STATUS.BLOCKED,error:'AUTH_SESSION_REQUIRED',items:[]};
+      if(kind!==null&&!['customer','owner'].includes(kind))
+        return {status:STATUS.BLOCKED,error:'SYNC_COUNTERPARTY_KIND_INVALID',items:[]};
+      if(!Number.isSafeInteger(limit)||limit<1||limit>200)
+        return {status:STATUS.BLOCKED,error:'SYNC_COUNTERPARTY_LIMIT_INVALID',items:[]};
+      const epoch=sessionEpoch;
+      const query=new URLSearchParams({limit:String(limit)});
+      if(kind!==null)query.set('kind',kind);
+      try{
+        const result=await request('/v1/counterparties?'+query.toString(),{method:'GET'});
+        if(epoch!==sessionEpoch)
+          return {status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED',items:[]};
+        if(result.response.status===401)
+          return {status:STATUS.BLOCKED,error:'AUTH_SESSION_INVALID',items:[]};
+        if(!result.response.ok||!Array.isArray(result.body))
+          return {status:STATUS.BLOCKED,error:result.body.error||'SYNC_SERVER_REJECTED',items:[]};
+        if(result.body.length>limit)return {status:STATUS.BLOCKED,error:'SYNC_COUNTERPARTY_UNVERIFIED',items:[]};
+        const ids=new Set(),items=[];
+        for(const row of result.body){
+          if(!row||typeof row!=='object'||Array.isArray(row)||
+             row.workspace_id!==workspaceId||typeof row.partner_id!=='string'||
+             !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(row.partner_id)||
+             ids.has(row.partner_id)||!['customer','owner'].includes(row.partner_kind)||
+             typeof row.display_name!=='string'||row.display_name.length<1||row.display_name.length>160)
+            return {status:STATUS.BLOCKED,error:'SYNC_COUNTERPARTY_UNVERIFIED',items:[]};
+          ids.add(row.partner_id);items.push(Object.freeze({...row}));
+        }
+        return {status:STATUS.SYNCED,items:Object.freeze(items)};
+      }catch(error){
+        if(epoch!==sessionEpoch)return {status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED',items:[]};
+        return {status:STATUS.PENDING,error:errorCode(error,'SYNC_NETWORK_UNAVAILABLE'),items:[]};
+      }
+    }
+
     async function reconnect() {
       if(logoutInFlight)return {pull:{status:STATUS.BLOCKED,
         error:'SYNC_LOGOUT_IN_FLIGHT',items:[]},drafts:[]};
@@ -637,7 +676,7 @@
       });
     }
 
-    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, reconnect, verifyActor, inspectRecoveryReceipts, snapshot, STATUS });
+    return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, listCounterparties, reconnect, verifyActor, inspectRecoveryReceipts, snapshot, STATUS });
   }
 
   return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });

@@ -22,7 +22,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
  syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
  pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null,reviewGate=null,reviewNoReceipt=false}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
-  'team-logout','team-partner','team-date','team-region','team-create',
+  'team-logout','team-partner','team-directory','team-counterparties','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
   'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
   'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
@@ -60,6 +60,9 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState,
       ...(reviewState==='PENDING_REVIEW'?{submitted_by:'fake_operator'}:{}),
       ...(reviewState==='REVIEWED'?{submitted_by:'fake_operator',reviewed_by:'fake_checker'}:{})}};},
+   async listCounterparties(){calls.push('listCounterparties');return {status:'SYNCED',items:[
+     {workspace_id:state.workspace_id,partner_id:'fake_customer_1',partner_kind:'customer',display_name:'Synthetic Customer'}
+   ]};},
    async reviewScope(action,selected,revision,options={}){
      calls.push('reviewScope');if(reviewGate)await reviewGate();
      let attempt=state.review_attempts.find(
@@ -128,6 +131,17 @@ test('Team UI logs in without keeping password input then queues fake-only pendi
  assert.match(h.els['team-warning'].textContent,/1 bản nháp/);
  assert.equal(h.els['team-drafts'].children.length,1);
  h.mounted.dispose();
+});
+test('Team UI renders a read-only synthetic directory without changing the selected partner or drafts',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ const original=h.els['team-partner'].value;
+ h.els['team-directory'].fire('click');await tick();
+ assert.deepEqual(h.calls.filter(x=>x==='listCounterparties'),['listCounterparties']);
+ assert.equal(h.els['team-partner'].value,original);
+ assert.equal(h.state.drafts.length,0);
+ assert.match(h.els['team-counterparties'].children[0].textContent,/fake_customer_1/);
+ assert.match(h.els['team-notice'].textContent,/chỉ đọc/);
 });
 test('UI requires fake partner prefix and refuses real-looking counterparties',async()=>{
  const h=harness();

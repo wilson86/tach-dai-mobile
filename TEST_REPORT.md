@@ -60,3 +60,22 @@ Added an authenticated read-only `GET /v1/counterparties` path through the exist
 - It does not create counterparties, accept monetary values, create scopes, or expose inactive records.
 
 Focused run for the directory plus adjacent auth/receipt/CAS contracts: **23 passed, 0 failed, 0 skipped**.
+
+## Batch 4 — private synthetic bootstrap plan
+
+Added `team-settlement/synthetic-bootstrap-plan.cjs`.
+
+- Pure validation only: no filesystem, process, network, SQL, pool, or logging dependency.
+- Rejects plaintext-password fields by accepting only exact identity keys with a valid scrypt verifier.
+- Requires 10–30 synthetic identities, active membership for every identity, an admin per workspace, and both a synthetic customer and owner per workspace.
+- The summary excludes verifier and authentication-subject data.
+
+Focused run: **7 passed, 0 failed, 0 skipped**.
+
+## Batch 5 — synthetic counterparty directory UI
+
+- Added an explicit read-only `listCounterparties` client method; it requires the current authenticated workspace, validates fake tenant metadata, and leaves draft/cursor state unchanged.
+- Added a pilot button that renders the directory without changing the selected partner. The operator must deliberately choose a valid fake ID before drafting.
+- No storage, automatic selection, financial POST, or bearer persistence was added.
+
+Focused client/UI/directory run: **106 passed, 0 failed, 0 skipped**.

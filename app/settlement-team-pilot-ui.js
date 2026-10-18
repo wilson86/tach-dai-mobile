@@ -21,7 +21,7 @@ const REVIEW_LABELS=Object.freeze({
   REOPEN_REQUESTED:'REOPEN_REQUESTED — yêu cầu mở lại'
 });
 const IDS=['team-login','team-subject','team-password','team-workspace',
- 'team-logout','team-partner','team-date','team-region','team-create',
+ 'team-logout','team-partner','team-directory','team-counterparties','team-date','team-region','team-create',
  'team-sync','team-pull','team-reconnect','team-read','team-context',
  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
@@ -97,7 +97,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     e['team-warning'].textContent=unsent>0?
       'CẢNH BÁO: '+unsent+' bản nháp/yêu cầu duyệt MEMORY_ONLY CHƯA có receipt xác minh; có thể đã tới máy chủ, không được coi là đã lưu. Tải lại/đóng trang sẽ mất bản nháp cục bộ.':
       'MEMORY_ONLY — chưa có lưu ngoại tuyến bền vững; bản nháp mới có thể mất khi tải lại.';
-    for(const id of ['team-logout','team-create','team-sync','team-pull','team-reconnect','team-read'])
+    for(const id of ['team-logout','team-directory','team-create','team-sync','team-pull','team-reconnect','team-read'])
       e[id].disabled=busy||!state.authenticated;
     e['team-login'].querySelector('button[type="submit"]').disabled=busy||state.authenticated;
     e['team-review-controls'].hidden=!syntheticReviewUiEnabled;
@@ -165,8 +165,28 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     await sync.login(subject,pwd,workspace);
     clearVerifiedHistory(); // Never display another session's previously read feed.
     clearReview();
+    clear(e['team-counterparties']);
     tell('Đăng nhập pilot thành công. Chỉ dùng dữ liệu giả.');
   });});
+  on(e['team-directory'],'click',()=>void action(async()=>{
+    if(typeof sync.listCounterparties!=='function')throw Error('TEAM_PILOT_DIRECTORY_UNAVAILABLE');
+    const startIdentity=identityEpoch;
+    const result=await sync.listCounterparties();
+    if(dead||startIdentity!==identityEpoch||!sync.snapshot().authenticated){
+      clear(e['team-counterparties']);
+      tell('CHƯA XÁC MINH danh bạ: phiên đã thay đổi trong lúc đọc.');
+      return;
+    }
+    if(!result||result.status!=='SYNCED'||!Array.isArray(result.items)){
+      tell('CHƯA XÁC MINH danh bạ: '+String(result&&result.status||'BLOCKED')+
+        (result&&result.error?' • '+result.error:'')+'.');
+      return;
+    }
+    clear(e['team-counterparties']);
+    for(const item of result.items)row(e['team-counterparties'],
+      item.partner_id+' • '+item.partner_kind+' • '+item.display_name);
+    tell('Đã đọc '+result.items.length+' đối tác giả. Danh bạ chỉ đọc; hãy tự chọn mã trước khi tạo DRAFT.');
+  }));
   on(e['team-logout'],'click',()=>void action(async()=>{
     const snap=sync.snapshot();
     const n=snap.drafts.filter(x=>x.status!=='SYNCED').length+
@@ -185,7 +205,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       }
       throw err;
     }
-    clearVerifiedHistory();clearReview();
+    clearVerifiedHistory();clearReview();clear(e['team-counterparties']);
     tell('Đã đăng xuất và xác nhận máy chủ thu hồi phiên.');
   }));
   on(e['team-create'],'click',()=>void action(async()=>{
