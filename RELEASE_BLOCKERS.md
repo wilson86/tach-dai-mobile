@@ -18,6 +18,7 @@ Source SHA: `52f860a2a0bbb8b3e919d8541076e1ac90d3cdd4`
 
 - The approved 65-case HIOSKT source, field mapping, expected calculations, and independent discrepancy review.
 - This is required before claiming monetary parity or accepting real settlement facts.
+- A private hash-only 65-case review scaffold now exists, but it is not source evidence and cannot authorize a release.
 
 ## D. Requires human account/device action
 

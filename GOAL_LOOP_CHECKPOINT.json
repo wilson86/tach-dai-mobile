@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "checkpoint_id": "group-app-batch5-20261018T075000Z",
-  "created_at": "2026-10-18T07:50:00Z",
+  "checkpoint_id": "group-app-batch6-20261018T080000Z",
+  "created_at": "2026-10-18T08:00:00Z",
   "context_risk": "ELEVATED",
   "source_sha": "52f860a2a0bbb8b3e919d8541076e1ac90d3cdd4",
   "local_branch": "codex/b2-group-app-20261018",
   "worktree": "C:\\KTS-Settlement\\android-pilot-stage-a-52f860a\\tach-dai-mobile-b2-group-app",
   "source_checkout_preserved": true,
-  "batch": 5,
+  "batch": 6,
   "tasks_completed": [
     "Created isolated local C: worktree from exact pinned source SHA",
     "Audited existing durable ledger, auth, review, recovery, HTTP, UI and schema contracts",
@@ -22,15 +22,17 @@
     "Added private no-I/O synthetic bootstrap-plan validator for 10–30 identities",
     "Added redacted topology-summary and plaintext-field rejection tests",
     "Added explicit read-only counterparty directory client and pilot UI view",
-    "Verified directory UI cannot change selected partner, drafts or bearer persistence"
+    "Verified directory UI cannot change selected partner, drafts or bearer persistence",
+    "Added private exact-65-case HIOSKT commitment/review scaffold",
+    "Added source-data rejection and non-authorization tests for oracle review"
   ],
-  "tests": { "passed": 286, "failed": 0, "skipped": 4 },
+  "tests": { "passed": 299, "failed": 0, "skipped": 4 },
   "reused_evidence": {
     "b1_synthetic_postgres": "PASS_OPERATOR_REPORTED",
     "b2_android_vault_qa": "FULL_PASS_SYNTHETIC_ONLY_OWNER_REPORTED",
     "android_test_ca_removed": "OWNER_CONFIRMED"
   },
-  "next_priority": "Private 65-case HIOSKT oracle import/review template with no real source data and no claim of monetary parity.",
+  "next_priority": "Fresh explicitly approved disposable PostgreSQL role qualification and runtime QA on changed local SHA; otherwise obtain private independent 65-case HIOSKT evidence.",
   "safety": {
     "synthetic_only": true,
     "real_money_enabled": false,

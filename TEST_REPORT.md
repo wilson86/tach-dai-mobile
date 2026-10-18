@@ -79,3 +79,15 @@ Focused run: **7 passed, 0 failed, 0 skipped**.
 - No storage, automatic selection, financial POST, or bearer persistence was added.
 
 Focused client/UI/directory run: **106 passed, 0 failed, 0 skipped**.
+
+## Batch 6 — private 65-case oracle review scaffold
+
+- Added a blank exact-65-case private template and hash-only plan/review validation.
+- Raw source rows, monetary values, and extra fields are rejected; only SHA-256 commitments are accepted.
+- A completed 65-case review still reports `monetary_parity_proven=false` and `release_authorized=false`.
+
+Focused oracle/bootstrap run: **6 passed, 0 failed, 0 skipped**.
+
+## Final session verification
+
+Complete settlement-team Node suite: **299 passed, 0 failed, 4 skipped**. The four skips remain CI-disposable filesystem concurrency checks requiring their dedicated CI environment; they are not treated as passes.

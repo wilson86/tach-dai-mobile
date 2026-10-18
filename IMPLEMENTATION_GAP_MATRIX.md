@@ -15,8 +15,10 @@ Development branch: `codex/b2-group-app-20261018` (local isolated worktree)
 | Ordered tenant change feed | repository plus `/v1/changes` parsing | Pagination/tenant tests pass | No user-facing durable history view beyond pilot session | Product UI integration | P1 |
 | Audit history/status | immutable scope events / receipts schema | Receipt/feed contracts pass | No operator-oriented audit screen/export in group app | UI and access design | P2 |
 | Offline encrypted recovery | `recovery-vault.cjs` and Android B2 evidence | Focused vault tests pass; B2 owner evidence FULL PASS | Manual backup is not a durable automatic offline queue | Requires explicit product decision and storage threat review | P1 |
-| Real-money close/finalization | Explicitly absent | N/A | Intentionally unavailable | Independent 65-case HIOSKT oracle and approvals | RELEASE BLOCKER |
+| Real-money close/finalization | Explicitly absent; private 65-case commitment/review scaffold | Oracle scaffold tests pass | No approved source data, mappings, independent review, or release sign-off | Independent private HIOSKT evidence and approvals | RELEASE BLOCKER |
 
 ## Audit conclusion
 
 The source already has robust, fail-closed contracts for the synthetic ledger core. Batch 2 completed the narrow durable membership surface already anticipated by the HTTP contract. Batch 3 added a tenant-scoped active counterparty directory for existing customer/owner rows, with strict backend validation and no financial fields or mutation. Batch 4 added a private, no-I/O topology planner: it accepts only scrypt verifiers, enforces 10–30 synthetic identities, memberships with an administrator per workspace, and fake customer/owner counterparties. It produces a redacted summary, not SQL. Batch 5 connected the active directory to the synthetic pilot as an explicit, read-only list; it never changes the selected scope or pending drafts. Applying a plan and deployment remain explicitly reviewed operator actions.
+
+Batch 6 added a 65-case private HIOSKT commitment/review scaffold. It rejects source rows and values, stores only opaque SHA-256 commitments, and cannot authorize monetary parity or a release.
