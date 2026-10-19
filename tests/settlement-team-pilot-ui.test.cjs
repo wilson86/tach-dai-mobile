@@ -5,6 +5,13 @@ const fs=require('node:fs');
 const path=require('node:path');
 const UI=require('../app/settlement-team-pilot-ui.js');
 
+test('pilot page identifies the qualified local synthetic build and no live endpoint',()=>{
+ const html=fs.readFileSync(path.join(__dirname,'../app/settlement-team-pilot.html'),'utf8');
+ assert.match(html,/SHA e34a425/);
+ assert.match(html,/không có endpoint đang chạy/);
+ assert.match(html,/MEMORY_ONLY/);
+});
+
 function element(){
  const listeners=new Map();
  return {
