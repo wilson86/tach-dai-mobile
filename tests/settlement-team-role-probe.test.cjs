@@ -6,10 +6,11 @@ const {qualifyIsolatedPoolRoles}=require('../team-settlement/role-probe.cjs');
 
 const auth={role:'synthetic_auth',auth_schema:true,event_read:false,
   credential_read:true,session_read:true,session_insert:true,session_revoke:true,
-  team_schema:true,membership_read:true,membership_write:true,
+  team_schema:true,membership_read:true,membership_write_denied:true,
+  financial_write_denied:true,
   draft_execute:false,superuser:false,bypass_rls:false};
 const ledger={role:'synthetic_ledger',auth_schema:false,event_read:true,
-  draft_execute:true,superuser:false,bypass_rls:false};
+  draft_execute:true,membership_write_denied:true,superuser:false,bypass_rls:false};
 function pool(info,{failConnect=false,failQuery=false}={}){
   const calls={connect:0,query:0,releases:[]};
   const instance={
@@ -50,7 +51,8 @@ test('same role, overprivileged role, and cross-domain role privileges are denie
     {...ledger,superuser:true},
     {...ledger,bypass_rls:true},
     {...ledger,event_read:false},
-    {...ledger,draft_execute:false}
+    {...ledger,draft_execute:false},
+    {...ledger,membership_write_denied:false}
   ]){
     const a=pool(auth),l=pool(bad);
     await assert.rejects(qualifyIsolatedPoolRoles({
@@ -66,6 +68,8 @@ test('auth role cannot read ledger events, execute drafts, or bypass RLS',async(
     {...auth,auth_schema:false},
     {...auth,event_read:true},
     {...auth,draft_execute:true},
+    {...auth,membership_write_denied:false},
+    {...auth,financial_write_denied:false},
     {...auth,bypass_rls:true},
     {...auth,superuser:true}
   ]){
@@ -107,7 +111,7 @@ test('failed verification query destroys both clients without promoting role pro
 
 test('auth must have session and tenant-scoped membership privileges to qualify',async()=>{
   for(const absent of ['credential_read','session_read','session_insert','session_revoke',
-    'team_schema','membership_read','membership_write']){
+    'team_schema','membership_read','membership_write_denied','financial_write_denied']){
     const a=pool({...auth,[absent]:false}),l=pool(ledger);
     await assert.rejects(qualifyIsolatedPoolRoles({
       authPool:a.pool,ledgerPool:l.pool,syntheticOnly:true

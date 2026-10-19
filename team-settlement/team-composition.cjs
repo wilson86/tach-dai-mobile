@@ -13,7 +13,8 @@ const {qualifyIsolatedPoolRoles}=require('./role-probe.cjs');
 function createIsolatedTeamPrototype({
   authPool, ledgerPool, clock=()=>Date.now(), syntheticOnly=false,
   syntheticReviewEnabled=false,
-  syntheticRecoveryInspectEnabled=false
+  syntheticRecoveryInspectEnabled=false,
+  syntheticMembershipAdminEnabled=false
 }={}){
   if(syntheticOnly!==true)throw new Error('TEAM_RELEASE_NOT_AUTHORIZED');
   if(!authPool || !ledgerPool || authPool===ledgerPool ||
@@ -23,6 +24,8 @@ function createIsolatedTeamPrototype({
   if(typeof syntheticReviewEnabled!=='boolean')throw Error('TEAM_REVIEW_CONFIG_INVALID');
   if(typeof syntheticRecoveryInspectEnabled!=='boolean')
     throw Error('TEAM_RECOVERY_CONFIG_INVALID');
+  if(typeof syntheticMembershipAdminEnabled!=='boolean')
+    throw Error('TEAM_MEMBERSHIP_ADMIN_CONFIG_INVALID');
   const authDb=createPgTransactionAdapter({pool:authPool});
   const ledgerDb=createPgTransactionAdapter({pool:ledgerPool});
   const auth=createPostgresAuthService({db:authDb,clock});
@@ -37,7 +40,10 @@ function createIsolatedTeamPrototype({
   const server=createAuthHttpServer(auth,{
     ledger,clock,enableSyntheticReviewHttp:syntheticReviewEnabled,
     recoveryInspector,
-    enableSyntheticRecoveryInspectHttp:syntheticRecoveryInspectEnabled
+    enableSyntheticRecoveryInspectHttp:syntheticRecoveryInspectEnabled,
+    // Membership bootstrap is a separately controlled setup boundary. The
+    // normal group application never exposes membership mutation routes.
+    enableMembershipAdminHttp:syntheticMembershipAdminEnabled
   });
   // The caller controls when/how to listen. This candidate must NEVER
   // automatically expose a port or initialize an operational database.

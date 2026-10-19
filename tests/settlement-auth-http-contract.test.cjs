@@ -106,7 +106,7 @@ test('HTTP admin routes require server-derived admin role and can revoke a membe
   const auth = setup();
   auth.registerIdentity({ user_id: 'admin_1', auth_subject: 'subject_admin', password: 'synthetic-admin-password' });
   auth.setMembership({ workspace_id: 'group_a', user_id: 'admin_1', role: 'admin' });
-  const server = createAuthHttpServer(auth);
+  const server = createAuthHttpServer(auth, { enableMembershipAdminHttp: true });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   try {
     const adminLogin = await request(server, { method: 'POST', path: '/v1/login', body: {
@@ -127,6 +127,15 @@ test('HTTP admin routes require server-derived admin role and can revoke a membe
     }});
     assert.equal(memberLogin.status, 401);
   } finally { await new Promise(resolve => server.close(resolve)); }
+});
+
+test('membership administration routes are disabled by default', async () => {
+  const auth = setup();
+  await withServer(auth, async server => {
+    const result = await request(server, { method: 'POST', path: '/v1/admin/memberships', body: {} });
+    assert.equal(result.status, 404);
+    assert.deepEqual(JSON.parse(result.body), { error: 'TEAM_ROUTE_NOT_ENABLED' });
+  });
 });
 
 test('unknown or already-revoked session cannot be falsely acknowledged as logged out',async()=>{

@@ -147,8 +147,8 @@ test('async persisted auth interoperates with read-only HTTP route and session r
     assert.equal(session.status,200);
     assert.equal(session.body.role,'operator');
     const admin=await httpCall(server,{path:'/v1/admin/memberships',method:'POST',token,body:{}});
-    assert.equal(admin.status,400);
-    assert.equal(admin.body.error,'AUTH_MEMBERSHIP_INVALID');
+    assert.equal(admin.status,404);
+    assert.equal(admin.body.error,'TEAM_ROUTE_NOT_ENABLED');
     assert.equal((await httpCall(server,{path:'/v1/logout',method:'POST',token})).status,204);
     assert.equal((await httpCall(server,{path:'/v1/session',token})).status,401);
     assert.equal((await httpCall(server,{path:'/v1/scopes/customer_1/2026-10-12/mn',token})).status,401);

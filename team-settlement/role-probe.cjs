@@ -9,6 +9,9 @@ const PROBE_SQL = `SELECT current_user AS role,
   has_function_privilege(current_user,
     'kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)',
     'EXECUTE') AS draft_execute,
+  NOT (has_table_privilege(current_user, 'kts_team.memberships', 'INSERT')
+    OR has_table_privilege(current_user, 'kts_team.memberships', 'UPDATE')
+    OR has_table_privilege(current_user, 'kts_team.memberships', 'DELETE')) AS membership_write_denied,
   COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname=current_user),true) AS superuser,
   COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),true) AS bypass_rls`;
 
@@ -18,8 +21,10 @@ const AUTH_PROBE_SQL = PROBE_SQL.replace(
   has_table_privilege(current_user, 'kts_auth.sessions', 'SELECT') AS session_read,
   has_schema_privilege(current_user, 'kts_team', 'USAGE') AS team_schema,
   has_table_privilege(current_user, 'kts_team.memberships', 'SELECT') AS membership_read,
-  (has_table_privilege(current_user, 'kts_team.memberships', 'INSERT')
-   AND has_table_privilege(current_user, 'kts_team.memberships', 'UPDATE')) AS membership_write,
+  NOT (has_table_privilege(current_user, 'kts_team.scopes', 'INSERT')
+    OR has_table_privilege(current_user, 'kts_team.scopes', 'UPDATE')
+    OR has_table_privilege(current_user, 'kts_team.scope_events', 'INSERT')
+    OR has_table_privilege(current_user, 'kts_team.idempotency_receipts', 'INSERT')) AS financial_write_denied,
   (has_column_privilege(current_user, 'kts_auth.sessions', 'session_hash', 'INSERT')
    AND has_column_privilege(current_user, 'kts_auth.sessions', 'user_id', 'INSERT')
    AND has_column_privilege(current_user, 'kts_auth.sessions', 'workspace_id', 'INSERT')
@@ -58,10 +63,11 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
        auth.auth_schema!==true || auth.team_schema!==true ||
        auth.credential_read!==true || auth.session_read!==true ||
        auth.session_insert!==true || auth.session_revoke!==true ||
-       auth.membership_read!==true || auth.membership_write!==true ||
+       auth.membership_read!==true || auth.membership_write_denied!==true ||
+       auth.financial_write_denied!==true ||
        auth.event_read!==false || auth.draft_execute!==false ||
        ledger.auth_schema!==false || ledger.event_read!==true ||
-       ledger.draft_execute!==true)deny();
+       ledger.draft_execute!==true || ledger.membership_write_denied!==true)deny();
     qualified=true;
     return Object.freeze({qualified:true,auth_role:auth.role,ledger_role:ledger.role});
   } finally {

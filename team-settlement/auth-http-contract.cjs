@@ -76,17 +76,20 @@ function createAuthHttpServer(auth, {
   ledger = null,
   recoveryInspector = null,
   enableSyntheticRecoveryInspectHttp = false,
-  enableSyntheticReviewHttp = false
+  enableSyntheticReviewHttp = false,
+  enableMembershipAdminHttp = false
 } = {}) {
   if (!auth || typeof auth.login !== 'function' || typeof auth.verifySession !== 'function' ||
-      typeof auth.revokeSession !== 'function' || typeof auth.manageMembership !== 'function' ||
-      typeof auth.setIdentityDisabled !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
+      typeof auth.revokeSession !== 'function' || !Number.isSafeInteger(maxBodyBytes) || maxBodyBytes < 256 ||
       !Number.isSafeInteger(maxLoginAttempts) || maxLoginAttempts < 1 ||
       !Number.isSafeInteger(loginWindowMs) || loginWindowMs < 1 ||
       !Number.isSafeInteger(maxLoginKeys) || maxLoginKeys < 1 || maxLoginKeys > 100000 ||
       !Number.isSafeInteger(maxLoginSourceAttempts) || maxLoginSourceAttempts < 1 ||
       maxLoginSourceAttempts > 100000 ||
       typeof clock !== 'function' || typeof enableSyntheticReviewHttp !== 'boolean' ||
+      typeof enableMembershipAdminHttp !== 'boolean' ||
+      (enableMembershipAdminHttp && (typeof auth.manageMembership !== 'function' ||
+       typeof auth.setIdentityDisabled !== 'function')) ||
       typeof enableSyntheticRecoveryInspectHttp !== 'boolean' ||
       (enableSyntheticRecoveryInspectHttp &&
        (!recoveryInspector || typeof recoveryInspector.inspect !== 'function')) ||
@@ -180,6 +183,7 @@ function createAuthHttpServer(auth, {
         return noContent(res);
       }
       if (req.url === '/v1/admin/memberships' && req.method === 'POST') {
+        if (!enableMembershipAdminHttp) return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
         const token = bearer(req);
         if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
         let input;
@@ -201,6 +205,7 @@ function createAuthHttpServer(auth, {
         }
       }
       if (req.url === '/v1/admin/disable' && req.method === 'POST') {
+        if (!enableMembershipAdminHttp) return json(res, 404, { error: 'TEAM_ROUTE_NOT_ENABLED' });
         const token = bearer(req);
         if (!token) return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
         let input;
