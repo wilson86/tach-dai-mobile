@@ -55,8 +55,10 @@ function assertDb(db) {
   if (!db || typeof db.transaction !== 'function') throw new Error('TEAM_DB_ADAPTER_REQUIRED');
 }
 
-function createPostgresLedgerRepository({ db } = {}) {
+function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic = null } = {}) {
   assertDb(db);
+  if (syntheticAuthorizationDiagnostic !== null && typeof syntheticAuthorizationDiagnostic !== 'function')
+    throw new Error('TEAM_AUTHORIZATION_DIAGNOSTIC_INVALID');
 
   async function inScopeTransaction(actor, scope, work) {
     const trustedActor = C.actorFromServer(actor);
@@ -89,9 +91,17 @@ function createPostgresLedgerRepository({ db } = {}) {
             AND m.revoked_at IS NULL AND i.disabled_at IS NULL`,
         [trustedActor.workspace_id, trustedActor.user_id]
       );
-      if (!membership || !Array.isArray(membership.rows) ||
-          membership.rows.length !== 1 ||
-          membership.rows[0].team_role !== trustedActor.role)
+      const membershipRole=membership&&Array.isArray(membership.rows)&&membership.rows.length===1&&
+        typeof membership.rows[0]?.team_role==='string'?membership.rows[0].team_role:null;
+      if (syntheticAuthorizationDiagnostic) syntheticAuthorizationDiagnostic(Object.freeze({
+        synthetic_only:true,stage:'LEDGER_MEMBERSHIP_RECHECK',
+        actor_user_id:trustedActor.user_id,workspace_id:trustedActor.workspace_id,
+        actor_role:trustedActor.role,membership_role:membershipRole,
+        membership_state:membershipRole===null?'MISSING_OR_INACTIVE':'ACTIVE',
+        actor_matches_membership:membershipRole===trustedActor.role,
+        append_draft_role_permitted:['admin','operator'].includes(membershipRole)
+      }));
+      if (membershipRole===null || membershipRole !== trustedActor.role)
         throw new Error('AUTH_SESSION_REVOKED');
       return work(tx, trustedActor);
     });

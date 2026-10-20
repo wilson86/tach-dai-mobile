@@ -14,7 +14,8 @@ function createIsolatedTeamPrototype({
   authPool, ledgerPool, clock=()=>Date.now(), syntheticOnly=false,
   syntheticReviewEnabled=false,
   syntheticRecoveryInspectEnabled=false,
-  syntheticMembershipAdminEnabled=false
+  syntheticMembershipAdminEnabled=false,
+  syntheticAuthorizationDiagnostic=null
 }={}){
   if(syntheticOnly!==true)throw new Error('TEAM_RELEASE_NOT_AUTHORIZED');
   if(!authPool || !ledgerPool || authPool===ledgerPool ||
@@ -26,10 +27,13 @@ function createIsolatedTeamPrototype({
     throw Error('TEAM_RECOVERY_CONFIG_INVALID');
   if(typeof syntheticMembershipAdminEnabled!=='boolean')
     throw Error('TEAM_MEMBERSHIP_ADMIN_CONFIG_INVALID');
+  if(syntheticAuthorizationDiagnostic!==null&&typeof syntheticAuthorizationDiagnostic!=='function')
+    throw Error('TEAM_AUTHORIZATION_DIAGNOSTIC_INVALID');
   const authDb=createPgTransactionAdapter({pool:authPool});
   const ledgerDb=createPgTransactionAdapter({pool:ledgerPool});
   const auth=createPostgresAuthService({db:authDb,clock});
-  const ledgerRepository=createPostgresLedgerRepository({db:ledgerDb});
+  const ledgerRepository=createPostgresLedgerRepository({db:ledgerDb,
+    syntheticAuthorizationDiagnostic});
   const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled});
   // A distinct, separately opted-in recovery inspector wires the actual
   // actor-scoped PostgreSQL READ ONLY receipt repository into the HTTP route.
