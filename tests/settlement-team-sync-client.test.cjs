@@ -129,7 +129,7 @@ test('PWA client integrates with synthetic localhost auth, draft and change endp
     const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
     // An in-memory contract is not a durable PostgreSQL receipt.
     const memoryAck=await client.syncDraft(draft.id);
-    assert.equal(memoryAck.status,Sync.STATUS.BLOCKED);
+    assert.equal(memoryAck.status,Sync.STATUS.PENDING);
     assert.equal(memoryAck.error,'SYNC_ACK_UNVERIFIED');
     const changes = await client.pullChanges();
     assert.equal(changes.status, Sync.STATUS.SYNCED);
@@ -200,7 +200,7 @@ test('HTTP success without a verified event receipt never marks financial draft 
   client.setSessionToken('a'.repeat(43), 'group_a');
   const item = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
   const outcome = await client.syncDraft(item.id);
-  assert.equal(outcome.status, Sync.STATUS.BLOCKED);
+  assert.equal(outcome.status, Sync.STATUS.PENDING);
   assert.equal(outcome.error, 'SYNC_ACK_UNVERIFIED');
 });
 
@@ -330,7 +330,7 @@ test('replayed HTTP acknowledgement without original server revision cannot mark
   const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
     business_date:'2026-10-12',region:'mn'},{synthetic:true});
   const result=await client.syncDraft(item.id);
-  assert.equal(result.status,'BLOCKED');
+  assert.equal(result.status,'PENDING');
   assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
   assert.equal(client.snapshot().drafts[0].server_revision,undefined);
 });
@@ -360,7 +360,7 @@ test('fake HTTP SYNCED without valid PostgreSQL feed receipt never syncs a draft
     const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
     const item=client.queueDraft(scope,{synthetic:true});
     const result=await client.syncDraft(item.id);
-    assert.equal(result.status,'BLOCKED',JSON.stringify(receipt));
+    assert.equal(result.status,'PENDING',JSON.stringify(receipt));
     assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
   }
 });
@@ -753,7 +753,7 @@ test('a synthetic draft needs an exact server scope receipt, not a different eve
    client.setSessionToken('a'.repeat(43),'group_a');
    const draft=client.queueDraft(scope,{synthetic:true});
    const result=await client.syncDraft(draft.id);
-   assert.equal(result.status,'BLOCKED');
+   assert.equal(result.status,'PENDING');
    assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
    assert.equal(client.snapshot().drafts[0].server_result,undefined);
  }
@@ -1235,4 +1235,104 @@ test('logging in during an unresolved remote logout is refused without new HTTP'
  assert.equal(calls.length,1);
  resolveLogout(response(204,{}));
  assert.equal((await old).authenticated,false);
+});
+
+test('synthetic-pilot pending draft survives reload with its exact immutable transport',async()=>{
+  const saved=storage(); const seen=[];
+  const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-15',region:'mn'};
+  const fetchImpl=async(url,options)=>{
+    seen.push({url,options});
+    if(url.endsWith('/v1/login'))return response(200,{session_token:'a'.repeat(43),expires_at:1});
+    return response(200,{sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-10-15:mn',
+      event_id:'persisted_event_1',replayed:false,new_revision:4,feed_seq:'4'});
+  };
+  const first=Sync.createSyncClient({storage:saved,fetchImpl});
+  await first.login('synthetic_operator_a','synthetic-password','group_a');
+  const draft=first.queueDraft(scope,{synthetic:true,amount:7},3);
+  const persisted=JSON.parse(saved.data.get(Sync.PENDING_DRAFTS_KEY));
+  assert.equal(first.snapshot().draft_persistence,'LOCAL_STORAGE');
+  assert.equal(persisted.length,1);
+  assert.deepEqual(Object.keys(persisted[0]).sort(),['account_id','base_revision','created_at','id','payload','scope','status','workspace_id']);
+  assert.equal(persisted[0].id,draft.id);
+  assert.equal(persisted[0].base_revision,3);
+  assert.deepEqual(persisted[0].payload,{synthetic:true,amount:7});
+  assert.equal(JSON.stringify(persisted).includes('a'.repeat(43)),false);
+  first.clearSession({discardPending:true});
+  const reloaded=Sync.createSyncClient({storage:saved,fetchImpl});
+  await reloaded.login('synthetic_operator_a','synthetic-password','group_a');
+  assert.equal(reloaded.snapshot().drafts.length,1);
+  assert.equal(reloaded.snapshot().drafts[0].id,draft.id);
+  assert.equal((await reloaded.syncDraft(draft.id)).status,'SYNCED');
+  const write=seen.find(x=>x.url.endsWith('/v1/scopes/drafts'));
+  const sent=JSON.parse(write.options.body);
+  assert.equal(sent.idempotency_key,draft.id);
+  assert.equal(sent.expected_revision,3);
+  assert.deepEqual(sent.payload,{synthetic:true,amount:7});
+  assert.deepEqual(JSON.parse(saved.data.get(Sync.PENDING_DRAFTS_KEY)),[]);
+});
+
+test('pending persistence fails closed for lost acknowledgements, storage failure and corrupted rows',async()=>{
+  const scope={workspace_id:'group_a',partner_id:'fake_partner_2',business_date:'2026-10-15',region:'mn'};
+  const saved=storage(); let writes=0;
+  let mode='lost';
+  const fetchImpl=async(url)=>{
+    if(url.endsWith('/v1/login'))return response(200,{session_token:'a'.repeat(43),expires_at:1});
+    writes++;
+    if(mode==='lost')return response(503,{error:'ACK_LOST'});
+    if(mode==='forged')return response(200,{sync_status:'SYNCED',scope_key:'wrong',event_id:'forged',replayed:false,new_revision:1,feed_seq:'1'});
+    return response(422,{error:'SERVER_REJECTED'});
+  };
+  const first=Sync.createSyncClient({storage:saved,fetchImpl});
+  await first.login('synthetic_operator_a','synthetic-password','group_a');
+  const draft=first.queueDraft(scope,{synthetic:true});
+  assert.equal((await first.syncDraft(draft.id)).status,'PENDING'); // lost ACK remains recoverable
+  first.clearSession({discardPending:true});
+  const reloaded=Sync.createSyncClient({storage:saved,fetchImpl});
+  await reloaded.login('synthetic_operator_a','synthetic-password','group_a');
+  mode='forged';
+  assert.equal((await reloaded.syncDraft(draft.id)).status,'PENDING');
+  mode='reject';
+  assert.equal((await reloaded.syncDraft(draft.id)).status,'PENDING');
+  assert.equal(writes,3);
+
+  let failureWrites=0;
+  const failingStore={get:()=>null,set:()=>{throw Error('quota');},remove:()=>{}};
+  const failed=Sync.createSyncClient({storage:failingStore,fetchImpl:async url=>{
+    if(url.endsWith('/v1/login'))return response(200,{session_token:'b'.repeat(43),expires_at:1});
+    failureWrites++; return response(200,{});
+  }});
+  await failed.login('synthetic_operator_b','synthetic-password','group_a');
+  const volatile=failed.queueDraft(scope,{synthetic:true});
+  const denied=await failed.syncDraft(volatile.id);
+  assert.equal(denied.status,'PENDING');
+  assert.equal(denied.error,'SYNC_LOCAL_PERSISTENCE_REQUIRED');
+  assert.equal(failureWrites,0);
+
+  const corrupt=storage();
+  corrupt.set(Sync.PENDING_DRAFTS_KEY,'[{"id":"not-a-draft","account_id":"synthetic_operator_c","workspace_id":"group_a"}]');
+  const corrupted=Sync.createSyncClient({storage:corrupt,fetchImpl:async()=>response(200,{session_token:'c'.repeat(43),expires_at:1})});
+  await corrupted.login('synthetic_operator_c','synthetic-password','group_a');
+  assert.equal(corrupted.snapshot().draft_persistence,'STORAGE_CORRUPT');
+  assert.deepEqual(corrupted.snapshot().drafts,[]);
+});
+
+test('pending persistence isolates account/workspace queues and does not merge foreign drafts',async()=>{
+  const saved=storage();
+  const scopeA={workspace_id:'group_a',partner_id:'fake_partner_a',business_date:'2026-10-15',region:'mn'};
+  const scopeB={workspace_id:'group_b',partner_id:'fake_partner_b',business_date:'2026-10-15',region:'mn'};
+  const fetchImpl=async(url,options)=>response(200,{session_token:(options&&options.body&&options.body.includes('operator_b')?'b':'a').repeat(43),expires_at:1});
+  const a=Sync.createSyncClient({storage:saved,fetchImpl});
+  await a.login('synthetic_operator_a','synthetic-password','group_a');
+  const draftA=a.queueDraft(scopeA,{synthetic:true});
+  a.clearSession({discardPending:true});
+  const b=Sync.createSyncClient({storage:saved,fetchImpl});
+  await b.login('synthetic_operator_b','synthetic-password','group_b');
+  assert.deepEqual(b.snapshot().drafts,[]);
+  const draftB=b.queueDraft(scopeB,{synthetic:true});
+  const rows=JSON.parse(saved.data.get(Sync.PENDING_DRAFTS_KEY));
+  assert.deepEqual(rows.map(row=>row.id).sort(),[draftA.id,draftB.id].sort());
+  b.clearSession({discardPending:true});
+  const aReloaded=Sync.createSyncClient({storage:saved,fetchImpl});
+  await aReloaded.login('synthetic_operator_a','synthetic-password','group_a');
+  assert.deepEqual(aReloaded.snapshot().drafts.map(row=>row.id),[draftA.id]);
 });

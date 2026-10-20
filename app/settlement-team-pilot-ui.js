@@ -94,7 +94,14 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     const reviews=Array.isArray(state.review_attempts)?state.review_attempts:[];
     const unsent=state.drafts.filter(x=>x.status!=='SYNCED').length+
       reviews.filter(x=>x.status!=='SYNCED').length;
-    e['team-warning'].textContent=unsent>0?
+    const persistence=state.draft_persistence;
+    if(persistence==='STORAGE_FAILED'||persistence==='STORAGE_CORRUPT')
+      e['team-warning'].textContent='CẢNH BÁO: không thể lưu an toàn DRAFT PENDING trên thiết bị ('+persistence+'). Không gửi DRAFT; sao chép bằng chứng và liên hệ người vận hành.';
+    else if(persistence==='LOCAL_STORAGE')
+      e['team-warning'].textContent=unsent>0?
+        'DRAFT PENDING được giữ cục bộ theo tài khoản/workspace; CHƯA có receipt xác minh nên không được coi là đã lưu trên máy chủ.':
+        'Không có DRAFT PENDING cục bộ. Chỉ SYNCED có receipt xác minh mới được coi là đã lưu.';
+    else e['team-warning'].textContent=unsent>0?
       'CẢNH BÁO: '+unsent+' bản nháp/yêu cầu duyệt MEMORY_ONLY CHƯA có receipt xác minh; có thể đã tới máy chủ, không được coi là đã lưu. Tải lại/đóng trang sẽ mất bản nháp cục bộ.':
       'MEMORY_ONLY — chưa có lưu ngoại tuyến bền vững; bản nháp mới có thể mất khi tải lại.';
     for(const id of ['team-logout','team-directory','team-create','team-sync','team-pull','team-reconnect','team-read'])
@@ -211,7 +218,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   on(e['team-create'],'click',()=>void action(async()=>{
     const draft=sync.queueDraft(scope(),
       {synthetic:true,demo_message:'TEAM_PILOT_FAKE_DATA_ONLY'});
-    tell(draft.id+' PENDING: chỉ có trong bộ nhớ, chưa ghi máy chủ.');
+    tell(draft.id+' PENDING: chưa có receipt máy chủ; trạng thái lưu cục bộ: '+sync.snapshot().draft_persistence+'.');
   }));
   on(e['team-sync'],'click',()=>void action(async()=>{
     const pending=sync.snapshot().drafts.filter(z=>z.status==='PENDING');

@@ -14,6 +14,7 @@
   }
     const REVIEW_STATES = Object.freeze(['DRAFT','PENDING_REVIEW','REVIEWED','CLOSED','REOPEN_REQUESTED']);
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
+  const PENDING_DRAFTS_KEY = 'kts-team-pending-drafts-v1';
   const MAX_SIGNED_BIGINT = 9223372036854775807n;
   const RECENT_EVENT_ID_LIMIT = 500; // Bounded client-only replay cross-check.
   function verifiedFeedSequence(value) {
@@ -99,9 +100,22 @@
     const fetcher = fetchImpl || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
     if (typeof fetcher !== 'function') throw new Error('SYNC_FETCH_REQUIRED');
     const endpoint = normalizeBaseUrl(baseUrl);
-    const store = storage || { get: function () { return null; }, set: function () {}, remove: function () {} };
+    // The pilot UI does not inject storage, so explicitly adapt browser localStorage.
+    // Tests may inject the small get/set/remove adapter used below. Do not pretend
+    // that a missing or malformed store is durable.
+    let browserStore = null;
+    try {
+      const local = typeof globalThis !== 'undefined' && globalThis.localStorage;
+      if (local) browserStore = {
+        get: key => local.getItem(key), set: (key, value) => local.setItem(key, value),
+        remove: key => local.removeItem(key)
+      };
+    } catch (_) {}
+    const store = storage || browserStore;
     let sessionToken = null; // Deliberately memory-only. Never persist bearer credentials.
     let workspaceId = null;
+    let accountId = null; // Synthetic auth subject only; bearer tokens are never persisted.
+    let pendingPersistence = 'MEMORY_ONLY';
     let sessionEpoch = 0;
     let loginInFlight = false; // Only one pending identity exchange per browser client.
     let logoutInFlight = false; // No new money intents while remote revoke is uncertain.
@@ -127,8 +141,72 @@
     function setStatus(item, status, code) {
       item.status = status;
       if (code) item.error = code; else delete item.error;
+      persistPendingDrafts();
       emit();
       return Object.freeze(clone(item));
+    }
+
+    function validPersistedDraft(row, workspace, account) {
+      return row && typeof row === 'object' && !Array.isArray(row) &&
+        typeof row.id === 'string' && /^draft_[a-f0-9]{32}$/.test(row.id) &&
+        row.account_id === account && row.workspace_id === workspace &&
+        row.scope && row.scope.workspace_id === workspace &&
+        typeof row.scope.partner_id === 'string' &&
+        /^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(row.scope.partner_id) &&
+        validBusinessDate(row.scope.business_date) && ['mn','mt','mb'].includes(row.scope.region) &&
+        row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload) &&
+        Number.isSafeInteger(row.base_revision) && row.base_revision >= 0 &&
+        row.status === STATUS.PENDING && typeof row.created_at === 'string' &&
+        Number.isFinite(Date.parse(row.created_at));
+    }
+    function readPersistedDrafts() {
+      if (!store || typeof store.get !== 'function' || typeof store.set !== 'function')
+        throw new Error('SYNC_DRAFT_STORAGE_UNAVAILABLE');
+      const raw = store.get(PENDING_DRAFTS_KEY);
+      if (raw === null || raw === '') return [];
+      const rows = JSON.parse(raw);
+      if (!Array.isArray(rows)) throw new Error('SYNC_DRAFT_STORAGE_CORRUPT');
+      return rows;
+    }
+    function persistPendingDrafts() {
+      if (!accountId || !workspaceId) { pendingPersistence = 'MEMORY_ONLY'; return false; }
+      let saved;
+      try { saved = readPersistedDrafts(); }
+      catch (error) {
+        pendingPersistence = error && error.message === 'SYNC_DRAFT_STORAGE_UNAVAILABLE' ?
+          'STORAGE_FAILED' : 'STORAGE_CORRUPT';
+        return false;
+      }
+      // Keep another identity/workspace's queue intact. Replacing the shared
+      // storage key with only this session's rows would silently lose drafts.
+      const others = saved.filter(row => !(row && row.account_id === accountId && row.workspace_id === workspaceId));
+      const records = Array.from(pending.values()).filter(x => x.status === STATUS.PENDING).map(x => ({
+        id:x.id,account_id:accountId,workspace_id:workspaceId,scope:x.scope,payload:x.payload,
+        base_revision:x.base_revision,status:x.status,created_at:x.created_at
+      }));
+      try { store.set(PENDING_DRAFTS_KEY, JSON.stringify(others.concat(records))); pendingPersistence='LOCAL_STORAGE'; return true; }
+      catch (_) { pendingPersistence='STORAGE_FAILED'; return false; }
+    }
+    function restorePendingDrafts() {
+      if (!accountId || !workspaceId) return;
+      let rows;
+      try { rows = readPersistedDrafts(); }
+      catch (error) {
+        pendingPersistence = error && error.message === 'SYNC_DRAFT_STORAGE_UNAVAILABLE' ?
+          'STORAGE_FAILED' : 'STORAGE_CORRUPT';
+        return;
+      }
+      for (const row of rows) {
+        // Records for other authenticated owners are deliberately invisible.
+        if (!row || row.account_id !== accountId || row.workspace_id !== workspaceId) continue;
+        if (!validPersistedDraft(row,workspaceId,accountId)) {
+          pending.clear();
+          pendingPersistence='STORAGE_CORRUPT';
+          return;
+        }
+        pending.set(row.id,{id:row.id,scope:clone(row.scope),payload:clone(row.payload),base_revision:row.base_revision,status:STATUS.PENDING,created_at:row.created_at});
+      }
+      pendingPersistence='LOCAL_STORAGE';
     }
 
     async function jsonResponse(response) {
@@ -150,7 +228,7 @@
         Array.from(reviewAttempts.values()).some(item => item.status !== STATUS.SYNCED);
     }
 
-    function setSessionToken(token, workspace = null, { discardPending = false } = {}) {
+    function setSessionToken(token, workspace = null, { discardPending = false, accountId: owner = null } = {}) {
       // Match durable PostgreSQL tokenHash's base64url-shaped input contract.
       // Never place control characters or whitespace into an Authorization header.
       if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(token))
@@ -164,11 +242,13 @@
       sessionEpoch += 1;
       sessionToken = token;
       workspaceId = workspace;
+      accountId = owner;
       pending.clear();
       reviewAttempts.clear();
       cursor = null;
       lastAcceptedFeedSequence = null;
       recentFeedEventIds.clear();
+      restorePendingDrafts();
       emit();
       return snapshot();
     }
@@ -194,7 +274,7 @@
         if (epoch !== sessionEpoch) throw new Error('SYNC_SESSION_CHANGED');
         if (!result.response.ok || typeof result.body.session_token !== 'string')
           throw new Error(result.body.error || 'AUTH_LOGIN_DENIED');
-        setSessionToken(result.body.session_token, workspaceId);
+        setSessionToken(result.body.session_token, workspaceId, {accountId:authSubject});
         return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
       } finally {
         loginInFlight = false;
@@ -235,6 +315,7 @@
       sessionEpoch += 1;
       sessionToken = null;
       workspaceId = null;
+      accountId = null;
       cursor = null;
       lastAcceptedFeedSequence = null;
       recentFeedEventIds.clear();
@@ -265,8 +346,9 @@
       if (!validBusinessDate(scope.business_date))
         throw new Error('SYNC_SCOPE_INVALID');
       const id = newDraftId();
-      const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING };
+      const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING, created_at:new Date().toISOString() };
       pending.set(id, item);
+      persistPendingDrafts();
       emit();
       return Object.freeze(clone(item));
     }
@@ -285,6 +367,10 @@
       if (!sessionToken) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
       if (workspaceId !== null && item.scope.workspace_id !== workspaceId)
         return setStatus(item, STATUS.BLOCKED, 'SYNC_WORKSPACE_MISMATCH');
+      // A login-proven identity must durably retain the exact intent before a
+      // network attempt. Without that, a lost ACK could turn into silent loss.
+      if (accountId && !persistPendingDrafts())
+        return setStatus(item, STATUS.PENDING, 'SYNC_LOCAL_PERSISTENCE_REQUIRED');
       const epoch = sessionEpoch;
       draftFlights.add(id);
       try {
@@ -302,7 +388,9 @@
         // Keep the same durable-on-server idempotency key for an explicit retry.
         if (result.response.status >= 500)
           return setStatus(item, STATUS.PENDING, 'SYNC_DRAFT_RECEIPT_UNCERTAIN');
-        if (!result.response.ok) return setStatus(item, STATUS.BLOCKED, result.body.error || 'SYNC_SERVER_REJECTED');
+        // A server-side rejection is not a verified receipt. Keep the original
+        // idempotency key and payload available for an explicit, safe retry.
+        if (!result.response.ok) return setStatus(item, STATUS.PENDING, result.body.error || 'SYNC_SERVER_REJECTED');
         // A receipt for another scope must never mark this draft as committed.
         const scopeKey = [item.scope.workspace_id,item.scope.partner_id,
           item.scope.business_date,item.scope.region].join(':');
@@ -315,7 +403,7 @@
             !verifiedFeedSequence(result.body.feed_seq) ||
             !Number.isSafeInteger(result.body.new_revision) ||
             result.body.new_revision !== item.base_revision + 1)
-          return setStatus(item, STATUS.BLOCKED, 'SYNC_ACK_UNVERIFIED');
+          return setStatus(item, STATUS.PENDING, 'SYNC_ACK_UNVERIFIED');
         item.server_result = clone(result.body);
         item.server_revision = result.body.new_revision;
         return setStatus(item, STATUS.SYNCED);
@@ -658,16 +746,13 @@
     }
 
     function snapshot() {
-      const volatileUnsentCount=Array.from(pending.values())
-        .filter(item=>item.status!==STATUS.SYNCED).length+
-        Array.from(reviewAttempts.values()).filter(item=>item.status!==STATUS.SYNCED).length;
+      const draftUnsentCount=Array.from(pending.values()).filter(item=>item.status!==STATUS.SYNCED).length;
+      const reviewUnsentCount=Array.from(reviewAttempts.values()).filter(item=>item.status!==STATUS.SYNCED).length;
+      const volatileUnsentCount=(pendingPersistence==='LOCAL_STORAGE'?0:draftUnsentCount)+reviewUnsentCount;
       return Object.freeze({
         authenticated: Boolean(sessionToken), cursor, workspace_id: workspaceId,
         session_epoch: sessionEpoch, // Nonsecret UI signal: clear old identity's read-only audit history.
-        // Financial drafts are only held in this JavaScript process. A browser
-        // reload/close can destroy them; these fields let the UI warn before
-        // data loss WITHOUT falsely claiming any local/offline persistence.
-        draft_persistence: 'MEMORY_ONLY',
+        draft_persistence: pendingPersistence,
         volatile_unsent_count: volatileUnsentCount,
         reload_loss_risk: volatileUnsentCount>0,
         drafts: Object.freeze(Array.from(pending.values()).map(item => Object.freeze(clone(item)))),
@@ -679,5 +764,5 @@
     return Object.freeze({ login, logout, subscribe, setSessionToken, clearSession, queueDraft, syncDraft, reviewScope, pullChanges, readScope, listCounterparties, reconnect, verifyActor, inspectRecoveryReceipts, snapshot, STATUS });
   }
 
-  return Object.freeze({ STATUS, CURSOR_KEY, createSyncClient });
+  return Object.freeze({ STATUS, CURSOR_KEY, PENDING_DRAFTS_KEY, createSyncClient });
 }));

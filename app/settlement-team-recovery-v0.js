@@ -110,7 +110,7 @@ function sanitizeDrafts(drafts,actor){
     // field after decryption: never silently relabel it as create_draft.
     const keys=row&&typeof row==='object'&&!Array.isArray(row)?
       Object.keys(row):[];
-    const allowed=['id','status','scope','base_revision','payload','error','action'];
+    const allowed=['id','status','scope','base_revision','payload','error','action','created_at'];
     const scopeKeys=row&&row.scope&&typeof row.scope==='object'&&
       !Array.isArray(row.scope)?Object.keys(row.scope):[];
     const requiredScope=['workspace_id','partner_id','business_date','region'];
@@ -120,6 +120,8 @@ function sanitizeDrafts(drafts,actor){
        keys.some(key=>!allowed.includes(key))||
        (row.action!==undefined&&row.action!=='create_draft')||
        (row.error!==undefined&&typeof row.error!=='string')||
+       (row.created_at!==undefined&&
+        (typeof row.created_at!=='string'||!Number.isFinite(Date.parse(row.created_at))))||
        scopeKeys.length!==requiredScope.length||
        scopeKeys.some(key=>!requiredScope.includes(key))||
        !DRAFT_ID.test(row.id)||ids.has(row.id)||
@@ -141,7 +143,8 @@ function sanitizeDrafts(drafts,actor){
         workspace_id:actor.workspace_id,partner_id:row.scope.partner_id,
         business_date:row.scope.business_date,region:row.scope.region
       },
-      base_revision:row.base_revision,payload:verifiedJson(row.payload)
+      base_revision:row.base_revision,payload:verifiedJson(row.payload),
+      ...(row.created_at===undefined?{}:{created_at:row.created_at})
     };
   });
   return items;
@@ -233,12 +236,14 @@ async function open({envelope,actor,passphrase,cryptoProvider}={}){
      content.kind!==KIND||!Array.isArray(content.items))
     deny('TEAM_RECOVERY_DRAFT_INVALID');
   const recoveredKeys='base_revision|id|original_status|payload|scope';
+  const recoveredWithTimestampKeys='base_revision|created_at|id|original_status|payload|scope';
   const reconstructed=content.items.map(x=>{
     if(!x||typeof x!=='object'||Array.isArray(x)||
-       Object.keys(x).sort().join('|')!==recoveredKeys)
+       ![recoveredKeys,recoveredWithTimestampKeys].includes(Object.keys(x).sort().join('|')))
       deny('TEAM_RECOVERY_DRAFT_INVALID');
     return {id:x.id,status:x.original_status,scope:x.scope,
-      base_revision:x.base_revision,payload:x.payload};
+      base_revision:x.base_revision,payload:x.payload,
+      ...(x.created_at===undefined?{}:{created_at:x.created_at})};
   });
   const items=sanitizeDrafts(reconstructed,who).map(item=>deepFreeze({
     ...item,status:'QUARANTINED',auto_retry:false
