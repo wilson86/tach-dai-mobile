@@ -45,6 +45,7 @@ async function main(){
   a.input.value=original;a.run();
   const rows=a.output.value.split("\n");
   assert.equal(rows.length,18,"C(4,2) x C(3,2)=18 exposures");
+  assert.equal(new Set(rows).size,18,"all 18 number/station pairs unique");
   assert.equal(new Set(rows.map(x=>x.match(/(\d{2} \d{2}) dx/)[1])).size,6);
   assert.deepEqual(rows.slice(0,3),["tp la 28 82 dx 1n","tp bp 28 82 dx 1n","la bp 28 82 dx 1n"]);
   assert.ok(a.records().every(r=>r.sourceLine===1),"physical source line preserved");
