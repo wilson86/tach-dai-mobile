@@ -53,7 +53,7 @@
       <div id="dvSchedule" class="schedule">Đang nạp engine 6ce6…</div>
     </div>
     <div class="card">
-      <div class="label">Nhập tin / nguyên đoạn chat</div>
+      <div class="label" id="dvInputLabel">Nhập tin / nguyên đoạn chat</div>
       <textarea id="dvInput" spellcheck="false" autocapitalize="off" autocomplete="off" placeholder="Ví dụ: 3d 12 32 42 52 dx5n"></textarea>
       <div class="actions">
         <button id="dvRun" class="action primary">Kiểm tra + Đá Vòng</button>
@@ -222,6 +222,8 @@ async function runDaVong(){
     const d=parseLocalDate($('dvDate').value||localDateISO()), stations=w.getSchedule(region,d)||[];
     const result=KTS_UNIFIED.transformDaVongText(source,engineApi(w),region,stations);
     if(!result.ok) throw Error(result.error||'DA_VONG_FAILED');
+    if(typeof window.KTS_DV_UI?.noteGeneratedSource!=='function')throw Error('DAVONG_SOURCE_PROVENANCE_NOT_READY');
+    window.KTS_DV_UI.noteGeneratedSource(result.blocks,source);
     $('dvOutput').value=result.display_output||result.output;
     $('dvResultLabel').textContent=`Kết quả (${result.outputs.length})`;
     setDvStatus(`Đã tách · ${result.outputs.length} tin · ${result.group_count||0} nhóm đá${wasChat?' · đã lọc chat':''}`,'ok');
