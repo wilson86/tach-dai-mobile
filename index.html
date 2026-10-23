@@ -923,10 +923,66 @@ function auditMoneyConservation(sourceText,outputs,region=null){
   });
   return {status:rows.every(row=>row.ok)?"PASS":"FAIL",rows};
 }
+
+function contextualDaChunks(chunks,selector,region){
+  // On MN/MT 2d/3d, DA is a pair wager with full stake (DX semantics).
+  // Keep ordinary B/DD/etc. as separate chunks; never multiply their money.
+  if(region==="mb"||(selector!=="2d"&&selector!=="3d"))return chunks;
+  const result=[];
+  for(const chunk of chunks){
+    const toks=chunk.trim().split(/\s+/).filter(Boolean);
+    let i=0;
+    while(i<toks.length&&isNumberToken(toks[i])&&!isBetType(toks[i]))i++;
+    if(!i){result.push(chunk);continue;}
+    const prefix=toks.slice(0,i).join(" "),parts=[];
+    let kind=null,body=[];
+    for(;i<toks.length;){
+      const compact=splitCompactBetToken(toks[i]);
+      const bet=compact?compact[0]:toks[i];
+      if(!isBetType(bet)){throw Error("KHÔNG NHẬN RA CƯỢC TRONG NHÓM ĐÁ");}
+      const nextKind=/^(?:da|đá|đa)$/iu.test(bet)?"pair":"other";
+      if(kind!==null&&nextKind!==kind){parts.push(prefix+" "+body.join(" "));body=[];}
+      kind=nextKind;
+      if(compact){body.push(toks[i]);i++;}
+      else{
+        if(!isMoneyToken(toks[i+1]||""))throw Error("THIẾU TIỀN SAU CƯỢC ĐÁ");
+        body.push(toks[i],toks[i+1]);i+=2;
+      }
+    }
+    if(body.length)parts.push(prefix+" "+body.join(" "));
+    result.push(...parts);
+  }
+  return result;
+}
+function isContextualDaPair(chunk,selector,region){
+  if(region==="mb"||(selector!=="2d"&&selector!=="3d"))return false;
+  const groups=parseBetPayloadAst(chunk);
+  return groups.length>0&&groups.every(g=>g.bets.length>0&&g.bets.every(b=>/^(?:da|đá|đa)$/iu.test(b.selector)));
+}
+function expandPairNumberChunks(chunk){
+  const tokens=String(chunk||"").trim().split(/\s+/).filter(Boolean);
+  let i=0;
+  while(i<tokens.length&&isNumberToken(tokens[i])&&!isBetType(tokens[i]))i++;
+  const numbers=tokens.slice(0,i);
+  if(numbers.length<3)return [chunk]; // the already-valid two-number DX case remains identical
+  if(numbers.length>40)throw Error("QUÁ NHIỀU SỐ ĐÁ: cần chia nhóm nhỏ để kiểm tra");
+  if(numbers.some(n=>!/^[0-9]{2}$/u.test(n)))
+    throw Error("SỐ ĐÁ PHẢI ĐỦ HAI CHỮ SỐ (01, 02...)");
+  if(new Set(numbers).size!==numbers.length)throw Error("TRÙNG SỐ TRONG NHÓM ĐÁ");
+  const suffix=tokens.slice(i).join(" ");
+  if(!suffix)throw Error("THIẾU LOẠI CƯỢC VÀ TIỀN ĐÁ");
+  const pairs=[];
+  for(let a=0;a<numbers.length-1;a++)
+    for(let b=a+1;b<numbers.length;b++)
+      pairs.push(numbers[a]+" "+numbers[b]+" "+suffix);
+  return pairs;
+}
+
 function expandChunk(selector,chunk,region,stations){
   if(!stations.length) return [`${selector} ${chunk}`];
   let main=stations.slice(0,2),aux=stations.slice(2);
-  const kind=betKind(chunk);
+  const contextualPair=isContextualDaPair(chunk,selector,region);
+  const kind=contextualPair?"dx":betKind(chunk);
 
   if(selector==="2dphu"){
     if(stations.length<3) throw new Error("Ngày này không có đủ 2 đài phụ.");
@@ -962,7 +1018,7 @@ function expandChunk(selector,chunk,region,stations){
     // the canonical ordered pair so every consumer can validate its two
     // station identities without reinterpreting `2d` from calendar position.
     const explicitDx=/(?:^|\s)(?:dx|đx)(?=\s|\d)/iu.test(chunk);
-    if(explicitDx) return [`${main[0][0]} ${main[1][0]} ${chunk}`];
+    if(explicitDx||contextualPair) return expandPairNumberChunks(chunk).map(c=>`${main[0][0]} ${main[1][0]} ${c}`);
     return [`2d ${chunk}`];
   }
   if(stations.length<3) return [`${selector} ${chunk}`];
@@ -979,11 +1035,11 @@ function expandChunk(selector,chunk,region,stations){
     // a canonical accounting family but retain their total-to-distribute
     // business semantics.
     const explicitDx=/(?:^|\s)(?:dx|đx)(?=\s|\d)/iu.test(chunk);
-    if(explicitDx){
-      // DX is one unit stake per unordered station pair.  `canonicalPairs`
+    if(explicitDx||contextualPair){
+      // DX/contextual DA is one unit stake per unordered station pair.  `canonicalPairs`
       // has exactly C(N,2) unique pairs, in authority order, and is shared by
       // all 3d/4d dates rather than special-casing Sunday.
-      return canonicalPairs.map(pair=>`${pair} ${chunk}`);
+      return expandPairNumberChunks(chunk).flatMap(c=>canonicalPairs.map(pair=>`${pair} ${c}`));
     }
     const normalPrefixes=["2d",...aux.map(x=>x[0])];
     return splitChunkMoneyExactly(chunk,normalPrefixes.length).map((part,index)=>part?`${normalPrefixes[index]} ${part}`:null).filter(Boolean);
@@ -1029,7 +1085,7 @@ function processLine(line,region,stations){
     }
     return [s];
   }
-  const chunks=splitBetChunks(m[2].trim());
+  const chunks=contextualDaChunks(splitBetChunks(m[2].trim()),m[1],region);
   if(!chunks.length)return [s];
   const out=[];
   for(const c of chunks) out.push(...expandChunk(m[1],c,region,stations));
