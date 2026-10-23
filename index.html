@@ -1213,7 +1213,7 @@ function renderLedgerWork(){
   reference.placeholder="";
   const remaining=remainingOriginalSourceLines(ledger);
   reference.value=remaining===null?ledger.origin:remaining;
-  reference.setAttribute("aria-label",remaining===null?"Tin nguồn gốc, ánh xạ chưa xác minh":"Nguồn còn cược, chỉ tham chiếu");
+  reference.setAttribute?.("aria-label",remaining===null?"Tin nguồn gốc, ánh xạ chưa xác minh":"Nguồn còn cược, chỉ tham chiếu");
   const note=$("ledgerWorkStatus");
   if(note)note.textContent=remaining===null?
     "Chưa xác minh được dòng nguồn của ledger cũ. Giữ nguyên tin gốc để bảo toàn cược; chỉ Copy/Cắt tại Kết quả.":
