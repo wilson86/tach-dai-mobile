@@ -1,6 +1,7 @@
 "use strict";
 const assert=require("node:assert/strict");
 const fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
+const U=require("../app/unified-core.js");
 const src=fs.readFileSync(path.join(__dirname,"../app/unified-core.js"),"utf8");
 const from=src.indexOf(";(function installDaVongCheckboxUx(){");
 const until=src.indexOf("// Unified source-input authority:",from);
@@ -60,11 +61,19 @@ function setup(existingStorage=new Map(),clipboardFailure=false){
  const navigator={clipboard:{async writeText(v){if(clipboardFailure)throw Error("denied");written=String(v)}}};
  const ctx={document:doc,localStorage:store,sessionStorage:{getItem(){return sample}},
   navigator,console,Date,Math,JSON,Set,Map,Array,String,RegExp,Error,
-  window:null};ctx.window=ctx;
+  window:null,KTS_UNIFIED:U};ctx.window=ctx;
  // The app shell's business transform runs before this UI's post-run observer.
  nodes.dvRun.addEventListener("click",()=>{
    if(ctx.KTS_DV_UI?.beforeRun?.())return;
-   nodes.dvOutput.value=nodes.dvInput.value?detailed:"";
+   if(nodes.dvInput.value){
+     const result=U.transformDaVongText(nodes.dvInput.value,{
+       normalizeInput:s=>String(s).trim(),validateCheckOnlyLine(){},
+       processLine:s=>[s]
+     },"mn",[]);
+     assert.equal(result.ok,true);
+     ctx.KTS_DV_UI?.noteGeneratedSource?.(result.blocks,nodes.dvInput.value);
+     nodes.dvOutput.value=result.display_output;
+   }else nodes.dvOutput.value="";
  });
  nodes.dvClear.addEventListener("click",()=>{
   ctx.KTS_DV_UI?.beforeClear?.();nodes.dvInput.value="";nodes.dvOutput.value="";
@@ -91,11 +100,11 @@ async function main(){
  await x.nodes.dvCutSelection.click();
  assert.equal(x.getCopied(),originalRows[0],"CUT clipboard only first selected wager");
  assert.equal(x.nodes.dvOutput.value,originalRows.slice(1).join("\n"));
- assert.equal(x.nodes.dvWorkingPanel.style.display,"","upper remaining rows are visible");
- assert.equal(x.nodes.dvInput.style.display,"none","raw input hidden when it cannot express exact survivors");
- assert.equal(x.nodes.dvWorkingOrigin.textContent,sample,"immutable original available for review");
- assert.equal(x.nodes.dvWorkingRows.children.length,3,"working source retains semantic groups");
- assert.ok(!x.nodes.dvWorkingRows.textContent.includes("[[KTS_EXACT_OUTPUT_LEDGER"));
+ assert.equal(x.nodes.dvWorkingPanel.style.display,"none","duplicate result-row pane remains hidden");
+ assert.equal(x.nodes.dvInput.style.display,"none","raw input hidden after source/result mapping");
+ assert.equal(x.nodes.dvRemainingSource.value,sample,"working source keeps line with live wagers");
+ assert.equal(x.nodes.dvOriginalSourceText.textContent,sample,"immutable original separately available");
+ assert.equal(x.nodes.dvSourceCopy.disabled,true,"raw copy blocked after partial Cut");
  const stored=JSON.parse(x.store.getItem("KTS_DAVONG_WORKING_ROWS_V1"));
  assert.equal(stored.app,"tach-dai-davong");
  assert.equal(stored.rows.filter(r=>r.alive).length,5);
@@ -112,6 +121,7 @@ async function main(){
  const loaded=setup(x.backing);
  assert.equal(loaded.nodes.dvOutput.value,originalRows.slice(1).join("\n"),"offline reload restores exact remaining bets");
  assert.equal(loaded.nodes.dvInput.style.display,"none");
+ assert.equal(loaded.nodes.dvRemainingSource.value,sample);
  await loaded.nodes.dvUndo.click();
  assert.equal(loaded.nodes.dvOutput.value,originalRows.join("\n"),"persisted Undo restores full output");
  await loaded.nodes.dvClear.click();
@@ -130,27 +140,24 @@ async function main(){
  assert.equal(selectedGroup.nodes.dvTapResultList.children.length,2);
  await selectedGroup.nodes.dvUndo.click();
  assert.equal(selectedGroup.nodes.dvOutput.value,originalRows.join("\n"));
- // Selecting a row in the UPPER remaining-wager panel must select the
- // identical row below and allow Copy/Cut with no silent source regeneration.
- const upper=setup();await upper.nodes.dvRun.click();await upper.wait();
- let first=upper.nodes.dvTapResultList.children[0].children[1].children[0];
+ // The lower result is the sole authoritative Cut/Copy selection surface.
+ const lower=setup();await lower.nodes.dvRun.click();await lower.wait();
+ let first=lower.nodes.dvTapResultList.children[0].children[1].children[0];
  first.checked=true;first.emit("change");
- await upper.nodes.dvCutSelection.click();
- const working=upper.nodes.dvWorkingRows.children[0].children[1].children[0];
- working.checked=true;working.emit("change");
- assert.match(upper.nodes.dvTapSummary.textContent,/1\/5 kết quả/u);
- await upper.nodes.dvWorkingCopy.click();
- assert.equal(upper.getCopied(),originalRows[1]);
- await upper.nodes.dvCopyOriginal.click();
- assert.equal(upper.getCopied(),sample,"read-only original Copy never returns JSON");
- await upper.nodes.dvWorkingCut.click();
- assert.equal(upper.nodes.dvOutput.value,originalRows.slice(2).join("\n"));
- await upper.nodes.dvRun.click();await upper.wait();
- assert.equal(upper.nodes.dvOutput.value,originalRows.slice(2).join("\n"));
- await upper.nodes.dvUndo.click();
- assert.equal(upper.nodes.dvOutput.value,originalRows.slice(1).join("\n"));
- await upper.nodes.dvUndo.click();
- assert.equal(upper.nodes.dvOutput.value,originalRows.join("\n"));
+ await lower.nodes.dvCutSelection.click();
+ let survivor=lower.nodes.dvTapResultList.children[0].children[1].children[0];
+ survivor.checked=true;survivor.emit("change");
+ assert.match(lower.nodes.dvTapSummary.textContent,/1\/5 kết quả/u);
+ await lower.nodes.dvCopy.click();
+ assert.equal(lower.getCopied(),originalRows[1]);
+ await lower.nodes.dvCutSelection.click();
+ assert.equal(lower.nodes.dvOutput.value,originalRows.slice(2).join("\n"));
+ await lower.nodes.dvRun.click();await lower.wait();
+ assert.equal(lower.nodes.dvOutput.value,originalRows.slice(2).join("\n"));
+ await lower.nodes.dvUndo.click();
+ assert.equal(lower.nodes.dvOutput.value,originalRows.slice(1).join("\n"));
+ await lower.nodes.dvUndo.click();
+ assert.equal(lower.nodes.dvOutput.value,originalRows.join("\n"));
 
  // Denied clipboard permissions must keep the source and result atomic.
  const denied=setup(new Map(),true);
