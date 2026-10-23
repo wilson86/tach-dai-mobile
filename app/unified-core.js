@@ -494,16 +494,32 @@
     if(select)select.textContent=liveRows.length&&pickedRows.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
     const result=$('dvOutput');
     if(result)result.value=liveRows.map(r=>r.text).join('\n');
-    // A partially cut derived wager may have no replayable source form.
-    // Keep the operator's ORIGINAL source visible, read-only, and preserve the
-    // exact surviving output rows solely in the mode-local ledger/result pane.
+    // The authoritative original remains in #dvInput for mode-isolated
+    // persistence and Undo. A separate read-only working-source display
+    // removes lines whose entire result set has been cut, never recomputes
+    // wagers, and never publishes partial source to sibling modes.
     const protectedSource=ledgerActive&&liveRows.length>0;
-    const sourceInput=$('dvInput');
-    sourceInput.style.display='';
+    const working=protectedSource?remainingSource():null;
+    const view=$('dvRemainingSource'),sourceInput=$('dvInput');
+    const verified=protectedSource&&working!==null;
+    sourceInput.style.display=verified?'none':'';
     sourceInput.readOnly=protectedSource;
+    if(view){view.style.display=verified?'':'none';view.value=verified?working.text:'';}
+    const label=$('dvInputLabel');
+    if(label)label.textContent=verified?'Nguồn còn cược — chỉ tham chiếu':'Nhập tin / nguyên đoạn chat';
     $('dvSourceCut').disabled=protectedSource;
+    $('dvSourceCopy').disabled=protectedSource;
+    $('dvSelectAllInput').disabled=protectedSource;
     const sourceNote=$('dvSourceProtectedNote');
-    if(sourceNote)sourceNote.style.display=protectedSource?'':'none';
+    if(sourceNote){
+      sourceNote.style.display=protectedSource?'':'none';
+      sourceNote.textContent=verified?
+        'Dòng đã Cắt hết tự biến mất ở trên. Dòng còn cược có thể đã Cắt một phần; KHÔNG Copy/gửi lại tin nguồn. Chỉ dùng các dòng ở Kết quả bên dưới.' :
+        'Không xác minh được từng dòng nguồn với ledger cũ. Đang giữ nguyên bản gốc để tránh mất cược; chỉ Copy/Cắt ở Kết quả.';
+    }
+    const details=$('dvOriginalSourceDetails'),originalPre=$('dvOriginalSourceText');
+    if(details)details.style.display=protectedSource?'':'none';
+    if(originalPre)originalPre.textContent=originalChatText||origin;
     // Never clone RESULT row checkboxes into the SOURCE pane.
     const panel=$('dvWorkingPanel');
     if(panel)panel.style.display='none';
@@ -616,6 +632,19 @@
     referenceNote.textContent='Tin nguồn gốc (chỉ xem). Các cược còn lại và thao tác Cắt nằm ở khung Kết quả bên dưới. Không gửi lại nguyên tin gốc này.';
     referenceNote.style.display='none';
     input.parentNode.insertBefore(referenceNote,input.nextSibling);
+    const workingSource=document.createElement('textarea');
+    workingSource.id='dvRemainingSource';workingSource.readOnly=true;
+    workingSource.setAttribute('aria-label','Nguồn còn cược, chỉ tham chiếu');
+    workingSource.style.display='none';
+    input.parentNode.insertBefore(workingSource,input.nextSibling);
+    const originalDetails=document.createElement('details');
+    originalDetails.id='dvOriginalSourceDetails';
+    const originalSummary=document.createElement('summary');
+    originalSummary.textContent='Xem tin gốc ban đầu (chỉ đối chiếu)';
+    const originalPre=document.createElement('pre');originalPre.id='dvOriginalSourceText';
+    originalPre.style.whiteSpace='pre-wrap';
+    originalDetails.appendChild(originalSummary);originalDetails.appendChild(originalPre);
+    input.parentNode.insertBefore(originalDetails,input.nextSibling);
     swap('dvCutSelection',cut);
     swap('dvSelectAllOutput',toggleAll);
     swap('dvCopy',copyResult);
@@ -632,6 +661,7 @@
       status(ok?'Đã copy tin gốc':'Không thể copy tin gốc.',ok?'ok':'err');
     });
     $('dvSourceCopy').addEventListener('click',async()=>{
+      if(ledgerActive){status('Nguồn có cược đã Cắt, chỉ Copy ở Kết quả để tránh gửi trùng.','err');return;}
       const a=input.selectionStart??0,b=input.selectionEnd??0;
       const value=a<b?input.value.slice(a,b):input.value;
       const ok=await copy(value);
@@ -661,7 +691,7 @@
       if(ledgerActive){ledgerActive=false;persist();render();}
     });
     maybeRestore();render();
-    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize};
+    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize,noteGeneratedSource};
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
