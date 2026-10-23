@@ -12,8 +12,8 @@ const detailed="──── 12 đá (3) ────\n3d 12 32 dx5n\n3d 12 42 d
  "\n──── 32 đá (2) ────\n3d 32 42 dx5n\n3d 32 52 dx5n\n"+
  "\n──── 42 đá (1) ────\n3d 42 52 dx5n";
 const originalRows=[
- "3d 12 32 dx5n","3d 12 42 dx5n","3d 12 52 dx5n",
- "3d 32 42 dx5n","3d 32 52 dx5n","3d 42 52 dx5n"];
+ "3d 12 32 dx 5n","3d 12 42 dx 5n","3d 12 52 dx 5n",
+ "3d 32 42 dx 5n","3d 32 52 dx 5n","3d 42 52 dx 5n"];
 function setup(existingStorage=new Map(),clipboardFailure=false){
  const nodes=Object.create(null);
  function element(tag="div",id=""){
