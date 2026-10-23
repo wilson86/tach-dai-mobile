@@ -1049,18 +1049,15 @@ function expandChunk(selector,chunk,region,stations){
   // here; 2d and Tách Đài Ngang retain their respective existing semantics.
   return prefixes.map(prefix=>`${prefix} ${chunk}`);
 }
-function expandExplicitStationPair(first,second,rest){
-  const chunks=splitBetChunks(rest);
+function expandExplicitStationPair(first,second,rest,region){
+  const chunks=contextualDaChunks(splitBetChunks(rest),"2d",region);
   if(!chunks.length) return [`${first} ${second} ${rest}`.trim()];
   const out=[];
   for(const chunk of chunks){
-    if(betKind(chunk)==="normal"){
-      // These are two explicit station exposures, not a horizontal owner
-      // allocation.  Preserve full money on each station.  A later deliberate
-      // owner cut must retain this station identity on every cut payload.
+    if(betKind(chunk)==="normal"&&!isContextualDaPair(chunk,"2d",region)){
       out.push(`${first} ${chunk}`,`${second} ${chunk}`);
     }else{
-      out.push(`${first} ${second} ${chunk}`);
+      out.push(...expandPairNumberChunks(chunk).map(c=>`${first} ${second} ${c}`));
     }
   }
   return out;
@@ -1081,7 +1078,7 @@ function processLine(line,region,stations){
         return [`${toks[0]} ${rest}`.trim()];
       }
       const rest=toks.slice(2).join(" ").trim();
-      return expandExplicitStationPair(toks[0],toks[1],rest);
+      return expandExplicitStationPair(toks[0],toks[1],rest,region);
     }
     return [s];
   }
@@ -1101,8 +1098,11 @@ function validateBatch(text,region,stations){
   const errors=[];
   text.split(/\r?\n/).forEach((raw,idx)=>{
     raw=raw.trim(); if(!raw || isStandaloneSeparator(raw))return;
-    try{validateCheckOnlyLine(raw,region,stations);}
-    catch(e){errors.push({line:idx+1,msg:e.message,raw});}
+    try{
+      validateCheckOnlyLine(raw,region,stations);
+      // Preflight output expansion before any row is materialized: atomic HOLD.
+      processLine(raw,region,stations);
+    }catch(e){errors.push({line:idx+1,msg:e.message,raw});}
   });
   return errors;
 }
