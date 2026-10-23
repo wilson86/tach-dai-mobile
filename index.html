@@ -993,13 +993,14 @@ function expandPairNumberChunks(chunk){
   let i=0;
   while(i<tokens.length&&isNumberToken(tokens[i])&&!isBetType(tokens[i]))i++;
   const numbers=tokens.slice(0,i);
-  if(numbers.length<3)return [chunk]; // the already-valid two-number DX case remains identical
+  if(numbers.length<2)throw Error("CƯỢC ĐÁ CẦN ÍT NHẤT HAI SỐ ĐÚNG HAI CHỮ SỐ");
   if(numbers.length>40)throw Error("QUÁ NHIỀU SỐ ĐÁ: cần chia nhóm nhỏ để kiểm tra");
   if(numbers.some(n=>!/^[0-9]{2}$/u.test(n)))
     throw Error("SỐ ĐÁ PHẢI ĐỦ HAI CHỮ SỐ (01, 02...)");
   if(new Set(numbers).size!==numbers.length)throw Error("TRÙNG SỐ TRONG NHÓM ĐÁ");
   const suffix=tokens.slice(i).join(" ");
   if(!suffix)throw Error("THIẾU LOẠI CƯỢC VÀ TIỀN ĐÁ");
+  if(numbers.length===2)return [chunk];
   const pairs=[];
   for(let a=0;a<numbers.length-1;a++)
     for(let b=a+1;b<numbers.length;b++)
