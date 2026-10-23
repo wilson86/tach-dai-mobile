@@ -16,7 +16,7 @@ const readLedger=(s)=>{if(!s.startsWith(prefix))return null;
   catch(_){return false}};
 const elements=new Map();
 function $(id){if(!elements.has(id))elements.set(id,{
-  id,value:"",placeholder:"",textContent:"",disabled:false,readOnly:false,style:{display:""},
+  id,value:"",placeholder:"",textContent:"",disabled:false,readOnly:false,style:{display:""},setAttribute(){},
 });return elements.get(id)}
 function scopedFunction(code,start,end,name,ctx){
   const a=code.indexOf(start),b=code.indexOf(end,a+start.length);
@@ -24,7 +24,7 @@ function scopedFunction(code,start,end,name,ctx){
   return new Function("scope","with(scope){\n"+code.slice(a,b)+"\nreturn "+name+";}")(ctx);
 }
 const renderCtx={inputEl:$("input"),$,EXACT_OUTPUT_LEDGER_PREFIX:prefix,
-  parseExactOutputLedger:readLedger,ledgerCheckboxBindings:[{index:0}]};
+  parseExactOutputLedger:readLedger,remainingOriginalSourceLines:()=>null,ledgerCheckboxBindings:[{index:0}]};
 const render=scopedFunction(source,"function renderLedgerWork(){",
  "\nasync function copySourceView(){","renderLedgerWork",renderCtx);
 assert.match(html,/<textarea id="ledgerSourceView" readonly/);
