@@ -57,7 +57,7 @@ async function main(){
   assert.equal(els.ledgerWork.style.display,"");
   // Partially Cut source remains as reference, NOT a second result selector.
   assert.equal(els.ledgerSourceView.value,original);
-  assert.equal(els.ledgerWorkRows.style.display,"none");
+  assert.match(html,/id="ledgerWorkRows" style="display:none"/u,"no duplicate upper result list");
   assert.equal(els.ledgerWorkCopy.disabled,true);
   assert.equal(els.ledgerWorkCut.disabled,true);
   assert.equal(els.ledgerWorkOrigin.textContent,original);
