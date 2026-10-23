@@ -381,7 +381,9 @@
     for(let i=0;i<originals.length;i++){
       const source=originals[i].trim();
       if(!source)continue;
-      const parsed=KTS_UNIFIED.expandDxOnlyFallback(source);
+      let parsed;
+      try{parsed=KTS_UNIFIED.expandDxOnlyFallback(source)}
+      catch(_){return} // Invalid/unrecognizable legacy lineage remains fully protected.
       if(!parsed||!parsed.outputs?.length)return;
       expected.push(...parsed.outputs.map(text=>({text,line:i+1})));
     }
