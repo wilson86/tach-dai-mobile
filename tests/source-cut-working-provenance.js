@@ -9,7 +9,7 @@ const b=src.indexOf("async function copySourceView(",a);
 assert.ok(a>0&&b>a,"working source renderer missing");
 const nodes={};
 function $(id){return nodes[id]||(nodes[id]={
-  value:"",textContent:"",placeholder:"",disabled:false,style:{},attributes:{},
+  value:"",textContent:"",placeholder:"",disabled:false,readOnly:false,style:{},attributes:{},
   setAttribute(k,v){this.attributes[k]=v}
 })}
 const input=$("input");
