@@ -878,7 +878,7 @@ function pairExposureAdjustments(line,region){
   const adjustments={};
   for(const group of groups){
     const count=group.numbers.length;
-    const numericPairs=count<2?1:count*(count-1)/2;
+    const numericPairs=String(region||"").toLowerCase()==="mb"?1:(count<2?1:count*(count-1)/2);
     for(const bet of group.bets){
       const literalDx=/^(?:dx|đx)$/iu.test(bet.selector);
       const contextualDa=(String(region||"").toLowerCase()!=="mb"&&!!m&&
