@@ -447,20 +447,19 @@
     if(select)select.textContent=liveRows.length&&pickedRows.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
     const result=$('dvOutput');
     if(result)result.value=liveRows.map(r=>r.text).join('\n');
+    // A partially cut derived wager may have no replayable source form.
+    // Keep the operator's ORIGINAL source visible, read-only, and preserve the
+    // exact surviving output rows solely in the mode-local ledger/result pane.
+    const protectedSource=ledgerActive&&liveRows.length>0;
+    const sourceInput=$('dvInput');
+    sourceInput.style.display='';
+    sourceInput.readOnly=protectedSource;
+    $('dvSourceCut').disabled=protectedSource;
+    const sourceNote=$('dvSourceProtectedNote');
+    if(sourceNote)sourceNote.style.display=protectedSource?'':'none';
+    // Never clone RESULT row checkboxes into the SOURCE pane.
     const panel=$('dvWorkingPanel');
-    if(panel){
-      panel.style.display=ledgerActive&&liveRows.length?'':'none';
-      $('dvInput').style.display=ledgerActive&&liveRows.length?'none':'';
-      for(const id of ['dvSourceCopy','dvSourceCut','dvSelectAllInput'])
-        $(id).style.display=ledgerActive&&liveRows.length?'none':'';
-      if(ledgerActive&&liveRows.length){
-        groupList($('dvWorkingRows'),'source',true);
-        $('dvWorkingOrigin').textContent=originalChatText||origin;
-        $('dvWorkingSelect').textContent=liveRows.length&&pickedRows.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
-        $('dvWorkingCopy').disabled=pickedRows.length===0;
-        $('dvWorkingCut').disabled=pickedRows.length===0;
-      }
-    }
+    if(panel)panel.style.display='none';
     $('dvUndo').disabled=undoStack.length===0;
   }
   async function cut(){
@@ -563,6 +562,12 @@
       '<details><summary>Xem tin gốc ban đầu</summary><pre id="dvWorkingOrigin"></pre>'+
       '<button type="button" class="action secondary" id="dvCopyOriginal">Copy tin gốc</button></details>';
     input.parentNode.insertBefore(panel,input.nextSibling);
+    const referenceNote=document.createElement('div');
+    referenceNote.id='dvSourceProtectedNote';
+    referenceNote.className='dv-working-note';
+    referenceNote.textContent='Tin nguồn gốc (chỉ xem). Các cược còn lại và thao tác Cắt nằm ở khung Kết quả bên dưới. Không gửi lại nguyên tin gốc này.';
+    referenceNote.style.display='none';
+    input.parentNode.insertBefore(referenceNote,input.nextSibling);
     swap('dvCutSelection',cut);
     swap('dvSelectAllOutput',toggleAll);
     swap('dvCopy',copyResult);
