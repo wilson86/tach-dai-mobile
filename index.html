@@ -859,6 +859,41 @@ function moneyStakes(text){
   for(const {key,value} of moneyStakeOccurrences(text)) totals[key]=(totals[key]||0)+value;
   return totals;
 }
+
+function pairExposureAdjustments(line,region){
+  // Independent expected-money oracle: do not infer exposure from output rows.
+  let source=normalizeInput(line);
+  source=source.replace(/^(?:mn|mt|mb)\s+/iu,"");
+  const m=source.match(/^(2d|3d|4d)\s+(.+)$/iu);
+  let rest=m?m[2]:source;
+  if(!m){
+    const parts=source.split(/\s+/);
+    if(parts.length>2&&!/^\d/.test(parts[0])&&!/^\d/.test(parts[1]))
+      rest=parts.slice(2).join(" ");
+    else if(parts.length>1&&!/^\d/.test(parts[0]))rest=parts.slice(1).join(" ");
+  }
+  let groups=[];
+  try{groups=parseBetPayloadAst(rest)}catch(_){return {};}
+  const adjustments={};
+  for(const group of groups){
+    const count=group.numbers.length;
+    const numericPairs=count<2?1:count*(count-1)/2;
+    for(const bet of group.bets){
+      const literalDx=/^(?:dx|đx)$/iu.test(bet.selector);
+      const contextualDa=(String(region||"").toLowerCase()!=="mb"&&!!m&&
+        /^(?:2d|3d)$/iu.test(m[1])&&/^(?:da|đá|đa)$/iu.test(bet.selector));
+      if(!literalDx&&!contextualDa)continue;
+      const stationCount=m?(m[1].toLowerCase()==="3d"?3:m[1].toLowerCase()==="4d"?6:1):1;
+      const factor=stationCount*numericPairs;
+      const key=canonicalMoneySelector(bet.selector);
+      const parsed=KTS_BUSINESS_ENGINE.parseMoney(bet.amount);
+      const value=parsed.halfUnits/2;
+      if(key&&factor>1)adjustments[key]=(adjustments[key]||0)+value*(factor-1);
+    }
+  }
+  return adjustments;
+}
+
 function auditMoneyConservation(sourceText,outputs,region=null){
   const input=moneyStakes(sourceText),output={};
   // Explicit 3d/4d DX is a unit stake on every unordered station pair.
@@ -866,18 +901,8 @@ function auditMoneyConservation(sourceText,outputs,region=null){
   // horizontal money allocation.
   String(sourceText||"").split(/\r?\n/).forEach(line=>{
     const mode=String(line).match(/\b([234])d\b/i),relativeAux=/\b2dphu\b/i.test(String(line)),tokens=String(line).split(/\s+/).filter(Boolean);
-    let dx;
-    for(let i=0;i<tokens.length;i++){
-      const compact=tokens[i].match(/^(?:dx|đx)(\d+(?:[.,]\d+)?)(?:n|d)?$/iu);
-      if(compact){dx=(dx||0)+Number(compact[1].replace(",","."));continue;}
-      if(/^(?:dx|đx)$/iu.test(tokens[i])){const money=parseMoneyToken(tokens[i+1]||"");if(money){dx=(dx||0)+money.value;i++;}}
-    }
-    if((mode||relativeAux)&&dx!==undefined){
-      const n=relativeAux?2:Number(mode[1]), stationPairs=n*(n-1)/2;
-      // DX keeps its complete number group atomically.  Only topology/station
-      // exposure multiplies stake; number count never creates pair children.
-      input.DX=(input.DX||0)+dx*((relativeAux?2:stationPairs)-1);
-    }
+    for(const [key,delta] of Object.entries(pairExposureAdjustments(line,region)))
+      input[key]=(input[key]||0)+delta;
     // A normal generic 2d/3d/4d wager is an intentional full-stake exposure
     // on every resolved station.  This is not horizontal money allocation
     // (which belongs exclusively to Tách Đài Ngang or an explicit owner cut).
@@ -889,7 +914,9 @@ function auditMoneyConservation(sourceText,outputs,region=null){
     if((mode||relativeAux) && !mbHorizontalCut){
       const rest=String(line).replace(/^\s*(?:2dphu|[234]d)\s+/iu,"");
       const normalOccurrences=[];
-      for(const chunk of splitBetChunks(rest)) if(betKind(chunk)==="normal") normalOccurrences.push(...moneyStakeOccurrences(chunk));
+      for(const chunk of contextualDaChunks(splitBetChunks(rest),mode?mode[0].toLowerCase():"2d",region))
+        if(betKind(chunk)==="normal"&&!isContextualDaPair(chunk,mode?mode[0].toLowerCase():"2d",region))
+          normalOccurrences.push(...moneyStakeOccurrences(chunk));
       for(const selector of new Set(normalOccurrences.map(x=>x.key))){
         const sourceOccurrences=normalOccurrences.filter(x=>x.key===selector);
         // Count canonical materialized selector occurrences, not equal money
@@ -909,7 +936,8 @@ function auditMoneyConservation(sourceText,outputs,region=null){
     if(explicitPair){
       const pairRest=String(line).trim().split(/\s+/).slice(2).join(" ");
       const normalOccurrences=[];
-      for(const chunk of splitBetChunks(pairRest)) if(betKind(chunk)==="normal") normalOccurrences.push(...moneyStakeOccurrences(chunk));
+      for(const chunk of contextualDaChunks(splitBetChunks(pairRest),"2d",region))
+        if(betKind(chunk)==="normal"&&!isContextualDaPair(chunk,"2d",region)) normalOccurrences.push(...moneyStakeOccurrences(chunk));
       // The scalar source stake is already present in `input`; add the second
       // identical station exposure so selector-scoped expected and actual maps
       // compare exactly (B, ĐẦU, ĐUÔI, XC independently).
