@@ -52,7 +52,9 @@
   .result-group-row span{min-width:0}
   #resultGroups:empty{display:none}
 
-  .ledger-work{background:#f3f8ff;border:1px solid #c1d4ef;border-radius:11px;padding:10px;margin:4px 0}
+  .ledger-work{background:transparent;border:0;border-radius:0;padding:0;margin:4px 0}
+  #ledgerSourceView{min-height:250px;background:#fff;user-select:text;-webkit-user-select:text}
+  #ledgerSourceView[readonly]{opacity:1;color:#111827;-webkit-text-fill-color:#111827}
   .ledger-work-title{font-size:15px;font-weight:800;margin-bottom:6px}
   .ledger-work-note{font-size:12px;line-height:1.5;color:#52647b;margin-bottom:8px}
   .ledger-work-list{border:1px solid #dbe5f3;border-radius:9px;overflow:hidden}
@@ -89,7 +91,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.31</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.32</span></div>
 
   <div class="card">
     <div class="controls">
@@ -123,15 +125,19 @@
     <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
       placeholder="Dán tin hoặc đoạn chat vào đây..."></textarea>
     <div id="ledgerWork" class="ledger-work" style="display:none">
-      <div class="ledger-work-title">Phần cược còn lại — đã tách</div>
-      <div class="ledger-work-note">Chọn dòng để Copy/Cắt. Đây là kết quả đã tách, không phải cú pháp tin khách; tin gốc được giữ riêng.</div>
-      <div id="ledgerWorkRows" class="ledger-work-list"></div>
+      <div class="ledger-work-note" role="status">Tin nguồn gốc (chỉ xem). Phần cược chưa Cắt nằm ở khung Kết quả bên dưới; không gửi lại nguyên tin gốc này.</div>
+      <textarea id="ledgerSourceView" readonly spellcheck="false" aria-label="Tin nguồn gốc tham chiếu, chỉ đọc"></textarea>
       <div class="actions">
-        <button id="ledgerWorkSelect" class="secondary" type="button">Chọn tất cả</button>
-        <button id="ledgerWorkCopy" class="secondary" type="button">Copy đã chọn</button>
-        <button id="ledgerWorkCut" class="secondary" type="button">Cắt đã chọn</button>
+        <button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button>
       </div>
-      <details class="ledger-original"><summary>Xem tin gốc ban đầu</summary><pre id="ledgerWorkOrigin"></pre><button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button></details>
+      <!-- Legacy ledger controls intentionally inert. All result Copy/Cut/checkboxes stay in the RESULT pane. -->
+      <div id="ledgerWorkRows" style="display:none"></div>
+      <div class="actions" style="display:none">
+        <button id="ledgerWorkSelect" type="button" disabled>Chọn tất cả</button>
+        <button id="ledgerWorkCopy" type="button" disabled>Copy đã chọn</button>
+        <button id="ledgerWorkCut" type="button" disabled>Cắt đã chọn</button>
+      </div>
+      <pre id="ledgerWorkOrigin" style="display:none"></pre>
     </div>
 
 
@@ -1151,57 +1157,35 @@ function identifySemanticOutputGroups(line,region,stations,generated){
 
 
 function renderLedgerWork(){
-  const panel=$("ledgerWork"),list=$("ledgerWorkRows");
-  if(!panel||!list||typeof list.replaceChildren!=="function")return;
+  // Keep the exact-output ledger INTERNAL; never show its split rows as
+  // source text. A partial Cut can be unrepresentable as a replayable ticket.
+  const panel=$("ledgerWork"),reference=$("ledgerSourceView");
+  if(!panel||!reference)return;
   const raw=String(inputEl.value||"");
   const hasLedger=raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
   inputEl.style.display=hasLedger?"none":"";
   panel.style.display=hasLedger?"":"none";
-  // Raw-input action buttons are replaced by ledger row controls in this mode.
-  for(const id of ["sourceCopyBtn","sourceCutBtn","selectAllInputBtn"])$(id).style.display=hasLedger?"none":"";
+  for(const id of ["sourceCopyBtn","sourceCutBtn","selectAllInputBtn"])
+    $(id).style.display=hasLedger?"none":"";
+  reference.value="";
   if(!hasLedger)return;
   const ledger=parseExactOutputLedger(raw);
-  list.replaceChildren();
   ledgerCheckboxBindings.length=0;
+  for(const id of ["ledgerWorkSelect","ledgerWorkCopy","ledgerWorkCut"])
+    $(id).disabled=true; // Result selection belongs ONLY in the bottom pane.
   if(!ledger){
-    const warning=document.createElement("div");
-    warning.className="ledger-work-note";
-    warning.textContent="Ledger không hợp lệ hoặc không khớp ứng dụng, ngày, miền hay engine. Không gửi dữ liệu này như tin khách.";
-    list.appendChild(warning);
+    reference.placeholder="Ledger không hợp lệ hoặc sai miền/ngày/engine; không được gửi như tin cược.";
     $("ledgerWorkOrigin").textContent="";
     $("ledgerCopyOriginal").disabled=true;
-    for(const id of ["ledgerWorkSelect","ledgerWorkCopy","ledgerWorkCut"])$(id).disabled=true;
     return;
   }
+  // Preserve original chat timestamps, physical separators and line breaks.
+  // The shown source is read-only reference, never a regenerated source wager.
+  reference.placeholder="";
+  reference.value=ledger.origin;
   $("ledgerWorkOrigin").textContent=ledger.origin;
   $("ledgerCopyOriginal").disabled=!ledger.origin;
-  const alive=outputRecords.filter(r=>r.alive);
-  const hydrated=alive.length===ledger.rows.length&&alive.every((r,i)=>
-    r.id===ledger.rows[i].id&&r.text===ledger.rows[i].text);
-  const view=hydrated?alive:ledger.rows;
-  for(const row of view){
-    const index=hydrated?outputRecords.findIndex(r=>r.alive&&r.id===row.id):-1;
-    const label=document.createElement("label");label.className="ledger-work-row";
-    const check=document.createElement("input");check.type="checkbox";check.disabled=index<0;
-    check.checked=index>=0&&checkedResultRecordIndexes.has(index);
-    if(check.checked)label.classList.add("selected");
-    check.setAttribute("aria-label","Chọn cược "+row.text);
-    check.addEventListener("change",()=>{
-      if(check.checked)checkedResultRecordIndexes.add(index);
-      else checkedResultRecordIndexes.delete(index);
-      syncGroupedSelectionUI();
-    });
-    const text=document.createElement("span");text.textContent=row.text;
-    ledgerCheckboxBindings.push({index,box:check,label});
-    label.append(check,text);list.appendChild(label);
-  }
-  const selected=hydrated?checkedAliveRecordIndexes().length:0;
-  $("ledgerWorkSelect").disabled=!hydrated;
-  $("ledgerWorkCopy").disabled=selected===0;
-  $("ledgerWorkCut").disabled=selected===0;
-  $("ledgerWorkSelect").textContent=selected===view.length&&view.length?"Bỏ chọn tất cả":"Chọn tất cả";
 }
-
 async function copySourceView(){
   if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
     const selected=checkedAliveRecordIndexes();
@@ -1847,7 +1831,7 @@ if(parseExactOutputLedger(inputEl.value))run();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.31";
+const APP_VERSION = "2.0.32";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
