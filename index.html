@@ -91,7 +91,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.32</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.33</span></div>
 
   <div class="card">
     <div class="controls">
@@ -125,10 +125,11 @@
     <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
       placeholder="Dán tin hoặc đoạn chat vào đây..."></textarea>
     <div id="ledgerWork" class="ledger-work" style="display:none">
-      <div class="ledger-work-note" role="status">Tin nguồn gốc (chỉ xem). Phần cược chưa Cắt nằm ở khung Kết quả bên dưới; không gửi lại nguyên tin gốc này.</div>
+      <div id="ledgerWorkStatus" class="ledger-work-note" role="status">Nguồn còn cược (chỉ tham chiếu); không gửi lại sau khi Cắt.</div>
       <textarea id="ledgerSourceView" readonly spellcheck="false" aria-label="Tin nguồn gốc tham chiếu, chỉ đọc"></textarea>
       <div class="actions">
         <button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button>
+        <button id="ledgerReeditOriginal" class="secondary" type="button">Sửa tin gốc (làm lại từ đầu)</button>
       </div>
       <!-- Legacy ledger controls intentionally inert. All result Copy/Cut/checkboxes stay in the RESULT pane. -->
       <div id="ledgerWorkRows" style="display:none"></div>
@@ -1156,6 +1157,33 @@ function identifySemanticOutputGroups(line,region,stations,generated){
 }
 
 
+function remainingOriginalSourceLines(ledger){
+  // Pure view projection: never modify the authoritative raw source or ledger.
+  // Old records are accepted ONLY if their immutable row IDs match an exact
+  // regeneration of the corresponding physical source line.
+  if(!ledger||!Array.isArray(ledger.rows)||!ledger.origin)return null;
+  const lines=ledger.origin.split(/\r?\n/);
+  const region=regionEl.value;
+  const stations=getSchedule(region,parseLocalDate(dateEl.value||localDateISO()));
+  const sourceLines=new Set(),cache=new Map();
+  for(const r of ledger.rows){
+    const id=String(r.id||"").match(/^([1-9]\d*):([1-9]\d*):([^\n]*)$/);
+    if(!id||id[3]!==r.text)return null;
+    const n=Number(id[1]),slot=Number(id[2]);
+    if(!Number.isSafeInteger(n)||n>lines.length||!Number.isSafeInteger(slot))return null;
+    const source=lines[n-1].trim();
+    if(!source||isStandaloneSeparator(source))return null;
+    if(!cache.has(n)){
+      try{cache.set(n,processLine(source,region,stations))}
+      catch(_){return null}
+    }
+    if(cache.get(n)[slot-1]!==r.text)return null;
+    sourceLines.add(n);
+  }
+  // A partially cut source line stays visible as reference; Copy/Cut only
+  // the verified surviving RESULT rows to avoid duplicating sent wagers.
+  return lines.filter((_,i)=>sourceLines.has(i+1)).join("\n");
+}
 function renderLedgerWork(){
   // Keep the exact-output ledger INTERNAL; never show its split rows as
   // source text. A partial Cut can be unrepresentable as a replayable ticket.
@@ -1177,14 +1205,32 @@ function renderLedgerWork(){
     reference.placeholder="Ledger không hợp lệ hoặc sai miền/ngày/engine; không được gửi như tin cược.";
     $("ledgerWorkOrigin").textContent="";
     $("ledgerCopyOriginal").disabled=true;
+    $("ledgerReeditOriginal").disabled=true;
     return;
   }
   // Preserve original chat timestamps, physical separators and line breaks.
   // The shown source is read-only reference, never a regenerated source wager.
   reference.placeholder="";
-  reference.value=ledger.origin;
+  const remaining=remainingOriginalSourceLines(ledger);
+  reference.value=remaining===null?ledger.origin:remaining;
+  reference.setAttribute?.("aria-label",remaining===null?"Tin nguồn gốc, ánh xạ chưa xác minh":"Nguồn còn cược, chỉ tham chiếu");
+  const note=$("ledgerWorkStatus");
+  if(note)note.textContent=remaining===null?
+    "Chưa xác minh được dòng nguồn của ledger cũ. Giữ nguyên tin gốc để bảo toàn cược; chỉ Copy/Cắt tại Kết quả.":
+    "Nguồn còn cược (chỉ tham chiếu). Dòng đã Cắt hết tự biến mất; nếu đã Cắt một phần, không gửi lại dòng nguồn này. Chỉ Copy/Cắt tại Kết quả.";
   $("ledgerWorkOrigin").textContent=ledger.origin;
   $("ledgerCopyOriginal").disabled=!ledger.origin;
+  $("ledgerReeditOriginal").disabled=!ledger.origin;
+}
+function reeditOriginalAfterCut(){
+  const ledger=parseExactOutputLedger(inputEl.value);
+  if(!ledger||!ledger.origin){setStatus("Tin gốc không hợp lệ; không thể mở để sửa.","err");return;}
+  if(!window.confirm("Sửa lại tin gốc sẽ HỦY các kết quả chưa Cắt. Cược đã gửi/Cắt không tự thu hồi; tách lại có thể gửi trùng. Tiếp tục?"))return;
+  snapshot();
+  inputEl.value=ledger.origin;outputEl.value="";
+  resetOutputRecords();persistExactOutputLedger();renderOutputRecords();
+  announceWorkingSource();inputEl.focus();
+  setStatus("Đã mở tin gốc để sửa. Đối chiếu cược đã gửi trước khi tách lại.","ok");
 }
 async function copySourceView(){
   if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
@@ -1754,6 +1800,7 @@ $("selectAllInputBtn").addEventListener("click",()=>{
 });
 $("ledgerWorkSelect").addEventListener("click",()=>{toggleAllGroupedResults();renderLedgerWork();});
 $("ledgerWorkCopy").addEventListener("click",copyLedgerWork);
+$("ledgerReeditOriginal").addEventListener("click",reeditOriginalAfterCut);
 $("ledgerCopyOriginal").addEventListener("click",async()=>{
   const ledger=parseExactOutputLedger(inputEl.value);
   if(!ledger||!ledger.origin){setStatus("Không có tin gốc hợp lệ để copy.","err");return;}
@@ -1831,7 +1878,7 @@ if(parseExactOutputLedger(inputEl.value))run();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.32";
+const APP_VERSION = "2.0.33";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

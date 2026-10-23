@@ -1,5 +1,5 @@
 "use strict";
-// DOM/browser-contract test for hiding raw exact-ledger JSON. Native Node only,
+// DOM/browser-contract: readonly source line reference, lower results only. Native Node,
 // no network/production data. Both app variants use the exact same contract.
 const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 const root=path.resolve(__dirname,"..");
@@ -41,60 +41,49 @@ const p=ctx.__api;
 const groups=()=>els.resultGroups.children;
 const rows=()=>els.ledgerWorkRows.children;
 async function main(){
- p.initGroupedResults();
- p.region.value="mn";p.date.value="2026-10-15";
- p.input.value="2d 89 98 b5n dx2,5n";
- p.run();
- assert.equal(els.ledgerWork.style.display,"none","plain Telegram input stays editable");
- const original=p.input.value;
- const all=p.records().filter(r=>r.alive).map(r=>r.text);
- assert.equal(all.length,3);
- const dx=groups()[0].children[3].children[0];dx.checked=true;dx.events.change();
- await p.cutSelectedOutput();
- const rawLedger=p.input.value;
- assert.ok(rawLedger.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"),"internal ledger remains authoritative");
- assert.equal(p.output.value.split("\n").length,2,"DX removed, B outputs preserved");
- assert.equal(p.input.style.display,"none","internal JSON textarea not shown to user");
- assert.equal(els.ledgerWork.style.display,"","readable upper working source shown");
- assert.equal(rows().length,2,"upper rows reflect exactly surviving output rows");
- assert.deepEqual(rows().map(r=>r.children[1].textContent),p.output.value.split("\n"));
- assert.ok(!rows().some(r=>r.children[1].textContent.includes("KTS_EXACT_OUTPUT_LEDGER")));
- assert.equal(els.ledgerWorkOrigin.textContent,original,"raw original is still separately auditable");
- await els.ledgerCopyOriginal.events.click();
- assert.equal(clipboard.value,original,"Copy tin gốc cannot export internal JSON");
- assert.equal(els.ledgerWorkCut.disabled,true,"no accidental cut with zero selected");
- // Upper row selection is the same authoritative checkbox state as lower pane.
- const first=rows()[0].children[0];first.checked=true;first.events.change();
- assert.match(els.resultGroupsSummary.textContent,/Đã chọn 1\/2/u);
- await els.ledgerWorkCopy.events.click();
- assert.equal(clipboard.value,p.records().find(r=>r.alive).text);
- await els.ledgerWorkCut.events.click();
- assert.equal(p.output.value.split("\n").length,1);
- assert.equal(rows().length,1);
- assert.equal(els.ledgerWork.style.display,"");
- const persisted=p.output.value;
- p.run();assert.equal(p.output.value,persisted,"re-run does not resplit remaining wager");
- p.undo();assert.equal(p.input.value,rawLedger,"undo restores prior serialized state without loss");
- assert.equal(rows().length,2,"upper readable rows restored");
- p.undo();assert.equal(p.input.value,original,"second undo restores original plaintext");
- assert.equal(els.ledgerWork.style.display,"none");
- assert.equal(p.output.value.split("\n").length,3);
- // Explicit Xóa must remove persistent ledger; Undo restores both it and UI.
- const last=groups()[0].children[3].children[0];last.checked=true;last.events.change();
- await p.cutSelectedOutput();
- const previous=p.input.value;
- assert.ok(previous.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"));
- const key=p.parseExactOutputLedger(previous).app==="tach-dai-mobile"?
-   "tachDaiMobileExactOutputLedgerV1":"tachDaiNgangExactOutputLedgerV1";
- assert.equal(storage.has(key),true);
- await els.clearBtn.events.click();
- assert.equal(p.input.value,"");
- assert.equal(els.ledgerWork.style.display,"none");
- assert.equal(storage.has(key),false,"explicit Clear must prevent stale ledger on reload");
- p.undo();
- assert.equal(p.input.value,previous);
- assert.equal(els.ledgerWork.style.display,"");
- assert.equal(storage.has(key),true,"Undo restores persisted exact ledger");
- console.log("READABLE EXACT LEDGER TOP SOURCE COPY CUT UNDO: PASS");
+  p.initGroupedResults();
+  p.region.value="mn";p.date.value="2026-10-15";
+  p.input.value="2d 89 98 b5n dx2,5n";
+  p.run();
+  assert.equal(els.ledgerWork.style.display,"none","raw input remains editable");
+  const original=p.input.value;
+  assert.equal(p.records().filter(r=>r.alive).length,3);
+  let dx=groups()[0].children[3].children[0];dx.checked=true;dx.events.change();
+  await p.cutSelectedOutput();
+  const ledger=p.input.value;
+  assert.ok(ledger.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"));
+  assert.equal(p.output.value.split("\n").length,2);
+  assert.equal(p.input.style.display,"none");
+  assert.equal(els.ledgerWork.style.display,"");
+  // Partially Cut source remains as reference, NOT a second result selector.
+  assert.equal(els.ledgerSourceView.value,original);
+  assert.match(html,/id="ledgerWorkRows" style="display:none"/u,"no duplicate upper result list");
+  assert.equal(els.ledgerWorkCopy.disabled,true);
+  assert.equal(els.ledgerWorkCut.disabled,true);
+  assert.equal(els.ledgerWorkOrigin.textContent,original);
+  await els.ledgerCopyOriginal.events.click();
+  assert.equal(clipboard.value,original,"raw original available by explicit review only");
+  const survivors=p.output.value;
+  p.run();assert.equal(p.output.value,survivors,"re-run must not resurrect cut DX");
+  p.undo();
+  assert.equal(p.input.value,original);
+  assert.equal(p.output.value.split("\n").length,3);
+  assert.equal(els.ledgerWork.style.display,"none");
+  // Clear and Undo are atomic against the exact-output storage.
+  dx=groups()[0].children[3].children[0];dx.checked=true;dx.events.change();
+  await p.cutSelectedOutput();
+  const previous=p.input.value;
+  assert.ok(previous.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"));
+  const key=p.parseExactOutputLedger(previous).app==="tach-dai-mobile"?
+    "tachDaiMobileExactOutputLedgerV1":"tachDaiNgangExactOutputLedgerV1";
+  assert.equal(storage.has(key),true);
+  await els.clearBtn.events.click();
+  assert.equal(p.input.value,"");
+  assert.equal(storage.has(key),false);
+  p.undo();
+  assert.equal(p.input.value,previous);
+  assert.equal(storage.has(key),true);
+  assert.equal(els.ledgerWork.style.display,"");
+  console.log("LEDGER READONLY SOURCE + LOWER RESULT ONLY + UNDO/CLEAR PASS");
 }
 main().catch(e=>{console.error(e.stack||e);process.exitCode=1;});

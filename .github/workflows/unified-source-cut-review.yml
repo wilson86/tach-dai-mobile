@@ -32,6 +32,14 @@ jobs:
         run: |
           node tests/davong-checkbox-ui-parity.js
           node tests/unified-ledger-mode-local-cross-frame.js
+      - name: Standalone Mobile source-line Cut parity and ledger safety
+        run: |
+          node tests/source-cut-working-provenance.js
+          node tests/source-pane-after-result-cut.js
+          node tests/ledger-readable-working-ui.js
+          node tests/source-output-cut-conservation.js
+          node tests/realtime-arbitrary-row-cut.contract.js
+          node tests/grouped-checkbox-results.js
       - name: Unified parser, pairs, negative cases and cache
         run: |
           node tests/unified-static-tests.js

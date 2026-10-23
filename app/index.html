@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.21</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.22</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div id="sharedSettings" class="card shared-settings">
     <div class="controls">
       <div><label class="small" for="sharedRegion">Miền dùng chung</label><select id="sharedRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -77,7 +77,7 @@
     </div>
   </section>
 </div>
-<script src="./unified-core.js?ux=1.0.21"></script>
+<script src="./unified-core.js?ux=1.0.22"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -280,9 +280,9 @@ async function prepareOfflineEngine(){
         }
       });
     })));
-    const cache=await caches.open('kts-tach-unified-v1.0.21-mb-dot-raw-guard-046935-source-cut-provenance');
+    const cache=await caches.open('kts-tach-unified-v1.0.22-mb-dot-raw-guard-046935-sync-source-cut');
     const expected=['../','../index.html','../station_calendar.generated.js',
-      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.21'];
+      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.22'];
     for(const path of expected){
       const request=new URL(path,location.href).href;
       const response=await cache.match(request);
