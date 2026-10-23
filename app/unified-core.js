@@ -144,7 +144,7 @@
         try{
           const generated=expandDaVongLineDetailed(lines[i],api,region,stations);
           outputs.push(...generated.outputs);
-          blocks.push(...generated.blocks);
+          blocks.push(...generated.blocks.map(block=>({...block,sourceLine:i+1})));
           pairLines+=generated.pair_lines;
         }catch(error){
           throw Error(`LỖI dòng ${i+1}: ${String(error&&error.message||error)}`);
@@ -255,6 +255,7 @@
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
   let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
+  let pendingSourceBlocks=null,pendingSourceText='';
   const selected=new Set(),undoStack=[],selectionBindings=[];
   const live=()=>rows.filter(r=>r.alive);
   const picked=()=>live().filter(r=>selected.has(r.id));
