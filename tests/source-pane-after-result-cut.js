@@ -38,6 +38,7 @@ const full=[{id:"a",text:"3d 35 52 dx 5n",sourceLine:1,alive:true},
 let rows=full.map(r=>({...r})),clip=[],snapshots=[],stored="",announcements=0;
 const cutCtx={
   outputRecords:rows,inputEl:renderCtx.inputEl,outputEl:$("output"),
+  EXACT_OUTPUT_LEDGER_PREFIX:prefix,
   checkedResultRecordIndexes:new Set([0]),checkedAliveRecordIndexes:()=>[0],
   selectedAliveRecordIndexes:()=>[0],groupedResultReady:true,
   writeClipboardText:async text=>{clip.push(text);return true},
