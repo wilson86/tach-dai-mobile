@@ -283,8 +283,20 @@ async function prepareOfflineEngine(){
       '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.21'];
     for(const path of expected){
       const request=new URL(path,location.href).href;
-      const response=await cache.match(request);
-      if(!response||!response.ok)throw Error('CACHE_MISSING:'+path);
+      let response=await cache.match(request);
+      // An installing worker may not have populated the new epoch yet.
+      // Repair only missing static files using an online, no-store fetch.
+      // Never clear an existing wager ledger, browser storage, or caches.
+      if(!response||!response.ok){
+        const fresh=await fetch(request,{cache:'no-store'}).catch(()=>null);
+        if(!fresh||!fresh.ok)throw Error('CACHE_MISSING:'+path);
+        if(path==='../business_engine.generated.js'){
+          const source=await fresh.clone().text();
+          if(!source.includes(EXPECTED_ENGINE))throw Error('ENGINE_CACHE_MISMATCH');
+        }
+        await cache.put(request,fresh.clone());
+        response=fresh;
+      }
       if(path==='../business_engine.generated.js'){
         const source=await response.text();
         if(!source.includes(EXPECTED_ENGINE))throw Error('ENGINE_CACHE_MISMATCH');
