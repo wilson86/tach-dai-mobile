@@ -1,7 +1,7 @@
 'use strict';
 // Pilot UI refresh: bump the cache key whenever checkbox UX or shell changes.
 // The new service worker refreshes unified-core.js for existing pilot installs.
-const CACHE='kts-tach-unified-v1.0.20-mb-dot-raw-guard-046935';
+const CACHE='kts-tach-unified-v1.0.20-mb-dot-raw-guard-046935-source-pane-fix';
 const CORE=['./','./index.html','./unified-core.js','./unified-core.js?ux=1.0.20','./manifest.webmanifest','./version.json','../icon-192.png','../icon-512.png',
   // Parent's Da Vong engine is hosted in the Mobile child iframe. Offline
   // navigation must have its root HTML and the two authoritative adapters.
