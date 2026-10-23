@@ -351,6 +351,52 @@
       nextRows.push(row);current.rowIds.push(row.id);
     }
     groups=nextGroups;rows=nextRows;selected.clear();
+    const map=pendingSourceBlocks,source=pendingSourceText;
+    pendingSourceBlocks=null;pendingSourceText='';
+    if(map)bindLineage(map,source);
+  }
+  function noteGeneratedSource(blocks,source){
+    pendingSourceBlocks=Array.isArray(blocks)?blocks.map(b=>({...b,lines:(b.lines||[]).slice()})):null;
+    pendingSourceText=safeText(source);
+  }
+  function bindLineage(blocks,source){
+    if(!Array.isArray(blocks)||!blocks.length)return false;
+    const sourceLines=safeText(source).split(/\r?\n/);
+    const expected=blocks.flatMap(b=>(b.lines||[]).map(text=>({text:String(text).trim(),line:b.sourceLine})));
+    // Reject any ambiguous/partial mapping, including source with an explicit
+    // region wrapper not reflected in the operator's editable original.
+    if(source.trim()!==origin.trim()||expected.length!==rows.length||
+       expected.some((row,i)=>!Number.isSafeInteger(row.line)||row.line<1||
+         row.line>sourceLines.length||!sourceLines[row.line-1]?.trim()||
+         row.text!==rows[i].text))return false;
+    rows.forEach((r,i)=>{r.sourceLine=expected[i].line});
+    return true;
+  }
+  function recoverLegacyLineage(){
+    if(!rows.length||rows.every(r=>Number.isSafeInteger(r.sourceLine)))return;
+    // Existing persisted ledgers predate per-row provenance. Only recover
+    // exact, pure-DX inputs using deterministic pair outputs. Other ledgers
+    // stay protected and visibly show the immutable original (fail closed).
+    const originals=origin.split(/\r?\n/),expected=[];
+    for(let i=0;i<originals.length;i++){
+      const source=originals[i].trim();
+      if(!source)continue;
+      const parsed=KTS_UNIFIED.expandDxOnlyFallback(source);
+      if(!parsed||!parsed.outputs?.length)return;
+      expected.push(...parsed.outputs.map(text=>({text,line:i+1})));
+    }
+    if(expected.length!==rows.length||expected.some((part,i)=>part.text!==rows[i].text))return;
+    rows.forEach((r,i)=>{r.sourceLine=expected[i].line});
+  }
+  function remainingSource(){
+    if(!ledgerActive)return null;
+    const lines=origin.split(/\r?\n/),survivors=live();
+    if(!survivors.length)return {text:'',partial:false};
+    if(survivors.some(r=>!Number.isSafeInteger(r.sourceLine)||r.sourceLine<1||
+      r.sourceLine>lines.length||!lines[r.sourceLine-1]?.trim()))return null;
+    const remaining=new Set(survivors.map(r=>r.sourceLine));
+    const partial=rows.some(r=>!r.alive&&remaining.has(r.sourceLine));
+    return {text:lines.filter((_,i)=>remaining.has(i+1)).join('\n'),partial};
   }
   function activeGroups(){return groups.filter(g=>g.rowIds.some(id=>byId(id)?.alive))}
   function checkbox(label,value,change,aria){
@@ -512,6 +558,7 @@
     originalChatText=data.raw_original||'';
     rows=data.rows.map(r=>({...r}));groups=data.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();ledgerActive=true;$('dvInput').value=origin;
+    recoverLegacyLineage();
     undoStack.splice(0,undoStack.length);
     if(Array.isArray(data.undo))for(const old of data.undo.slice(-30)){
       if(old&&typeof old.input==='string'&&typeof old.origin==='string'&&
