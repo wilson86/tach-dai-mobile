@@ -1,6 +1,6 @@
 {
-  "version": "2.0.32",
-  "updated": "2026-10-17",
-  "notes": "Stage-only MB leading-dot normalization, raw-prefix Router safety gate, unchanged business engine; NOT DEPLOYED",
+  "version": "2.0.33",
+  "updated": "2026-10-24",
+  "notes": "Candidate DX/DA number-pair money fix + safe re-edit; QA/release pending; generated engine unchanged; NOT DEPLOYED",
   "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb"
 }
