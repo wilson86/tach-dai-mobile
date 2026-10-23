@@ -1,0 +1,43 @@
+name: Unified Source-Cut Review ($0 Public Node)
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "tests/**"
+      - ".github/workflows/unified-source-cut-review.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unified-source-cut-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  focused-node-review:
+    name: Native Node 22 UX and ledger QA
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Runtime and syntax
+        run: |
+          node --version
+          node --check app/unified-core.js
+          node --check tests/davong-source-line-cut-provenance.js
+      - name: Screenshot exact source-line Cut, reload, Undo and failure safety
+        run: node tests/davong-source-line-cut-provenance.js
+      - name: Existing Da Vong UX and shared-ledger protection
+        run: |
+          node tests/davong-checkbox-ui-parity.js
+          node tests/unified-ledger-mode-local-cross-frame.js
+      - name: Unified parser, pairs, negative cases and cache
+        run: |
+          node tests/unified-static-tests.js
+          node tests/unified-versioned-ux-cache.js
+          node tests/unified-offline-engine-cache.js
+          node tests/unified-separator-regression.js
+          node tests/mb-leading-dot-davong-parity.js
+      - name: Release assets and rollback identity
+        run: node tests/release-review-asset-consistency.js

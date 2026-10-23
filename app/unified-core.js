@@ -144,7 +144,7 @@
         try{
           const generated=expandDaVongLineDetailed(lines[i],api,region,stations);
           outputs.push(...generated.outputs);
-          blocks.push(...generated.blocks);
+          blocks.push(...generated.blocks.map(block=>({...block,sourceLine:i+1})));
           pairLines+=generated.pair_lines;
         }catch(error){
           throw Error(`LỖI dòng ${i+1}: ${String(error&&error.message||error)}`);
@@ -175,7 +175,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.20';
+  const UX_VERSION='1.0.21';
 
   function selectAllText(el){
     if(!el) return;
@@ -255,6 +255,7 @@
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
   let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
+  let pendingSourceBlocks=null,pendingSourceText='';
   const selected=new Set(),undoStack=[],selectionBindings=[];
   const live=()=>rows.filter(r=>r.alive);
   const picked=()=>live().filter(r=>selected.has(r.id));
@@ -350,6 +351,54 @@
       nextRows.push(row);current.rowIds.push(row.id);
     }
     groups=nextGroups;rows=nextRows;selected.clear();
+    const map=pendingSourceBlocks,source=pendingSourceText;
+    pendingSourceBlocks=null;pendingSourceText='';
+    if(map)bindLineage(map,source);
+  }
+  function noteGeneratedSource(blocks,source){
+    pendingSourceBlocks=Array.isArray(blocks)?blocks.map(b=>({...b,lines:(b.lines||[]).slice()})):null;
+    pendingSourceText=safeText(source);
+  }
+  function bindLineage(blocks,source){
+    if(!Array.isArray(blocks)||!blocks.length)return false;
+    const sourceLines=safeText(source).split(/\r?\n/);
+    const expected=blocks.flatMap(b=>(b.lines||[]).map(text=>({text:String(text).trim(),line:b.sourceLine})));
+    // Reject any ambiguous/partial mapping, including source with an explicit
+    // region wrapper not reflected in the operator's editable original.
+    if(source.trim()!==origin.trim()||expected.length!==rows.length||
+       expected.some((row,i)=>!Number.isSafeInteger(row.line)||row.line<1||
+         row.line>sourceLines.length||!sourceLines[row.line-1]?.trim()||
+         row.text!==rows[i].text))return false;
+    rows.forEach((r,i)=>{r.sourceLine=expected[i].line});
+    return true;
+  }
+  function recoverLegacyLineage(){
+    if(!rows.length||rows.every(r=>Number.isSafeInteger(r.sourceLine)))return;
+    // Existing persisted ledgers predate per-row provenance. Only recover
+    // exact, pure-DX inputs using deterministic pair outputs. Other ledgers
+    // stay protected and visibly show the immutable original (fail closed).
+    const originals=origin.split(/\r?\n/),expected=[];
+    for(let i=0;i<originals.length;i++){
+      const source=originals[i].trim();
+      if(!source)continue;
+      let parsed;
+      try{parsed=KTS_UNIFIED.expandDxOnlyFallback(source)}
+      catch(_){return} // Invalid/unrecognizable legacy lineage remains fully protected.
+      if(!parsed||!parsed.outputs?.length)return;
+      expected.push(...parsed.outputs.map(text=>({text,line:i+1})));
+    }
+    if(expected.length!==rows.length||expected.some((part,i)=>part.text!==rows[i].text))return;
+    rows.forEach((r,i)=>{r.sourceLine=expected[i].line});
+  }
+  function remainingSource(){
+    if(!ledgerActive)return null;
+    const lines=origin.split(/\r?\n/),survivors=live();
+    if(!survivors.length)return {text:'',partial:false};
+    if(survivors.some(r=>!Number.isSafeInteger(r.sourceLine)||r.sourceLine<1||
+      r.sourceLine>lines.length||!lines[r.sourceLine-1]?.trim()))return null;
+    const remaining=new Set(survivors.map(r=>r.sourceLine));
+    const partial=rows.some(r=>!r.alive&&remaining.has(r.sourceLine));
+    return {text:lines.filter((_,i)=>remaining.has(i+1)).join('\n'),partial};
   }
   function activeGroups(){return groups.filter(g=>g.rowIds.some(id=>byId(id)?.alive))}
   function checkbox(label,value,change,aria){
@@ -447,16 +496,32 @@
     if(select)select.textContent=liveRows.length&&pickedRows.length===liveRows.length?'Bỏ chọn tất cả':'Chọn tất cả';
     const result=$('dvOutput');
     if(result)result.value=liveRows.map(r=>r.text).join('\n');
-    // A partially cut derived wager may have no replayable source form.
-    // Keep the operator's ORIGINAL source visible, read-only, and preserve the
-    // exact surviving output rows solely in the mode-local ledger/result pane.
+    // The authoritative original remains in #dvInput for mode-isolated
+    // persistence and Undo. A separate read-only working-source display
+    // removes lines whose entire result set has been cut, never recomputes
+    // wagers, and never publishes partial source to sibling modes.
     const protectedSource=ledgerActive&&liveRows.length>0;
-    const sourceInput=$('dvInput');
-    sourceInput.style.display='';
+    const working=protectedSource?remainingSource():null;
+    const view=$('dvRemainingSource'),sourceInput=$('dvInput');
+    const verified=protectedSource&&working!==null;
+    sourceInput.style.display=verified?'none':'';
     sourceInput.readOnly=protectedSource;
+    if(view){view.style.display=verified?'':'none';view.value=verified?working.text:'';}
+    const label=$('dvInputLabel');
+    if(label)label.textContent=verified?'Nguồn còn cược — chỉ tham chiếu':'Nhập tin / nguyên đoạn chat';
     $('dvSourceCut').disabled=protectedSource;
+    $('dvSourceCopy').disabled=protectedSource;
+    $('dvSelectAllInput').disabled=protectedSource;
     const sourceNote=$('dvSourceProtectedNote');
-    if(sourceNote)sourceNote.style.display=protectedSource?'':'none';
+    if(sourceNote){
+      sourceNote.style.display=protectedSource?'':'none';
+      sourceNote.textContent=verified?
+        'Dòng đã Cắt hết tự biến mất ở trên. Dòng còn cược có thể đã Cắt một phần; KHÔNG Copy/gửi lại tin nguồn. Chỉ dùng các dòng ở Kết quả bên dưới.' :
+        'Không xác minh được từng dòng nguồn với ledger cũ. Đang giữ nguyên bản gốc để tránh mất cược; chỉ Copy/Cắt ở Kết quả.';
+    }
+    const details=$('dvOriginalSourceDetails'),originalPre=$('dvOriginalSourceText');
+    if(details)details.style.display=protectedSource?'':'none';
+    if(originalPre)originalPre.textContent=originalChatText||origin;
     // Never clone RESULT row checkboxes into the SOURCE pane.
     const panel=$('dvWorkingPanel');
     if(panel)panel.style.display='none';
@@ -511,6 +576,7 @@
     originalChatText=data.raw_original||'';
     rows=data.rows.map(r=>({...r}));groups=data.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
     selected.clear();ledgerActive=true;$('dvInput').value=origin;
+    recoverLegacyLineage();
     undoStack.splice(0,undoStack.length);
     if(Array.isArray(data.undo))for(const old of data.undo.slice(-30)){
       if(old&&typeof old.input==='string'&&typeof old.origin==='string'&&
@@ -568,6 +634,19 @@
     referenceNote.textContent='Tin nguồn gốc (chỉ xem). Các cược còn lại và thao tác Cắt nằm ở khung Kết quả bên dưới. Không gửi lại nguyên tin gốc này.';
     referenceNote.style.display='none';
     input.parentNode.insertBefore(referenceNote,input.nextSibling);
+    const workingSource=document.createElement('textarea');
+    workingSource.id='dvRemainingSource';workingSource.readOnly=true;
+    workingSource.setAttribute('aria-label','Nguồn còn cược, chỉ tham chiếu');
+    workingSource.style.display='none';
+    input.parentNode.insertBefore(workingSource,input.nextSibling);
+    const originalDetails=document.createElement('details');
+    originalDetails.id='dvOriginalSourceDetails';
+    const originalSummary=document.createElement('summary');
+    originalSummary.textContent='Xem tin gốc ban đầu (chỉ đối chiếu)';
+    const originalPre=document.createElement('pre');originalPre.id='dvOriginalSourceText';
+    originalPre.style.whiteSpace='pre-wrap';
+    originalDetails.appendChild(originalSummary);originalDetails.appendChild(originalPre);
+    input.parentNode.insertBefore(originalDetails,input.nextSibling);
     swap('dvCutSelection',cut);
     swap('dvSelectAllOutput',toggleAll);
     swap('dvCopy',copyResult);
@@ -584,6 +663,7 @@
       status(ok?'Đã copy tin gốc':'Không thể copy tin gốc.',ok?'ok':'err');
     });
     $('dvSourceCopy').addEventListener('click',async()=>{
+      if(ledgerActive){status('Nguồn có cược đã Cắt, chỉ Copy ở Kết quả để tránh gửi trùng.','err');return;}
       const a=input.selectionStart??0,b=input.selectionEnd??0;
       const value=a<b?input.value.slice(a,b):input.value;
       const ok=await copy(value);
@@ -613,7 +693,7 @@
       if(ledgerActive){ledgerActive=false;persist();render();}
     });
     maybeRestore();render();
-    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize};
+    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize,noteGeneratedSource};
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
