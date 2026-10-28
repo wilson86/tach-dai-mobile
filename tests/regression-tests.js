@@ -70,6 +70,32 @@ function expectThrow(fn, expected) {
 
 async function main() {
 const rules = loadRules();
+
+  // Synthetic MB fixture: 'đau' is a narrowly
+  // stake-bound spelling for ĐẦU, but duplicates still need a money oracle.
+  const mbDauRaw="mb 10 dd 4n 21 32 b6n 43 đau 8n đuôi 12n 54 65 b10n";
+  const mbDauNormalized=rules.normalizeInput(mbDauRaw);
+  assert.match(mbDauNormalized,/43 đầu 8n đuôi 12n/u);
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(mbDauNormalized,"mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))));
+  assert.deepEqual(
+    Array.from(rules.engine.extractStakeOccurrences(mbDauNormalized)).filter(x=>x.selector==="DAU"||x.selector==="DUOI").map(x=>x.amount),
+    ["8n","12n"]
+  );
+  // Non-wager language stays verbatim after ordinary lowercase normalization.
+  assert.equal(rules.normalizeInput("Đau bụng 50n"),"đau bụng 50n");
+  assert.equal(rules.normalizeInput("98 đau buồn 50n"),"98 đau buồn 50n");
+  assert.equal(rules.normalizeInput("98 đau 50"),"98 đau 50");
+  const mbDuplicated90="mb 11 22 33 22 b6n 44 55 b10n";
+  expectThrow(
+    ()=>rules.validateCheckOnlyLine(mbDuplicated90,"mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))),
+    /trùng số 22/u
+  );
+  // Explicitly separate clauses MAY repeat 90; never guess that operator edit.
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(
+    "mb 11 22 33 b6n 22 b6n 44 55 b10n",
+    "mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))
+  ));
+
 const assertHalfUnitSplit=(amount,count)=>{
   const parts=rules.distributeAmountExactly(`${amount}n`,count).filter(Boolean);
   const units=parts.map(part=>{const m=part.match(/^(\d+)(?:[.,](\d+))?n$/u);assert.ok(m,`bad split token ${part}`);assert.ok(!m[2]||/^0*$/u.test(m[2])||/^50*$/u.test(m[2]),`quarter/other fraction ${part}`);return Number(m[1])*2+(m[2]&&!/^0*$/u.test(m[2])?1:0);});
@@ -408,6 +434,22 @@ assert.match(sw, /self\.skipWaiting\(\)/);
 assert.match(sw, /req\.mode === "navigate"/);
 assert.match(sw, /caches\.match\("\.\/index\.html"\)/);
 assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
+
+
+  // Synthetic UI contract: accept corrected MB wager, but
+  // reject the two-line paste atomically when second line repeats 90.
+  const photoInputOne="mb 10 dd 4n 21 32 b6n 43 đau 8n đuôi 12n 54 65 b10n";
+  const photoInputTwo="mb 11 22 33 22 b6n 44 55 b10n";
+  const photoUI=rules.elements;
+  photoUI.region.value="mb"; photoUI.date.value="2026-10-28"; photoUI.today.checked=false;
+  photoUI.input.value=photoInputOne;
+  rules.run();
+  assert.match(photoUI.output.value,/43 đầu (?:8n|4n) đuôi (?:12n|6n)/u);
+  assert.ok(rules.getOutputRecords().length>0,"valid MB đầu/đuôi must materialize");
+  photoUI.input.value=photoInputOne+"\\n"+photoInputTwo;
+  rules.run();
+  assert.match(photoUI.output.value,/Dòng 2: trùng số 90/u);
+  assert.equal(rules.getOutputRecords().length,0,"invalid mixed MB chat must reject all outputs");
 
 console.log("CORE RULES: PASS");
 console.log("DAT RULE: PASS");
