@@ -446,9 +446,9 @@ assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
   rules.run();
   assert.match(photoUI.output.value,/43 đầu (?:8n|4n) đuôi (?:12n|6n)/u);
   assert.ok(rules.getOutputRecords().length>0,"valid MB đầu/đuôi must materialize");
-  photoUI.input.value=photoInputOne+"\\n"+photoInputTwo;
+  photoUI.input.value=photoInputOne+"\n"+photoInputTwo;
   rules.run();
-  assert.match(photoUI.output.value,/Dòng 2: trùng số 90/u);
+  assert.match(photoUI.output.value,/Dòng 2: trùng số 22/u);
   assert.equal(rules.getOutputRecords().length,0,"invalid mixed MB chat must reject all outputs");
 
 console.log("CORE RULES: PASS");
