@@ -4,9 +4,9 @@
 
 ## Candidate source (verify exact SHA in latest Issue #18 checkpoint)
 
-- Private wilson86/KTS: review/issue18-cache-authority-20261029.
-- Public wilson86/tach-dai-mobile: review/issue18-expanded-admission-20261029.
-- Public wilson86/tach-dai-ngang: review/issue18-ledger-drift-20261029.
+- Private wilson86/KTS: review/issue18-cache-isolation-authority-20261029.
+- Public wilson86/tach-dai-mobile: review/issue18-stage-integrity-20261029.
+- Public wilson86/tach-dai-ngang: review/issue18-cache-isolation-20261029.
 - Candidate versions: Mobile 2.0.36; Ngang 1.0.35; Unified 1.0.25.
 - Engine SHA: 7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea.
 
@@ -24,7 +24,7 @@ node scripts/issue18-production-preflight.js `
   --ngang-sha '<NGANG_HEAD>'
 ```
 
-The tool refuses non-C: workspace paths, unexpected SHA, dirty checkouts, symlink/junction source paths, mismatched versions/engine or missing assets. It invokes the canonical Python generator strict --check and **23 Mobile + 15 Ngang** explicitly audited, locally runnable Node regression files (all checked-in JavaScript tests except Ngang `tests/verify-published-artifact.js`, which calls the live website and must NOT run in offline admission). No GitHub Actions, package install, API, production mutation or network is required. Save its JSON evidence in Issue #18. Any failing command blocks the gate. This source-level allowlist is NOT proof that tests have run.
+The tool refuses non-C: workspace paths, unexpected SHA, dirty checkouts, symlink/junction source paths, mismatched versions/engine or missing assets. It invokes the canonical Python generator strict --check and **24 Mobile + 15 Ngang** explicitly audited, locally runnable Node regression files (all checked-in JavaScript tests except Ngang `tests/verify-published-artifact.js`, which calls the live website and must NOT run in offline admission). No GitHub Actions, package install, API, production mutation or network is required. Save its JSON evidence in Issue #18. Any failing command blocks the gate. This source-level allowlist is NOT proof that tests have run.
 
 ## Gate B — isolated browser
 
@@ -38,6 +38,17 @@ node scripts/issue18-build-local-stage.js `
 python -m http.server 62545 --bind 127.0.0.1 `
   --directory 'C:\KTS-QA\issue18-stage-new'
 ```
+
+**MANDATORY before Chrome:** verify the stage with:
+
+```powershell
+node scripts/issue18-verify-stage.js `
+  --mobile 'C:\\KTS-QA\\issue18-review\\Mobile' `
+  --ngang 'C:\\KTS-QA\\issue18-review\\Ngang' `
+  --out 'C:\\KTS-QA\\issue18-stage-new'
+```
+
+Require `STAGE_SOURCE_BYTES_PASS` and `checked_assets: 21`; otherwise do not open the stage. The verifier confirms file bytes, not browser behavior.
 
 Open http://127.0.0.1:62545/Mobile/app/ ONLY in a disposable Chrome profile under C:. Confirm Ngang iframe resolves to localhost /Ngang/, the *staged* Unified service-worker routes match /Mobile/app/ (including offline navigations and icons), and there are no requests to production. The committed public SW asset is not edited. If policy blocks Chrome, do not bypass it.
 
