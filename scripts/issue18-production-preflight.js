@@ -8,6 +8,10 @@ const cp=require('node:child_process');
 const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.36',ngang:'1.0.35',unified:'1.0.25'});
 // Explicit allowlists, audited for no network, production writes or paid runner.
 // The Ngang published-artifact verifier is intentionally EXCLUDED (live fetch).
+const KTS_PYTESTS=Object.freeze([
+  'KTSRouter/tests/test_n035_router_no_send.py',
+  'KTSRouter/tests/test_n035_desktop_oracle.py'
+]);
 const MOBILE_TESTS=Object.freeze([
   'tests/davong-checkbox-ui-parity.js',
   'tests/davong-source-line-cut-provenance.js',
@@ -86,7 +90,7 @@ function verifyFolder(root,folder){
 }
 function processReadOnly(binary,argv,cwd,timeout=120000){
   const r=cp.spawnSync(binary,argv,{cwd,encoding:'utf8',shell:false,windowsHide:true,timeout,
-    maxBuffer:8*1024*1024,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PIP_NO_INDEX:'1'}});
+    maxBuffer:8*1024*1024,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PIP_NO_INDEX:'1',PYTEST_DISABLE_PLUGIN_AUTOLOAD:'1',PYTEST_ADDOPTS:''}});
   return {exitCode:r.status,signal:r.signal||null,error:r.error?String(r.error.message):null,
     stdout:String(r.stdout||'').slice(-5000),stderr:String(r.stderr||'').slice(-5000)};
 }
@@ -139,6 +143,18 @@ function admission(options,runCommand=processReadOnly){
     '--workspace-root',root],dirs.kts,180000);
   result.checks.push({name:'CANONICAL_GENERATOR_CHECK',...py});
   if(py.exitCode!==0||py.error){result.status='BLOCKED_GENERATOR';return result;}
+  // Approved offline N035 Router/SQLite no-send and Desktop station-scope oracle.
+  // Do not run historical scripts with hard-coded E: HTML paths, live runtime,
+  // networked published checks, or external pytest plugins.
+  for(const file of KTS_PYTESTS){
+    const target=path.join(dirs.kts,file);
+    if(!fs.existsSync(target)||fs.lstatSync(target).isSymbolicLink())
+      block('MISSING_TEST','KTS/'+file);
+  }
+  const kts=runCommand('python',['-B','-m','pytest','-q','-p','no:cacheprovider',
+    ...KTS_PYTESTS],dirs.kts,180000);
+  result.checks.push({name:'KTS_N035_ROUTER_SQLITE_AND_DESKTOP_OFFLINE',...kts});
+  if(kts.exitCode!==0||kts.error){result.status='BLOCKED_KTS_OFFLINE';return result;}
   for(const [name,dir,tests] of [
     ['MOBILE',dirs.mobile,MOBILE_TESTS],['NGANG',dirs.ngang,NGANG_TESTS]
   ])for(const test of tests){
@@ -184,4 +200,4 @@ if(require.main===module){
     process.exitCode=2;
   }
 }
-module.exports={argsOf,admission,MOBILE_TESTS,NGANG_TESTS};
+module.exports={argsOf,admission,KTS_PYTESTS,MOBILE_TESTS,NGANG_TESTS};
