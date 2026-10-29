@@ -5,7 +5,7 @@ const path=require('node:path');
 const os=require('node:os');
 const cp=require('node:child_process');
 
-const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.36',ngang:'1.0.34',unified:'1.0.25'});
+const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.36',ngang:'1.0.35',unified:'1.0.25'});
 // Explicit allowlists, audited for no network, production writes or paid runner.
 // The Ngang published-artifact verifier is intentionally EXCLUDED (live fetch).
 const MOBILE_TESTS=Object.freeze([
