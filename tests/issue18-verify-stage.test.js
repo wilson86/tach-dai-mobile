@@ -49,6 +49,9 @@ test('manifest binds 21 copied assets and both staged rewrites without touching 
   const result=verify(f);
   assert.equal(result.status,'STAGE_SOURCE_BYTES_PASS');
   assert.equal(result.checked_assets,21);
+  const manifest=JSON.parse(fs.readFileSync(path.join(f.out,'ISSUE18_STAGE_MANIFEST.json'),'utf8'));
+  assert.equal(Object.keys(manifest.source_files_sha256).length,21);
+  assert.equal(Object.keys(manifest.staged_files_sha256).length,21);
   assert.equal(result.engine_sha256,HASH);
   assert.equal(result.release_authorized,false);
   assert.equal(result.chrome,'NOT_RUN');
@@ -73,6 +76,22 @@ test('a different root app asset or extra staged file is blocked',t=>{
 test('source editing after stage construction invalidates exact-byte certificate',t=>{
   const f=fixture(t);
   fs.appendFileSync(path.join(f.ngang,'business_engine.generated.js'),'\nSOURCE_CHANGED');
+  assert.throws(()=>verify(f),/SOURCE_DRIFT/);
+});
+test('modifying unrelated source shell file after stage build is blocked',t=>{
+  const f=fixture(t);
+  fs.appendFileSync(path.join(f.mobile,'index.html'),'\nSOURCE_EDITED');
+  assert.throws(()=>verify(f),/SOURCE_DRIFT/);
+});
+test('manifest source and staged asset digest removal or tampering is blocked',t=>{
+  const f=fixture(t);
+  const p=path.join(f.out,'ISSUE18_STAGE_MANIFEST.json');
+  const manifest=JSON.parse(fs.readFileSync(p,'utf8'));
+  delete manifest.source_files_sha256['Ngang/icon-512.png'];
+  fs.writeFileSync(p,JSON.stringify(manifest));
+  assert.throws(()=>verify(f),/INCOMPLETE_ASSET_HASHES/);
+  manifest.source_files_sha256['Ngang/icon-512.png']='0'.repeat(64);
+  fs.writeFileSync(p,JSON.stringify(manifest));
   assert.throws(()=>verify(f),/SOURCE_DRIFT/);
 });
 test('treat edited release-authorization flag as stage tampering',t=>{
