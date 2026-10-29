@@ -37,6 +37,7 @@ const NGANG_TESTS=Object.freeze([
   'tests/duplicate-selector-tests.js',
   'tests/dx-number-pair-operator-oracle.js',
   'tests/grouped-checkbox-results.js',
+  'tests/issue18-sw-cache-isolation.test.js',
   'tests/ledger-app-identity-isolation.js',
   'tests/ledger-readable-working-ui.js',
   'tests/mb-leading-dot-chat-envelope.js',
