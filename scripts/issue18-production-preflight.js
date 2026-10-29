@@ -59,6 +59,14 @@ function processReadOnly(binary,argv,cwd,timeout=120000){
     stdout:String(r.stdout||'').slice(-5000),stderr:String(r.stderr||'').slice(-5000)};
 }
 function verifiedRepo(dir,expectedSha){
+  // Disallow linked Git worktrees or .git indirections pointing to E:/F:.
+  // A fresh isolated clone on C: has a normal local .git directory.
+  const gitdir=path.join(dir,'.git');
+  if(!fs.existsSync(gitdir)||!fs.lstatSync(gitdir).isDirectory()||
+     fs.lstatSync(gitdir).isSymbolicLink()||
+     path.win32.normalize(fs.realpathSync.native(gitdir)).toLowerCase()!==
+       path.win32.normalize(gitdir).toLowerCase())
+    block('LINKED_GIT_REFUSED','Use a normal clean clone with .git on C:, not a linked worktree.');
   const root=processReadOnly('git',['rev-parse','--show-toplevel'],dir);
   if(root.exitCode!==0||!root.stdout.trim())block('GIT_ROOT_UNAVAILABLE',dir);
   if(path.win32.normalize(root.stdout.trim()).toLowerCase()!==path.win32.normalize(dir).toLowerCase())
