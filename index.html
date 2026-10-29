@@ -1905,7 +1905,16 @@ $("clearBtn").addEventListener("click",()=>{
   inputEl.focus();
 });
 $("undoBtn").addEventListener("click",()=>{
-  const s=undoStack.pop(); if(!s)return;
+  const s=undoStack[undoStack.length-1]; if(!s)return;
+  // Undo must be durable before it becomes visible. A failed storage write
+  // must not make a Cut appear undone only until the next reload.
+  const before={
+    input:inputEl.value,output:outputEl.value,
+    records:outputRecords.map(r=>({...r})),ledger:cloneLedger(workingLedger),
+    lines:lastSourceLines.slice(),selection:{...lastOutputSelection},
+    checked:[...checkedResultRecordIndexes],
+    status:statusEl.textContent,cls:statusEl.className
+  };
   inputEl.value=s.input;
   outputEl.value=s.output;
   outputRecords=(s.outputRecords||[]).map(r=>({...r}));
@@ -1918,7 +1927,23 @@ $("undoBtn").addEventListener("click",()=>{
   resultCard.className=`card result-card ${s.cls.includes("err")?"error":s.cls.includes("ok")?"ok":""}`;
   renderGroupedResults();
   renderLedgerWork();
-  persistExactOutputLedger();
+  if(!persistExactOutputLedger()){
+    inputEl.value=before.input;
+    outputEl.value=before.output;
+    outputRecords=before.records;
+    workingLedger=before.ledger;
+    lastSourceLines=before.lines;
+    lastOutputSelection=before.selection;
+    checkedResultRecordIndexes.clear();
+    for(const i of before.checked)checkedResultRecordIndexes.add(i);
+    statusEl.textContent=before.status;
+    statusEl.className=before.cls;
+    renderGroupedResults();
+    renderLedgerWork();
+    setStatus("Không lưu được Hoàn tác; kết quả đã Cắt vẫn được giữ. Hãy kiểm tra bộ nhớ trước khi thử lại.","err");
+    return;
+  }
+  undoStack.pop();
   announceWorkingSource();
 });
 regionEl.addEventListener("change",updateUI);
