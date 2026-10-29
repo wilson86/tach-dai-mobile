@@ -2,6 +2,7 @@
 // Issue #18: operator-invoked, read-only local admission. No production or network.
 const fs=require('node:fs');
 const path=require('node:path');
+const os=require('node:os');
 const cp=require('node:child_process');
 
 const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.36',ngang:'1.0.34',unified:'1.0.25'});
@@ -80,6 +81,14 @@ function verifiedRepo(dir,expectedSha){
 function jsonAt(folder,filename){return JSON.parse(fs.readFileSync(path.join(folder,filename),'utf8'));}
 function admission(options,runCommand=processReadOnly){
   const root=verifyWindowsWorkspace(options['--workspace']);
+  // Fixture scripts may create disposable files under os.tmpdir(). Do not
+  // permit that side effect on E:/F:, junctions, or an unknown temp drive.
+  const temp=os.tmpdir();
+  if(!path.win32.isAbsolute(temp)||!/^c:\\/i.test(temp)||
+     !fs.existsSync(temp)||fs.lstatSync(temp).isSymbolicLink()||
+     path.win32.normalize(fs.realpathSync.native(temp)).toLowerCase()!==
+       path.win32.normalize(temp).toLowerCase())
+    block('TEMP_NOT_C_ONLY','Node fixture temp directory must resolve directly to C:.');
   const dirs={kts:verifyFolder(root,'KTS'),mobile:verifyFolder(root,'Mobile'),ngang:verifyFolder(root,'Ngang')};
   verifiedRepo(dirs.kts,options['--kts-sha']);
   verifiedRepo(dirs.mobile,options['--mobile-sha']);
