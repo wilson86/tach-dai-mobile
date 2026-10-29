@@ -37,9 +37,9 @@ function fixture(t){
   fs.writeFileSync(path.join(mobile,'app/index.html'),HTML);
   fs.writeFileSync(path.join(mobile,'app/sw.js'),SW);
   for(const [p,version]of [
-    [path.join(mobile,'version.json'),'2.0.36'],
-    [path.join(mobile,'app/version.json'),'1.0.25'],
-    [path.join(ngang,'version.json'),'1.0.35']
+    [path.join(mobile,'version.json'),'2.0.37'],
+    [path.join(mobile,'app/version.json'),'1.0.26'],
+    [path.join(ngang,'version.json'),'1.0.36']
   ])fs.writeFileSync(p,JSON.stringify({version,business_engine_sha256:HASH}));
   stage({mobile,ngang,out});
   return {mobile,ngang,out};
