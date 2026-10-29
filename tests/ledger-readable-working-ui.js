@@ -29,7 +29,7 @@ const storage=new Map();let failWrites=false;
 const ctx={
  console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
  navigator:{clipboard:{async writeText(value){clipboard.value=value}}},
- localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){if(failWrites)throw Error('quota');storage.set(k,v)},removeItem(k){storage.delete(k)}},
+ localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){if(failWrites)throw Error('quota');storage.set(k,v)},removeItem(k){if(failWrites)throw Error('quota');storage.delete(k)}},
  document:dom,
  setTimeout(){},clearTimeout(){}
 };
@@ -103,6 +103,11 @@ async function main(){
  const key=p.parseExactOutputLedger(previous).app==="tach-dai-mobile"?
    "tachDaiMobileExactOutputLedgerV1":"tachDaiNgangExactOutputLedgerV1";
  assert.equal(storage.has(key),true);
+ // Clear cannot hide source while the old persisted ledger survives a quota error.
+ failWrites=true;await els.clearBtn.events.click();failWrites=false;
+ assert.equal(p.input.value,previous,"failed Clear restores exact ledger UI");
+ assert.equal(storage.has(key),true,"failed Clear preserves ledger data");
+ assert.match(els.status.textContent,/Không thể lưu thao tác Xóa/u);
  await els.clearBtn.events.click();
  assert.equal(p.input.value,"");
  assert.equal(els.ledgerWork.style.display,"none");
