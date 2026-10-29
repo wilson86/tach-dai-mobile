@@ -32,6 +32,8 @@ async function chromeSmoke(stage){
   ensure(path.isAbsolute(stage)&&fs.statSync(stage).isDirectory(),'stage must be existing absolute directory');
   const server=serve(stage);await new Promise((yes,no)=>server.once('error',no).listen(0,'127.0.0.1',yes));
   const origin='http://127.0.0.1:'+server.address().port;
+  const served=await fetch(origin+'/Mobile/app/');
+  ensure(served.ok&&((await served.text()).includes('id="tachFrame"')),'loopback server did not serve the real Unified HTML');
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'kts-issue18-headless-'));
   const chrome=process.env.CHROME_PATH||'google-chrome';
   let child,ws;
@@ -73,10 +75,11 @@ async function chromeSmoke(stage){
       })
     }
     await command('Page.enable');await command('Runtime.enable');
-    await command('Page.navigate',{url:origin+'/Mobile/app/'});
+    const navigation=await command('Page.navigate',{url:origin+'/Mobile/app/'});
+    ensure(!navigation.errorText,'Chrome navigation rejected: '+JSON.stringify(navigation));
     let found,lastEval;
     for(let i=0;i<100;i++){
-      const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {unified:!!a&&!!b,local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.26'),a?.contentDocument?.body?.textContent?.includes('2.0.37'),b?.contentDocument?.body?.textContent?.includes('1.0.36')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
+      const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {location:location.href,title:document.title,ready:document.readyState,html:document.documentElement?.outerHTML?.slice(0,350),unified:!!a&&!!b,local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.26'),a?.contentDocument?.body?.textContent?.includes('2.0.37'),b?.contentDocument?.body?.textContent?.includes('1.0.36')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
       lastEval=r;
       if(r.exceptionDetails)throw Error('CHROME_EVAL_EXCEPTION '+JSON.stringify(r.exceptionDetails).slice(0,1200));
       found=r.result?.value;
