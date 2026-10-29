@@ -255,8 +255,13 @@ function validDurableUndoReceipt(s,ledger){
   if(!s.outputRecords.every(r=>r&&typeof r.id==="string"&&
        typeof r.text==="string"&&Number.isInteger(r.sourceLine)&&typeof r.alive==="boolean"))return false;
   if(s.output!==s.outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n"))return false;
-  // Never permit a receipt to restore a different original wager.
-  if((s.workingLedger?.origin||s.input)!==ledger.origin)return false;
+  // Verify the receipt's actual input as well as workingLedger.origin.
+  // Checking only workingLedger.origin lets a foreign plain-text ticket in.
+  if(!s.workingLedger||s.workingLedger.origin!==ledger.origin)return false;
+  if(!s.input.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)&&
+     s.input!==ledger.origin&&
+     !(looksLikeChatLog(ledger.origin)&&s.input===preprocessChatText(ledger.origin)))
+    return false;
   if(s.input.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
     try{
       const prior=JSON.parse(s.input.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
