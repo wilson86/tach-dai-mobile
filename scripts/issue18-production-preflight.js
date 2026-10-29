@@ -15,6 +15,7 @@ const MOBILE_TESTS=Object.freeze([
   'tests/grouped-checkbox-results.js',
   'tests/issue18-build-local-stage.test.js',
   'tests/issue18-production-preflight.test.js',
+  'tests/issue18-verify-stage.test.js',
   'tests/ledger-app-identity-isolation.js',
   'tests/ledger-readable-working-ui.js',
   'tests/mb-leading-dot-chat-envelope.js',
