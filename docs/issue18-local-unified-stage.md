@@ -9,7 +9,7 @@ isolated Unified end-to-end QA stage.**
 
 - Use **clean, SHA-pinned** C: checkouts of the coordinated GitHub review
   branches (record actual HEAD SHAs at test time):
-  - Mobile `review/issue18-all-asset-provenance-20261030`
+  - Mobile `review/issue18-staging-commit-pins-20261030`
   - Ngang `review/issue18-cache-isolation-20261029`
   - KTS authority `review/issue18-cache-isolation-authority-20261029`
 - Stage admission requires exact Mobile **2.0.36**, Ngang **1.0.35**, Unified
@@ -23,11 +23,12 @@ isolated Unified end-to-end QA stage.**
 ## Build from the Mobile repository (Node.js; no packages required)
 
 ```powershell
-node scripts/issue18-build-local-stage.js --mobile "C:\KTS-QA\mobile-wip" --ngang "C:\KTS-QA\ngang-wip" --out "C:\KTS-QA\issue18-stage-new"
+node scripts/issue18-build-local-stage.js --mobile "C:\KTS-QA\issue18-review\Mobile" --ngang "C:\KTS-QA\issue18-review\Ngang" --out "C:\KTS-QA\issue18-stage-new" --mobile-sha "<MOBILE_HEAD>" --ngang-sha "<NGANG_HEAD>"
 ```
 
-The tool verifies exact release-candidate versions and a shared 64-character
-engine SHA, checks required assets, refuses overlapping or symlinked source
+The tool verifies both clean source checkouts are pinned to the exact Git commit
+SHAs supplied on its CLI, then verifies candidate versions and common engine SHA,
+checks required assets, refuses overlapping or symlinked source
 paths, refuses existing targets, and copies only into the new staging directory.
 It rewrites **only the copy** of the Ngang iframe to `../../Ngang/` and
 **only the staged copy** of `Mobile/app/sw.js` from the published `/tach-dai-mobile/`
@@ -39,10 +40,10 @@ closed before staging. Original source checkouts remain unchanged.
 The output contains `Mobile/`, `Ngang/` and a
 `ISSUE18_STAGE_MANIFEST.json` with `release_authorized: false`.
 
-Before any Chrome action, run the **read-only** SHA-256 verifier on the exact staged files:
+Before any Chrome action, run the **read-only** Git SHA-pinned 21-asset verifier on the exact staged files:
 
 ```powershell
-node scripts/issue18-verify-stage.js --mobile 'C:\\KTS-QA\\issue18-review\\Mobile' --ngang 'C:\\KTS-QA\\issue18-review\\Ngang' --out 'C:\\KTS-QA\\issue18-stage-new'
+node scripts/issue18-verify-stage.js --mobile 'C:\KTS-QA\issue18-review\Mobile' --ngang 'C:\KTS-QA\issue18-review\Ngang' --out 'C:\KTS-QA\issue18-stage-new' --mobile-sha '<MOBILE_HEAD>' --ngang-sha '<NGANG_HEAD>'
 ```
 
 Require `STAGE_SOURCE_BYTES_PASS`, 21 checked files, correct version and source hashes. Any failure blocks Chrome QA; create a separate fresh stage after fixing the underlying issue. This is not a Chrome or production PASS.
