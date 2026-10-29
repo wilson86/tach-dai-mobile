@@ -81,7 +81,7 @@ async function chromeSmoke(stage){
       if(found?.unified&&found?.local&&found?.tach&&found?.ngang&&found.versions?.every(Boolean))break;
       await nap(100);
     }
-    assert.ok(found?.unified,'Unified two iframe shell did not load');
+    assert.ok(found?.unified,'Unified two iframe shell did not load: '+JSON.stringify(found));
     assert.ok(found?.local,'One iframe routed outside localhost staging');
     assert.ok(found?.tach&&found?.ngang,'Mobile/Ngang child app input absent in real Chrome');
     assert.ok(found?.versions?.every(Boolean),'Versioned Unified/Mobile/Ngang UI missing');
