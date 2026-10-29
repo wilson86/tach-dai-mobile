@@ -84,6 +84,9 @@ async function main(){
  // Full Cut retains the original as a zero-row ledger across reload, with no wagers.
  els.selectAllOutputBtn.events.click();await p.cutSelectedOutput();
  const empty=p.parseExactOutputLedger(p.input.value);assert.equal(empty.origin,original);assert.equal(empty.rows.length,0);
+ assert.ok(empty.undoReceipt,"full Cut must carry one durable Undo receipt");
+ const tampered={...empty,undoReceipt:{...empty.undoReceipt,input:"khác tin gốc"}};
+ assert.equal(p.parseExactOutputLedger("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"+JSON.stringify(tampered)),false,"foreign-source Undo receipt rejected");
  p.input.value="";p.restorePersistedExactOutputLedger();
  // Simulate a new browser's empty volatile Undo stack after a full Cut.
  vm.runInContext("undoStack=[]",ctx);p.run();assert.equal(p.output.value,"");
