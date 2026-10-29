@@ -2,6 +2,8 @@
 // Build an isolated, loopback-only Unified fixture. Never changes the source trees.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
+const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 const MOBILE_FILES = [
   'index.html', 'sw.js', 'version.json', 'manifest.webmanifest',
@@ -78,8 +80,10 @@ function stage({mobile, ngang, out}) {
     fail('Mobile/Ngang/Unified engine SHA mismatch');
   if (mv.version !== '2.0.36' || nv.version !== '1.0.34' || uv.version !== '1.0.25')
     fail('mixed or stale Issue18 candidate versions');
-  const html = isolatedUnifiedHtml(fs.readFileSync(checkedFile(m, 'app/index.html'), 'utf8'));
-  const sw = isolatedUnifiedServiceWorker(fs.readFileSync(checkedFile(m, 'app/sw.js'), 'utf8'));
+  const sourceHtml = fs.readFileSync(checkedFile(m, 'app/index.html'), 'utf8');
+  const sourceSw = fs.readFileSync(checkedFile(m, 'app/sw.js'), 'utf8');
+  const html = isolatedUnifiedHtml(sourceHtml);
+  const sw = isolatedUnifiedServiceWorker(sourceSw);
   // Preflight all assets before making the staging directory.
   for (const file of MOBILE_FILES) checkedFile(m, file);
   for (const file of NGANG_FILES) checkedFile(n, file);
@@ -95,7 +99,18 @@ function stage({mobile, ngang, out}) {
   fs.writeFileSync(path.join(target, 'Mobile/app/sw.js'), sw, {encoding: 'utf8', flag: 'w'});
   const manifest = {schema: 'KTS_ISSUE18_LOCAL_ONLY_STAGE_V1', engine_sha256: engine,
     mobile_version: mv.version, ngang_version: nv.version, unified_version: uv.version,
-    iframe_ngang: '../../Ngang/', source_unchanged: true, release_authorized: false};
+    iframe_ngang: '../../Ngang/', source_unchanged: true, release_authorized: false,
+    source_sha256: {
+      unified_html: sha256(sourceHtml),
+      unified_sw: sha256(sourceSw),
+      mobile_engine: sha256(fs.readFileSync(checkedFile(m,'business_engine.generated.js'))),
+      ngang_engine: sha256(fs.readFileSync(checkedFile(n,'business_engine.generated.js')))
+    },
+    staged_sha256: {
+      unified_html: sha256(fs.readFileSync(path.join(target,'Mobile/app/index.html'))),
+      unified_sw: sha256(fs.readFileSync(path.join(target,'Mobile/app/sw.js')))
+    }
+  };
   fs.writeFileSync(path.join(target, 'ISSUE18_STAGE_MANIFEST.json'), JSON.stringify(manifest, null, 2) + '\n', 'utf8');
   return manifest;
 }
