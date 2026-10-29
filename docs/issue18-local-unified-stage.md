@@ -9,7 +9,7 @@ isolated Unified end-to-end QA stage.**
 
 - Use **clean, SHA-pinned** C: checkouts of the coordinated GitHub review
   branches (record actual HEAD SHAs at test time):
-  - Mobile `review/issue18-stage-integrity-20261029`
+  - Mobile `review/issue18-all-asset-provenance-20261030`
   - Ngang `review/issue18-cache-isolation-20261029`
   - KTS authority `review/issue18-cache-isolation-authority-20261029`
 - Stage admission requires exact Mobile **2.0.36**, Ngang **1.0.35**, Unified
