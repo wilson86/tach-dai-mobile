@@ -109,8 +109,10 @@ test('structured failures include stable code in message and Error.code',()=>{
     {code:'USAGE',message:/STAGE_INTEGRITY_BLOCKED \[USAGE\]/});
 });
 test('CLI requires three unique absolute sources and stage paths',()=>{
-  assert.deepEqual(parseArgs(['--mobile','/a','--ngang','/b','--out','/c']),
-    {mobile:'/a',ngang:'/b',out:'/c'});
+  const a='a'.repeat(40),b='b'.repeat(40);
+  assert.deepEqual(parseArgs(['--mobile','/a','--ngang','/b','--out','/c',
+    '--mobile-sha',a,'--ngang-sha',b]),
+    {mobile:'/a',ngang:'/b',out:'/c',mobileSha:a,ngangSha:b});
   assert.throws(()=>parseArgs(['--mobile','/a','--mobile','/b','--out','/c']),/USAGE/);
   assert.throws(()=>parseArgs(['--mobile','/a']),/USAGE/);
 });
