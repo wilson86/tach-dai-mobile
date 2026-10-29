@@ -12,7 +12,7 @@ const unifiedCore=read("app/unified-core.js");
 const unifiedVersion=JSON.parse(read("app/version.json"));
 const engine=read("business_engine.generated.js"),calendar=read("station_calendar.generated.js");
 const SHA="7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea";
-const MOBILE="2.0.36",UNIFIED="1.0.25";
+const MOBILE="2.0.37",UNIFIED="1.0.26";
 assert.equal(rootVersion.version,MOBILE);
 assert.equal(unifiedVersion.version,UNIFIED);
 assert.equal(rootVersion.business_engine_sha256,SHA);
