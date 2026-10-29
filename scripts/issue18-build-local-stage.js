@@ -39,6 +39,24 @@ function isolatedUnifiedHtml(source) {
     fail('production Ngang iframe still present');
   return html;
 }
+// The published Unified SW has GitHub Pages path guards. In the local
+// /Mobile/app/ fixture those guards would skip navigation/offline caching.
+// Rewrite ONLY the copied SW, never the release asset.
+function isolatedUnifiedServiceWorker(source) {
+  const marker='/tach-dai-mobile/';
+  for (const required of ['/tach-dai-mobile/app','/tach-dai-mobile/app/',
+        '/tach-dai-mobile/icon-192.png','/tach-dai-mobile/icon-512.png']) {
+    if (!source.includes(required))
+      fail('unexpected Unified service-worker route: ' + required);
+  }
+  const rewritten=source.split(marker).join('/Mobile/');
+  if (rewritten.includes(marker) ||
+      !rewritten.includes('/Mobile/app') ||
+      !rewritten.includes('/Mobile/icon-192.png') ||
+      !rewritten.includes('/Mobile/icon-512.png'))
+    fail('Unified service-worker route rewrite incomplete');
+  return rewritten;
+}
 function stage({mobile, ngang, out}) {
   if (![mobile, ngang, out].every(x => typeof x === 'string' && path.isAbsolute(x)))
     fail('provide absolute --mobile, --ngang and --out paths');
@@ -61,6 +79,7 @@ function stage({mobile, ngang, out}) {
   if (mv.version !== '2.0.36' || nv.version !== '1.0.34' || uv.version !== '1.0.25')
     fail('mixed or stale Issue18 candidate versions');
   const html = isolatedUnifiedHtml(fs.readFileSync(checkedFile(m, 'app/index.html'), 'utf8'));
+  const sw = isolatedUnifiedServiceWorker(fs.readFileSync(checkedFile(m, 'app/sw.js'), 'utf8'));
   // Preflight all assets before making the staging directory.
   for (const file of MOBILE_FILES) checkedFile(m, file);
   for (const file of NGANG_FILES) checkedFile(n, file);
@@ -73,6 +92,7 @@ function stage({mobile, ngang, out}) {
     }
   }
   fs.writeFileSync(path.join(target, 'Mobile/app/index.html'), html, {encoding: 'utf8', flag: 'w'});
+  fs.writeFileSync(path.join(target, 'Mobile/app/sw.js'), sw, {encoding: 'utf8', flag: 'w'});
   const manifest = {schema: 'KTS_ISSUE18_LOCAL_ONLY_STAGE_V1', engine_sha256: engine,
     mobile_version: mv.version, ngang_version: nv.version, unified_version: uv.version,
     iframe_ngang: '../../Ngang/', source_unchanged: true, release_authorized: false};
@@ -92,4 +112,4 @@ if (require.main === module) {
   try { console.log(JSON.stringify(stage(parseArgs(process.argv.slice(2))))); }
   catch (error) { console.error(error.message); process.exitCode = 2; }
 }
-module.exports = {isolatedUnifiedHtml, stage, parseArgs};
+module.exports = {isolatedUnifiedHtml, isolatedUnifiedServiceWorker, stage, parseArgs};
