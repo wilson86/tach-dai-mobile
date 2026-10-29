@@ -91,7 +91,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.33</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.34</span></div>
 
   <div class="card">
     <div class="controls">
@@ -231,16 +231,27 @@ function parseExactOutputLedger(raw){
 }
 function persistExactOutputLedger(){
   try{
+    const old=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
+    if(old&&!parseExactOutputLedger(old)&&!preserveIncompatibleLedger(old))return;
     if(inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) localStorage.setItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY,inputEl.value);
     else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
   }catch(_){}
+}
+function preserveIncompatibleLedger(raw){
+  for(let i=0;i<10000;i++){
+    const key=EXACT_OUTPUT_LEDGER_STORAGE_KEY+":preserved:"+i;
+    const existing=localStorage.getItem(key);
+    if(existing===raw)return true;
+    if(existing===null){localStorage.setItem(key,raw);return localStorage.getItem(key)===raw;}
+  }
+  return false;
 }
 function restorePersistedExactOutputLedger(){
   try{
     const raw=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY)||"";
     if(!raw)return;
     if(parseExactOutputLedger(raw)) inputEl.value=raw;
-    else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
+    // Keep unrecognized data intact; do not interpret it as wagers.
   }catch(_){}
 }
 function announceWorkingSource(){
@@ -1931,7 +1942,7 @@ if(parseExactOutputLedger(inputEl.value))run();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.33";
+const APP_VERSION = "2.0.34";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

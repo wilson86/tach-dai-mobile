@@ -39,7 +39,7 @@ vm.runInContext(calendar+"\n"+engine+"\n"+script+
  "\nglobalThis.__api={run,initGroupedResults,cutSelectedOutput,copyLedgerWork,parseExactOutputLedger,restorePersistedExactOutputLedger,serializeExactOutputLedger,renderLedgerWork,records:()=>outputRecords.map(r=>({...r})),input:inputEl,output:outputEl,region:regionEl,date:dateEl,undo:()=>document.getElementById('undoBtn').events.click()};",ctx);
 const p=ctx.__api;
 const groups=()=>els.resultGroups.children;
-const rows=()=>els.ledgerWorkRows.children;
+const choose=record=>{const label=groups().flatMap(g=>g.children.slice(1)).find(x=>x.children[1].textContent===record);assert.ok(label,record);const box=label.children[0];box.checked=true;box.events.change()};
 async function main(){
  p.initGroupedResults();
  p.region.value="mn";p.date.value="2026-10-15";
@@ -48,39 +48,40 @@ async function main(){
  assert.equal(els.ledgerWork.style.display,"none","plain Telegram input stays editable");
  const original=p.input.value;
  const all=p.records().filter(r=>r.alive).map(r=>r.text);
- assert.equal(all.length,3);
- const dx=groups()[0].children[3].children[0];dx.checked=true;dx.events.change();
+ assert.deepEqual(Array.from(all),["tn 89 98 b5n","ag 89 98 b5n","tn ag 89 98 dx2,5n"]);
+ assert.ok(p.records().every(r=>r.sourceLine===1),"original physical line retained");
+ const cut=all.find(r=>r.includes(' dx'));choose(cut);
  await p.cutSelectedOutput();
  const rawLedger=p.input.value;
  assert.ok(rawLedger.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"),"internal ledger remains authoritative");
  assert.equal(p.output.value.split("\n").length,2,"DX removed, B outputs preserved");
  assert.equal(p.input.style.display,"none","internal JSON textarea not shown to user");
  assert.equal(els.ledgerWork.style.display,"","readable upper working source shown");
- assert.equal(rows().length,2,"upper rows reflect exactly surviving output rows");
- assert.deepEqual(rows().map(r=>r.children[1].textContent),p.output.value.split("\n"));
- assert.ok(!rows().some(r=>r.children[1].textContent.includes("KTS_EXACT_OUTPUT_LEDGER")));
+ assert.equal(els.ledgerSourceView.value,original,"read-only source retains original; remaining bets stay in results");
+ assert.match(html,/<textarea id="ledgerSourceView" readonly/u);
  assert.equal(els.ledgerWorkOrigin.textContent,original,"raw original is still separately auditable");
  await els.ledgerCopyOriginal.events.click();
  assert.equal(clipboard.value,original,"Copy tin gốc cannot export internal JSON");
  assert.equal(els.ledgerWorkCut.disabled,true,"no accidental cut with zero selected");
- // Upper row selection is the same authoritative checkbox state as lower pane.
- const first=rows()[0].children[0];first.checked=true;first.events.change();
+ // Result selection and actions are owned by the lower pane.
+ choose(p.records().find(r=>r.alive).text);
  assert.match(els.resultGroupsSummary.textContent,/Đã chọn 1\/2/u);
- await els.ledgerWorkCopy.events.click();
+ await els.copyBtn.events.click();
  assert.equal(clipboard.value,p.records().find(r=>r.alive).text);
- await els.ledgerWorkCut.events.click();
+ await els.cutBtn.events.click();
  assert.equal(p.output.value.split("\n").length,1);
- assert.equal(rows().length,1);
  assert.equal(els.ledgerWork.style.display,"");
  const persisted=p.output.value;
  p.run();assert.equal(p.output.value,persisted,"re-run does not resplit remaining wager");
+ p.input.value="";p.restorePersistedExactOutputLedger();p.run();
+ assert.equal(p.output.value,persisted,"reload does not resurrect cut rows");
  p.undo();assert.equal(p.input.value,rawLedger,"undo restores prior serialized state without loss");
- assert.equal(rows().length,2,"upper readable rows restored");
+ assert.deepEqual(Array.from(p.output.value.split("\n")),Array.from(all).filter(r=>r!==cut),"undo restores surviving rows");
  p.undo();assert.equal(p.input.value,original,"second undo restores original plaintext");
  assert.equal(els.ledgerWork.style.display,"none");
  assert.equal(p.output.value.split("\n").length,3);
  // Explicit Xóa must remove persistent ledger; Undo restores both it and UI.
- const last=groups()[0].children[3].children[0];last.checked=true;last.events.change();
+ choose(cut);
  await p.cutSelectedOutput();
  const previous=p.input.value;
  assert.ok(previous.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"));

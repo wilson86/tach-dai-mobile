@@ -203,7 +203,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.22';
+  const UX_VERSION='1.0.23';
 
   function selectAllText(el){
     if(!el) return;
@@ -328,9 +328,21 @@
   }
   function persist(){
     try{
+      const old=localStorage.getItem(STORAGE);
+      let compatible=false;
+      if(old){try{compatible=validateLedger(JSON.parse(old))}catch(_){}}
+      if(old&&!compatible&&!preserveIncompatibleLedger(old))return;
       if(ledgerActive&&live().length)localStorage.setItem(STORAGE,JSON.stringify(serial()));
       else localStorage.removeItem(STORAGE);
     }catch(_){}
+  }
+  function preserveIncompatibleLedger(raw){
+    for(let i=0;i<10000;i++){
+      const key=STORAGE+':preserved:'+i,existing=localStorage.getItem(key);
+      if(existing===raw)return true;
+      if(existing===null){localStorage.setItem(key,raw);return localStorage.getItem(key)===raw}
+    }
+    return false;
   }
   function snapshot(){
     undoStack.push({origin,input:safeText($('dvInput')?.value),output:safeText($('dvOutput')?.value),

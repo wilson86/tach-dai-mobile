@@ -14,7 +14,7 @@ const detailed="──── 12 đá (3) ────\n3d 12 32 dx5n\n3d 12 42 d
 const originalRows=[
  "3d 12 32 dx 5n","3d 12 42 dx 5n","3d 12 52 dx 5n",
  "3d 32 42 dx 5n","3d 32 52 dx 5n","3d 42 52 dx 5n"];
-function setup(existingStorage=new Map(),clipboardFailure=false){
+function setup(existingStorage=new Map(),clipboardFailure=false,denyBackup=false){
  const nodes=Object.create(null);
  function element(tag="div",id=""){
   const node={tag,id,children:[],events:Object.create(null),style:{},value:"",
@@ -55,7 +55,7 @@ function setup(existingStorage=new Map(),clipboardFailure=false){
  nodes.dvRegion.value="mn";nodes.dvDate.value="2026-10-15";
  const doc={readyState:"complete",head:element("head"),body:element("body"),
   getElementById(id){return nodes[id]||null;},createElement:element};
- const store={getItem(k){return existingStorage.get(k)||null},setItem(k,v){existingStorage.set(k,String(v))},
+ const store={getItem(k){return existingStorage.get(k)||null},setItem(k,v){if(denyBackup&&k.includes(':preserved:'))throw Error('quota');existingStorage.set(k,String(v))},
   removeItem(k){existingStorage.delete(k)}};
  let written="";
  const navigator={clipboard:{async writeText(v){if(clipboardFailure)throw Error("denied");written=String(v)}}};
@@ -83,6 +83,15 @@ function setup(existingStorage=new Map(),clipboardFailure=false){
  return {nodes,ctx,store,backing:existingStorage,getCopied:()=>written,wait};
 }
 async function main(){
+ const key='KTS_DAVONG_WORKING_ROWS_V1';
+ const legacy=JSON.stringify({schema:key,app:'tach-dai-davong',engine:'old-engine',region:'mn',date:'2026-10-15',origin:'synthetic',rows:[],groups:[]});
+ const retained=new Map([[key,legacy]]),old=setup(retained);
+ assert.equal(retained.get(key),legacy,'startup retains incompatible ledger');
+ await old.nodes.dvClear.click();await old.wait();
+ assert.equal(retained.get(key+':preserved:0'),legacy,'legacy bytes backed up before clear');
+ const full=new Map([[key,legacy]]),blocked=setup(full,false,true);
+ await blocked.nodes.dvClear.click();await blocked.wait();
+ assert.equal(full.get(key),legacy,'quota failure preserves original ledger');
  const x=setup();
  await x.nodes.dvRun.click();await x.wait();
  assert.equal(x.nodes.dvTapResultList.children.length,3,"3 pair-header checkbox groups");

@@ -1,5 +1,5 @@
 {
-  "version": "2.0.33",
+  "version": "2.0.34",
   "updated": "2026-10-29",
   "notes": "Canonical duplicate-number confirmation gate; calendar generated from KTS station_schedule_authority.json; explicit unordered DX pairs and full station coverage.",
   "business_engine_sha256": "0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb"
