@@ -12,8 +12,8 @@ isolated Unified end-to-end QA stage.**
   - Mobile `review/issue18-staging-commit-pins-20261030`
   - Ngang `review/issue18-cache-isolation-20261029`
   - KTS authority `review/issue18-cache-isolation-authority-20261029`
-- Stage admission requires exact Mobile **2.0.36**, Ngang **1.0.35**, Unified
-  **1.0.25**, with matching generated engine SHA. Old WIP versions are rejected.
+- Stage admission requires exact Mobile **2.0.37**, Ngang **1.0.36**, Unified
+  **1.0.26**, with matching generated engine SHA. Old WIP versions are rejected.
 - Read each repository's `AGENTS.md` and the WILSON86 zero-cost policy.
 - Use **synthetic data only**. Never attach to a personal Chrome profile,
   production database, Telegram session or customer storage.
