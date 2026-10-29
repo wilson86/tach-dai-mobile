@@ -5,6 +5,7 @@ const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const {isolatedUnifiedHtml,isolatedUnifiedServiceWorker}=require('./issue18-build-local-stage.js');
+const {verifyGitSource}=require('./issue18-git-source-pin.js');
 
 const MOBILE_FILES=[
   'index.html','sw.js','version.json','manifest.webmanifest',
@@ -51,8 +52,10 @@ function pathsIn(rootDir){
   walk(rootDir);
   return found.sort();
 }
-function verify({mobile,ngang,out}){
+function verify({mobile,ngang,out,mobileSha,ngangSha}){
   const m=root('mobile',mobile),n=root('ngang',ngang),s=root('out',out);
+  if(Boolean(mobileSha)!==Boolean(ngangSha))fail('SOURCE_SHA_PIN_REQUIRED','both Git source pins must be provided');
+  if(mobileSha){verifyGitSource(m,mobileSha);verifyGitSource(n,ngangSha);}
   if(new Set([m,n,s]).size!==3)fail('OVERLAP','staging and source paths collide');
   if([m,n].some(x=>s.startsWith(x+path.sep)||x.startsWith(s+path.sep)))
     fail('OVERLAP','staging and source must be disjoint');
@@ -66,6 +69,8 @@ function verify({mobile,ngang,out}){
   let manifest;
   try{manifest=JSON.parse(safeRead(s,'ISSUE18_STAGE_MANIFEST.json').toString('utf8'))}
   catch(e){fail('INVALID_MANIFEST',e.message)}
+  if(mobileSha&&(manifest.source_commit_sha?.mobile!==mobileSha||manifest.source_commit_sha?.ngang!==ngangSha))
+    fail('SOURCE_SHA_DRIFT','stage manifest is not pinned to the requested Git commits');
   if(manifest.schema!=='KTS_ISSUE18_LOCAL_ONLY_STAGE_V1' ||
     manifest.release_authorized!==false||manifest.source_unchanged!==true ||
     manifest.iframe_ngang!=='../../Ngang/' ||
@@ -116,23 +121,25 @@ function verify({mobile,ngang,out}){
   if(manifest.staged_sha256?.unified_html!==sha256(rewrittenHtml)||
     manifest.staged_sha256?.unified_sw!==sha256(rewrittenSw))
     fail('STAGED_DIGEST_DRIFT','manifest stage hashes do not match verified content');
+  if(mobileSha){verifyGitSource(m,mobileSha);verifyGitSource(n,ngangSha);}
   return Object.freeze({status:'STAGE_SOURCE_BYTES_PASS',
     checked_assets:checked,engine_sha256:engine,
     stage_manifest_sha256:sha256(safeRead(s,'ISSUE18_STAGE_MANIFEST.json')),
     release_authorized:false,chrome:'NOT_RUN',android:'NOT_RUN',cost_usd:0});
 }
 function parseArgs(args){
-  if(args.length!==6)fail('USAGE','--mobile ABS --ngang ABS --out ABS');
+  if(args.length!==10)fail('USAGE','--mobile ABS --ngang ABS --out ABS --mobile-sha SHA40 --ngang-sha SHA40');
   const values=Object.create(null);
   for(let i=0;i<args.length;i+=2){
     const key=args[i];
-    if(!['--mobile','--ngang','--out'].includes(key)||!args[i+1]||Object.hasOwn(values,key))
+    if(!['--mobile','--ngang','--out','--mobile-sha','--ngang-sha'].includes(key)||!args[i+1]||Object.hasOwn(values,key))
       fail('USAGE','unexpected or duplicate argument '+key);
     values[key]=args[i+1];
   }
-  if(!values['--mobile']||!values['--ngang']||!values['--out'])
-    fail('USAGE','all three absolute paths required');
-  return {mobile:values['--mobile'],ngang:values['--ngang'],out:values['--out']};
+  if(!values['--mobile']||!values['--ngang']||!values['--out']||!values['--mobile-sha']||!values['--ngang-sha'])
+    fail('USAGE','all five pinned inputs required');
+  return {mobile:values['--mobile'],ngang:values['--ngang'],out:values['--out'],
+    mobileSha:values['--mobile-sha'],ngangSha:values['--ngang-sha']};
 }
 if(require.main===module){
   try{console.log(JSON.stringify(verify(parseArgs(process.argv.slice(2))),null,2))}
