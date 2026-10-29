@@ -4,9 +4,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {stage, isolatedUnifiedHtml, parseArgs} = require('../scripts/issue18-build-local-stage.js');
+const {stage, isolatedUnifiedHtml, isolatedUnifiedServiceWorker, parseArgs} = require('../scripts/issue18-build-local-stage.js');
 const HASH = '7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
 const html = '<iframe id="tachFrame" src="../"></iframe>\n<iframe id="ngangFrame" src="https://wilson86.github.io/tach-dai-ngang/"></iframe>';
+const sw = `const NAV='/tach-dai-mobile/app', N='/tach-dai-mobile/app/',
+ICON_1='/tach-dai-mobile/icon-192.png', ICON_2='/tach-dai-mobile/icon-512.png';`;
 function fixture() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'issue18-stage-test-'));
   const mobile = path.join(base, 'srcMobile'), ngang = path.join(base, 'srcNgang'), out = path.join(base, 'fresh-stage');
@@ -16,6 +18,7 @@ function fixture() {
     const target = path.join(repo,f); fs.mkdirSync(path.dirname(target),{recursive:true}); fs.writeFileSync(target,'test asset');
   }
   fs.writeFileSync(path.join(mobile,'app/index.html'),html);
+  fs.writeFileSync(path.join(mobile,'app/sw.js'),sw);
   for (const [f,version] of [[path.join(mobile,'version.json'),'2.0.36'],[path.join(mobile,'app/version.json'),'1.0.25'],[path.join(ngang,'version.json'),'1.0.34']])
     fs.writeFileSync(f, JSON.stringify({version,business_engine_sha256:HASH}));
   return {base,mobile,ngang,out};
@@ -30,6 +33,16 @@ test('rejects changed production iframe and unexpected offsite iframe',()=>{
   assert.throws(()=>isolatedUnifiedHtml(html.replace('tach-dai-ngang/','evil/')),/STAGING_BLOCKED/);
   assert.throws(()=>isolatedUnifiedHtml(html + '<iframe id="evilFrame" src="https://example.com"></iframe>'),/STAGING_BLOCKED/);
 });
+test('local Unified SW uses local navigation and offline icon routes only',()=>{
+  const staged=isolatedUnifiedServiceWorker(sw);
+  assert.ok(staged.includes('/Mobile/app'));
+  assert.ok(staged.includes('/Mobile/icon-192.png'));
+  assert.ok(staged.includes('/Mobile/icon-512.png'));
+  assert.ok(!staged.includes('/tach-dai-mobile/'));
+  assert.ok(sw.includes('/tach-dai-mobile/'), 'release SW must remain unchanged');
+  assert.throws(()=>isolatedUnifiedServiceWorker(sw.replace(
+    '/tach-dai-mobile/icon-512.png','/unknown/icon-512.png')),/STAGING_BLOCKED/);
+});
 test('fresh stage copies exact assets and does not change original source',t=>{
   const f=fixture(); t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
   const manifest=stage(f);
@@ -37,6 +50,8 @@ test('fresh stage copies exact assets and does not change original source',t=>{
   assert.equal(manifest.release_authorized,false);
   assert.equal(fs.readFileSync(path.join(f.mobile,'app/index.html'),'utf8'),html);
   assert.match(fs.readFileSync(path.join(f.out,'Mobile/app/index.html'),'utf8'),/src="\.\.\/\.\.\/Ngang\/"/);
+  assert.ok(fs.readFileSync(path.join(f.out,'Mobile/app/sw.js'),'utf8').includes('/Mobile/app'));
+  assert.equal(fs.readFileSync(path.join(f.mobile,'app/sw.js'),'utf8'),sw);
   assert.equal(fs.existsSync(path.join(f.out,'Ngang/icon-192.png')),true);
   assert.equal(fs.existsSync(path.join(f.out,'Ngang/icon-512.png')),true);
   assert.throws(()=>stage(f),/STAGING_BLOCKED: stage already exists/);
