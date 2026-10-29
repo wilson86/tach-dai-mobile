@@ -2,7 +2,7 @@
 // Fail-closed CLI validation; no git, browser, workflow, production or network.
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {argsOf,admission,MOBILE_TESTS,NGANG_TESTS}=require('../scripts/issue18-production-preflight.js');
+const {argsOf,admission,KTS_PYTESTS,MOBILE_TESTS,NGANG_TESTS}=require('../scripts/issue18-production-preflight.js');
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
 const good=['--workspace','C:\\KTS-QA\\issue18',
   '--kts-sha',a,'--mobile-sha',b,'--ngang-sha',c];
@@ -38,4 +38,13 @@ test('release admission includes all audited regression tests but excludes live 
     assert.ok(MOBILE_TESTS.includes(required));
     assert.ok(NGANG_TESTS.includes(required));
   }
+});
+
+test('Router and Desktop N035 tests are offline source-bound only',()=>{
+  assert.deepEqual([...KTS_PYTESTS],[
+    'KTSRouter/tests/test_n035_router_no_send.py',
+    'KTSRouter/tests/test_n035_desktop_oracle.py'
+  ]);
+  assert.ok(Object.isFrozen(KTS_PYTESTS));
+  assert.ok(KTS_PYTESTS.every(path=>/^KTSRouter\/tests\/test_n035_[a-z_]+\.py$/.test(path)));
 });
