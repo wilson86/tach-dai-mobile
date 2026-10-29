@@ -42,3 +42,12 @@ test('rejects malformed SHA, non-Git folder or linked .git marker',t=>{
   t.after(()=>fs.rmSync(noGit,{recursive:true,force:true}));
   assert.throws(()=>verifyGitSource(noGit,'a'.repeat(40)),/LINKED_WORKTREE/);
 });
+
+test('refuses linked .git indirection even when target is clean',t=>{
+  const {dir,sha}=fixture(t);
+  const linked=fs.mkdtempSync(path.join(os.tmpdir(),'kts-issue18-gitfile-'));
+  t.after(()=>fs.rmSync(linked,{recursive:true,force:true}));
+  const sourceGit=path.join(dir,'.git').replace(/\\/g,'/');
+  fs.writeFileSync(path.join(linked,'.git'),'gitdir: '+sourceGit+'\n');
+  assert.throws(()=>verifyGitSource(linked,sha),/LINKED_WORKTREE/);
+});
