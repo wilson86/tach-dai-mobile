@@ -22,12 +22,15 @@ jobs:
     steps:
       - name: Checkout pinned Mobile candidate
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Checkout pinned public Ngang candidate
         uses: actions/checkout@v4
         with:
           repository: wilson86/tach-dai-ngang
           ref: 93d05ab8a36ed392e2b126cbce1b9d2f2311f55c
           path: _ngang_candidate
+          persist-credentials: false
       - name: Verify immutable candidate identities
         shell: bash
         run: |
