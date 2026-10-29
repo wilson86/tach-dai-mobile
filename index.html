@@ -1369,8 +1369,13 @@ async function cutSelectedSourceLines(){
   if(!picked.trim()){setStatus("Chỉ chọn dòng cược có nội dung để Cắt.","err");return;}
   if(!(await writeClipboardText(picked))){setStatus("Không thể copy dòng nguồn; chưa Cắt.","err");return;}
   snapshot();
+  const receipt=undoStack[undoStack.length-1];
   inputEl.value=remaining;
-  persistExactOutputLedger();
+  if(!persistExactOutputLedger()){
+    restoreCutDraft(receipt);
+    setStatus("Không lưu được thao tác Cắt nguồn; tin cũ vẫn giữ. Nội dung đã copy chưa được Cắt.","err");
+    return;
+  }
   if(remaining.trim())run();
   else{outputEl.value="";resetOutputRecords();setStatus("Đã cắt toàn bộ dòng nguồn","ok");}
   announceWorkingSource();
