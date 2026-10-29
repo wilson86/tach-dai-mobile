@@ -4,6 +4,7 @@ on:
     branches: [review/issue18-staging-commit-pins-20261030]
     paths:
       - .github/workflows/issue18-public-chrome-local-only.yml
+      - scripts/issue18-chrome-isolated-smoke.js
 permissions:
   contents: read
 concurrency:
