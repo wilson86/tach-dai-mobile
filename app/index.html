@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.25</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.26</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div id="sharedSettings" class="card shared-settings">
     <div class="controls">
       <div><label class="small" for="sharedRegion">Miền dùng chung</label><select id="sharedRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -77,7 +77,7 @@
     </div>
   </section>
 </div>
-<script src="./unified-core.js?ux=1.0.25"></script>
+<script src="./unified-core.js?ux=1.0.26"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -181,7 +181,7 @@ function loadSharedSettings(){
 function engine(){
   const w=$('tachFrame').contentWindow;
   const names=['normalizeInput','validateCheckOnlyLine','processLine','getSchedule','preprocessChatText','looksLikeChatLog','resolveExplicitSourceRegion','splitBetChunks'];
-  if(!w||names.some(n=>typeof w[n]!=='function')) throw Error('ENGINE_046935_NOT_READY');
+  if(!w||names.some(n=>typeof w[n]!=='function')) throw Error('ENGINE_NOT_READY');
   if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.ENGINE_SHA256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
   return w;
 }
@@ -273,7 +273,7 @@ async function runDaVong(options={}){
     const msg=String(e&&e.message||e);
     // The Mobile iframe owns the canonical engine. If its offline navigation
     // fails, preserve existing rendered wagers/ledger rather than erasing them.
-    if(msg.includes('ENGINE_046935_NOT_READY')){
+    if(msg.includes('ENGINE_NOT_READY')){
       setDvStatus('Engine Tách Đài chưa nạp được (offline hoặc tải lại). Không thay đổi cược đang lưu. Hãy kết nối mạng để chuẩn bị bộ nhớ đệm và thử lại.','err');
       return;
     }
@@ -295,7 +295,7 @@ $('dvCopy').addEventListener('click',async()=>{const text=bettingPayloadFromDisp
 $('sharedRegion').addEventListener('change',syncSharedSettings);
 $('sharedDate').addEventListener('change',()=>{$('sharedToday').checked=false;syncSharedSettings()});
 $('sharedToday').addEventListener('change',syncSharedSettings);
-$('tachFrame').addEventListener('load',()=>{syncSharedSettings();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine 046935 đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
+$('tachFrame').addEventListener('load',()=>{syncSharedSettings();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
 $('ngangFrame').addEventListener('load',syncSharedSettings);
 loadSharedSettings();
 // The Unified app-scope SW alone cannot intercept offline navigation to ../,
@@ -322,9 +322,9 @@ async function prepareOfflineEngine(){
         }
       });
     })));
-    const cache=await caches.open('kts-tach-unified-v1.0.25-duplicate-approval-7952aa');
+    const cache=await caches.open('kts-tach-unified-v1.0.26-duplicate-approval-7952aa');
     const expected=['../','../index.html','../station_calendar.generated.js',
-      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.25'];
+      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.26'];
     for(const path of expected){
       const request=new URL(path,location.href).href;
       const response=await cache.match(request);
