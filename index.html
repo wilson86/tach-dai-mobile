@@ -208,6 +208,20 @@ let workingLedger=null;
 function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
 function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
 function ledgerDate(){return String(dateEl.value||localDateISO());}
+function durableUndoReceipt(){
+  const last=undoStack[undoStack.length-1];
+  if(!last)return null;
+  const snapshot=cloneLedger(last);
+  if(snapshot.input.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
+    // Bound storage growth: a Cut receipt only preserves one previous step.
+    try{
+      const prior=JSON.parse(snapshot.input.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
+      delete prior.undoReceipt;
+      snapshot.input=EXACT_OUTPUT_LEDGER_PREFIX+JSON.stringify(prior);
+    }catch(_){ /* Existing invalid input is rejected by ledger validation. */ }
+  }
+  return snapshot;
+}
 function serializeExactOutputLedger(){
   const origin=workingLedger?.origin||inputEl.value;
   return EXACT_OUTPUT_LEDGER_PREFIX+JSON.stringify({
@@ -215,7 +229,9 @@ function serializeExactOutputLedger(){
     engine:engineSha(),region:regionEl.value,
     date:ledgerDate(),origin,duplicateConfirmation:workingLedger?.duplicateConfirmation||null,
     rows:outputRecords.filter(r=>r.alive).map(r=>({id:r.id,sourceLine:r.sourceLine,
-      sourceGroupNo:r.sourceGroupNo||0,sourceGroupText:r.sourceGroupText||"",text:r.text}))
+      sourceGroupNo:r.sourceGroupNo||0,sourceGroupText:r.sourceGroupText||"",text:r.text})),
+    // Keep one durable Undo snapshot in the *same* localStorage write as Cut.
+    undoReceipt:durableUndoReceipt()
   });
 }
 function parseExactOutputLedger(raw){
@@ -225,9 +241,31 @@ function parseExactOutputLedger(raw){
     if(ledger?.schema!=="KTS_EXACT_OUTPUT_LEDGER_V1"||
        ledger.app!==EXACT_OUTPUT_LEDGER_APP_ID||ledger.engine!==engineSha()||
       ledger.region!==regionEl.value||ledger.date!==ledgerDate()||!Array.isArray(ledger.rows)||
-      !ledger.rows.every(r=>typeof r.id==="string"&&typeof r.text==="string"&&Number.isInteger(r.sourceLine)))return false;
+      !ledger.rows.every(r=>typeof r.id==="string"&&typeof r.text==="string"&&Number.isInteger(r.sourceLine))||
+      (ledger.undoReceipt!=null&&!validDurableUndoReceipt(ledger.undoReceipt,ledger)))return false;
     return ledger;
   }catch(_){return false;}
+}
+function validDurableUndoReceipt(s,ledger){
+  if(!s||typeof s.input!=="string"||typeof s.output!=="string"||
+     typeof s.status!=="string"||typeof s.cls!=="string"||
+     !Array.isArray(s.outputRecords)||!Array.isArray(s.sourceLines)||
+     !s.sourceLines.every(x=>typeof x==="string")||
+     (s.workingLedger!==null&&typeof s.workingLedger!=="object"))return false;
+  if(!s.outputRecords.every(r=>r&&typeof r.id==="string"&&
+       typeof r.text==="string"&&Number.isInteger(r.sourceLine)&&typeof r.alive==="boolean"))return false;
+  if(s.output!==s.outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n"))return false;
+  // Never permit a receipt to restore a different original wager.
+  if((s.workingLedger?.origin||s.input)!==ledger.origin)return false;
+  if(s.input.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
+    try{
+      const prior=JSON.parse(s.input.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
+      if(prior.app!==ledger.app||prior.engine!==ledger.engine||
+         prior.region!==ledger.region||prior.date!==ledger.date||
+         prior.origin!==ledger.origin)return false;
+    }catch(_){return false;}
+  }
+  return true;
 }
 function persistExactOutputLedger(){
   try{
@@ -1769,6 +1807,8 @@ function run(options={}){
     checkedResultRecordIndexes.clear();
     outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
     lastSourceLines=[];renderOutputRecords();
+    // Only on a fresh session, rehydrate one checked Cut snapshot for Undo.
+    if(!undoStack.length&&exactLedger.undoReceipt)undoStack.push(cloneLedger(exactLedger.undoReceipt));
     setStatus(outputRecords.length?`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`:"Đã Cắt hết kết quả; tin gốc được giữ để đối chiếu.",outputRecords.length?"ok":"");
     return;
   }
