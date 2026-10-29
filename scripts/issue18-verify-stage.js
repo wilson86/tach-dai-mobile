@@ -124,6 +124,7 @@ function verify({mobile,ngang,out,mobileSha,ngangSha}){
   if(mobileSha){verifyGitSource(m,mobileSha);verifyGitSource(n,ngangSha);}
   return Object.freeze({status:'STAGE_SOURCE_BYTES_PASS',
     checked_assets:checked,engine_sha256:engine,
+    source_commit_sha:{mobile:mobileSha||null,ngang:ngangSha||null},
     stage_manifest_sha256:sha256(safeRead(s,'ISSUE18_STAGE_MANIFEST.json')),
     release_authorized:false,chrome:'NOT_RUN',android:'NOT_RUN',cost_usd:0});
 }
