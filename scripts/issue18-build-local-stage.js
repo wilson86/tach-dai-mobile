@@ -86,7 +86,7 @@ function parseArgs(argv) {
   return args;
 }
 if (require.main === module) {
-  try { console.log(JSON.stringify(stage(parseArgs(process.argv.slice(2)))); }
+  try { console.log(JSON.stringify(stage(parseArgs(process.argv.slice(2))))); }
   catch (error) { console.error(error.message); process.exitCode = 2; }
 }
 module.exports = {isolatedUnifiedHtml, stage, parseArgs};
