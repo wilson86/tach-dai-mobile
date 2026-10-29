@@ -95,6 +95,32 @@ async function chromeSmoke(stage){
     ensure(typeof output.mobile==='string'&&output.mobile.includes('89'),'Mobile real Chrome synthetic N035 output missing');
     ensure(typeof output.ngang==='string'&&output.ngang.includes('89'),'Ngang real Chrome synthetic N035 output missing');
     ensure(output.mobile!==output.ngang,'Ngang and Mobile unexpectedly same mode-specific result');
+    await command('Browser.grantPermissions',{origin,permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
+    // Production-path browser events: select one rendered wager row, use the
+    // actual Cut button, verify persisted survivor ledger, reload, then Undo.
+    const cut=await command('Runtime.evaluate',{expression:"(async()=>{const d=document.getElementById('tachFrame').contentDocument;const group=d.getElementById('resultGroups')?.children?.[0],row=group?.children?.[1],box=row?.querySelector('input[type=checkbox]');if(!box)return {error:'NO_ROW_CHECKBOX',group:!!group};box.click();d.getElementById('cutBtn').click();await new Promise(done=>setTimeout(done,500));const input=d.getElementById('input').value,output=d.getElementById('output').value;return {input,output,stored:!!d.defaultView.localStorage.getItem('tachDaiMobileExactOutputLedgerV1'),status:d.getElementById('status').textContent}})()",awaitPromise:true,returnByValue:true});
+    if(cut.exceptionDetails)throw Error('CHROME_CUT_EXCEPTION: '+JSON.stringify(cut.exceptionDetails).slice(0,900));
+    const cutResult=cut.result?.value||{};
+    ensure(cutResult.input?.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n'),
+      'Cut must commit its survivor ledger: '+JSON.stringify(cutResult).slice(0,850));
+    ensure(cutResult.stored,'successful Cut must persist before visible deletion');
+    ensure(cutResult.output!==output.mobile&&cutResult.output.length>0,
+      'Cut must remove only selected row and retain other wagers');
+    await command('Page.reload',{ignoreCache:true});
+    let restored;
+    for(let i=0;i<80;i++){
+      const result=await command('Runtime.evaluate',{expression:"(()=>{const d=document.getElementById('tachFrame')?.contentDocument;return {input:d?.getElementById('input')?.value||'',output:d?.getElementById('output')?.value||'',undo:!!d?.getElementById('undoBtn'),status:d?.getElementById('status')?.textContent||''}})()",returnByValue:true});
+      restored=result.result?.value;
+      if(restored?.input.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n')&&restored?.output===cutResult.output)break;
+      await nap(120);
+    }
+    ensure(restored?.input.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n')&&restored?.output===cutResult.output,
+      'Real Chrome reload must retain exact surviving output: '+JSON.stringify(restored).slice(0,850));
+    const undo=await command('Runtime.evaluate',{expression:"(async()=>{const d=document.getElementById('tachFrame').contentDocument;d.getElementById('undoBtn').click();await new Promise(done=>setTimeout(done,250));return {input:d.getElementById('input').value,output:d.getElementById('output').value,status:d.getElementById('status').textContent}})()",awaitPromise:true,returnByValue:true});
+    const undoResult=undo.result?.value||{};
+    ensure(undoResult.input==='2d 89 98 b5n dx2,5n'&&undoResult.output===output.mobile,
+      'Undo after Chrome reload must restore exact original ticket: '+JSON.stringify(undoResult).slice(0,850));
+    console.log('ISSUE18_PUBLIC_CHROME_CUT_RELOAD_UNDO_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
       origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.37','1.0.36','1.0.26'],
       frames:2,source:'synthetic',modeOutputsDistinct:true,physicalWindows:'NOT_RUN',
