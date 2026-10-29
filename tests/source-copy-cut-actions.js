@@ -25,11 +25,11 @@ const dom={
  getElementById(id){return els[id]||(els[id]=element(id))},
  createElement:element,body:{appendChild(){}},execCommand(){return true},addEventListener(){}
 };
-const storage=new Map();
+const storage=new Map();let failWrites=false;
 const ctx={
  console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
  navigator:{clipboard:{async writeText(value){clipboard.value=value}}},
- localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){storage.set(k,v)},removeItem(k){storage.delete(k)}},
+ localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){if(failWrites)throw Error("quota");storage.set(k,v)},removeItem(k){if(failWrites)throw Error("quota");storage.delete(k)}},
  document:dom,
  setTimeout(){},clearTimeout(){}
 };
@@ -49,6 +49,11 @@ async function main(){
  p.input.selectionStart=0;p.input.selectionEnd=firstLine.length;
  await els.sourceCopyBtn.events.click();
  assert.equal(clipboard.value,firstLine,"Copy nguồn copies selected human text");
+ failWrites=true;
+ await els.sourceCutBtn.events.click();failWrites=false;
+ assert.equal(p.input.value,full,"failed source Cut must restore full input");
+ assert.equal(p.output.value,originalOutput,"failed source Cut must restore exact rows");
+ assert.match(els.status.textContent,/Không lưu được thao tác Cắt nguồn/u);
  await els.sourceCutBtn.events.click();
  assert.equal(p.input.value,"2d 19 b15n","Cắt nguồn removes the selected entire source line");
  assert.ok(!p.output.value.includes("89 98"));
