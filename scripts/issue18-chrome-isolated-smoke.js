@@ -98,7 +98,17 @@ async function chromeSmoke(stage){
     await command('Browser.grantPermissions',{origin,permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
     // Production-path browser events: select one rendered wager row, use the
     // actual Cut button, verify persisted survivor ledger, reload, then Undo.
-    const cut=await command('Runtime.evaluate',{expression:"(async()=>{const d=document.getElementById('tachFrame').contentDocument;const sourceInput=d.getElementById('input');sourceInput.value='2d 89 98 b5n dx2,5n';d.getElementById('runBtn').click();await new Promise(done=>setTimeout(done,150));const group=d.getElementById('resultGroups')?.children?.[0],row=group?.children?.[1],box=row?.querySelector('input[type=checkbox]');if(!box)return {error:'NO_ROW_CHECKBOX',group:!!group,status:d.getElementById('status').textContent,output:d.getElementById('output').value,input:sourceInput.value};box.click();d.getElementById('cutBtn').click();await new Promise(done=>setTimeout(done,500));const input=d.getElementById('input').value,output=d.getElementById('output').value;return {input,output,stored:!!window.localStorage.getItem('tachDaiMobileExactOutputLedgerV1'),status:d.getElementById('status').textContent}})()",awaitPromise:true,returnByValue:true});
+    // Use a trusted CDP pointer event. A programmatic button.click() has no
+    // user activation and is (correctly) refused by navigator.clipboard.
+    const prep=await command('Runtime.evaluate',{expression:"(async()=>{document.querySelector('.tab[data-mode=tach]').click();await new Promise(done=>setTimeout(done,250));const frame=document.getElementById('tachFrame'),d=frame.contentDocument;d.getElementById('input').value='2d 89 98 b5n dx2,5n';d.getElementById('runBtn').click();await new Promise(done=>setTimeout(done,100));const group=d.getElementById('resultGroups')?.children?.[0],row=group?.children?.[1],box=row?.querySelector('input[type=checkbox]');if(!box)return {error:'NO_ROW_CHECKBOX',status:d.getElementById('status').textContent};box.click();const button=d.getElementById('cutBtn');button.scrollIntoView({block:'center'});await new Promise(done=>setTimeout(done,100));const a=frame.getBoundingClientRect(),b=button.getBoundingClientRect();return {x:a.left+b.left+b.width/2,y:a.top+b.top+b.height/2,buttonDisabled:button.disabled,status:d.getElementById('status').textContent}})()",awaitPromise:true,returnByValue:true});
+    if(prep.exceptionDetails)throw Error('CHROME_PREP_EXCEPTION: '+JSON.stringify(prep.exceptionDetails).slice(0,900));
+    const coords=prep.result?.value||{};
+    ensure(Number.isFinite(coords.x)&&Number.isFinite(coords.y)&&!coords.buttonDisabled,
+      'Cut UI button not ready for trusted click: '+JSON.stringify(coords).slice(0,750));
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:coords.x,y:coords.y,button:'left',clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:coords.x,y:coords.y,button:'left',clickCount:1});
+    await nap(500);
+    const cut=await command('Runtime.evaluate',{expression:"(()=>{const d=document.getElementById('tachFrame').contentDocument;return {input:d.getElementById('input').value,output:d.getElementById('output').value,stored:!!window.localStorage.getItem('tachDaiMobileExactOutputLedgerV1'),status:d.getElementById('status').textContent}})()",returnByValue:true});
     if(cut.exceptionDetails)throw Error('CHROME_CUT_EXCEPTION: '+JSON.stringify(cut.exceptionDetails).slice(0,900));
     const cutResult=cut.result?.value||{};
     ensure(cutResult.input?.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n'),
