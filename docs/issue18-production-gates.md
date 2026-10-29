@@ -39,11 +39,11 @@ python -m http.server 62545 --bind 127.0.0.1 `
   --directory 'C:\KTS-QA\issue18-stage-new'
 ```
 
-Open http://127.0.0.1:62545/Mobile/app/ ONLY in a disposable Chrome profile under C:. Confirm Ngang iframe resolves to localhost /Ngang/ and does not contact production. If policy blocks Chrome, do not bypass it.
+Open http://127.0.0.1:62545/Mobile/app/ ONLY in a disposable Chrome profile under C:. Confirm Ngang iframe resolves to localhost /Ngang/, the *staged* Unified service-worker routes match /Mobile/app/ (including offline navigations and icons), and there are no requests to production. The committed public SW asset is not edited. If policy blocks Chrome, do not bypass it.
 
 With synthetic data only, capture actual Chrome screenshots, version/profile, date/region, test output, and non-sensitive localStorage evidence:
 
-1. N035 on 2026-10-29, MN TN/AG: '2d 52 dx5n' -> Tách Đài 'tn ag 52 dx5n', Ngang two '2d 52 dx2.5n', Đá Vòng REJECT. Missing/duplicate station pair HOLD without dispatch/ACK.
+1. N035 on 2026-10-29, MN two-station scope TN/AG: '2d 52 dx5n'. Check exact Tách Đài/Ngang outputs and money against the owner-approved Issue #18 N035 oracle for the selected date, region, station scope and mode; do not assume equal output or money between Tách Đài and Ngang. Đá Vòng must REJECT a single-number DX. Missing/ambiguous two-station scope must HOLD without dispatch/ACK. The historical corpus N035 entry still says NEEDS_ORACLE and must be interpreted using the later signed Issue #18 owner override rather than silently rewriting history.
 2. Partial Cut -> browser reload -> one-step Undo; exact original source and remaining rows.
 3. Full Cut -> browser reload -> Undo; prevent resurrected wager rows and lost source.
 4. Quota failure on isolated profile: Cut, Clear, Undo, source Cut all fail closed and retry succeeds.
