@@ -1963,9 +1963,15 @@ $("clearBtn").addEventListener("click",()=>{
     setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
     return;
   }
-  if(inputEl.value||outputEl.value)snapshot();
+  const hadData=!!(inputEl.value||outputEl.value);
+  if(hadData)snapshot();
+  const receipt=hadData?undoStack[undoStack.length-1]:null;
   inputEl.value="";outputEl.value="";resetOutputRecords();
-  persistExactOutputLedger(); // Clear stale local ledger on explicit Xóa; Undo can restore snapshot.
+  if(!persistExactOutputLedger()){
+    if(receipt)restoreCutDraft(receipt);
+    setStatus("Không thể lưu thao tác Xóa; dữ liệu và kết quả cũ được giữ nguyên.","err");
+    return;
+  }
   announceWorkingSource();
   setStatus("");
   inputEl.focus();
