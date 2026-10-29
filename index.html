@@ -91,7 +91,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.34</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.35</span></div>
 
   <div class="card">
     <div class="controls">
@@ -125,8 +125,9 @@
     <textarea id="input" spellcheck="false" autocapitalize="off" autocomplete="off"
       placeholder="Dán tin hoặc đoạn chat vào đây..."></textarea>
     <div id="ledgerWork" class="ledger-work" style="display:none">
-      <div class="ledger-work-note" role="status">Tin nguồn gốc (chỉ xem). Phần cược chưa Cắt nằm ở khung Kết quả bên dưới; không gửi lại nguyên tin gốc này.</div>
-      <textarea id="ledgerSourceView" readonly spellcheck="false" aria-label="Tin nguồn gốc tham chiếu, chỉ đọc"></textarea>
+      <div class="ledger-work-note" role="status">Tin còn lại đang xử lý: từng dòng kết quả chưa Cắt, chỉ xem; đây không phải tin gốc đã sửa. Chọn và Cắt trong khung Kết quả bên dưới.</div>
+      <textarea id="ledgerSourceView" readonly spellcheck="false" aria-label="Các dòng kết quả còn lại, chỉ đọc"></textarea>
+      <details><summary>Xem tin gốc ban đầu</summary><pre id="ledgerWorkOrigin"></pre></details>
       <div class="actions">
         <button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button>
       </div>
@@ -137,7 +138,6 @@
         <button id="ledgerWorkCopy" type="button" disabled>Copy đã chọn</button>
         <button id="ledgerWorkCut" type="button" disabled>Cắt đã chọn</button>
       </div>
-      <pre id="ledgerWorkOrigin" style="display:none"></pre>
     </div>
 
 
@@ -232,10 +232,11 @@ function parseExactOutputLedger(raw){
 function persistExactOutputLedger(){
   try{
     const old=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
-    if(old&&!parseExactOutputLedger(old)&&!preserveIncompatibleLedger(old))return;
+    if(old&&!parseExactOutputLedger(old)&&!preserveIncompatibleLedger(old))return false;
     if(inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) localStorage.setItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY,inputEl.value);
     else localStorage.removeItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);
-  }catch(_){}
+    return true;
+  }catch(_){return false;}
 }
 function preserveIncompatibleLedger(raw){
   for(let i=0;i<10000;i++){
@@ -768,6 +769,12 @@ function validateStationVsDaSyntax(head,rest){
   }
 }
 
+function validateSingletonTwoStationDx(head,rest,stations){
+  if(head!=="2d")return;
+  const inspected=KTS_BUSINESS_ENGINE.preflightBetPayload(rest,[1]);
+  if(inspected.groups.some(g=>g.numbers.length===1&&g.bets.some(b=>KTS_BUSINESS_ENGINE.canonicalSelector(b.selector)==="DX")))
+    KTS_BUSINESS_ENGINE.resolveTwoDScope(rest.split(/\s+/u),stations);
+}
 function validateCheckOnlyLine(line,region,stations){
   let s=normalizeInput(line);
   if(!s) return true;
@@ -786,7 +793,7 @@ function validateCheckOnlyLine(line,region,stations){
     const head=parts[0],rest=s.slice(head.length).trim();
   if(["2d","3d","4d","2dphu","mb"].includes(head)){
       if(head==="2dphu" && stations.length<3) throw new Error("Ngày này không có đủ 2 đài phụ.");
-      validateBetPayload(rest); validateStationVsDaSyntax(head,rest); return true;
+      validateBetPayload(rest); validateSingletonTwoStationDx(head,rest,stations); validateStationVsDaSyntax(head,rest); return true;
     }
     throw new Error("MB không cần ghi đài; cú pháp phải bắt đầu bằng số");
   }
@@ -797,7 +804,7 @@ function validateCheckOnlyLine(line,region,stations){
   if(["2d","3d","4d","2dphu"].includes(toks[0])){
     const head=toks[0],rest=toks.slice(1).join(" ");
     if(head==="2dphu" && stations.length<3) throw new Error("Ngày này không có đủ 2 đài phụ.");
-    validateBetPayload(rest); if(head!=="2dphu") validateStationVsDaSyntax(head,rest); return true;
+    validateBetPayload(rest); validateSingletonTwoStationDx(head,rest,stations); if(head!=="2dphu") validateStationVsDaSyntax(head,rest); return true;
   }
 
   const valid=new Set(stations.map(x=>x[0]));
@@ -1111,6 +1118,7 @@ function processLine(line,region,stations){
   const mr=s.match(/^(mn|mt|mb)\s+(.+)$/);
   if(mr){ s=mr[2].trim(); }
   const m=s.match(/^(2dphu|2d|3d|4d)\s+(.+)$/);
+  if(m)validateSingletonTwoStationDx(m[1],m[2],stations);
   if(!m){
     const toks=s.split(/\s+/).filter(Boolean);
     const valid=new Set(stations.map(x=>x[0]));
@@ -1253,8 +1261,8 @@ function identifySemanticOutputGroups(line,region,stations,generated){
 
 
 function renderLedgerWork(){
-  // Keep the exact-output ledger INTERNAL; never show its split rows as
-  // source text. A partial Cut can be unrepresentable as a replayable ticket.
+  // The working view is a read-only projection of ledger rows, not a
+  // reconstructed customer message or an executable parser input.
   const panel=$("ledgerWork"),reference=$("ledgerSourceView");
   if(!panel||!reference)return;
   const raw=String(inputEl.value||"");
@@ -1278,7 +1286,7 @@ function renderLedgerWork(){
   // Preserve original chat timestamps, physical separators and line breaks.
   // The shown source is read-only reference, never a regenerated source wager.
   reference.placeholder="";
-  reference.value=ledger.origin;
+  reference.value=ledger.rows.map(r=>r.text).join("\n");
   $("ledgerWorkOrigin").textContent=ledger.origin;
   $("ledgerCopyOriginal").disabled=!ledger.origin;
 }
@@ -1718,29 +1726,25 @@ async function cutSelectedOutput(){
   const wasExactLedger=inputBefore.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX);
   indexes.forEach(i=>{ outputRecords[i].alive=false; });
   const hasAlive=outputRecords.some(r=>r.alive);
-  if(!hasAlive){
-    inputEl.value="";outputRecords=[];lastSourceLines=[];workingLedger=null;
-  }else if(wasExactLedger){
-    inputEl.value=serializeExactOutputLedger();lastSourceLines=[];
-  }else{
-    deleteCompletedSourceLines();
-  }
+  inputEl.value=serializeExactOutputLedger();lastSourceLines=[];
+  if(!hasAlive)outputRecords=[];
 
-  // Prefer a normal wager source where exact replay proves conservation. If
-  // that is impossible (for example one DX row), persist the exact surviving
-  // rows in a labelled local ledger; never fake a new customer message.
-  if(hasAlive&&!wasExactLedger&&!cutOutputMatchesExecutableSource()){
-    inputEl.value=serializeExactOutputLedger();
-    lastSourceLines=[];
-  }
+  // Persist exact rows and immutable origin even when a shortened ticket
+  // could replay: otherwise source and physical provenance disappear on reload.
   checkedResultRecordIndexes.clear();
   renderOutputRecords();
-  persistExactOutputLedger();
+  if(!persistExactOutputLedger()){
+    restoreCutDraft(receipt);
+    setStatus("Không lưu được ledger; đã giữ nguyên cược. Nội dung đã copy chưa được Cắt.","err");
+    return;
+  }
   announceWorkingSource();
 
   lastOutputSelection={start:0,end:0};
   if(inputEl.value!==inputBefore){
-    setStatus(`Đã cắt ${indexes.length} dòng • đã copy • đã xóa tin gốc tương ứng`,"ok");
+    setStatus(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)?
+      `Đã cắt ${indexes.length} dòng • đã copy • kết quả còn lại được hiển thị; tin gốc được giữ để đối chiếu`:
+      `Đã cắt ${indexes.length} dòng • đã copy • nguồn còn lại đã cập nhật`,"ok");
   }else{
     setStatus(`Đã cắt ${indexes.length} dòng • đã copy • tin gốc giữ đến khi cắt hết kết quả của tin đó`,"ok");
   }
@@ -1765,7 +1769,7 @@ function run(options={}){
     checkedResultRecordIndexes.clear();
     outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
     lastSourceLines=[];renderOutputRecords();
-    setStatus(`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`,"ok");
+    setStatus(outputRecords.length?`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`:"Đã Cắt hết kết quả; tin gốc được giữ để đối chiếu.",outputRecords.length?"ok":"");
     return;
   }
 
@@ -1796,7 +1800,8 @@ function run(options={}){
       return;
     }
     outputEl.value="PHÁT HIỆN TIN SAI:\n\n"+errors.map(e=>`Dòng ${e.line}: ${e.msg}\n→ ${e.raw}`).join("\n\n");
-    setStatus(`Có ${errors.length} lỗi`,"err");
+    const scopeHold=errors.some(e=>/RELATIVE_2D_ACTIVE_SCOPE_(?:UNAVAILABLE|DUPLICATE)/u.test(String(e.msg)));
+    setStatus(scopeHold?"HOLD: chưa xác định được hai đài khác nhau; chưa tính tiền.":`Có ${errors.length} lỗi`,"err");
     if(!options.preserveInputSelection) selectLine(inputEl,errors[0].line);
     return;
   }
@@ -1942,7 +1947,7 @@ if(parseExactOutputLedger(inputEl.value))run();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.34";
+const APP_VERSION = "2.0.35";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

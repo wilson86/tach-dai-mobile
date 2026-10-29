@@ -203,7 +203,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.23';
+  const UX_VERSION='1.0.24';
 
   function selectAllText(el){
     if(!el) return;
@@ -279,7 +279,7 @@
   const HEADER=/^────\s+(.+?)\s+đá\s+\((\d+)\)\s+────$/u;
   const STORAGE='KTS_DAVONG_WORKING_ROWS_V1';
   const SCHEMA='KTS_DAVONG_WORKING_ROWS_V1';
-  const ENGINE='0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb';
+  const ENGINE='7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
   let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;

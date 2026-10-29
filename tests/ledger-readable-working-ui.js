@@ -25,11 +25,11 @@ const dom={
  getElementById(id){return els[id]||(els[id]=element(id))},
  createElement:element,body:{appendChild(){}},execCommand(){return true},addEventListener(){}
 };
-const storage=new Map();
+const storage=new Map();let failWrites=false;
 const ctx={
  console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
  navigator:{clipboard:{async writeText(value){clipboard.value=value}}},
- localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){storage.set(k,v)},removeItem(k){storage.delete(k)}},
+ localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){if(failWrites)throw Error('quota');storage.set(k,v)},removeItem(k){storage.delete(k)}},
  document:dom,
  setTimeout(){},clearTimeout(){}
 };
@@ -57,7 +57,8 @@ async function main(){
  assert.equal(p.output.value.split("\n").length,2,"DX removed, B outputs preserved");
  assert.equal(p.input.style.display,"none","internal JSON textarea not shown to user");
  assert.equal(els.ledgerWork.style.display,"","readable upper working source shown");
- assert.equal(els.ledgerSourceView.value,original,"read-only source retains original; remaining bets stay in results");
+ assert.equal(els.ledgerSourceView.value,p.output.value,"working view shows exactly remaining ledger rows");
+ assert.match(html,/<summary>Xem tin gốc ban đầu<\/summary>/u);
  assert.match(html,/<textarea id="ledgerSourceView" readonly/u);
  assert.equal(els.ledgerWorkOrigin.textContent,original,"raw original is still separately auditable");
  await els.ledgerCopyOriginal.events.click();
@@ -80,6 +81,14 @@ async function main(){
  p.undo();assert.equal(p.input.value,original,"second undo restores original plaintext");
  assert.equal(els.ledgerWork.style.display,"none");
  assert.equal(p.output.value.split("\n").length,3);
+ // Full Cut retains the original as a zero-row ledger across reload, with no wagers.
+ els.selectAllOutputBtn.events.click();await p.cutSelectedOutput();
+ const empty=p.parseExactOutputLedger(p.input.value);assert.equal(empty.origin,original);assert.equal(empty.rows.length,0);
+ p.input.value="";p.restorePersistedExactOutputLedger();p.run();assert.equal(p.output.value,"");
+ assert.equal(els.ledgerWorkOrigin.textContent,original);p.undo();assert.equal(p.input.value,original);
+ // A failed persistence must roll the Cut back without losing rows.
+ const beforeFailure=p.output.value;choose(p.records().find(r=>r.alive).text);failWrites=true;
+ await p.cutSelectedOutput();failWrites=false;assert.equal(p.input.value,original);assert.equal(p.output.value,beforeFailure);
  // Explicit Xóa must remove persistent ledger; Undo restores both it and UI.
  choose(cut);
  await p.cutSelectedOutput();

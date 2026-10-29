@@ -1,7 +1,7 @@
 {
-  "version": "1.0.23",
+  "version": "1.0.24",
   "updated": "2026-10-29",
-  "business_engine_sha256": "0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb",
+  "business_engine_sha256": "7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea",
   "contract": "DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2",
   "modes": [
     "tach",

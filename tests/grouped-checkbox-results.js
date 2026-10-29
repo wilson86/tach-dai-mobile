@@ -30,6 +30,7 @@ function element(tag="div"){
 }
 const ctx={
   console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
+  localStorage:(()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)}})(),
   navigator:{clipboard:{async writeText(text){clipboard.text=text;}}},
   document:{
     getElementById(id){return els[id]||(els[id]=element(id));},
@@ -81,11 +82,14 @@ async function main(){
   els.selectAllOutputBtn.events.click();
   await rules.cutSelectedOutput();
   assert.equal(rules.els.output.value,"");
-  assert.equal(rules.els.input.value,"");
+  assert.equal(JSON.parse(rules.els.input.value.split('\n').slice(1).join('\n')).origin,original);
+  assert.equal(JSON.parse(rules.els.input.value.split('\n').slice(1).join('\n')).rows.length,0);
   assert.equal(groups().length,0);
   rules.undo();assert.equal(rules.els.input.value,original);
   // Fail closed must still reveal textual errors, never display stale checkbox rows.
-  rules.els.input.value="2d 52 dx5n";rules.run();
+  // Duplicate DX numbers are an owner-approved hard rejection; N035 singleton
+  // DX remains NEEDS_ORACLE and cannot serve as an unconditional negative.
+  rules.els.input.value="2d 52 52 dx5n";rules.run();
   assert.equal(groups().length,0);
   assert.match(rules.els.output.value,/PHÁT HIỆN TIN SAI:/u);
   assert.equal(rules.els.output.style.display,"");

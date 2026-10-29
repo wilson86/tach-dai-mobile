@@ -47,6 +47,7 @@ function loadRules() {
   };
   const context = {
     crypto:require('node:crypto').webcrypto,TextEncoder,Uint8Array,
+    localStorage:(()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)}})(),
     console,
     Set,
     Date,
@@ -316,14 +317,14 @@ rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 
-// Selecting the full source-equivalent group is executable and removes only it.
+// Selecting a source-equivalent group keeps the immutable origin in the ledger.
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "3d 64 51 dx 5n");
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
 assert.equal(ui.output.value, secondOutput);
-assert.equal(outputRecords().length, 3);
-assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
+assert.equal(outputRecords().filter(record=>record.alive).length, 3);
+assert.deepEqual(outputRecords().filter(record=>record.alive).map(record => record.sourceLine), [2, 2, 2]);
 
 // Undo restores the complete source/output bijection.
 rules.triggerUndo();
@@ -337,7 +338,7 @@ rules.run();
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "3d 64 51 dx 5n");
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
 rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
@@ -355,7 +356,8 @@ assert.equal(ui.output.value, "qn 22 10 dd 5n");
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = ui.output.value.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "");
+assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).origin,"2d 22 10 dd 5n");
+assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).rows.length,0);
 assert.equal(ui.output.value, "");
 assert.equal(outputRecords().length, 0);
 
@@ -409,7 +411,8 @@ assert.match(ui.output.value, /DUPLICATE_NUMBER_PAIR_INVALID:/);
   ui.output.selectionStart = 0;
   ui.output.selectionEnd = ui.output.value.length;
   await rules.cutSelectedOutput();
-  assert.equal(ui.input.value, "");
+  assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).origin,separatorMessage);
+  assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).rows.length,0);
   assert.equal(ui.output.value, "");
   rules.triggerUndo();
   assert.equal(ui.input.value, separatorMessage);
