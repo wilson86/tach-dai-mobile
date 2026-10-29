@@ -74,9 +74,9 @@ function verify({mobile,ngang,out,mobileSha,ngangSha}){
   if(manifest.schema!=='KTS_ISSUE18_LOCAL_ONLY_STAGE_V1' ||
     manifest.release_authorized!==false||manifest.source_unchanged!==true ||
     manifest.iframe_ngang!=='../../Ngang/' ||
-    manifest.mobile_version!=='2.0.36'||
-    manifest.ngang_version!=='1.0.35'||
-    manifest.unified_version!=='1.0.25')
+    manifest.mobile_version!=='2.0.37'||
+    manifest.ngang_version!=='1.0.36'||
+    manifest.unified_version!=='1.0.26')
     fail('BAD_MANIFEST','wrong schema, version, iframe or release flag');
   const mv=JSON.parse(safeRead(m,'version.json')),nv=JSON.parse(safeRead(n,'version.json')),
     uv=JSON.parse(safeRead(m,'app/version.json'));
