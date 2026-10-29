@@ -107,19 +107,30 @@ async function testDaVong(){
   el("dvInput").value=origin;
   const ctx={$:el,ledgerActive:false,live:()=>result.filter(r=>r.alive),
     picked:()=>result.filter(r=>r.alive),activeGroups:()=>[{id:"g1"}],
+    // The extracted render() is an isolated closure: supply current
+    // source-reference state and a verified surviving-source projection.
+    origin,originalChatText:origin,
+    remainingSource:()=>({text:result.filter(r=>r.alive).map(r=>r.text).join("\n")}),
     selectionBindings:[],groupList(){},undoStack:[]};
   const draw=scopedFunction(code,"  function render(){","\n  async function cut(){","render",ctx);
   draw();assert.equal(el("dvInput").readOnly,false);
   result[0].alive=false;ctx.ledgerActive=true;draw();
   assert.equal(el("dvInput").value,origin);
   assert.equal(el("dvInput").readOnly,true,"partial Cut protects raw source edit");
-  assert.equal(el("dvInput").style.display,"");
+  assert.equal(el("dvInput").style.display,"none","protected raw input is hidden in verified ledger mode");
+  assert.equal(el("dvRemainingSource").style.display,"");
+  assert.equal(el("dvRemainingSource").value,result[1].text,
+    "read-only working source reflects only surviving wagers");
+  assert.equal(el("dvOriginalSourceText").textContent,origin,
+    "immutable chat source remains available for audit");
   assert.equal(el("dvWorkingPanel").style.display,"none","never render duplicate result-style source");
   assert.equal(el("dvSourceCut").disabled,true);
   assert.equal(el("dvSourceProtectedNote").style.display,"");
   assert.equal(el("dvOutput").value,result[1].text);
   ctx.ledgerActive=false;draw();
   assert.equal(el("dvInput").readOnly,false);
+  assert.equal(el("dvInput").style.display,"");
+  assert.equal(el("dvRemainingSource").style.display,"none");
   assert.equal(el("dvSourceCut").disabled,false);
   assert.equal(el("dvSourceProtectedNote").style.display,"none");
   assert.ok(code.includes("modeLocalLedger=new Map()"),"cross-mode isolation must remain");
