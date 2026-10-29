@@ -31,6 +31,8 @@ jobs:
       - name: Verify immutable candidate identities
         shell: bash
         run: |
+          node --version
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git -C _ngang_candidate rev-parse HEAD)" = "b0ed40f921ad2eed9e1c18ad3979337f9836a5a8"
           node - <<'NODE'
           const assert=require('node:assert/strict');
