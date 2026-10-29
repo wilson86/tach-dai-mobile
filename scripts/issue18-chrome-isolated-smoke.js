@@ -233,7 +233,7 @@ async function chromeSmoke(stage){
     await command('Page.reload',{ignoreCache:false});
     let repaired;
     for(let i=0;i<100;i++){
-      const check=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame')?.contentDocument,b=document.getElementById('ngangFrame')?.contentDocument;return {mobile:a?.getElementById('output')?.value||'',ngang:b?.getElementById('output')?.value||'',date:document.getElementById('sharedDate')?.value}})()",returnByValue:true});
+      const check=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame')?.contentDocument,b=document.getElementById('ngangFrame')?.contentDocument,s=window.localStorage;return {mobile:a?.getElementById('output')?.value||'',ngang:b?.getElementById('output')?.value||'',date:document.getElementById('sharedDate')?.value,mobileDate:a?.getElementById('date')?.value,ngangDate:b?.getElementById('date')?.value,mobileStatus:a?.getElementById('status')?.textContent,ngangStatus:b?.getElementById('status')?.textContent,mobileInput:a?.getElementById('input')?.value?.slice(0,60),ngangInput:b?.getElementById('input')?.value?.slice(0,60),mobileStored:!!s.getItem('tachDaiMobileExactOutputLedgerV1'),ngangStored:!!s.getItem('tachDaiNgangExactOutputLedgerV1')}})()",returnByValue:true});
       repaired=check.result?.value;
       if(repaired?.date===originalDate&&repaired?.mobile===cutResult.output&&repaired?.ngang===nCut.output)break;
       await nap(110);
