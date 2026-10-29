@@ -42,7 +42,7 @@ async function chromeSmoke(stage){
       '--no-first-run','--no-default-browser-check','--disable-extensions','--disable-background-networking',
       '--remote-allow-origins=*','--remote-debugging-port=0','--user-data-dir='+profile,
       '--proxy-server=direct://','--proxy-bypass-list=*',
-      '--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE localhost','about:blank'];
+      '--host-resolver-rules=EXCLUDE 127.0.0.1, EXCLUDE localhost, MAP * ~NOTFOUND','about:blank'];
     child=cp.spawn(chrome,args,{stdio:'ignore',shell:false,env:{...process.env,HOME:process.env.HOME}});
     const activePort=path.join(profile,'DevToolsActivePort');
     let port=null;
