@@ -16,8 +16,8 @@ function fixture() {
     const target = path.join(repo,f); fs.mkdirSync(path.dirname(target),{recursive:true}); fs.writeFileSync(target,'test asset');
   }
   fs.writeFileSync(path.join(mobile,'app/index.html'),html);
-  for (const f of [path.join(mobile,'version.json'),path.join(mobile,'app/version.json'),path.join(ngang,'version.json')])
-    fs.writeFileSync(f, JSON.stringify({version:'WIP',business_engine_sha256:HASH}));
+  for (const [f,version] of [[path.join(mobile,'version.json'),'2.0.36'],[path.join(mobile,'app/version.json'),'1.0.25'],[path.join(ngang,'version.json'),'1.0.34']])
+    fs.writeFileSync(f, JSON.stringify({version,business_engine_sha256:HASH}));
   return {base,mobile,ngang,out};
 }
 test('isolates both real iframes without changing unrelated markup',()=>{
@@ -45,6 +45,12 @@ test('engine mismatch fails closed before creating stage',t=>{
   const f=fixture();t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
   fs.writeFileSync(path.join(f.ngang,'version.json'),JSON.stringify({business_engine_sha256:'0'.repeat(64)}));
   assert.throws(()=>stage(f),/engine SHA mismatch/); assert.equal(fs.existsSync(f.out),false);
+});
+test('mixed candidate versions fail closed before staging',t=>{
+  const f=fixture();t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
+  fs.writeFileSync(path.join(f.ngang,'version.json'),JSON.stringify({version:'1.0.33',business_engine_sha256:HASH}));
+  assert.throws(()=>stage(f),/mixed or stale Issue18 candidate versions/);
+  assert.equal(fs.existsSync(f.out),false);
 });
 test('rejects overlap and malformed args',t=>{
   const f=fixture(); t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
