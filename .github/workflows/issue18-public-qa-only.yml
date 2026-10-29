@@ -26,14 +26,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wilson86/tach-dai-ngang
-          ref: b0ed40f921ad2eed9e1c18ad3979337f9836a5a8
+          ref: f770fff8f616177f168a7c2b00d5e9359164bbf7
           path: _ngang_candidate
       - name: Verify immutable candidate identities
         shell: bash
         run: |
           node --version
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C _ngang_candidate rev-parse HEAD)" = "b0ed40f921ad2eed9e1c18ad3979337f9836a5a8"
+          test "$(git -C _ngang_candidate rev-parse HEAD)" = "f770fff8f616177f168a7c2b00d5e9359164bbf7"
           node - <<'NODE'
           const assert=require('node:assert/strict');
           const fs=require('node:fs');
