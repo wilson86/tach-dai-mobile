@@ -108,6 +108,15 @@ test('mixed candidate versions fail closed before staging',t=>{
   assert.throws(()=>stage(f),/mixed or stale Issue18 candidate versions/);
   assert.equal(fs.existsSync(f.out),false);
 });
+test('CLI stage requires both exact Git source pins',()=>{
+  const a='a'.repeat(40),b='b'.repeat(40);
+  const input=['--mobile','/m','--ngang','/n','--out','/fresh',
+    '--mobile-sha',a,'--ngang-sha',b];
+  assert.deepEqual(parseArgs(input),{mobile:'/m',ngang:'/n',out:'/fresh',
+    mobileSha:a,ngangSha:b});
+  assert.throws(()=>parseArgs(input.slice(0,-2)),/STAGING_BLOCKED/);
+  assert.throws(()=>parseArgs([...input.slice(0,-2),'--mobile-sha',b]),/STAGING_BLOCKED/);
+});
 test('rejects overlap and malformed args',t=>{
   const f=fixture(); t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
   assert.throws(()=>stage({...f,out:path.join(f.mobile,'stage')}),/overlap/);
