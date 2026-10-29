@@ -74,14 +74,16 @@ async function chromeSmoke(stage){
     }
     await command('Page.enable');await command('Runtime.enable');
     await command('Page.navigate',{url:origin+'/Mobile/app/'});
-    let found;
+    let found,lastEval;
     for(let i=0;i<100;i++){
       const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {unified:!!a&&!!b,local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.26'),a?.contentDocument?.body?.textContent?.includes('2.0.37'),b?.contentDocument?.body?.textContent?.includes('1.0.36')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
+      lastEval=r;
+      if(r.exceptionDetails)throw Error('CHROME_EVAL_EXCEPTION '+JSON.stringify(r.exceptionDetails).slice(0,1200));
       found=r.result?.value;
       if(found?.unified&&found?.local&&found?.tach&&found?.ngang&&found.versions?.every(Boolean))break;
       await nap(100);
     }
-    assert.ok(found?.unified,'Unified two iframe shell did not load: '+JSON.stringify(found));
+    assert.ok(found?.unified,'Unified two iframe shell did not load: '+JSON.stringify({found,lastEval}).slice(0,1800));
     assert.ok(found?.local,'One iframe routed outside localhost staging');
     assert.ok(found?.tach&&found?.ngang,'Mobile/Ngang child app input absent in real Chrome');
     assert.ok(found?.versions?.every(Boolean),'Versioned Unified/Mobile/Ngang UI missing');
@@ -97,9 +99,14 @@ async function chromeSmoke(stage){
     }));
   }finally{
     try{ws?.close()}catch(_){}
-    if(child&&!child.killed)child.kill('SIGTERM');
+    if(child&&child.exitCode===null){
+      child.kill('SIGTERM');
+      await Promise.race([new Promise(ok=>child.once('exit',ok)),nap(2000)]);
+      if(child.exitCode===null)child.kill('SIGKILL');
+    }
     await new Promise(ok=>server.close(ok));
-    fs.rmSync(profile,{recursive:true,force:true});
+    try{fs.rmSync(profile,{recursive:true,force:true,maxRetries:4,retryDelay:150})}
+    catch(e){console.error('CHROME_TEST_PROFILE_CLEANUP_ONLY: '+e.message)}
   }
 }
 if(require.main===module)chromeSmoke(process.argv[2]).catch(e=>{console.error(e.stack||e);process.exitCode=2});
