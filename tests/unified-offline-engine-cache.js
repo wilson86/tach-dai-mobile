@@ -14,7 +14,7 @@ const version=JSON.parse(fs.readFileSync(path.join(root,"app/version.json"),"utf
 const core=fs.readFileSync(path.join(root,"app/unified-core.js"),"utf8");
 const engine=fs.readFileSync(path.join(root,"business_engine.generated.js"),"utf8");
 const SHA="7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea";
-assert.equal(version.version,"1.0.24");
+assert.equal(version.version,"1.0.25");
 assert.equal(version.business_engine_sha256,SHA);
 assert.ok(engine.includes(SHA));
 assert.match(core,/const UX_VERSION='1\.0\.24'/u);
@@ -57,7 +57,7 @@ function mockWorker(js,scopeUrl){
  await task;
  for(const rel of ["../","../index.html","../sw.js",
    "../station_calendar.generated.js","../business_engine.generated.js",
-   "./index.html","./unified-core.js?ux=1.0.24"]){
+   "./index.html","./unified-core.js?ux=1.0.25"]){
    assert.ok(app.entries.has(new URL(rel,base+"app/").href),"missing app precache "+rel);
  }
  const root=mockWorker(rootSW,base);
