@@ -92,15 +92,24 @@ function verify({mobile,ngang,out}){
       fail('SOURCE_DRIFT','source changed since stage generation: '+key);
   const rewrittenHtml=Buffer.from(isolatedUnifiedHtml(safeRead(m,'app/index.html').toString('utf8')));
   const rewrittenSw=Buffer.from(isolatedUnifiedServiceWorker(safeRead(m,'app/sw.js').toString('utf8')));
+  if(!manifest.source_files_sha256||!manifest.staged_files_sha256||
+     Object.keys(manifest.source_files_sha256).length!==21||
+     Object.keys(manifest.staged_files_sha256).length!==21)
+    fail('INCOMPLETE_ASSET_HASHES','manifest must bind all 21 source and stage assets');
   let checked=0;
   for(const [prefix,source,files]of [['Mobile',m,MOBILE_FILES],['Ngang',n,NGANG_FILES]]){
     for(const rel of files){
-      let expected=safeRead(source,rel);
+      const fullRel=prefix+'/'+rel;
+      const sourceBytes=safeRead(source,rel);
+      if(manifest.source_files_sha256[fullRel]!==sha256(sourceBytes))
+        fail('SOURCE_DRIFT','source asset changed since stage build: '+fullRel);
+      let expected=sourceBytes;
       if(prefix==='Mobile'&&rel==='app/index.html')expected=rewrittenHtml;
       if(prefix==='Mobile'&&rel==='app/sw.js')expected=rewrittenSw;
-      const actual=safeRead(s,prefix+'/'+rel);
-      if(sha256(actual)!==sha256(expected))
-        fail('ASSET_BYTES_DRIFT',prefix+'/'+rel+' differs from original or safe rewrite');
+      const actual=safeRead(s,fullRel),hash=sha256(actual);
+      if(hash!==sha256(expected)||
+         manifest.staged_files_sha256[fullRel]!==hash)
+        fail('ASSET_BYTES_DRIFT',fullRel+' differs from original or safe rewrite');
       checked++;
     }
   }
