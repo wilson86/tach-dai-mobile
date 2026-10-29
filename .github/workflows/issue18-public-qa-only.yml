@@ -35,6 +35,8 @@ jobs:
         shell: bash
         run: |
           node --version
+          node --check scripts/issue18-build-local-stage.js
+          node --check scripts/issue18-verify-stage.js
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git -C _ngang_candidate rev-parse HEAD)" = "ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4"
           node - <<'NODE'
