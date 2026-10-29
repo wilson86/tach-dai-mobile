@@ -101,6 +101,12 @@ async function main(){
  assert.equal(p.input.value,"");
  assert.equal(els.ledgerWork.style.display,"none");
  assert.equal(storage.has(key),false,"explicit Clear must prevent stale ledger on reload");
+ // A quota/storage failure during Undo must not expose non-durable wagers.
+ const beforeFailedUndo=p.input.value;
+ failWrites=true;p.undo();failWrites=false;
+ assert.equal(p.input.value,beforeFailedUndo,"failed Undo keeps previously cleared UI");
+ assert.equal(storage.has(key),false,"failed Undo does not invent persisted rows");
+ assert.match(els.status.textContent,/Không lưu được Hoàn tác/u);
  p.undo();
  assert.equal(p.input.value,previous);
  assert.equal(els.ledgerWork.style.display,"");
