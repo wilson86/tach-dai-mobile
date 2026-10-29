@@ -84,8 +84,11 @@ async function main(){
  // Full Cut retains the original as a zero-row ledger across reload, with no wagers.
  els.selectAllOutputBtn.events.click();await p.cutSelectedOutput();
  const empty=p.parseExactOutputLedger(p.input.value);assert.equal(empty.origin,original);assert.equal(empty.rows.length,0);
- p.input.value="";p.restorePersistedExactOutputLedger();p.run();assert.equal(p.output.value,"");
+ p.input.value="";p.restorePersistedExactOutputLedger();
+ // Simulate a new browser's empty volatile Undo stack after a full Cut.
+ vm.runInContext("undoStack=[]",ctx);p.run();assert.equal(p.output.value,"");
  assert.equal(els.ledgerWorkOrigin.textContent,original);p.undo();assert.equal(p.input.value,original);
+ assert.equal(p.output.value,all.join("\n"),"one-step Undo after reload restores exact output");
  // A failed persistence must roll the Cut back without losing rows.
  const beforeFailure=p.output.value;choose(p.records().find(r=>r.alive).text);failWrites=true;
  await p.cutSelectedOutput();failWrites=false;assert.equal(p.input.value,original);assert.equal(p.output.value,beforeFailure);
