@@ -7,7 +7,7 @@
 - Private wilson86/KTS: review/issue18-cache-isolation-authority-20261029.
 - Public wilson86/tach-dai-mobile: review/issue18-staging-commit-pins-20261030.
 - Public wilson86/tach-dai-ngang: review/issue18-cache-isolation-20261029.
-- Candidate versions: Mobile 2.0.36; Ngang 1.0.35; Unified 1.0.25.
+- Candidate versions: Mobile 2.0.37; Ngang 1.0.36; Unified 1.0.26.
 - Engine SHA: 7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea.
 
 Do not reset or clean an existing dirty worktree. Create three fresh isolated C: checkouts, with paths C:\KTS-QA\issue18-review\KTS, C:\KTS-QA\issue18-review\Mobile and C:\KTS-QA\issue18-review\Ngang. Record their full HEAD SHA values.
