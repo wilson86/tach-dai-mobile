@@ -147,6 +147,27 @@ function admission(options,runCommand=processReadOnly){
     result.checks.push({name:name+'/'+test,...r});
     if(r.exitCode!==0||r.error){result.status='BLOCKED_FOCUSED_TEST';return result;}
   }
+  // Detect source races, test-induced writes, or replacement after the initial
+  // SHA gate. No PASS if exact checked source was changed during admission.
+  try {
+    verifiedRepo(dirs.kts,options['--kts-sha']);
+    verifiedRepo(dirs.mobile,options['--mobile-sha']);
+    verifiedRepo(dirs.ngang,options['--ngang-sha']);
+    const latest=[jsonAt(dirs.mobile,'version.json'),jsonAt(dirs.ngang,'version.json'),
+      jsonAt(dirs.mobile,'app/version.json')];
+    if(latest[0].version!==m.version||latest[1].version!==n.version||
+       latest[2].version!==u.version||
+       latest.some(x=>x.business_engine_sha256!==ISSUE18_ENGINE))
+      block('POSTFLIGHT_VERSION_DRIFT','Candidate version/engine changed during QA');
+    result.checks.push({name:'FINAL_SOURCE_PINS',exitCode:0,
+      stdout:'All 3 exact SHAs, clean checkouts, and version/engine identities preserved',
+      stderr:'',error:null,signal:null});
+  }catch(e){
+    result.status='BLOCKED_POSTFLIGHT_DRIFT';
+    result.checks.push({name:'FINAL_SOURCE_PINS',exitCode:2,
+      stdout:'',stderr:String(e.message||e),error:e.code||'SOURCE_DRIFT',signal:null});
+    return result;
+  }
   result.status='LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING';
   return result;
 }
