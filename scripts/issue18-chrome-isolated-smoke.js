@@ -130,7 +130,39 @@ async function chromeSmoke(stage){
     const undoResult=undo.result?.value||{};
     ensure(undoResult.input==='2d 89 98 b5n dx2,5n'&&undoResult.output===output.mobile,
       'Undo after Chrome reload must restore exact original ticket: '+JSON.stringify(undoResult).slice(0,850));
+    console.log('ISSUE18_PUBLIC_CHROME_MOBILE_CUT_RELOAD_UNDO_PASS');
+    // Independent Ngang browser acceptance, on the same isolated localhost
+    // and same canonical source. Do not infer from the Mobile receipt.
+    const nPrep=await command('Runtime.evaluate',{expression:"(async()=>{document.querySelector('.tab[data-mode=ngang]').click();await new Promise(ok=>setTimeout(ok,250));const frame=document.getElementById('ngangFrame'),d=frame.contentDocument;const region=d.getElementById('region'),date=d.getElementById('date');region.value='mn';region.dispatchEvent(new Event('change',{bubbles:true}));date.value='2026-10-15';date.dispatchEvent(new Event('change',{bubbles:true}));d.getElementById('input').value='2d 89 98 b5n dx2,5n';d.getElementById('runBtn').click();await new Promise(ok=>setTimeout(ok,150));const baseline=d.getElementById('output').value,group=d.getElementById('resultGroups')?.children?.[0],row=group?.children?.[1],box=row?.querySelector('input[type=checkbox]');if(!box)return {error:'NGANG_NO_ROW',baseline,status:d.getElementById('status').textContent};box.click();const btn=d.getElementById('cutBtn');btn.scrollIntoView({block:'center'});await new Promise(ok=>setTimeout(ok,100));const a=frame.getBoundingClientRect(),b=btn.getBoundingClientRect();return {x:a.left+b.left+b.width/2,y:a.top+b.top+b.height/2,baseline,disabled:btn.disabled}})()",awaitPromise:true,returnByValue:true});
+    if(nPrep.exceptionDetails)throw Error('NGANG_BROWSER_PREP_EXCEPTION: '+JSON.stringify(nPrep.exceptionDetails).slice(0,800));
+    const nPosition=nPrep.result?.value||{};
+    ensure(Number.isFinite(nPosition.x)&&Number.isFinite(nPosition.y)&&!nPosition.disabled,
+      'Ngang result checkbox/cut inaccessible: '+JSON.stringify(nPosition).slice(0,750));
+    ensure(nPosition.baseline&&nPosition.baseline!==output.mobile,'Ngang must remain distinct from Mobile');
+    await command('Input.dispatchMouseEvent',{type:'mousePressed',x:nPosition.x,y:nPosition.y,button:'left',clickCount:1});
+    await command('Input.dispatchMouseEvent',{type:'mouseReleased',x:nPosition.x,y:nPosition.y,button:'left',clickCount:1});
+    await nap(500);
+    const nResult=await command('Runtime.evaluate',{expression:"(()=>{const d=document.getElementById('ngangFrame').contentDocument;return {input:d.getElementById('input').value,output:d.getElementById('output').value,stored:!!window.localStorage.getItem('tachDaiNgangExactOutputLedgerV1'),status:d.getElementById('status').textContent}})()",returnByValue:true});
+    const nCut=nResult.result?.value||{};
+    ensure(nCut.input?.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n')&&nCut.stored&&nCut.output&&nCut.output!==nPosition.baseline,
+      'Ngang Chrome Cut must be persistent and conserve surviving results: '+JSON.stringify(nCut).slice(0,900));
+    await command('Page.reload',{ignoreCache:true});
+    let nReload;
+    for(let i=0;i<80;i++){
+      const rr=await command('Runtime.evaluate',{expression:"(()=>{const d=document.getElementById('ngangFrame')?.contentDocument;return {input:d?.getElementById('input')?.value||'',output:d?.getElementById('output')?.value||'',status:d?.getElementById('status')?.textContent||''}})()",returnByValue:true});
+      nReload=rr.result?.value;
+      if(nReload?.input.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n')&&nReload?.output===nCut.output)break;
+      await nap(120);
+    }
+    ensure(nReload?.input.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n')&&nReload?.output===nCut.output,
+      'Ngang Chrome reload must keep exact surviving stakes: '+JSON.stringify(nReload).slice(0,800));
+    const nUndo=await command('Runtime.evaluate',{expression:"(async()=>{const d=document.getElementById('ngangFrame').contentDocument;d.getElementById('undoBtn').click();await new Promise(ok=>setTimeout(ok,250));return {input:d.getElementById('input').value,output:d.getElementById('output').value,status:d.getElementById('status').textContent}})()",awaitPromise:true,returnByValue:true});
+    const nUndoValue=nUndo.result?.value||{};
+    ensure(nUndoValue.input==='2d 89 98 b5n dx2,5n'&&nUndoValue.output===nPosition.baseline,
+      'Ngang reload Undo must restore original stakes: '+JSON.stringify(nUndoValue).slice(0,850));
+    console.log('ISSUE18_PUBLIC_CHROME_NGANG_CUT_RELOAD_UNDO_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_CUT_RELOAD_UNDO_PASS');
+
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
       origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.37','1.0.36','1.0.26'],
       frames:2,source:'synthetic',modeOutputsDistinct:true,physicalWindows:'NOT_RUN',
