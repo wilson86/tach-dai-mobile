@@ -19,7 +19,7 @@ function fixture(t){
   git(dir,'init','-q');
   fs.writeFileSync(path.join(dir,'synthetic.txt'),'synthetic-only');
   git(dir,'add','synthetic.txt');
-  git(dir,'-c','user.name=KTS Fixture','-c','user.email=kts-fixture@invalid.test',
+  git(dir,'-c','commit.gpgsign=false','-c','user.name=KTS Fixture','-c','user.email=kts-fixture@invalid.test',
     'commit','-q','-m','synthetic source pin fixture');
   return {dir,sha:git(dir,'rev-parse','HEAD')};
 }
