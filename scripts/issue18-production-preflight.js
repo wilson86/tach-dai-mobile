@@ -18,6 +18,7 @@ const MOBILE_TESTS=Object.freeze([
   'tests/duplicate-selector-tests.js',
   'tests/grouped-checkbox-results.js',
   'tests/issue18-build-local-stage.test.js',
+  'tests/issue18-git-source-pin.test.js',
   'tests/issue18-production-preflight.test.js',
   'tests/issue18-verify-stage.test.js',
   'tests/ledger-app-identity-isolation.js',
