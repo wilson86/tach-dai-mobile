@@ -12,6 +12,27 @@ The source contract test verifies the schema, the active-operator predicate,
 the two synthetic scopes and rejection of unsafe values. This is offline
 evidence. It does not establish that PostgreSQL RLS or Android logout passed.
 
+## Reproducible control-source changes
+
+The control runner and wrapper are not stored in this repository. The two
+patches in `patches/` preserve their qualified changes without runtime data:
+first apply `r6-role-fix-control.patch`, then
+`r6-rls-integration-control.patch`. They target the two control files by their
+relative names. The first patch requires runner SHA-256
+`0125D10FE318C627416F76E18BC55BD7AE27B73A5F1FE9ADEEBB93BDA76AA36C`
+and wrapper SHA-256
+`8FE69C11434310F136637790A403B8DAE64CABD64B375BA3F99772B01B9B74C5`.
+After both patches, their respective hashes must be
+`842E15F5A974B8339389F80C4D064F3544FDDE4053736FD13EEC5B5B5554DA34`
+and `2CD9DAF266B8111C0030C1EF9395EEFB9DD60B3A78036574A9B84324D52949FB`.
+
+Use `git -c core.autocrlf=false apply --check` before each application and
+`git -c core.autocrlf=false apply` to apply it. The LF setting is necessary:
+automatic CRLF conversion changes the byte hashes and is rejected by source
+admission. Do not apply either patch to an active session or overwrite an
+unverified control file. Preserve a rollback copy first. The runner admits and
+loads the repository helper only after verifying its exact SHA-256.
+
 ## Minimal future acceptance
 
 Only a separately authorized, supervised session may run the following:

@@ -1,0 +1,63 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 1a6d236..0d45f76 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -4,6 +4,7 @@ param(
+   [string]$CheckpointName='RUNTIME20_WINDOWS_GROUP_APP_RETRY12.json',
+   [switch]$AdmissionOnly,
+   [string]$AdmissionControllerArtifact,
++  [string]$AdmissionR6BaselineArtifact,
+   [switch]$OfflineTwoPhaseTest,
+   [switch]$PreRestartContractTest,
+   [switch]$DnsProbeTest,
+@@ -46,6 +47,7 @@ $approvedWrapperSha='BEAB7725D3FCE81E273DF0365DE939BCEFC52D7E511172824F66ACB3A57
+ $approvedController=$controller
+ $r6EvidenceType='REAL_POSTGRESQL';$r6LocalEvidenceType='ANDROID_LOCAL_STORAGE'
+ if($AdmissionControllerArtifact){if(-not $AdmissionOnly){throw 'ADMISSION_ARTIFACT_REQUIRES_ADMISSION_ONLY'};$controller=[IO.Path]::GetFullPath($AdmissionControllerArtifact)}
++if($AdmissionR6BaselineArtifact -and -not $AdmissionOnly){throw 'ADMISSION_R6_BASELINE_REQUIRES_ADMISSION_ONLY'}
+ $pgStarted=$false; $supervisor=$null; $node=$null; $probeOrigin=$null; $p8787Before=$null; $publicSessionLease=$null; $result=[ordered]@{session_id=$run;source_head=$expected;status='FAIL';synthetic_only=$true;cost_usd=0;production_mutation='NONE';started_utc=[datetimeoffset]::UtcNow.ToString('o')}
+ function Assert-True($value,$message){if(-not $value){throw $message}}
+ function Assert-ChildExitCode($Process,[string]$FailurePrefix){
+@@ -404,8 +406,7 @@ function Capture-R6StageEvidence($Request,$Ready,[string]$Stage,[string]$Evidenc
+   if($Stage -eq 'LOCAL_PENDING'){
+     $data=$localRecord;$query=$null
+   }elseif($Stage -eq 'CROSS_WORKSPACE_RLS'){
+-    $otherQuery="SELECT json_build_object('workspaces',(SELECT count(*) FROM kts_team.workspaces WHERE workspace_id='$other'),'counterparties',(SELECT count(*) FROM kts_team.counterparties WHERE workspace_id='$other'),'memberships',(SELECT count(*) FROM kts_team.memberships WHERE workspace_id='$other'))::text"
+-    $otherQuery=$otherQuery.Replace("'memberships',","'other_actor',(SELECT user_id FROM kts_team.memberships WHERE workspace_id='$other' AND team_role='operator' AND revoked_at IS NULL ORDER BY user_id LIMIT 1),'protected_scopes',(SELECT count(*) FROM kts_team.scopes WHERE workspace_id='$w' AND partner_id='$p' AND business_date='$d'::date AND region='$g'),'protected_events',(SELECT count(*) FROM kts_team.scope_events WHERE workspace_id='$w' AND partner_id='$p' AND business_date='$d'::date AND region='$g'),'memberships',")
++    $otherQuery=Get-R6OtherWorkspaceBaselineSql -Workspace $w -Partner $p -BusinessDate $d -Region $g
+     $otherRows=@(Psql @('-X','-q','-t','-A','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','55434','-U',$bootstrap,'-d',$Database,'-c',$otherQuery) $BootstrapPassword|Where-Object {$_ -and $_.ToString().Trim()})
+     Assert-True ($otherRows.Count -eq 1) 'R6_RLS_BASELINE_ROW_COUNT_INVALID';$otherBaseline=$otherRows[0]|ConvertFrom-Json
+     Assert-True ([int]$otherBaseline.workspaces -eq 1 -and [int]$otherBaseline.counterparties -gt 0 -and [int]$otherBaseline.memberships -gt 0) 'R6_RLS_OTHER_WORKSPACE_ABSENT'
+@@ -662,11 +663,17 @@ try {
+     'tests/settlement-team-synthetic-local-http.test.cjs'='698B8CC55DA472E3C21B540D3F2C448F4130C22B4A7D8DCB8BD07E4062F0A329'
+     'tests/settlement-team-ui-routing-browser.test.cjs'='97BE5B293BC2FDC512467CAE8291DFC6114BEEB513E556E846F4BC29BCF888DE'
+     'team-settlement/permanent-private-ca-policy.cjs'='7981027C622803A825F169BEEE78995A6818AF0D53194419AA13AA7CABEB4238'
++    'team-settlement/windows-r6-rls-baseline.ps1'='F17608F91EC43577DDBE5F9D4ED8BE0A4ADFFFA44B21EC3C730F5B2D6D9F1CF9'
+   }
+   $dirty=@(git -C $repo status --porcelain)
+   $expectedDirty=@(' M app/settlement-team-pilot-start.js',' M app/settlement-team-pilot.css',' M app/settlement-team-pilot.html',' M team-settlement/auth-http-contract.cjs',' M team-settlement/synthetic-local-team-http.cjs',' M tests/settlement-auth-http-contract.test.cjs',' M tests/settlement-team-synthetic-local-http.test.cjs',' M tests/settlement-team-windows-pilot-controller.cjs','?? team-settlement/live-runtime-adapters.cjs','?? team-settlement/permanent-private-ca-policy.cjs','?? team-settlement/persistent-pilot-lifecycle.cjs','?? team-settlement/synthetic-private-team-https.cjs','?? team-settlement/two-phase-controller-test-seam.cjs','?? team-settlement/windows-pilot-controller-capabilities.cjs','?? tests/chrome-private-ca-trust.test.cjs','?? tests/permanent-private-ca-policy.test.cjs','?? tests/persistent-pilot-lifecycle.test.cjs','?? tests/settlement-team-pilot-start-https.test.cjs','?? tests/settlement-team-private-https-contract.test.cjs','?? tests/settlement-team-ui-routing-browser.test.cjs','?? tests/settlement-team-windows-pilot-capabilities.test.cjs')
++  $expectedDirty+=@('?? team-settlement/windows-r6-rls-baseline.ps1')
+   Assert-True (((@($dirty|Sort-Object) -join '|') -eq (@($expectedDirty|Sort-Object) -join '|'))) 'SOURCE_WORKTREE_UNEXPECTED'
+-  foreach($sourcePath in $approvedSource.Keys){Assert-True ((Get-KtsSha256 (Join-Path $repo $sourcePath)) -eq $approvedSource[$sourcePath]) "SOURCE_HASH_MISMATCH_$sourcePath"}
++  foreach($sourcePath in $approvedSource.Keys){
++    Assert-True ((Get-KtsSha256 (Join-Path $repo $sourcePath)) -eq $approvedSource[$sourcePath]) "SOURCE_HASH_MISMATCH_$sourcePath"
++  }
++  if($AdmissionR6BaselineArtifact){Assert-True ((Get-KtsSha256 ([IO.Path]::GetFullPath($AdmissionR6BaselineArtifact))) -eq $approvedSource['team-settlement/windows-r6-rls-baseline.ps1']) 'ADMISSION_R6_BASELINE_ARTIFACT_HASH_MISMATCH'}
++  . (Join-Path $repo 'team-settlement\windows-r6-rls-baseline.ps1')
+   Assert-True (Test-Path -LiteralPath $controller) 'ADMISSION_CONTROLLER_ARTIFACT_MISSING'
+   Assert-True ((Get-KtsSha256 $controller) -eq $approvedSource['tests/settlement-team-windows-pilot-controller.cjs']) 'ADMISSION_CONTROLLER_ARTIFACT_HASH_MISMATCH'
+   Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq '6F4C8CAD03ED969DAA4501459E5CD88097DFD47D559FFA0FF6DB662BFF530C36') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
+
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 6f5cf3a..49ab083 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -109,7 +109,7 @@ function Assert-AndroidDriverIdentity([string]$Path){
+   Assert-True ((Get-Sha256 $Path) -eq '6F4C8CAD03ED969DAA4501459E5CD88097DFD47D559FFA0FF6DB662BFF530C36') 'ANDROID_DRIVER_SOURCE_DRIFT'
+ }
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '0D8E7E8FDA10E548498FD71D19D3F06A11FB3ABF5C7E15D106E421098C66B236') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '842E15F5A974B8339389F80C4D064F3544FDDE4053736FD13EEC5B5B5554DA34') 'R6_RUNNER_SOURCE_DRIFT'
+ }
+ if($OfflineDriverIdentitySelfTest){
+   $proofDir=Join-Path $ControlRoot ('evidence\android-driver-identity-'+[guid]::NewGuid().ToString('N'))

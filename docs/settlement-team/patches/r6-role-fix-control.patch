@@ -1,0 +1,41 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 697efe0..1a6d236 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -405,7 +405,7 @@ function Capture-R6StageEvidence($Request,$Ready,[string]$Stage,[string]$Evidenc
+     $data=$localRecord;$query=$null
+   }elseif($Stage -eq 'CROSS_WORKSPACE_RLS'){
+     $otherQuery="SELECT json_build_object('workspaces',(SELECT count(*) FROM kts_team.workspaces WHERE workspace_id='$other'),'counterparties',(SELECT count(*) FROM kts_team.counterparties WHERE workspace_id='$other'),'memberships',(SELECT count(*) FROM kts_team.memberships WHERE workspace_id='$other'))::text"
+-    $otherQuery=$otherQuery.Replace("'memberships',","'other_actor',(SELECT user_id FROM kts_team.memberships WHERE workspace_id='$other' AND role='operator' ORDER BY user_id LIMIT 1),'protected_scopes',(SELECT count(*) FROM kts_team.scopes WHERE workspace_id='$w' AND partner_id='$p' AND business_date='$d'::date AND region='$g'),'protected_events',(SELECT count(*) FROM kts_team.scope_events WHERE workspace_id='$w' AND partner_id='$p' AND business_date='$d'::date AND region='$g'),'memberships',")
++    $otherQuery=$otherQuery.Replace("'memberships',","'other_actor',(SELECT user_id FROM kts_team.memberships WHERE workspace_id='$other' AND team_role='operator' AND revoked_at IS NULL ORDER BY user_id LIMIT 1),'protected_scopes',(SELECT count(*) FROM kts_team.scopes WHERE workspace_id='$w' AND partner_id='$p' AND business_date='$d'::date AND region='$g'),'protected_events',(SELECT count(*) FROM kts_team.scope_events WHERE workspace_id='$w' AND partner_id='$p' AND business_date='$d'::date AND region='$g'),'memberships',")
+     $otherRows=@(Psql @('-X','-q','-t','-A','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','55434','-U',$bootstrap,'-d',$Database,'-c',$otherQuery) $BootstrapPassword|Where-Object {$_ -and $_.ToString().Trim()})
+     Assert-True ($otherRows.Count -eq 1) 'R6_RLS_BASELINE_ROW_COUNT_INVALID';$otherBaseline=$otherRows[0]|ConvertFrom-Json
+     Assert-True ([int]$otherBaseline.workspaces -eq 1 -and [int]$otherBaseline.counterparties -gt 0 -and [int]$otherBaseline.memberships -gt 0) 'R6_RLS_OTHER_WORKSPACE_ABSENT'
+@@ -690,7 +690,13 @@ try {
+       $record=[ordered]@{stage=$script:r6CurrentStage;role=$role;query=$sql;evidence_type='MOCKED_PSQL_DEPENDENCY'}
+       [IO.File]::AppendAllText((Join-Path $evidence 'MOCK_SQL_CALLS.jsonl'),(($record|ConvertTo-Json -Compress)+[Environment]::NewLine))
+       if($script:r6CurrentStage -eq 'CROSS_WORKSPACE_RLS'){
+-        if($sql.StartsWith('SELECT json_build_object')){Assert-True ($role -eq $bootstrap) 'R6_FIXTURE_BASELINE_ROLE_INVALID';return ($r6Fixture.query_results.BASELINE|ConvertTo-Json -Depth 16 -Compress)}
++        if($sql.StartsWith('SELECT json_build_object')){
++          Assert-True ($role -eq $bootstrap) 'R6_FIXTURE_BASELINE_ROLE_INVALID'
++          Assert-True ($sql.Contains("team_role='operator' AND revoked_at IS NULL")) 'R6_FIXTURE_MEMBERSHIP_SCHEMA_INVALID'
++          $schema=Get-Content -Raw -LiteralPath (Join-Path $repo 'team-settlement\migrations\001_team_ledger.sql')
++          Assert-True ($schema -match '(?s)CREATE TABLE IF NOT EXISTS kts_team\.memberships\s*\(.*?\bteam_role\s+text.*?\brevoked_at\s+timestamptz') 'R6_FIXTURE_MEMBERSHIP_SCHEMA_DRIFT'
++          return ($r6Fixture.query_results.BASELINE|ConvertTo-Json -Depth 16 -Compress)
++        }
+         Assert-True ($role -eq $ledger -and $sql.Contains('SET LOCAL kts.workspace_id=') -and $sql.Contains('ROLLBACK') -and $sql.Contains('UPDATE kts_team.workspaces')) 'R6_FIXTURE_RLS_CONTRACT_INVALID'
+         if($sql.Contains("SET LOCAL kts.workspace_id='fake_groupb_")){return ($r6Fixture.query_results.CROSS_WORKSPACE_RLS_REVERSE|ConvertTo-Json -Depth 16 -Compress)}
+       }
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 8071789..6f5cf3a 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -109,7 +109,7 @@ function Assert-AndroidDriverIdentity([string]$Path){
+   Assert-True ((Get-Sha256 $Path) -eq '6F4C8CAD03ED969DAA4501459E5CD88097DFD47D559FFA0FF6DB662BFF530C36') 'ANDROID_DRIVER_SOURCE_DRIFT'
+ }
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '0125D10FE318C627416F76E18BC55BD7AE27B73A5F1FE9ADEEBB93BDA76AA36C') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '0D8E7E8FDA10E548498FD71D19D3F06A11FB3ABF5C7E15D106E421098C66B236') 'R6_RUNNER_SOURCE_DRIFT'
+ }
+ if($OfflineDriverIdentitySelfTest){
+   $proofDir=Join-Path $ControlRoot ('evidence\android-driver-identity-'+[guid]::NewGuid().ToString('N'))
