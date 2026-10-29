@@ -11,7 +11,8 @@ const MOBILE_FILES = [
 ];
 const NGANG_FILES = [
   'index.html', 'sw.js', 'version.json', 'manifest.webmanifest',
-  'business_engine.generated.js', 'station_calendar.generated.js'
+  'business_engine.generated.js', 'station_calendar.generated.js',
+  'icon-192.png', 'icon-512.png'
 ];
 const NANG_IFRAME = /(<iframe\b[^>]*\bid="ngangFrame"[^>]*\bsrc=")[^"]+("[^>]*>)/g;
 function fail(message) { throw new Error('STAGING_BLOCKED: ' + message); }
