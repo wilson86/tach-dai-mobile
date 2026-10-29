@@ -56,6 +56,8 @@ jobs:
           const {MOBILE_TESTS,NGANG_TESTS}=require('./scripts/issue18-production-preflight.js');
           if(MOBILE_TESTS.length!==25||NGANG_TESTS.length!==15)
             throw Error('SOURCE_DRIFT_OR_MISSING_TESTS');
+          const failures=[];
+          let passed=0;
           for(const [label,cwd,tests] of [
             ['MOBILE',process.cwd(),MOBILE_TESTS],
             ['NGANG',path.resolve('_ngang_candidate'),NGANG_TESTS]
@@ -66,10 +68,13 @@ jobs:
                 cwd,shell:false,stdio:'inherit',timeout:120000,
                 env:{...process.env,CI:'true',GIT_OPTIONAL_LOCKS:'0'}
               });
-              if(result.error||result.signal||result.status!==0)
-                throw Error('BLOCKED '+label+' '+file+': '+String(result.error?.message||result.signal||result.status));
-              console.log('PASS '+label+' '+file);
+              if(result.error||result.signal||result.status!==0){
+                const reason='BLOCKED '+label+' '+file+': '+String(result.error?.message||result.signal||result.status);
+                console.error(reason);failures.push(reason);
+              }else{passed++;console.log('PASS '+label+' '+file);}
             }
           }
+          console.log('PUBLIC_NATIVE_QA_SUMMARY '+JSON.stringify({passed,failed:failures.length,failures}));
+          if(failures.length)throw Error('PUBLIC_NATIVE_QA_BLOCKED_ON_'+failures.length+'_FILES');
           console.log('PUBLIC_NATIVE_QA_ALL_AUDITED_FILES_PASS');
           NODE
