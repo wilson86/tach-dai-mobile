@@ -29,8 +29,12 @@ node scripts/issue18-build-local-stage.js --mobile "C:\KTS-QA\mobile-wip" --ngan
 The tool verifies exact release-candidate versions and a shared 64-character
 engine SHA, checks required assets, refuses overlapping or symlinked source
 paths, refuses existing targets, and copies only into the new staging directory.
-It rewrites **only the copy** of the Ngang iframe to `../../Ngang/`; an
-unexpected iframe origin fails closed. Original source checkouts remain unchanged.
+It rewrites **only the copy** of the Ngang iframe to `../../Ngang/` and
+**only the staged copy** of `Mobile/app/sw.js` from the published `/tach-dai-mobile/`
+routing prefix to the local `/Mobile/` routing prefix. The resulting offline
+navigation and icon checks therefore target localhost rather than silently
+skipping Unified's service-worker handler. Unexpected iframe or SW routes fail
+closed before staging. Original source checkouts remain unchanged.
 
 The output contains `Mobile/`, `Ngang/` and a
 `ISSUE18_STAGE_MANIFEST.json` with `release_authorized: false`.
