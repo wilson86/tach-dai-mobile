@@ -83,6 +83,12 @@ test('treat edited release-authorization flag as stage tampering',t=>{
   fs.writeFileSync(p,JSON.stringify(manifest));
   assert.throws(()=>verify(f),/BAD_MANIFEST/);
 });
+test('structured failures include stable code in message and Error.code',()=>{
+  assert.throws(()=>verify({mobile:'relative',ngang:'relative',out:'relative'}),
+    {code:'INVALID_ROOT',message:/STAGE_INTEGRITY_BLOCKED \[INVALID_ROOT\]/});
+  assert.throws(()=>parseArgs(['--unknown','x','--ngang','y','--out','z']),
+    {code:'USAGE',message:/STAGE_INTEGRITY_BLOCKED \[USAGE\]/});
+});
 test('CLI requires three unique absolute sources and stage paths',()=>{
   assert.deepEqual(parseArgs(['--mobile','/a','--ngang','/b','--out','/c']),
     {mobile:'/a',ngang:'/b',out:'/c'});
