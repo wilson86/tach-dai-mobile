@@ -7,7 +7,7 @@
 - Private wilson86/KTS: review/issue18-cache-authority-20261029.
 - Public wilson86/tach-dai-mobile: review/issue18-expanded-admission-20261029.
 - Public wilson86/tach-dai-ngang: review/issue18-ledger-drift-20261029.
-- Candidate versions: Mobile 2.0.36; Ngang 1.0.34; Unified 1.0.25.
+- Candidate versions: Mobile 2.0.36; Ngang 1.0.35; Unified 1.0.25.
 - Engine SHA: 7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea.
 
 Do not reset or clean an existing dirty worktree. Create three fresh isolated C: checkouts, with paths C:\KTS-QA\issue18-review\KTS, C:\KTS-QA\issue18-review\Mobile and C:\KTS-QA\issue18-review\Ngang. Record their full HEAD SHA values.
@@ -24,7 +24,7 @@ node scripts/issue18-production-preflight.js `
   --ngang-sha '<NGANG_HEAD>'
 ```
 
-The tool refuses non-C: workspace paths, unexpected SHA, dirty checkouts, symlink/junction source paths, mismatched versions/engine or missing assets. It invokes the canonical Python generator strict --check and **23 Mobile + 14 Ngang** explicitly audited, locally runnable Node regression files (all checked-in JavaScript tests except Ngang `tests/verify-published-artifact.js`, which calls the live website and must NOT run in offline admission). No GitHub Actions, package install, API, production mutation or network is required. Save its JSON evidence in Issue #18. Any failing command blocks the gate. This source-level allowlist is NOT proof that tests have run.
+The tool refuses non-C: workspace paths, unexpected SHA, dirty checkouts, symlink/junction source paths, mismatched versions/engine or missing assets. It invokes the canonical Python generator strict --check and **23 Mobile + 15 Ngang** explicitly audited, locally runnable Node regression files (all checked-in JavaScript tests except Ngang `tests/verify-published-artifact.js`, which calls the live website and must NOT run in offline admission). No GitHub Actions, package install, API, production mutation or network is required. Save its JSON evidence in Issue #18. Any failing command blocks the gate. This source-level allowlist is NOT proof that tests have run.
 
 ## Gate B — isolated browser
 
