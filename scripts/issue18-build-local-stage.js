@@ -58,6 +58,8 @@ function stage({mobile, ngang, out}) {
   const engine = mv.business_engine_sha256;
   if (!/^[a-f0-9]{64}$/.test(engine) || engine !== nv.business_engine_sha256 || engine !== uv.business_engine_sha256)
     fail('Mobile/Ngang/Unified engine SHA mismatch');
+  if (mv.version !== '2.0.36' || nv.version !== '1.0.34' || uv.version !== '1.0.25')
+    fail('mixed or stale Issue18 candidate versions');
   const html = isolatedUnifiedHtml(fs.readFileSync(checkedFile(m, 'app/index.html'), 'utf8'));
   // Preflight all assets before making the staging directory.
   for (const file of MOBILE_FILES) checkedFile(m, file);
