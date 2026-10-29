@@ -1,6 +1,6 @@
 {
-  "version": "1.0.25",
-  "updated": "2026-10-29",
+  "version": "1.0.26",
+  "updated": "2026-10-30",
   "business_engine_sha256": "7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea",
   "contract": "DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2",
   "modes": [
