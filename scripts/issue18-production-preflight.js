@@ -6,19 +6,48 @@ const os=require('node:os');
 const cp=require('node:child_process');
 
 const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.36',ngang:'1.0.34',unified:'1.0.25'});
+// Explicit allowlists, audited for no network, production writes or paid runner.
+// The Ngang published-artifact verifier is intentionally EXCLUDED (live fetch).
 const MOBILE_TESTS=Object.freeze([
-  'tests/release-review-asset-consistency.js',
+  'tests/davong-checkbox-ui-parity.js',
+  'tests/davong-source-line-cut-provenance.js',
+  'tests/duplicate-selector-tests.js',
+  'tests/grouped-checkbox-results.js',
+  'tests/issue18-build-local-stage.test.js',
+  'tests/issue18-production-preflight.test.js',
+  'tests/ledger-app-identity-isolation.js',
   'tests/ledger-readable-working-ui.js',
+  'tests/mb-leading-dot-chat-envelope.js',
+  'tests/mb-leading-dot-davong-parity.js',
+  'tests/realtime-arbitrary-row-cut.contract.js',
+  'tests/regression-tests.js',
+  'tests/release-review-asset-consistency.js',
+  'tests/semantic-number-group-checkbox.js',
   'tests/source-copy-cut-actions.js',
+  'tests/source-output-cut-conservation.js',
+  'tests/source-pane-after-result-cut.js',
+  'tests/unified-child-select-all-dedup.js',
+  'tests/unified-ledger-mode-local-cross-frame.js',
   'tests/unified-offline-engine-cache.js',
-  'tests/unified-versioned-ux-cache.js',
-  'tests/issue18-build-local-stage.test.js'
+  'tests/unified-separator-regression.js',
+  'tests/unified-static-tests.js',
+  'tests/unified-versioned-ux-cache.js'
 ]);
 const NGANG_TESTS=Object.freeze([
-  'tests/release-review-asset-consistency.js',
+  'tests/duplicate-selector-tests.js',
+  'tests/dx-number-pair-operator-oracle.js',
+  'tests/grouped-checkbox-results.js',
+  'tests/ledger-app-identity-isolation.js',
   'tests/ledger-readable-working-ui.js',
+  'tests/mb-leading-dot-chat-envelope.js',
+  'tests/ngang-money-boundary-matrix.js',
+  'tests/realtime-arbitrary-row-cut.contract.js',
+  'tests/regression-tests.js',
+  'tests/release-review-asset-consistency.js',
+  'tests/semantic-number-group-checkbox.js',
   'tests/source-copy-cut-actions.js',
-  'tests/ngang-money-boundary-matrix.js'
+  'tests/source-output-cut-conservation.js',
+  'tests/source-pane-after-result-cut.js'
 ]);
 const ISSUE18_ENGINE='7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
 function block(code,detail){const error=new Error(String(detail||code));error.code=code;throw error;}
