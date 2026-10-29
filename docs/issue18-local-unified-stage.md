@@ -7,10 +7,13 @@ isolated Unified end-to-end QA stage.**
 
 ## Preconditions
 
-- Use clean, SHA-pinned C: checkouts of the three WIP branches, including:
-  - Mobile `5118353d613267428d6917b8932fc790225bb236`
-  - Ngang `49fcfd27688436468ec858d2dc855eb80d078843`
-  - KTS policy `779a1e8ae9e52ce25f94f4510a8aa45ef8a6d8a3`
+- Use **clean, SHA-pinned** C: checkouts of the coordinated GitHub review
+  branches (record actual HEAD SHAs at test time):
+  - Mobile `review/issue18-cache-version-20261029`
+  - Ngang `review/issue18-cache-version-20261029`
+  - KTS authority `review/issue18-cache-authority-20261029`
+- Stage admission requires exact Mobile **2.0.36**, Ngang **1.0.34**, Unified
+  **1.0.25**, with matching generated engine SHA. Old WIP versions are rejected.
 - Read each repository's `AGENTS.md` and the WILSON86 zero-cost policy.
 - Use **synthetic data only**. Never attach to a personal Chrome profile,
   production database, Telegram session or customer storage.
@@ -23,7 +26,7 @@ isolated Unified end-to-end QA stage.**
 node scripts/issue18-build-local-stage.js --mobile "C:\KTS-QA\mobile-wip" --ngang "C:\KTS-QA\ngang-wip" --out "C:\KTS-QA\issue18-stage-new"
 ```
 
-The tool verifies that all three `version.json` files share one 64-character
+The tool verifies exact release-candidate versions and a shared 64-character
 engine SHA, checks required assets, refuses overlapping or symlinked source
 paths, refuses existing targets, and copies only into the new staging directory.
 It rewrites **only the copy** of the Ngang iframe to `../../Ngang/`; an
