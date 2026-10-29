@@ -285,13 +285,19 @@ function preserveIncompatibleLedger(raw){
   }
   return false;
 }
+const INCOMPATIBLE_LEDGER_WARNING="HOLD: còn dữ liệu Cut đã lưu nhưng khác miền/ngày/engine hoặc không hợp lệ. Dữ liệu vẫn được giữ; trở về đúng miền/ngày và tải lại trước khi xử lý cược.";
+let pendingIncompatibleLedger=false;
 function restorePersistedExactOutputLedger(){
   try{
     const raw=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY)||"";
-    if(!raw)return;
-    if(parseExactOutputLedger(raw)) inputEl.value=raw;
-    // Keep unrecognized data intact; do not interpret it as wagers.
-  }catch(_){}
+    if(!raw){pendingIncompatibleLedger=false;return;}
+    if(parseExactOutputLedger(raw)){
+      inputEl.value=raw;pendingIncompatibleLedger=false;
+    }else{
+      // Never silently show an empty ticket while prior wager rows remain stored.
+      pendingIncompatibleLedger=true;
+    }
+  }catch(_){pendingIncompatibleLedger=true;}
 }
 function announceWorkingSource(){
   // Same-origin Unified listens to this local event; no postMessage or polling
@@ -365,6 +371,7 @@ function loadSettings(){
   }catch(_){}
   restorePersistedExactOutputLedger();
   updateUI();
+  if(pendingIncompatibleLedger)setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
 }
 
 function stripInvisible(s){
@@ -1793,6 +1800,21 @@ function resolveExplicitSourceRegion(text){
 }
 
 function run(options={}){
+  if(pendingIncompatibleLedger){
+    try{
+      const stored=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY)||"";
+      if(stored&&(!parseExactOutputLedger(stored)||inputEl.value!==stored)){
+        outputEl.value="";resetOutputRecords();
+        setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
+        return;
+      }
+      pendingIncompatibleLedger=false;
+    }catch(_){
+      outputEl.value="";resetOutputRecords();
+      setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
+      return;
+    }
+  }
   const submittedRaw=inputEl.value;
   const raw=submittedRaw.trim();
   if(!raw){outputEl.value="";resetOutputRecords();setStatus("Chưa có tin.","err");return;}
@@ -1937,6 +1959,10 @@ $("cutBtn").addEventListener("click",cutSelectedOutput);
 runBtn.addEventListener("click",run);
 $("copyBtn").addEventListener("click",copyOutput);
 $("clearBtn").addEventListener("click",()=>{
+  if(pendingIncompatibleLedger){
+    setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
+    return;
+  }
   if(inputEl.value||outputEl.value)snapshot();
   inputEl.value="";outputEl.value="";resetOutputRecords();
   persistExactOutputLedger(); // Clear stale local ledger on explicit Xóa; Undo can restore snapshot.
