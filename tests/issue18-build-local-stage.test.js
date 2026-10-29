@@ -4,6 +4,8 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const vm = require('node:vm');
+const crypto = require('node:crypto');
+const sha256 = value=>crypto.createHash('sha256').update(value).digest('hex');
 const path = require('node:path');
 const {stage, isolatedUnifiedHtml, isolatedUnifiedServiceWorker, parseArgs} = require('../scripts/issue18-build-local-stage.js');
 const HASH = '7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
@@ -79,6 +81,14 @@ test('fresh stage copies exact assets and does not change original source',t=>{
   const manifest=stage(f);
   assert.equal(manifest.engine_sha256,HASH);
   assert.equal(manifest.release_authorized,false);
+  assert.equal(manifest.source_sha256.unified_html,sha256(html));
+  assert.equal(manifest.source_sha256.unified_sw,sha256(sw));
+  assert.equal(manifest.staged_sha256.unified_html,
+    sha256(fs.readFileSync(path.join(f.out,'Mobile/app/index.html'))));
+  assert.equal(manifest.staged_sha256.unified_sw,
+    sha256(fs.readFileSync(path.join(f.out,'Mobile/app/sw.js'))));
+  assert.notEqual(manifest.source_sha256.unified_html,manifest.staged_sha256.unified_html);
+  assert.notEqual(manifest.source_sha256.unified_sw,manifest.staged_sha256.unified_sw);
   assert.equal(fs.readFileSync(path.join(f.mobile,'app/index.html'),'utf8'),html);
   assert.match(fs.readFileSync(path.join(f.out,'Mobile/app/index.html'),'utf8'),/src="\.\.\/\.\.\/Ngang\/"/);
   assert.ok(fs.readFileSync(path.join(f.out,'Mobile/app/sw.js'),'utf8').includes('/Mobile/app'));
