@@ -9,9 +9,9 @@ isolated Unified end-to-end QA stage.**
 
 - Use **clean, SHA-pinned** C: checkouts of the coordinated GitHub review
   branches (record actual HEAD SHAs at test time):
-  - Mobile `review/issue18-cache-version-20261029`
-  - Ngang `review/issue18-cache-version-20261029`
-  - KTS authority `review/issue18-cache-authority-20261029`
+  - Mobile `review/issue18-stage-integrity-20261029`
+  - Ngang `review/issue18-cache-isolation-20261029`
+  - KTS authority `review/issue18-cache-isolation-authority-20261029`
 - Stage admission requires exact Mobile **2.0.36**, Ngang **1.0.35**, Unified
   **1.0.25**, with matching generated engine SHA. Old WIP versions are rejected.
 - Read each repository's `AGENTS.md` and the WILSON86 zero-cost policy.
@@ -38,6 +38,14 @@ closed before staging. Original source checkouts remain unchanged.
 
 The output contains `Mobile/`, `Ngang/` and a
 `ISSUE18_STAGE_MANIFEST.json` with `release_authorized: false`.
+
+Before any Chrome action, run the **read-only** SHA-256 verifier on the exact staged files:
+
+```powershell
+node scripts/issue18-verify-stage.js --mobile 'C:\\KTS-QA\\issue18-review\\Mobile' --ngang 'C:\\KTS-QA\\issue18-review\\Ngang' --out 'C:\\KTS-QA\\issue18-stage-new'
+```
+
+Require `STAGE_SOURCE_BYTES_PASS`, 21 checked files, correct version and source hashes. Any failure blocks Chrome QA; create a separate fresh stage after fixing the underlying issue. This is not a Chrome or production PASS.
 
 ## Serve only on loopback
 
