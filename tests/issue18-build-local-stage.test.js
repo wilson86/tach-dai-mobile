@@ -11,7 +11,7 @@ function fixture() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'issue18-stage-test-'));
   const mobile = path.join(base, 'srcMobile'), ngang = path.join(base, 'srcNgang'), out = path.join(base, 'fresh-stage');
   const MOBILE_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js','icon-192.png','icon-512.png','app/index.html','app/sw.js','app/version.json','app/unified-core.js','app/manifest.webmanifest'];
-  const NGANG_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js'];
+  const NGANG_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js','icon-192.png','icon-512.png'];
   for (const [repo,paths] of [[mobile,MOBILE_FILES],[ngang,NGANG_FILES]]) for (const f of paths) {
     const target = path.join(repo,f); fs.mkdirSync(path.dirname(target),{recursive:true}); fs.writeFileSync(target,'test asset');
   }
@@ -37,6 +37,8 @@ test('fresh stage copies exact assets and does not change original source',t=>{
   assert.equal(manifest.release_authorized,false);
   assert.equal(fs.readFileSync(path.join(f.mobile,'app/index.html'),'utf8'),html);
   assert.match(fs.readFileSync(path.join(f.out,'Mobile/app/index.html'),'utf8'),/src="\.\.\/\.\.\/Ngang\/"/);
+  assert.equal(fs.existsSync(path.join(f.out,'Ngang/icon-192.png')),true);
+  assert.equal(fs.existsSync(path.join(f.out,'Ngang/icon-512.png')),true);
   assert.throws(()=>stage(f),/STAGING_BLOCKED: stage already exists/);
 });
 test('engine mismatch fails closed before creating stage',t=>{
