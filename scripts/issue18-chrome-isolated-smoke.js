@@ -188,6 +188,59 @@ async function chromeSmoke(stage){
     }
     ensure(offline?.ready&&offline?.frames&&offline?.local,
       'Offline Chrome Unified and child apps must render from SW caches: '+JSON.stringify(offline));
+    // Negative cross-date safety: stored Cut made on 2026-10-15 must HOLD
+    // (without rewriting any wager) when Unified opens on 2026-10-16.
+    // Both ledgers are exactly the receipts produced by real trusted Cuts
+    // earlier in this same isolated browser test. No forged production data.
+    const stagedDate='2026-10-16',originalDate='2026-10-15';
+    const injectLedger="(()=>{const s=window.localStorage;const wrong={region:'mn',date:'"+stagedDate+"',today:false};"+
+      "s.setItem('kts_unified_shared_settings_v1',JSON.stringify(wrong));"+
+      "s.setItem('tachDaiMobileSettings',JSON.stringify(wrong));"+
+      "s.setItem('tachDaiNgangSettings',JSON.stringify(wrong));"+
+      "s.setItem('tachDaiMobileExactOutputLedgerV1',"+JSON.stringify(cutResult.input)+");"+
+      "s.setItem('tachDaiNgangExactOutputLedgerV1',"+JSON.stringify(nCut.input)+");"+
+      "return {date:wrong.date,mobileStored:!!s.getItem('tachDaiMobileExactOutputLedgerV1'),ngangStored:!!s.getItem('tachDaiNgangExactOutputLedgerV1')}})()";
+    const injected=await command('Runtime.evaluate',{expression:injectLedger,returnByValue:true});
+    ensure(injected.result?.value?.mobileStored&&injected.result?.value?.ngangStored,
+      'Unable to install two synthetic Cut receipts into isolated test storage');
+    await command('Page.reload',{ignoreCache:false});
+    let holdResult;
+    for(let i=0;i<100;i++){
+      const check=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame')?.contentDocument,b=document.getElementById('ngangFrame')?.contentDocument,s=window.localStorage;return {shared:document.getElementById('sharedDate')?.value,mobile:{date:a?.getElementById('date')?.value,status:a?.getElementById('status')?.textContent||'',output:a?.getElementById('output')?.value||''},ngang:{date:b?.getElementById('date')?.value,status:b?.getElementById('status')?.textContent||'',output:b?.getElementById('output')?.value||''},mobilePreserved:!!s.getItem('tachDaiMobileExactOutputLedgerV1'),ngangPreserved:!!s.getItem('tachDaiNgangExactOutputLedgerV1')}})()",returnByValue:true});
+      holdResult=check.result?.value;
+      if(holdResult?.mobile?.status?.includes('HOLD')&&holdResult?.ngang?.status?.includes('HOLD'))break;
+      await nap(110);
+    }
+    ensure(holdResult?.shared===stagedDate&&
+      holdResult?.mobile?.date===stagedDate&&holdResult?.ngang?.date===stagedDate&&
+      holdResult?.mobile?.status?.includes('HOLD')&&holdResult?.ngang?.status?.includes('HOLD')&&
+      holdResult?.mobile?.output===''&&holdResult?.ngang?.output===''&&
+      holdResult?.mobilePreserved&&holdResult?.ngangPreserved,
+      'Wrong-date saved Cut must HOLD on both modes without wagers: '+JSON.stringify(holdResult).slice(0,1100));
+    // Exercise actual Run and Clear UI while incompatible ledger is held.
+    const guarded=await command('Runtime.evaluate',{expression:"(()=>{for(const id of ['tachFrame','ngangFrame']){const d=document.getElementById(id).contentDocument;d.getElementById('runBtn').click();d.getElementById('clearBtn').click()}const a=document.getElementById('tachFrame').contentDocument,b=document.getElementById('ngangFrame').contentDocument;return {mobile:a.getElementById('status').textContent,ngang:b.getElementById('status').textContent,mobileOutput:a.getElementById('output').value,ngangOutput:b.getElementById('output').value}})()",returnByValue:true});
+    const guardValue=guarded.result?.value||{};
+    ensure(guardValue.mobile.includes('HOLD')&&guardValue.ngang.includes('HOLD')&&
+      guardValue.mobileOutput===''&&guardValue.ngangOutput==='',
+      'Run/Clear during cross-date HOLD must fail closed: '+JSON.stringify(guardValue).slice(0,900));
+    const kept=await command('Runtime.evaluate',{expression:"(()=>{const s=window.localStorage;return {mobile:s.getItem('tachDaiMobileExactOutputLedgerV1'),ngang:s.getItem('tachDaiNgangExactOutputLedgerV1')}})()",returnByValue:true});
+    ensure(kept.result?.value?.mobile===cutResult.input&&kept.result?.value?.ngang===nCut.input,
+      'Run/Clear with wrong date must never destroy either original saved wager ledger');
+    const repair="(()=>{const s=window.localStorage,correct={region:'mn',date:'"+originalDate+"',today:false};"+
+      "for(const k of ['kts_unified_shared_settings_v1','tachDaiMobileSettings','tachDaiNgangSettings'])s.setItem(k,JSON.stringify(correct));"+
+      "return correct.date})()";
+    await command('Runtime.evaluate',{expression:repair,returnByValue:true});
+    await command('Page.reload',{ignoreCache:false});
+    let repaired;
+    for(let i=0;i<100;i++){
+      const check=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame')?.contentDocument,b=document.getElementById('ngangFrame')?.contentDocument;return {mobile:a?.getElementById('output')?.value||'',ngang:b?.getElementById('output')?.value||'',date:document.getElementById('sharedDate')?.value}})()",returnByValue:true});
+      repaired=check.result?.value;
+      if(repaired?.date===originalDate&&repaired?.mobile===cutResult.output&&repaired?.ngang===nCut.output)break;
+      await nap(110);
+    }
+    ensure(repaired?.date===originalDate&&repaired?.mobile===cutResult.output&&repaired?.ngang===nCut.output,
+      'Both saved Cut ledgers must restore exact survivor wagers after returning to source date: '+JSON.stringify(repaired).slice(0,850));
+    console.log('ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS '+JSON.stringify(swScopes));
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
       origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.37','1.0.36','1.0.26'],
