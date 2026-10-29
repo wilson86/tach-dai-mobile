@@ -79,21 +79,21 @@ async function chromeSmoke(stage){
     ensure(!navigation.errorText,'Chrome navigation rejected: '+JSON.stringify(navigation));
     let found,lastEval;
     for(let i=0;i<100;i++){
-      const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {location:location.href,title:document.title,ready:document.readyState,html:document.documentElement?.outerHTML?.slice(0,350),unified:!!a&&!!b,local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.26'),a?.contentDocument?.body?.textContent?.includes('2.0.37'),b?.contentDocument?.body?.textContent?.includes('1.0.36')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
+      const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {location:location.href,title:document.title,ready:document.readyState,html:document.documentElement?.outerHTML?.slice(0,350),unified:!!a&&!!b,readyChildren:a?.contentDocument?.readyState==='complete'&&b?.contentDocument?.readyState==='complete',local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.26'),a?.contentDocument?.body?.textContent?.includes('2.0.37'),b?.contentDocument?.body?.textContent?.includes('1.0.36')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
       lastEval=r;
       if(r.exceptionDetails)throw Error('CHROME_EVAL_EXCEPTION '+JSON.stringify(r.exceptionDetails).slice(0,1200));
       found=r.result?.value;
-      if(found?.unified&&found?.local&&found?.tach&&found?.ngang&&found.versions?.every(Boolean))break;
+      if(found?.unified&&found?.readyChildren&&found?.local&&found?.tach&&found?.ngang&&found.versions?.every(Boolean))break;
       await nap(100);
     }
     assert.ok(found?.unified,'Unified two iframe shell did not load: '+JSON.stringify({found,lastEval}).slice(0,1800));
     assert.ok(found?.local,'One iframe routed outside localhost staging');
     assert.ok(found?.tach&&found?.ngang,'Mobile/Ngang child app input absent in real Chrome');
     assert.ok(found?.versions?.every(Boolean),'Versioned Unified/Mobile/Ngang UI missing');
-    const r=await command('Runtime.evaluate',{expression:"(async()=>{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');for(const f of [a,b]){const d=f.contentDocument;d.querySelector('#region').value='mn';d.querySelector('#date').value='2026-10-15';d.querySelector('#input').value='2d 89 98 b5n dx2,5n';d.querySelector('#runBtn').click()}await new Promise(ok=>setTimeout(ok,120));return {mobile:a.contentDocument.querySelector('#output').value,ngang:b.contentDocument.querySelector('#output').value}})()",awaitPromise:true,returnByValue:true});
+    const r=await command('Runtime.evaluate',{expression:"(async()=>{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');const results={};for(const [key,f] of [['mobile',a],['ngang',b]]){const d=f.contentDocument;const reg=d.querySelector('#region'),date=d.querySelector('#date');reg.value='mn';reg.dispatchEvent(new Event('change',{bubbles:true}));date.value='2026-10-15';date.dispatchEvent(new Event('change',{bubbles:true}));d.querySelector('#input').value='2d 89 98 b5n dx2,5n';d.querySelector('#runBtn').click();await new Promise(ok=>setTimeout(ok,120));results[key]=d.querySelector('#output').value}return results})()",awaitPromise:true,returnByValue:true});
     const output=r.result?.value||{};
-    ensure(typeof output.mobile==='string'&&output.mobile.includes('89'),'Mobile real Chrome synthetic N035 output missing');
-    ensure(typeof output.ngang==='string'&&output.ngang.includes('89'),'Ngang real Chrome synthetic N035 output missing');
+    ensure(typeof output.mobile==='string'&&output.mobile.includes('89'),'Mobile real Chrome synthetic N035 output missing: '+JSON.stringify(output).slice(0,650));
+    ensure(typeof output.ngang==='string'&&output.ngang.includes('89'),'Ngang real Chrome synthetic N035 output missing: '+JSON.stringify(output).slice(0,650));
     ensure(output.mobile!==output.ngang,'Ngang and Mobile unexpectedly same mode-specific result');
     await command('Browser.grantPermissions',{origin,permissions:['clipboardReadWrite','clipboardSanitizedWrite']});
     // Production-path browser events: select one rendered wager row, use the
