@@ -25,7 +25,7 @@ test('E: drive is never admitted as a test workspace',()=>{
 
 test('release admission includes all audited regression tests but excludes live published fetch',()=>{
   assert.equal(MOBILE_TESTS.length,23);
-  assert.equal(NGANG_TESTS.length,14);
+  assert.equal(NGANG_TESTS.length,15);
   for(const tests of [MOBILE_TESTS,NGANG_TESTS]){
     assert.equal(new Set(tests).size,tests.length,'no duplicate execution');
     assert.ok(Object.isFrozen(tests),'audited test list cannot be changed at runtime');
