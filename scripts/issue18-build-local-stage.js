@@ -78,7 +78,7 @@ function stage({mobile, ngang, out}) {
   const engine = mv.business_engine_sha256;
   if (!/^[a-f0-9]{64}$/.test(engine) || engine !== nv.business_engine_sha256 || engine !== uv.business_engine_sha256)
     fail('Mobile/Ngang/Unified engine SHA mismatch');
-  if (mv.version !== '2.0.36' || nv.version !== '1.0.34' || uv.version !== '1.0.25')
+  if (mv.version !== '2.0.36' || nv.version !== '1.0.35' || uv.version !== '1.0.25')
     fail('mixed or stale Issue18 candidate versions');
   const sourceHtml = fs.readFileSync(checkedFile(m, 'app/index.html'), 'utf8');
   const sourceSw = fs.readFileSync(checkedFile(m, 'app/sw.js'), 'utf8');
