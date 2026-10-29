@@ -3,6 +3,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
+const vm = require('node:vm');
 const path = require('node:path');
 const {stage, isolatedUnifiedHtml, isolatedUnifiedServiceWorker, parseArgs} = require('../scripts/issue18-build-local-stage.js');
 const HASH = '7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
@@ -42,6 +43,36 @@ test('local Unified SW uses local navigation and offline icon routes only',()=>{
   assert.ok(sw.includes('/tach-dai-mobile/'), 'release SW must remain unchanged');
   assert.throws(()=>isolatedUnifiedServiceWorker(sw.replace(
     '/tach-dai-mobile/icon-512.png','/unknown/icon-512.png')),/STAGING_BLOCKED/);
+});
+test('staged Unified SW handles loopback offline navigation and icons',async()=>{
+  const published=fs.readFileSync(path.join(__dirname,'..','app','sw.js'),'utf8');
+  const staged=isolatedUnifiedServiceWorker(published);
+  const handlers={};
+  const caches={
+    match:async key=>typeof key==='string'?'OFFLINE_UNIFIED_HTML':
+      key?.url?.endsWith('/Mobile/icon-192.png')?'OFFLINE_UNIFIED_ICON':null,
+    open:async()=>({put:async()=>{}}),keys:async()=>[]
+  };
+  const self={
+    addEventListener(name,fn){handlers[name]=fn},
+    skipWaiting(){},clients:{claim(){}}
+  };
+  vm.runInNewContext(staged,{self,caches,URL,
+    fetch:async()=>{throw Error('synthetic offline');},Response});
+  const request=async(route,mode)=>{
+    let reply=null,registered=false;
+    handlers.fetch({request:{method:'GET',mode,url:'http://127.0.0.1:62545'+route},
+      respondWith(value){registered=true;reply=Promise.resolve(value);}});
+    return {registered,body:registered?await reply:null};
+  };
+  const nav=await request('/Mobile/app/','navigate');
+  assert.equal(nav.registered,true);
+  assert.equal(nav.body,'OFFLINE_UNIFIED_HTML');
+  const icon=await request('/Mobile/icon-192.png','no-cors');
+  assert.equal(icon.registered,true);
+  assert.equal(icon.body,'OFFLINE_UNIFIED_ICON');
+  const unrelated=await request('/tach-dai-mobile/app/','navigate');
+  assert.equal(unrelated.registered,false,'stage must not intercept production routes');
 });
 test('fresh stage copies exact assets and does not change original source',t=>{
   const f=fixture(); t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
