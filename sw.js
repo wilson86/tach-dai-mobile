@@ -1,6 +1,6 @@
 // Bump for every business-rule or shell release. Navigations are network-first
 // and cached by exact request URL so /app/ can never poison the root offline page.
-const CACHE_NAME = "tach-dai-mobile-v2.0.32-mb-dot-raw-guard-source-pane-fix";
+const CACHE_NAME = "tach-dai-mobile-v2.0.33-duplicate-number-confirmation";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -34,7 +34,7 @@ self.addEventListener("fetch", event => {
   if (url.pathname.endsWith("/version.json") || url.pathname.endsWith("version.json")) {
     event.respondWith(
       fetch(req, { cache: "no-store" }).catch(() =>
-        new Response(JSON.stringify({version:"2.0.32"}), {headers:{"Content-Type":"application/json"}})
+        new Response(JSON.stringify({version:"2.0.33"}), {headers:{"Content-Type":"application/json"}})
       )
     );
     return;

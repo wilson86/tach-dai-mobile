@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.21</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.22</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div id="sharedSettings" class="card shared-settings">
     <div class="controls">
       <div><label class="small" for="sharedRegion">Miền dùng chung</label><select id="sharedRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -77,11 +77,11 @@
     </div>
   </section>
 </div>
-<script src="./unified-core.js?ux=1.0.21"></script>
+<script src="./unified-core.js?ux=1.0.22"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
-const EXPECTED_ENGINE='046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb';
+const EXPECTED_ENGINE='0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb';
 const modeButtons=[...document.querySelectorAll('.tab')];
 function setMode(mode){
   if(!['tach','ngang','davong'].includes(mode)) mode='tach';
@@ -185,7 +185,7 @@ function engine(){
   if(!w.KTS_BUSINESS_ENGINE||w.KTS_BUSINESS_ENGINE.ENGINE_SHA256!==EXPECTED_ENGINE) throw Error('BUSINESS_ENGINE_MISMATCH');
   return w;
 }
-function engineApi(w){return {normalizeInput:w.normalizeInput.bind(w),validateCheckOnlyLine:w.validateCheckOnlyLine.bind(w),processLine:w.processLine.bind(w),splitBetChunks:w.splitBetChunks.bind(w)}}
+function engineApi(w){return {canonical:w.KTS_BUSINESS_ENGINE,normalizeInput:w.normalizeInput.bind(w),validateCheckOnlyLine:w.validateCheckOnlyLine.bind(w),processLine:w.processLine.bind(w),splitBetChunks:w.splitBetChunks.bind(w)}}
 function setDvStatus(text,kind=''){const el=$('dvStatus');el.textContent=text;el.className='status '+kind}
 let dvLastSelection={start:0,end:0};
 function rememberDvSelection(){const el=$('dvOutput'),a=el.selectionStart??0,b=el.selectionEnd??a;if(b>a)dvLastSelection={start:a,end:b}}
@@ -204,10 +204,44 @@ function updateDvSchedule(){
     $('dvSchedule').textContent=`${region.toUpperCase()} · ${day} · ${names||'Miền Bắc'}`;
   }catch(e){$('dvSchedule').textContent='Chưa nạp được engine. Kiểm tra kết nối và trạng thái lưu offline.'}
 }
-async function runDaVong(){
+let pendingDvDuplicate=null;
+function invalidateDvDuplicate(){pendingDvDuplicate=null;document.getElementById('dvDuplicatePanel')?.remove();}
+for(const id of ['dvInput','dvRegion','dvDate','sharedRegion','sharedDate','sharedToday']){
+  $(id).addEventListener(id==='dvInput'?'input':'change',invalidateDvDuplicate);
+}
+function showDvDuplicateConfirmation(rows,w,raw,region,date){
+  pendingDvDuplicate={rows,w,raw,region,selectedRegion:$('dvRegion').value,date,engine:w.KTS_BUSINESS_ENGINE.ENGINE_SHA256};
+  document.getElementById('dvDuplicatePanel')?.remove();
+  const panel=document.createElement('div');panel.id='dvDuplicatePanel';panel.className='card';
+  const message=document.createElement('div');message.setAttribute('role','alert');
+  message.textContent='Số trùng chưa được tách hoặc tính tiền.\n'+rows.map(row=>
+    'Dòng '+row.line+': '+row.details.flatMap(d=>d.duplicates).join(', ')+' • '+
+    row.details.flatMap(d=>d.bets).map(b=>b.selector+' '+b.amount).join(', ')).join('\n');
+  panel.appendChild(message);
+  for(const [name,label] of [['edit','Sửa tin'],['cancel','Hủy'],['confirm','Xác nhận và tách']]){
+    const button=document.createElement('button');button.textContent=label;button.id='dvDuplicate-'+name;
+    button.addEventListener('click',async()=>{
+      const p=pendingDvDuplicate;
+      if(name!=='confirm'){pendingDvDuplicate=null;panel.remove();if(name==='edit')$('dvInput').focus();return;}
+      try{
+        const current=()=>p===pendingDvDuplicate&&p.raw===$('dvInput').value&&p.selectedRegion===$('dvRegion').value&&
+          p.date===$('dvDate').value&&p.engine===engine().KTS_BUSINESS_ENGINE.ENGINE_SHA256;
+        if(!current())throw Error('DUPLICATE_APPROVAL_STALE');
+        const binding=await w.buildDuplicateBinding(p.raw,p.region,p.date,p.rows,crypto.randomUUID());
+        if(!current())throw Error('DUPLICATE_APPROVAL_STALE');
+        const envelope={decision:'CONFIRM',operator:'local-operator',approval_id:crypto.randomUUID(),binding};
+        pendingDvDuplicate=null;panel.remove();
+        w.withCanonicalDuplicateApproval(envelope,binding,()=>runDaVong({confirmed:true}));
+      }catch(error){pendingDvDuplicate=null;panel.remove();setDvStatus(String(error.message||error),'err');}
+    });
+    panel.appendChild(button);
+  }
+  $('dvInput').closest('.card').after(panel);
+}
+async function runDaVong(options={}){
   if(window.KTS_DV_UI?.beforeRun?.())return;
-  const raw=$('dvInput').value.trim();
-  if(!raw){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
+  const raw=$('dvInput').value;
+  if(!raw.trim()){$('dvOutput').value='';$('dvResultLabel').textContent='Kết quả';setDvStatus('Chưa có tin.','err');return}
   try{
     const w=engine(), wasChat=w.looksLikeChatLog(raw), clean=wasChat?w.preprocessChatText(raw):raw;
     // Show the stripped chat envelope in the editable source on Run, even
@@ -221,12 +255,20 @@ async function runDaVong(){
     const explicit=w.resolveExplicitSourceRegion(clean), region=explicit.region||$('dvRegion').value, source=explicit.text;
     const d=parseLocalDate($('dvDate').value||localDateISO()), stations=w.getSchedule(region,d)||[];
     const result=KTS_UNIFIED.transformDaVongText(source,engineApi(w),region,stations);
+    if(result.duplicate_rows){
+      const rows=w.duplicatePhysicalRows(raw,source,result.duplicate_rows.map(row=>({line:row.line,raw:row.raw,msg:'DUPLICATE_NUMBER_CONFIRM_REQUIRED:'+JSON.stringify(row.details)})));
+      const mapped=w.duplicateConfirmationDetails(rows);
+      $('dvInput').value=raw;$('dvOutput').value='';
+      showDvDuplicateConfirmation(mapped,w,raw,region,$('dvDate').value);
+      setDvStatus('Cần xác nhận số trùng; chưa tách hoặc tính tiền.','err');return;
+    }
     if(!result.ok) throw Error(result.error||'DA_VONG_FAILED');
     if(typeof window.KTS_DV_UI?.noteGeneratedSource!=='function')throw Error('DAVONG_SOURCE_PROVENANCE_NOT_READY');
     window.KTS_DV_UI.noteGeneratedSource(result.blocks,source);
     $('dvOutput').value=result.display_output||result.output;
     $('dvResultLabel').textContent=`Kết quả (${result.outputs.length})`;
     setDvStatus(`Đã tách · ${result.outputs.length} tin · ${result.group_count||0} nhóm đá${wasChat?' · đã lọc chat':''}`,'ok');
+    if(options.confirmed)window.KTS_DV_UI?.afterRun?.();
   }catch(e){
     const msg=String(e&&e.message||e);
     // The Mobile iframe owns the canonical engine. If its offline navigation
@@ -280,9 +322,9 @@ async function prepareOfflineEngine(){
         }
       });
     })));
-    const cache=await caches.open('kts-tach-unified-v1.0.21-mb-dot-raw-guard-046935-source-cut-provenance');
+    const cache=await caches.open('kts-tach-unified-v1.0.22-duplicate-approval-0904f4');
     const expected=['../','../index.html','../station_calendar.generated.js',
-      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.21'];
+      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.22'];
     for(const path of expected){
       const request=new URL(path,location.href).href;
       const response=await cache.match(request);

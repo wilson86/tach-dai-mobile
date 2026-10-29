@@ -1,10 +1,10 @@
 /* GENERATED FILE — DO NOT EDIT.
  * ENGINE_VERSION: 1.0.0-three-region-split.1
- * ENGINE_SHA256: 046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb
+ * ENGINE_SHA256: 0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb
  */
 (function(global) {
   "use strict";
-  const source={"spec":{"schema":"KTS_SHARED_BUSINESS_ENGINE_V1","engine_version":"1.0.0-three-region-split.1","semantic_source":"This file and calendar_authority.json are the only manually maintained shared-rule sources. Generated adapters are never edited.","weekday_labels":{"0":"CHỦ NHẬT","1":"THỨ HAI","2":"THỨ BA","3":"THỨ TƯ","4":"THỨ NĂM","5":"THỨ SÁU","6":"THỨ BẢY"},"workflow_policies":{"TACH_3_MIEN":{"policy_version":"1","money_allocation":"HALF_UNIT_QUOTIENT_REMAINDER","station_exposure":"FULL_PER_SEMANTIC_STATION","mb_split":"HALF_UNIT_QUOTIENT_REMAINDER","mb_money_contract":{"station_topology":"SINGLE","station_expansion":"NONE","split_selectors":["B","DD","D","DAU","DUOI","LO","DAT"],"full_money_selectors":["DX","XC"]}},"NGANG":{"policy_version":"1","money_allocation":"WHOLE_INPUT_INTEGER_QUOTIENT_REMAINDER_ELSE_HALF_UNIT_QUOTIENT_REMAINDER","station_exposure":"HORIZONTAL_SPLIT","mb_split":"NOT_APPLICABLE"},"ROUTER_VALIDATE_FORWARD":{"policy_version":"1","money_allocation":"PRESERVE_VALIDATED_SOURCE_SEMANTICS","station_exposure":"ROUTER_OWNER_ALLOCATION","mb_split":"ROUTER_POLICY_ONLY"}},"selector_contract":{"multiword_aliases":{"dau duoi":"DD","đầu đuôi":"DD","dauduoi":"DD","đầuđuôi":"DD","dau-duoi":"DD","đầu-đuôi":"DD"},"canonical_aliases":{"b":"B","bao":"LO","dd":"DD","đđ":"DD","d":"D","dau":"DAU","đầu":"DAU","duoi":"DUOI","đuôi":"DUOI","lo":"LO","lô":"LO","bl":"LO","blo":"LO","da":"DAT","đá":"DAT","đa":"DAT","dat":"DAT","dathang":"DAT","dx":"DX","đx":"DX","xc":"XC","x":"XC"},"three_mien_replicated_selectors":["B","DD","D","DAU","DUOI","LO","XC"],"dx_pair_order":"AUTHORITATIVE_SCHEDULE_ORDER_UNORDERED_PAIR"},"selector_policies":{"B":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DD":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"XC":{"topology":"EXPLICIT_OR_FULL","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DX":{"topology":"UNORDERED_STATION_PAIRS","money":"PER_PAIR_FOR_TACH_3_MIEN","fraction":"HALF_UNIT_ONLY"},"DAT":{"topology":"TWO_STATION_OR_WORKFLOW","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DAU":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DUOI":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"LO":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"}},"money_transform_contract":{"none":{"operation":"IDENTITY"},"BAO_MULTIPLIER_CEIL":{"operation":"CEIL_MULTIPLY","canonical_selectors":["LO"],"multiplier":"1.067","rounding":"CEILING","split":"NO"}},"selector_groups":{"bet_tokens":["b","bao","dd","đđ","xc","x","dx","đx","da","đá","đa","dat","dathang","d","duoi","đuôi","dau","đầu","lo","lô","bl","blo"],"dx_tokens":["dx","đx","da","đá","dat","dathang"],"literal_dx_tokens":["dx","đx"],"xc_tokens":["xc","x"],"two_station_da_tokens":["da","đá","dx","đx"]},"station_aliases":[["thanh pho ho chi minh","tp"],["thành phố hồ chí minh","tp"],["thua thien hue","hue"],["thừa thiên huế","hue"],["ho chi minh","tp"],["hồ chí minh","tp"],["binh duong","bd"],["binh phuoc","bp"],["binh thuan","bt"],["bình dương","bd"],["bình phước","bp"],["bình thuận","bt"],["kien giang","kg"],["kiên giang","kg"],["ninh thuan","nt"],["ninh thuận","nt"],["quang binh","qb"],["quang ngai","qn"],["quảng bình","qb"],["quảng ngãi","qn"],["tien giang","tg"],["tiền giang","tg"],["binh dinh","bd"],["bình định","bd"],["dong thap","dt"],["hau giang","hg"],["hậu giang","hg"],["khanh hoa","kh"],["khánh hòa","kh"],["quang nam","qn"],["quang tri","qt"],["quảng nam","qn"],["quảng trị","qt"],["soc trang","st"],["sóc trăng","st"],["vinh long","vl"],["vĩnh long","vl"],["đồng tháp","dt"],["an giang","ag"],["bac lieu","bli"],["bạc liêu","bli"],["dak nong","dno"],["dong nai","dn"],["tay ninh","tn"],["tra vinh","tv"],["trà vinh","tv"],["tây ninh","tn"],["vung tau","vt"],["vũng tàu","vt"],["đắk nông","dno"],["đồng nai","dn"],["ben tre","bt"],["bến tre","bt"],["can tho","ct"],["cần thơ","ct"],["da nang","dn"],["dnang","dn"],["dak lak","dl"],["gia lai","gl"],["kon tum","kt"],["long an","la"],["phu yen","py"],["p yen","py"],["phú yên","py"],["đà nẵng","dn"],["qngai","qn"],["đắk lắk","dl"],["ca mau","cm"],["cà mau","cm"],["da lat","dl"],["tp hcm","tp"],["tp.hcm","tp"],["đà lạt","dl"],["tphcm","tp"],["hue","hue"],["huế","hue"]],"fail_closed":{"invalid_split_money":"SỐ TIỀN CHIA CHỈ ĐƯỢC PHÉP BƯỚC 0.5","calendar_schema":"BUSINESS_ENGINE_CALENDAR_SCHEMA_INVALID","generated_stale":"BUSINESS_ENGINE_GENERATED_ARTIFACT_STALE","engine_mismatch":"BUSINESS_ENGINE_MISMATCH"},"parser_contract":{"grammar_version":"3","validation_scopes":{"duplicate_number":"NUMBER_GROUP","selector":"BET_CLAUSE","amount":"BET_CLAUSE","station":"LINE","region":"SOURCE","topology":"SEMANTIC_OUTPUT"},"numeric_period_policy":"DECIMAL_ONLY_WHEN_DIGITS_DOT_DIGITS_AMOUNT; OTHERWISE_COMPACT_CLAUSE_SEPARATOR","source_atomicity":"FAIL_CLOSED_ON_GENUINE_INVALID_CLAUSE","literal_dx_min_distinct_numbers":2},"parser_aliases":{"2đ":"2d","blo":"blo","đa":"đa"},"two_d_topology_policy":{"metadata_schema":"CLAUSE_TOPOLOGY_V4_PRIMARY_PAIR_CROSS_LANGUAGE","relative_scope":"FIRST_TWO_ACTIVE_STATIONS","explicit_pair":"EXACTLY_TWO_DISTINCT_ACTIVE_CANONICAL_STATIONS","mixed_selectors":"PER_CLAUSE_SHARED_SCOPE","fail_closed":["MALFORMED","DUPLICATE","INACTIVE","UNKNOWN","AMBIGUOUS","WRONG_REGION"]},"region_resolution_contract":{"precedence":["EXPLICIT_FULL_STATION","EXPLICIT_REGION","PERSISTED_SOURCE_REGION","SOURCE_TIME_WINDOW"],"bare_dn":{"mn":"Đồng Nai","mt":"Đà Nẵng","mb":"FAIL_CLOSED_AMBIGUOUS_DN","outside_window":"FAIL_CLOSED_AMBIGUOUS_DN"},"historical_region":"PERSISTED_SOURCE_REGION_IS_AUTHORITATIVE_OVER_UI_OR_TIME","failure":"REGION_AMBIGUOUS_FAIL_CLOSED"}},"calendar":{"schema":"KTS_STATION_SCHEDULE_AUTHORITY_V1","weekday_convention":"JavaScript Date.getDay(): 0=Sunday, 1=Monday, ... 6=Saturday","role_contract":{"main_station_count":2,"auxiliary_stations_follow_main":true,"mb":"single-region check-only; no station split"},"regions":{"mn":{"0":[["tg","Tiền Giang"],["kg","Kiên Giang"],["dl","Đà Lạt"]],"1":[["tp","TP.HCM"],["dt","Đồng Tháp"],["cm","Cà Mau"]],"2":[["bt","Bến Tre"],["vt","Vũng Tàu"],["bli","Bạc Liêu"]],"3":[["dn","Đồng Nai"],["ct","Cần Thơ"],["st","Sóc Trăng"]],"4":[["tn","Tây Ninh"],["ag","An Giang"],["bt","Bình Thuận"]],"5":[["vl","Vĩnh Long"],["bd","Bình Dương"],["tv","Trà Vinh"]],"6":[["tp","TP.HCM"],["la","Long An"],["bp","Bình Phước"],["hg","Hậu Giang"]]},"mt":{"0":[["kh","Khánh Hòa"],["kt","Kon Tum"],["hue","Huế"]],"1":[["hue","Huế"],["py","Phú Yên"]],"2":[["dl","Đắk Lắk"],["qn","Quảng Nam"]],"3":[["dn","Đà Nẵng"],["kh","Khánh Hòa"]],"4":[["bd","Bình Định"],["qt","Quảng Trị"],["qb","Quảng Bình"]],"5":[["gl","Gia Lai"],["nt","Ninh Thuận"]],"6":[["dn","Đà Nẵng"],["qn","Quảng Ngãi"],["dno","Đắk Nông"]]},"mb":{"0":[["mb","Miền Bắc"]],"1":[["mb","Miền Bắc"]],"2":[["mb","Miền Bắc"]],"3":[["mb","Miền Bắc"]],"4":[["mb","Miền Bắc"]],"5":[["mb","Miền Bắc"]],"6":[["mb","Miền Bắc"]]}},"authoritative_regression":{"date":"2026-09-13","region":"mt","stations":["kh","kt","hue"],"main_stations":["kh","kt"],"auxiliary":["hue"]}}};
+  const source={"spec":{"schema":"KTS_SHARED_BUSINESS_ENGINE_V1","engine_version":"1.0.0-three-region-split.1","semantic_source":"This file and calendar_authority.json are the only manually maintained shared-rule sources. Generated adapters are never edited.","weekday_labels":{"0":"CHỦ NHẬT","1":"THỨ HAI","2":"THỨ BA","3":"THỨ TƯ","4":"THỨ NĂM","5":"THỨ SÁU","6":"THỨ BẢY"},"workflow_policies":{"TACH_3_MIEN":{"policy_version":"1","money_allocation":"HALF_UNIT_QUOTIENT_REMAINDER","station_exposure":"FULL_PER_SEMANTIC_STATION","mb_split":"HALF_UNIT_QUOTIENT_REMAINDER","mb_money_contract":{"station_topology":"SINGLE","station_expansion":"NONE","split_selectors":["B","DD","D","DAU","DUOI","LO","DAT"],"full_money_selectors":["DX","XC"]}},"NGANG":{"policy_version":"1","money_allocation":"WHOLE_INPUT_INTEGER_QUOTIENT_REMAINDER_ELSE_HALF_UNIT_QUOTIENT_REMAINDER","station_exposure":"HORIZONTAL_SPLIT","mb_split":"NOT_APPLICABLE"},"ROUTER_VALIDATE_FORWARD":{"policy_version":"1","money_allocation":"PRESERVE_VALIDATED_SOURCE_SEMANTICS","station_exposure":"ROUTER_OWNER_ALLOCATION","mb_split":"ROUTER_POLICY_ONLY"}},"selector_contract":{"multiword_aliases":{"dau duoi":"DD","đầu đuôi":"DD","dauduoi":"DD","đầuđuôi":"DD","dau-duoi":"DD","đầu-đuôi":"DD"},"canonical_aliases":{"b":"B","bao":"LO","dd":"DD","đđ":"DD","d":"D","dau":"DAU","đầu":"DAU","duoi":"DUOI","đuôi":"DUOI","lo":"LO","lô":"LO","bl":"LO","blo":"LO","da":"DAT","đá":"DAT","đa":"DAT","dat":"DAT","dathang":"DAT","dx":"DX","đx":"DX","xc":"XC","x":"XC"},"three_mien_replicated_selectors":["B","DD","D","DAU","DUOI","LO","XC"],"dx_pair_order":"AUTHORITATIVE_SCHEDULE_ORDER_UNORDERED_PAIR"},"selector_policies":{"B":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DD":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"XC":{"topology":"EXPLICIT_OR_FULL","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DX":{"topology":"UNORDERED_STATION_PAIRS","money":"PER_PAIR_FOR_TACH_3_MIEN","fraction":"HALF_UNIT_ONLY"},"DAT":{"topology":"TWO_STATION_OR_WORKFLOW","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DAU":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"DUOI":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"},"LO":{"topology":"STATION_EXPOSURE","money":"WORKFLOW","fraction":"HALF_UNIT_ONLY"}},"money_transform_contract":{"none":{"operation":"IDENTITY"},"BAO_MULTIPLIER_CEIL":{"operation":"CEIL_MULTIPLY","canonical_selectors":["LO"],"multiplier":"1.067","rounding":"CEILING","split":"NO"}},"selector_groups":{"bet_tokens":["b","bao","dd","đđ","xc","x","dx","đx","da","đá","đa","dat","dathang","d","duoi","đuôi","dau","đầu","lo","lô","bl","blo"],"dx_tokens":["dx","đx","da","đá","dat","dathang"],"literal_dx_tokens":["dx","đx"],"xc_tokens":["xc","x"],"two_station_da_tokens":["da","đá","dx","đx"]},"station_aliases":[["thanh pho ho chi minh","tp"],["thành phố hồ chí minh","tp"],["thua thien hue","hue"],["thừa thiên huế","hue"],["ho chi minh","tp"],["hồ chí minh","tp"],["binh duong","bd"],["binh phuoc","bp"],["binh thuan","bt"],["bình dương","bd"],["bình phước","bp"],["bình thuận","bt"],["kien giang","kg"],["kiên giang","kg"],["ninh thuan","nt"],["ninh thuận","nt"],["quang binh","qb"],["quang ngai","qn"],["quảng bình","qb"],["quảng ngãi","qn"],["tien giang","tg"],["tiền giang","tg"],["binh dinh","bd"],["bình định","bd"],["dong thap","dt"],["hau giang","hg"],["hậu giang","hg"],["khanh hoa","kh"],["khánh hòa","kh"],["quang nam","qn"],["quang tri","qt"],["quảng nam","qn"],["quảng trị","qt"],["soc trang","st"],["sóc trăng","st"],["vinh long","vl"],["vĩnh long","vl"],["đồng tháp","dt"],["an giang","ag"],["bac lieu","bli"],["bạc liêu","bli"],["dak nong","dno"],["dong nai","dn"],["tay ninh","tn"],["tra vinh","tv"],["trà vinh","tv"],["tây ninh","tn"],["vung tau","vt"],["vũng tàu","vt"],["đắk nông","dno"],["đồng nai","dn"],["ben tre","bt"],["bến tre","bt"],["can tho","ct"],["cần thơ","ct"],["da nang","dn"],["dnang","dn"],["dak lak","dl"],["gia lai","gl"],["kon tum","kt"],["long an","la"],["phu yen","py"],["p yen","py"],["phú yên","py"],["đà nẵng","dn"],["qngai","qn"],["đắk lắk","dl"],["ca mau","cm"],["cà mau","cm"],["da lat","dl"],["tp hcm","tp"],["tp.hcm","tp"],["đà lạt","dl"],["tphcm","tp"],["hue","hue"],["huế","hue"]],"fail_closed":{"invalid_split_money":"SỐ TIỀN CHIA CHỈ ĐƯỢC PHÉP BƯỚC 0.5","calendar_schema":"BUSINESS_ENGINE_CALENDAR_SCHEMA_INVALID","generated_stale":"BUSINESS_ENGINE_GENERATED_ARTIFACT_STALE","engine_mismatch":"BUSINESS_ENGINE_MISMATCH"},"parser_contract":{"grammar_version":"3","validation_scopes":{"duplicate_number":"NUMBER_GROUP_SELECTOR_AWARE","selector":"BET_CLAUSE","amount":"BET_CLAUSE","station":"LINE","region":"SOURCE","topology":"SEMANTIC_OUTPUT"},"duplicate_number_confirmation":{"schema":"KTS_DUPLICATE_NUMBER_CONFIRMATION_V1","pair_selectors":["DAT","DX"],"ordinary_selectors":["B","LO","DD","D","DAU","DUOI","XC"],"pair_action":"REJECT_NO_OVERRIDE","ordinary_action":"OPERATOR_CONFIRMATION_REQUIRED","confirmation_binding":["raw_source","physical_source_line","region","date","engine"],"unattended_action":"HOLD_NO_OUTPUT"},"numeric_period_policy":"DECIMAL_ONLY_WHEN_DIGITS_DOT_DIGITS_AMOUNT; OTHERWISE_COMPACT_CLAUSE_SEPARATOR","source_atomicity":"FAIL_CLOSED_ON_GENUINE_INVALID_CLAUSE"},"parser_aliases":{"2đ":"2d","blo":"blo","đa":"đa"},"two_d_topology_policy":{"metadata_schema":"CLAUSE_TOPOLOGY_V4_PRIMARY_PAIR_CROSS_LANGUAGE","relative_scope":"FIRST_TWO_ACTIVE_STATIONS","explicit_pair":"EXACTLY_TWO_DISTINCT_ACTIVE_CANONICAL_STATIONS","mixed_selectors":"PER_CLAUSE_SHARED_SCOPE","fail_closed":["MALFORMED","DUPLICATE","INACTIVE","UNKNOWN","AMBIGUOUS","WRONG_REGION"]},"region_resolution_contract":{"precedence":["EXPLICIT_FULL_STATION","EXPLICIT_REGION","PERSISTED_SOURCE_REGION","SOURCE_TIME_WINDOW"],"bare_dn":{"mn":"Đồng Nai","mt":"Đà Nẵng","mb":"FAIL_CLOSED_AMBIGUOUS_DN","outside_window":"FAIL_CLOSED_AMBIGUOUS_DN"},"historical_region":"PERSISTED_SOURCE_REGION_IS_AUTHORITATIVE_OVER_UI_OR_TIME","failure":"REGION_AMBIGUOUS_FAIL_CLOSED"}},"calendar":{"schema":"KTS_STATION_SCHEDULE_AUTHORITY_V1","weekday_convention":"JavaScript Date.getDay(): 0=Sunday, 1=Monday, ... 6=Saturday","role_contract":{"main_station_count":2,"auxiliary_stations_follow_main":true,"mb":"single-region check-only; no station split"},"regions":{"mn":{"0":[["tg","Tiền Giang"],["kg","Kiên Giang"],["dl","Đà Lạt"]],"1":[["tp","TP.HCM"],["dt","Đồng Tháp"],["cm","Cà Mau"]],"2":[["bt","Bến Tre"],["vt","Vũng Tàu"],["bli","Bạc Liêu"]],"3":[["dn","Đồng Nai"],["ct","Cần Thơ"],["st","Sóc Trăng"]],"4":[["tn","Tây Ninh"],["ag","An Giang"],["bt","Bình Thuận"]],"5":[["vl","Vĩnh Long"],["bd","Bình Dương"],["tv","Trà Vinh"]],"6":[["tp","TP.HCM"],["la","Long An"],["bp","Bình Phước"],["hg","Hậu Giang"]]},"mt":{"0":[["kh","Khánh Hòa"],["kt","Kon Tum"],["hue","Huế"]],"1":[["hue","Huế"],["py","Phú Yên"]],"2":[["dl","Đắk Lắk"],["qn","Quảng Nam"]],"3":[["dn","Đà Nẵng"],["kh","Khánh Hòa"]],"4":[["bd","Bình Định"],["qt","Quảng Trị"],["qb","Quảng Bình"]],"5":[["gl","Gia Lai"],["nt","Ninh Thuận"]],"6":[["dn","Đà Nẵng"],["qn","Quảng Ngãi"],["dno","Đắk Nông"]]},"mb":{"0":[["mb","Miền Bắc"]],"1":[["mb","Miền Bắc"]],"2":[["mb","Miền Bắc"]],"3":[["mb","Miền Bắc"]],"4":[["mb","Miền Bắc"]],"5":[["mb","Miền Bắc"]],"6":[["mb","Miền Bắc"]]}},"authoritative_regression":{"date":"2026-09-13","region":"mt","stations":["kh","kt","hue"],"main_stations":["kh","kt"],"auxiliary":["hue"]}}};
   const fail=source.spec.fail_closed.invalid_split_money;
   function parseMoney(token) {
     const m=String(token||"").match(/^(\d+)(?:[.,](\d+))?([a-zA-ZđĐ]?)$/u);
@@ -38,7 +38,30 @@
     for(const bet of types) if(raw.startsWith(bet) && raw.length>bet.length) { const money=raw.slice(bet.length); if(isMoneyToken(money)) return [bet,money]; }
     return null;
   }
-  function parseBetPayloadAst(rest) {
+  function canonicalSelector(selector) { return source.spec.selector_contract.canonical_aliases[String(selector||"").toLowerCase()]||String(selector||"").toUpperCase(); }
+  function duplicateNumberDetails(groups) {
+    const policy=source.spec.parser_contract.duplicate_number_confirmation||{}, pair=new Set(policy.pair_selectors||[]), ordinary=new Set(policy.ordinary_selectors||[]), details=[];
+    for(const [groupIndex,group] of (groups||[]).entries()) {
+      const numbers=(group.numbers||[]).map(String), duplicates=[...new Set(numbers.filter((n,index)=>numbers.indexOf(n)!==index))];
+      if(!duplicates.length) continue;
+      const bets=(group.bets||[]).map(bet=>({selector:canonicalSelector(bet.selector),amount:String(bet.amount||"")})), selectors=[...new Set(bets.map(bet=>bet.selector))];
+      const action=selectors.some(selector=>pair.has(selector))?"REJECT_NO_OVERRIDE":selectors.every(selector=>ordinary.has(selector))?"OPERATOR_CONFIRMATION_REQUIRED":"REJECT_NO_OVERRIDE";
+      details.push(Object.freeze({groupIndex,duplicates:Object.freeze(duplicates),numbers:Object.freeze(numbers),bets:Object.freeze(bets.map(Object.freeze)),selectors:Object.freeze(selectors),action}));
+    } return Object.freeze(details);
+  }
+  const duplicateInspectionToken=Object.freeze({}),verifiedDuplicateGrants=new WeakSet();
+  function assertDuplicateNumberPolicy(groups, options={}) {
+    const details=duplicateNumberDetails(groups), pair=details.find(detail=>detail.action==="REJECT_NO_OVERRIDE");
+    if(pair) throw new Error("DUPLICATE_NUMBER_PAIR_INVALID:"+JSON.stringify(pair));
+    if(details.length && options.inspection!==duplicateInspectionToken && !verifiedDuplicateGrants.has(options.approval)) throw new Error("DUPLICATE_NUMBER_CONFIRM_REQUIRED:"+JSON.stringify(details));
+    if(details.length&&verifiedDuplicateGrants.has(options.approval)) {
+      const covered=options.approval.binding.locations.flatMap(location=>location.duplicates);
+      for(const detail of details) if(!covered.some(entry=>stableApprovalJson({numbers:entry.numbers,bets:entry.bets})===stableApprovalJson({numbers:detail.numbers,bets:detail.bets})))
+        throw Error("DUPLICATE_APPROVAL_PAYLOAD_MISMATCH");
+    }
+    return details;
+  }
+  function parseBetPayloadAst(rest, options={}) {
     let normalized=String(rest||"");
     for(const [alias,target] of Object.entries(source.spec.selector_contract.multiword_aliases||{})) {
       const pattern=alias.replaceAll("-","[\\s-]*").replaceAll(" ","[\\s-]*");
@@ -48,8 +71,6 @@
     while(i<toks.length) {
       const numbers=[]; while(i<toks.length && isNumberToken(toks[i]) && !isBetToken(toks[i])) numbers.push(toks[i++]);
       if(!numbers.length) throw new Error(`phải có số đánh trước '${toks[i]||""}'`);
-      const dups=[...new Set(numbers.filter((n,index)=>numbers.indexOf(n)!==index))];
-      if(dups.length) throw new Error(dups.length===1?`trùng số ${dups[0]} trong cùng cú pháp`:`trùng các số ${dups.join(", ")} trong cùng cú pháp`);
       const bets=[]; while(i<toks.length) {
         if(isNumberToken(toks[i]) && !isBetToken(toks[i])) break;
         const compact=splitCompactBetToken(toks[i]); let selector,money;
@@ -60,13 +81,51 @@
         if(isBetToken(money)||splitCompactBetToken(money)||!isMoneyToken(money)) throw new Error(`tiền cược '${money}' không hợp lệ`);
         bets.push({selector,amount:money});
       }
-      if(!bets.length) throw new Error("thiếu loại cược sau số");
-      const minimumDxNumbers=Number(source.spec.parser_contract.literal_dx_min_distinct_numbers||0);
-      const hasLiteralDx=bets.some(bet=>source.spec.selector_groups.literal_dx_tokens.includes(String(bet.selector||"").toLowerCase()));
-      if(hasLiteralDx && (!Number.isInteger(minimumDxNumbers)||minimumDxNumbers<2 || new Set(numbers).size<minimumDxNumbers))
-        throw new Error(`DX/ĐX phải có ít nhất ${minimumDxNumbers} số cược khác nhau trong cùng nhóm số`);
-      groups.push({numbers,bets});
-    } return groups;
+      if(!bets.length) throw new Error("thiếu loại cược sau số"); groups.push({numbers,bets});
+    } assertDuplicateNumberPolicy(groups,options); return groups;
+  }
+  function preflightBetPayload(payload, physicalLines) {
+    if(!Array.isArray(physicalLines)||!physicalLines.length||physicalLines.some(n=>!Number.isSafeInteger(n)||n<1))
+      throw Error("DUPLICATE_PROVENANCE_INVALID");
+    // Inspection never returns money/output and never grants execution approval.
+    const groups=parseBetPayloadAst(payload,{inspection:duplicateInspectionToken});
+    return JSON.parse(JSON.stringify({physical_lines:physicalLines,groups,duplicates:duplicateNumberDetails(groups)}));
+  }
+  function stableApprovalJson(value) {
+    if(Array.isArray(value)) return "["+value.map(stableApprovalJson).join(",")+"]";
+    if(value&&typeof value==="object") return "{"+Object.keys(value).sort().map(k=>JSON.stringify(k)+":"+stableApprovalJson(value[k])).join(",")+"}";
+    return JSON.stringify(value);
+  }
+  function duplicateApprovalBinding(context, locations) {
+    if(!context||!/^[0-9a-f]{64}$/.test(context.source_sha256||"")||
+       !/^[0-9a-f]{64}$/.test(context.receipt_sha256||"")||
+       !["mn","mt","mb"].includes(context.region)||!/^\d{4}-\d{2}-\d{2}$/.test(context.date||"")||
+       typeof context.revision!=="string"||!context.revision.trim()||
+       context.engine_sha256!=="0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb"||!Array.isArray(locations)||!locations.length)
+      throw Error("DUPLICATE_APPROVAL_BINDING_INVALID");
+    for(const location of locations) {
+      if(!Array.isArray(location.physical_lines)||!location.physical_lines.length||
+         location.physical_lines.some(n=>!Number.isSafeInteger(n)||n<1)||
+         !Array.isArray(location.duplicates)||!location.duplicates.length)
+        throw Error("DUPLICATE_PROVENANCE_INVALID");
+      if(location.duplicates.some(d=>d.action!=="OPERATOR_CONFIRMATION_REQUIRED"))
+        throw Error("DUPLICATE_NUMBER_PAIR_INVALID");
+    }
+    return JSON.parse(JSON.stringify({schema:"KTS_DUPLICATE_APPROVAL_V1",...context,locations}));
+  }
+  async function createDuplicateApprovalBinding(rawSource, context, locations, hash) {
+    if(typeof hash!=="function") throw Error("DUPLICATE_HASH_UNAVAILABLE");
+    return duplicateApprovalBinding({...context,engine_sha256:"0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb",
+      source_sha256:await hash(String(rawSource)),
+      receipt_sha256:await hash(stableApprovalJson(locations))},locations);
+  }
+  function verifyDuplicateApproval(envelope, binding) {
+    if(!envelope||envelope.decision!=="CONFIRM"||typeof envelope.operator!=="string"||!envelope.operator.trim()||
+       typeof envelope.approval_id!=="string"||!envelope.approval_id.trim()||
+       stableApprovalJson(envelope.binding)!==stableApprovalJson(binding))
+      throw Error("DUPLICATE_APPROVAL_MISSING_OR_STALE");
+    const grant=Object.freeze({approval_id:envelope.approval_id,operator:envelope.operator,binding});
+    verifiedDuplicateGrants.add(grant);return grant;
   }
   function extractStakeOccurrences(text) {
     const tokens=String(text||"").split(/\s+/u).filter(Boolean), occurrences=[]; let i=0;
@@ -160,10 +219,10 @@
     if(active.length<2) throw new Error("RELATIVE_2D_ACTIVE_SCOPE_UNAVAILABLE");
     return Object.freeze({scope_mode:"RELATIVE_2D",station_scope:Object.freeze(active.slice(0,2).map(x=>String(x[0]).toLowerCase())),stations:Object.freeze(active.slice(0,2)),remaining:Object.freeze(rest)});
   }
-  function describeTwoDTopology(tokens, activeStations) {
+  function describeTwoDTopology(tokens, activeStations, options={}) {
     try {
       const scope=resolveTwoDScope(tokens,activeStations);
-      const groups=parseBetPayloadAst(scope.remaining.join(" "));
+      const groups=parseBetPayloadAst(scope.remaining.join(" "),options);
       const pair=scope.station_scope.slice().sort();
       const clauses=[];
       for(const group of groups) for(const bet of group.bets) {
@@ -196,8 +255,8 @@
     return String((a*m+denom-1n)/denom);
   }
   global.KTS_BUSINESS_ENGINE=Object.freeze({
-    ENGINE_VERSION:source.spec.engine_version, ENGINE_SHA256:"046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb",
+    ENGINE_VERSION:source.spec.engine_version, ENGINE_SHA256:"0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb", preflightBetPayload, stableApprovalJson, duplicateApprovalBinding, verifyDuplicateApproval, createDuplicateApprovalBinding,
     workflowPolicies:Object.freeze(source.spec.workflow_policies), mbMoneyContract:Object.freeze(source.spec.workflow_policies.TACH_3_MIEN.mb_money_contract), stationAliases:Object.freeze(source.spec.station_aliases.map(x=>Object.freeze(x.slice()))),
-    selectorContract:Object.freeze(source.spec.selector_contract), selectorPolicies:Object.freeze(source.spec.selector_policies), selectorGroups:Object.freeze(source.spec.selector_groups), moneyTransformContract:Object.freeze(source.spec.money_transform_contract), parserContract:Object.freeze(source.spec.parser_contract), regionResolutionContract:Object.freeze(source.spec.region_resolution_contract), calendar:Object.freeze(source.calendar), allocateStake, topology, parseMoney, isNumberToken, isMoneyToken, isBetToken, splitCompactBetToken, parseBetPayloadAst, extractStakeOccurrences, normalizeCompactTicket, normalizeParserAliases, resolveTwoDScope, describeTwoDTopology, describeThreeDTopology, transformMoneyAmount, extractExplicitSourceRegion, resolveSourceRegion
+    selectorContract:Object.freeze(source.spec.selector_contract), selectorPolicies:Object.freeze(source.spec.selector_policies), selectorGroups:Object.freeze(source.spec.selector_groups), moneyTransformContract:Object.freeze(source.spec.money_transform_contract), parserContract:Object.freeze(source.spec.parser_contract), regionResolutionContract:Object.freeze(source.spec.region_resolution_contract), calendar:Object.freeze(source.calendar), allocateStake, topology, parseMoney, isNumberToken, isMoneyToken, isBetToken, splitCompactBetToken, canonicalSelector, duplicateNumberDetails, assertDuplicateNumberPolicy, parseBetPayloadAst, extractStakeOccurrences, normalizeCompactTicket, normalizeParserAliases, resolveTwoDScope, describeTwoDTopology, describeThreeDTopology, transformMoneyAmount, extractExplicitSourceRegion, resolveSourceRegion
   });
 })(globalThis);

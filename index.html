@@ -91,7 +91,7 @@
     <button id="updateNowBtn" style="height:38px;margin-left:8px;background:#0b57d0;color:#fff;border:0;border-radius:9px;padding:0 12px;font-weight:700">Cập nhật ngay</button>
   </div>
 
-  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.32</span></div>
+  <div class="title">Tách Đài 3 Miền <span style="font-size:12px;color:#667085;font-weight:600">v2.0.33</span></div>
 
   <div class="card">
     <div class="controls">
@@ -213,7 +213,7 @@ function serializeExactOutputLedger(){
   return EXACT_OUTPUT_LEDGER_PREFIX+JSON.stringify({
     schema:"KTS_EXACT_OUTPUT_LEDGER_V1",app:EXACT_OUTPUT_LEDGER_APP_ID,
     engine:engineSha(),region:regionEl.value,
-    date:ledgerDate(),origin,
+    date:ledgerDate(),origin,duplicateConfirmation:workingLedger?.duplicateConfirmation||null,
     rows:outputRecords.filter(r=>r.alive).map(r=>({id:r.id,sourceLine:r.sourceLine,
       sourceGroupNo:r.sourceGroupNo||0,sourceGroupText:r.sourceGroupText||"",text:r.text}))
   });
@@ -561,7 +561,88 @@ function assertNoDuplicateBetSelectors(groups){
   return groups;
 }
 function parseBetPayloadAst(rest){
-  return assertNoDuplicateBetSelectors(KTS_BUSINESS_ENGINE.parseBetPayloadAst(rest));
+  return assertNoDuplicateBetSelectors(KTS_BUSINESS_ENGINE.parseBetPayloadAst(rest,{approval:globalThis.__ktsDuplicateApproval}));
+}
+async function duplicateSourceHash(text){
+  if(!globalThis.crypto?.subtle)throw Error("DUPLICATE_HASH_UNAVAILABLE");
+  const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(String(text)));
+  return Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,"0")).join("");
+}
+async function buildDuplicateBinding(raw,region,date,rows,revision){
+  const locations=rows.map(row=>({physical_lines:[row.line],source_text:row.raw,duplicates:row.details}));
+  return KTS_BUSINESS_ENGINE.createDuplicateApprovalBinding(raw,{region,date,revision},locations,duplicateSourceHash);
+}
+const consumedDuplicateApprovals=new Set();
+function withCanonicalDuplicateApproval(envelope,binding,action){
+  const verified=KTS_BUSINESS_ENGINE.verifyDuplicateApproval(envelope,binding);
+  if(consumedDuplicateApprovals.has(verified.approval_id))throw Error("DUPLICATE_APPROVAL_REPLAY");
+  consumedDuplicateApprovals.add(verified.approval_id);
+  const previous=globalThis.__ktsDuplicateApproval;
+  globalThis.__ktsDuplicateApproval=verified;
+  try{return action();}finally{globalThis.__ktsDuplicateApproval=previous||null;}
+}
+let pendingDuplicateConfirmation=null;
+function clearDuplicateConfirmation(message=""){
+  pendingDuplicateConfirmation=null;
+  globalThis.__ktsDuplicateApproval=null;
+  const panel=$("duplicateConfirmPanel");
+  if(panel)panel.remove();
+  if(message)setStatus(message,"err");
+}
+function duplicatePhysicalRows(raw,source,errors){
+  const physical=[],rawLines=String(raw).split(/\r?\n/);
+  let count=0;
+  for(let i=0;i<rawLines.length;i++){
+    const clean=preprocessChatText(rawLines.slice(0,i+1).join("\n"));
+    const text=resolveExplicitSourceRegion(clean).text;
+    const next=text.split(/\r?\n/).filter(line=>line.trim()).length;
+    while(count<next){physical.push(i+1);count++;}
+  }
+  const sourceLines=source.split(/\r?\n/);
+  return errors.map(error=>{
+    const ordinal=sourceLines.slice(0,error.line).filter(line=>line.trim()).length-1;
+    return {...error,line:physical[ordinal]||error.line};
+  });
+}
+function duplicateConfirmationDetails(errors){
+  const rows=[];
+  for(const error of errors||[]){
+    const prefix="DUPLICATE_NUMBER_CONFIRM_REQUIRED:";
+    if(!String(error.msg||"").startsWith(prefix)) return null;
+    try{rows.push({line:error.line,raw:error.raw,details:JSON.parse(String(error.msg).slice(prefix.length))});}catch(_){return null;}
+  }
+  return rows.length?rows:null;
+}
+function showDuplicateConfirmation(rows,region,date){
+  pendingDuplicateConfirmation={source:inputEl.value,region,selectedRegion:regionEl.value,date,engine:engineSha(),rows};
+  let panel=$("duplicateConfirmPanel");
+  if(!panel){
+    panel=document.createElement("div"); panel.id="duplicateConfirmPanel"; panel.className="card";
+    const label=document.createElement("div"); label.className="label"; label.textContent="XÁC NHẬN SỐ TRÙNG";
+    const message=document.createElement("div"); message.id="duplicateConfirmText"; message.setAttribute("role","alert");
+    const actions=document.createElement("div"); actions.className="actions";
+    for(const [id,text,style] of [["duplicateEditBtn","Sửa tin","secondary"],["duplicateCancelBtn","Hủy","secondary"],["duplicateConfirmBtn","Xác nhận và tách",""]]){
+      const button=document.createElement("button"); button.id=id; button.textContent=text; if(style)button.className=style; actions.appendChild(button);
+    }
+    panel.append(label,message,actions);
+    inputEl.closest(".card").after(panel);
+    $("duplicateEditBtn").addEventListener("click",()=>{inputEl.focus();setStatus("Hãy sửa tin nguồn rồi chạy lại.","err");});
+    $("duplicateCancelBtn").addEventListener("click",()=>clearDuplicateConfirmation("Đã hủy xác nhận số trùng"));
+    $("duplicateConfirmBtn").addEventListener("click",async()=>{
+      const p=pendingDuplicateConfirmation;
+      if(!p||p.source!==inputEl.value||p.selectedRegion!==regionEl.value||p.date!==dateEl.value||p.engine!==engineSha()){clearDuplicateConfirmation("Xác nhận đã hết hiệu lực; hãy kiểm tra lại tin.");return;}
+      try{
+        const revision=crypto.randomUUID();
+        const binding=await buildDuplicateBinding(p.source,p.region,p.date,p.rows,revision);
+        if(p!==pendingDuplicateConfirmation||p.source!==inputEl.value||p.selectedRegion!==regionEl.value||p.date!==dateEl.value||p.engine!==engineSha())throw Error("DUPLICATE_APPROVAL_STALE");
+        const envelope={decision:"CONFIRM",operator:"local-operator",approval_id:crypto.randomUUID(),binding};
+        panel.remove();pendingDuplicateConfirmation=null;
+        withCanonicalDuplicateApproval(envelope,binding,()=>run({duplicateApproval:{...p,envelope}}));
+      }catch(error){clearDuplicateConfirmation("Xác nhận không hợp lệ: "+String(error.message||error));}
+    });
+  }
+  const text=rows.map(row=>`Dòng ${row.line}: ${row.details.flatMap(d=>d.duplicates).join(", ")} • ${row.details.flatMap(d=>d.bets).map(b=>`${b.selector} ${b.amount}`).join(", ")}`).join("\n");
+  $("duplicateConfirmText").textContent=`Số trùng chưa được tách hoặc tính tiền.\n${text}\nHãy sửa tin hoặc xác nhận rõ ràng.`;
 }
 
 function validateBetPayload(rest){
@@ -1669,7 +1750,7 @@ function run(options={}){
       resetOutputRecords();outputEl.value="PHÁT HIỆN TIN SAI:\n\nLedger kết quả cục bộ không hợp lệ hoặc không khớp engine/ngày/miền.";
       setStatus("Ledger kết quả bị từ chối an toàn","err");return;
     }
-    workingLedger={origin:exactLedger.origin};
+    workingLedger={origin:exactLedger.origin,duplicateConfirmation:exactLedger.duplicateConfirmation||null};
     checkedResultRecordIndexes.clear();
     outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
     lastSourceLines=[];renderOutputRecords();
@@ -1694,6 +1775,15 @@ function run(options={}){
 
   if(errors.length){
     resetOutputRecords();
+    const confirmation=duplicateConfirmationDetails(duplicatePhysicalRows(submittedRaw,source,errors));
+    if(confirmation&&!options.duplicateApproval){
+      inputEl.value=submittedRaw;
+      outputEl.value="XÁC NHẬN SỐ TRÙNG CẦN THIẾT";
+      setStatus("Cần xác nhận số trùng; chưa tách hoặc tính tiền.","err");
+      showDuplicateConfirmation(confirmation,region,dateEl.value);
+      if(!options.preserveInputSelection)selectLine(inputEl,confirmation[0].line);
+      return;
+    }
     outputEl.value="PHÁT HIỆN TIN SAI:\n\n"+errors.map(e=>`Dòng ${e.line}: ${e.msg}\n→ ${e.raw}`).join("\n\n");
     setStatus(`Có ${errors.length} lỗi`,"err");
     if(!options.preserveInputSelection) selectLine(inputEl,errors[0].line);
@@ -1708,7 +1798,10 @@ function run(options={}){
     return;
   }
   lastSourceLines=lines.slice();
-  workingLedger={origin:submittedRaw};
+  workingLedger={origin:submittedRaw,duplicateConfirmation:options.duplicateApproval?{
+    schema:"KTS_DUPLICATE_NUMBER_CONFIRMATION_V1",engine:engineSha(),region,date:dateEl.value,
+    physicalLines:options.duplicateApproval.rows.map(row=>row.line),details:options.duplicateApproval.rows.map(row=>row.details)
+  }:null};
   checkedResultRecordIndexes.clear();
   outputRecords=[];
   lines.forEach((line,idx)=>{
@@ -1826,6 +1919,9 @@ inputEl.addEventListener("beforeinput",(ev)=>{
   }
 });
 inputEl.addEventListener("input",syncAfterAnyInputEdit);
+inputEl.addEventListener("input",()=>clearDuplicateConfirmation());
+regionEl.addEventListener("change",()=>clearDuplicateConfirmation());
+dateEl.addEventListener("change",()=>clearDuplicateConfirmation());
 
 loadSettings();
 initGroupedResults();
@@ -1835,7 +1931,7 @@ if(parseExactOutputLedger(inputEl.value))run();
 // =========================
 // PWA / AUTO UPDATE
 // =========================
-const APP_VERSION = "2.0.32";
+const APP_VERSION = "2.0.33";
 let swRegistration = null;
 
 async function checkForAppUpdate() {

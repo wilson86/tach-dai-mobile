@@ -32,6 +32,11 @@ function loadRules() {
     selectionEnd: 0,
     style: {},
     focus() {},
+    closest() { return this; },
+    after() {},
+    append() {},
+    appendChild() {},
+    setAttribute() {},
     select() { this.selectionStart = 0; this.selectionEnd = this.value.length; },
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
     remove() {}
@@ -41,6 +46,7 @@ function loadRules() {
     async writeText(value) { this.text = value; }
   };
   const context = {
+    crypto:require('node:crypto').webcrypto,TextEncoder,Uint8Array,
     console,
     Set,
     Date,
@@ -50,14 +56,14 @@ function loadRules() {
     Error,
     navigator: { clipboard },
     document: {
-      getElementById(id) { return elements[id] || (elements[id] = element()); },
+      getElementById(id) { if(id==="duplicateConfirmPanel"&&!elements[id])return null; return elements[id] || (elements[id] = element()); },
       createElement: element,
       body: { appendChild() {} },
       execCommand() { return true; }
     }
   };
   vm.createContext(context);
-  vm.runInContext(`${calendar}\n${businessEngine}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,distributeAmountExactly,auditMoneyConservation,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),engine:KTS_BUSINESS_ENGINE,elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
+  vm.runInContext(`${calendar}\n${businessEngine}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,distributeAmountExactly,auditMoneyConservation,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),confirmDuplicate:()=>document.getElementById("duplicateConfirmBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),getWorkingLedger:()=>JSON.parse(JSON.stringify(workingLedger)),engine:KTS_BUSINESS_ENGINE,elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
   return context.__rules;
 }
 
@@ -88,7 +94,7 @@ const rules = loadRules();
   const mbDuplicated90="mb 11 22 33 22 b6n 44 55 b10n";
   expectThrow(
     ()=>rules.validateCheckOnlyLine(mbDuplicated90,"mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))),
-    /trùng số 22/u
+    /^DUPLICATE_NUMBER_CONFIRM_REQUIRED:/u
   );
   // Explicitly separate clauses MAY repeat 90; never guess that operator edit.
   assert.doesNotThrow(()=>rules.validateCheckOnlyLine(
@@ -360,7 +366,7 @@ assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n\ndn 22 10 dd 5n\nq
 ui.input.value = "3d 22 22 dx 5n";
 rules.run();
 assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
-assert.match(ui.output.value, /trùng số 22/);
+assert.match(ui.output.value, /DUPLICATE_NUMBER_PAIR_INVALID:/);
 
   // PWA direct-UI regression: this path must never depend on Router bridge.
   ui.region.value = "mn";
@@ -448,8 +454,11 @@ assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
   assert.ok(rules.getOutputRecords().length>0,"valid MB đầu/đuôi must materialize");
   photoUI.input.value=photoInputOne+"\n"+photoInputTwo;
   rules.run();
-  assert.match(photoUI.output.value,/Dòng 2: trùng số 22/u);
-  assert.equal(rules.getOutputRecords().length,0,"invalid mixed MB chat must reject all outputs");
+  assert.equal(photoUI.output.value,"XÁC NHẬN SỐ TRÙNG CẦN THIẾT");
+  assert.equal(rules.getOutputRecords().length,0,"unconfirmed duplicate must reject all outputs");
+  await rules.confirmDuplicate();
+  assert.ok(rules.getOutputRecords().length>0,"confirmed full source must materialize only after revalidation");
+  assert.deepEqual(rules.getWorkingLedger().duplicateConfirmation.physicalLines,[2]);
 
 console.log("CORE RULES: PASS");
 console.log("DAT RULE: PASS");

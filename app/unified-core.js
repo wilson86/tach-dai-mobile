@@ -4,7 +4,7 @@
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
   const CONTRACT='DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2';
-  const PAIR_RE=/^(.*?)(\d{1,4}(?:[\s,;]+\d{1,4})+)\s*(dx|đx|da|đá|đa)\s*(\d+(?:[.,]\d+)?(?:n|d|đ)?)\s*$/iu;
+  const PAIR_RE=/^(.*?)(\d{1,4}(?:[\s,;]+\d{1,4})*)\s*(dx|đx|da|đá|đa)\s*(\d+(?:[.,]\d+)?(?:n|d|đ)?)\s*$/iu;
 
   function literalDxCount(line){
     return Array.from(String(line||'').matchAll(/(?:^|\s)(?:dx|đx)(?=\s|\d)/giu)).length;
@@ -139,6 +139,34 @@
     const outputs=[], blocks=[];
     let pairLines=0;
     try{
+      const duplicateRows=[];
+      // Preflight the whole source before exposing even a valid sibling.
+      for(let i=0;i<lines.length;i++){
+        if(!lines[i]||isStandaloneSeparator(lines[i]))continue;
+        if(api.canonical){
+          const tokens=String(api.normalizeInput(lines[i])).split(/\s+/u);
+          const first=tokens.findIndex(token=>api.canonical.isNumberToken(token)&&!api.canonical.isBetToken(token));
+          if(first>=0){
+            const inspected=api.canonical.preflightBetPayload(tokens.slice(first).join(' '),[i+1]);
+            for(const group of inspected.groups){
+              if(group.bets.some(bet=>selectorIsDx(bet.selector))&&group.numbers.length<2)
+                throw Error(`LỖI dòng ${i+1}: DA_VONG_NEEDS_AT_LEAST_TWO_NUMBERS`);
+            }
+          }
+        }
+        try{api.validateCheckOnlyLine(lines[i],region,stations)}catch(error){
+          const message=String(error.message||error),prefix='DUPLICATE_NUMBER_CONFIRM_REQUIRED:';
+          if(!message.startsWith(prefix))throw Error(`LỖI dòng ${i+1}: ${message}`);
+          if(!api.canonical?.preflightBetPayload)throw Error('DUPLICATE_CANONICAL_PREFLIGHT_NOT_READY');
+          const tokens=String(api.normalizeInput(lines[i])).split(/\s+/u);
+          const first=tokens.findIndex(token=>api.canonical.isNumberToken(token)&&!api.canonical.isBetToken(token));
+          if(first<0)throw Error('DUPLICATE_PREFLIGHT_PAYLOAD_UNAVAILABLE');
+          const receipt=api.canonical.preflightBetPayload(tokens.slice(first).join(' '),[i+1]);
+          duplicateRows.push({line:i+1,raw:lines[i],details:receipt.duplicates});
+        }
+      }
+      if(duplicateRows.length)return {ok:false,output:'',display_output:'',outputs:[],blocks:[],
+        error:'DUPLICATE_NUMBER_CONFIRM_REQUIRED',duplicate_rows:duplicateRows,contract:CONTRACT};
       for(let i=0;i<lines.length;i++){
         if(!lines[i] || isStandaloneSeparator(lines[i])) continue;
         try{
@@ -175,7 +203,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.21';
+  const UX_VERSION='1.0.22';
 
   function selectAllText(el){
     if(!el) return;
@@ -251,7 +279,7 @@
   const HEADER=/^────\s+(.+?)\s+đá\s+\((\d+)\)\s+────$/u;
   const STORAGE='KTS_DAVONG_WORKING_ROWS_V1';
   const SCHEMA='KTS_DAVONG_WORKING_ROWS_V1';
-  const ENGINE='046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb';
+  const ENGINE='0904f4ea660bcc801ef1bf5fb1a018cf4612110a69530e2344641bf46520dcfb';
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
   let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
@@ -693,7 +721,7 @@
       if(ledgerActive){ledgerActive=false;persist();render();}
     });
     maybeRestore();render();
-    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize,noteGeneratedSource};
+    window.KTS_DV_UI={beforeRun,beforeClear:snapshot,beforeChatNormalize,noteGeneratedSource,afterRun:rebuild};
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});
   else init();
