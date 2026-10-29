@@ -49,7 +49,9 @@ const cutCtx={
   serializeExactOutputLedger(){
     return prefix+JSON.stringify({origin,rows:cutCtx.outputRecords.filter(r=>r.alive).map(r=>({...r}))})
   },renderOutputRecords(){this.outputEl.value=this.outputRecords.filter(r=>r.alive).map(r=>r.text).join("\n")},
-  persistExactOutputLedger(){stored=this.inputEl.value},
+  // The real application requires an explicit true after durable storage.
+  // An undefined stub falsely invokes the rollback error path.
+  persistExactOutputLedger(){stored=this.inputEl.value;return true},
   announceWorkingSource(){announcements++},setStatus(){},
 };
 const cut=scopedFunction(source,"async function cutSelectedOutput(){",
