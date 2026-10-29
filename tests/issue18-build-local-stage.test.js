@@ -104,7 +104,7 @@ test('engine mismatch fails closed before creating stage',t=>{
 });
 test('mixed candidate versions fail closed before staging',t=>{
   const f=fixture();t.after(()=>fs.rmSync(f.base,{recursive:true,force:true}));
-  fs.writeFileSync(path.join(f.ngang,'version.json'),JSON.stringify({version:'1.0.33',business_engine_sha256:HASH}));
+  fs.writeFileSync(path.join(f.ngang,'version.json'),JSON.stringify({version:'1.0.34',business_engine_sha256:HASH}));
   assert.throws(()=>stage(f),/mixed or stale Issue18 candidate versions/);
   assert.equal(fs.existsSync(f.out),false);
 });
