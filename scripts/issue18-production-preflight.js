@@ -161,4 +161,4 @@ if(require.main===module){
     process.exitCode=2;
   }
 }
-module.exports={argsOf,admission};
+module.exports={argsOf,admission,MOBILE_TESTS,NGANG_TESTS};
