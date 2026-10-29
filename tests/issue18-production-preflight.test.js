@@ -24,7 +24,7 @@ test('E: drive is never admitted as a test workspace',()=>{
 });
 
 test('release admission includes all audited regression tests but excludes live published fetch',()=>{
-  assert.equal(MOBILE_TESTS.length,24);
+  assert.equal(MOBILE_TESTS.length,25);
   assert.equal(NGANG_TESTS.length,15);
   for(const tests of [MOBILE_TESTS,NGANG_TESTS]){
     assert.equal(new Set(tests).size,tests.length,'no duplicate execution');
