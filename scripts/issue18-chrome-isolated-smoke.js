@@ -163,6 +163,32 @@ async function chromeSmoke(stage){
     console.log('ISSUE18_PUBLIC_CHROME_NGANG_CUT_RELOAD_UNDO_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_CUT_RELOAD_UNDO_PASS');
 
+    // Genuine browser offline reload (not the static SW simulation):
+    // all three independent SW scopes must have activated before the network
+    // is taken offline. This intentionally does not replace Android testing.
+    let swScopes=[];
+    for(let i=0;i<60;i++){
+      const check=await command('Runtime.evaluate',{expression:"(async()=>{const regs=await navigator.serviceWorker.getRegistrations();return regs.filter(x=>x.active).map(x=>new URL(x.scope).pathname)})()",awaitPromise:true,returnByValue:true});
+      swScopes=check.result?.value||[];
+      if(['/Mobile/','/Mobile/app/','/Ngang/'].every(scope=>swScopes.includes(scope)))break;
+      await nap(150);
+    }
+    ensure(['/Mobile/','/Mobile/app/','/Ngang/'].every(scope=>swScopes.includes(scope)),
+      'Expected three active isolated PWA service-worker scopes: '+JSON.stringify(swScopes));
+    await command('Network.enable');
+    await command('Network.emulateNetworkConditions',{
+      offline:true,latency:0,downloadThroughput:0,uploadThroughput:0});
+    await command('Page.reload',{ignoreCache:false});
+    let offline;
+    for(let i=0;i<100;i++){
+      const resp=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {ready:document.readyState==='complete'&&a?.contentDocument?.readyState==='complete'&&b?.contentDocument?.readyState==='complete',frames:!!a?.contentDocument?.querySelector('#runBtn')&&!!b?.contentDocument?.querySelector('#runBtn'),local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/')}})()",returnByValue:true});
+      offline=resp.result?.value;
+      if(offline?.ready&&offline?.frames&&offline?.local)break;
+      await nap(100);
+    }
+    ensure(offline?.ready&&offline?.frames&&offline?.local,
+      'Offline Chrome Unified and child apps must render from SW caches: '+JSON.stringify(offline));
+    console.log('ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS '+JSON.stringify(swScopes));
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
       origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.37','1.0.36','1.0.26'],
       frames:2,source:'synthetic',modeOutputsDistinct:true,physicalWindows:'NOT_RUN',
