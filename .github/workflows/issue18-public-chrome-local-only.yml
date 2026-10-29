@@ -37,6 +37,7 @@ jobs:
           test "$(git -C Mobile rev-parse HEAD)" = "$GITHUB_SHA"
           test "$(git -C Ngang rev-parse HEAD)" = "ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4"
           node --check Mobile/scripts/issue18-chrome-isolated-smoke.js
+          test -s Mobile/scripts/issue18-chrome-isolated-smoke.js
       - name: Stage and verify all 21 exact assets with immutable source pins
         shell: bash
         run: |
