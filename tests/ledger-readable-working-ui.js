@@ -117,6 +117,16 @@ async function main(){
  assert.equal(p.input.value,previous);
  assert.equal(els.ledgerWork.style.display,"");
  assert.equal(storage.has(key),true,"Undo restores persisted exact ledger");
+ // New day/region must not silently hide or erase a valid prior ledger.
+ const preservedOld=storage.get(key);
+ p.date.value="2026-10-16";p.input.value="";
+ p.restorePersistedExactOutputLedger();
+ p.run();assert.equal(p.output.value,"","incompatible date must not produce wagers");
+ assert.match(els.status.textContent,/HOLD: còn dữ liệu Cut/u);
+ await els.clearBtn.events.click();
+ assert.equal(storage.get(key),preservedOld,"Clear cannot silently discard incompatible ledger");
+ p.date.value="2026-10-15";p.restorePersistedExactOutputLedger();p.run();
+ assert.ok(p.output.value.length>0,"matching date restores original surviving ledger");
  console.log("READABLE EXACT LEDGER TOP SOURCE COPY CUT UNDO: PASS");
 }
 main().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
