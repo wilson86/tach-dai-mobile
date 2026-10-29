@@ -84,9 +84,12 @@ function stage({mobile, ngang, out}) {
   const sourceSw = fs.readFileSync(checkedFile(m, 'app/sw.js'), 'utf8');
   const html = isolatedUnifiedHtml(sourceHtml);
   const sw = isolatedUnifiedServiceWorker(sourceSw);
-  // Preflight all assets before making the staging directory.
-  for (const file of MOBILE_FILES) checkedFile(m, file);
-  for (const file of NGANG_FILES) checkedFile(n, file);
+  // Hash every input before staging: a change in ANY source asset (not just
+  // engine/iframe) must invalidate admission, even if copies are later edited.
+  const sourceFilesSha256 = {};
+  for (const [root, prefix, files] of [[m, 'Mobile', MOBILE_FILES], [n, 'Ngang', NGANG_FILES]]) {
+    for (const file of files) sourceFilesSha256[prefix+'/'+file]=sha256(fs.readFileSync(checkedFile(root,file)));
+  }
   fs.mkdirSync(target);
   for (const [root, dest, files] of [[m, 'Mobile', MOBILE_FILES], [n, 'Ngang', NGANG_FILES]]) {
     for (const file of files) {
@@ -97,9 +100,25 @@ function stage({mobile, ngang, out}) {
   }
   fs.writeFileSync(path.join(target, 'Mobile/app/index.html'), html, {encoding: 'utf8', flag: 'w'});
   fs.writeFileSync(path.join(target, 'Mobile/app/sw.js'), sw, {encoding: 'utf8', flag: 'w'});
+  // Bind all staged files to the exact pre-copy source bytes. Fail closed if
+  // the checkout changed during copying or a staged file was substituted.
+  const stagedFilesSha256 = {};
+  for (const [root, prefix, files] of [[m, 'Mobile', MOBILE_FILES], [n, 'Ngang', NGANG_FILES]]) {
+    for (const file of files) {
+      const rel=prefix+'/'+file;
+      const currentSource=sha256(fs.readFileSync(checkedFile(root,file)));
+      if(currentSource!==sourceFilesSha256[rel])fail('source changed during staging: '+rel);
+      const actual=sha256(fs.readFileSync(path.join(target,rel)));
+      const expected=prefix==='Mobile'&&file==='app/index.html'?sha256(html):
+        prefix==='Mobile'&&file==='app/sw.js'?sha256(sw):currentSource;
+      if(actual!==expected)fail('staged asset differs from source: '+rel);
+      stagedFilesSha256[rel]=actual;
+    }
+  }
   const manifest = {schema: 'KTS_ISSUE18_LOCAL_ONLY_STAGE_V1', engine_sha256: engine,
     mobile_version: mv.version, ngang_version: nv.version, unified_version: uv.version,
     iframe_ngang: '../../Ngang/', source_unchanged: true, release_authorized: false,
+    source_files_sha256: sourceFilesSha256, staged_files_sha256: stagedFilesSha256,
     source_sha256: {
       unified_html: sha256(sourceHtml),
       unified_sw: sha256(sourceSw),
