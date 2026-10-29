@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const {verifyGitSource}=require('./issue18-git-source-pin.js');
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
 
 const MOBILE_FILES = [
@@ -59,10 +60,12 @@ function isolatedUnifiedServiceWorker(source) {
     fail('Unified service-worker route rewrite incomplete');
   return rewritten;
 }
-function stage({mobile, ngang, out}) {
+function stage({mobile, ngang, out, mobileSha, ngangSha}) {
   if (![mobile, ngang, out].every(x => typeof x === 'string' && path.isAbsolute(x)))
     fail('provide absolute --mobile, --ngang and --out paths');
   const m = fs.realpathSync(mobile), n = fs.realpathSync(ngang), target = path.resolve(out);
+  if(Boolean(mobileSha)!==Boolean(ngangSha)) fail('both source SHA pins are required together');
+  if(mobileSha){verifyGitSource(m,mobileSha);verifyGitSource(n,ngangSha);}
   if (m === n || inside(m, target) || inside(n, target) || inside(target, m) || inside(target, n))
     fail('source and staging paths overlap');
   if (process.platform === 'win32' && ![m, n, target].every(p => /^[cC]:\\/.test(p)))
@@ -115,7 +118,9 @@ function stage({mobile, ngang, out}) {
       stagedFilesSha256[rel]=actual;
     }
   }
+  if(mobileSha){verifyGitSource(m,mobileSha);verifyGitSource(n,ngangSha);}
   const manifest = {schema: 'KTS_ISSUE18_LOCAL_ONLY_STAGE_V1', engine_sha256: engine,
+    source_commit_sha:{mobile:mobileSha||null,ngang:ngangSha||null},
     mobile_version: mv.version, ngang_version: nv.version, unified_version: uv.version,
     iframe_ngang: '../../Ngang/', source_unchanged: true, release_authorized: false,
     source_files_sha256: sourceFilesSha256, staged_files_sha256: stagedFilesSha256,
@@ -136,10 +141,12 @@ function stage({mobile, ngang, out}) {
 function parseArgs(argv) {
   const args = {};
   for (let i = 0; i < argv.length; i += 2) {
-    if (!['--mobile','--ngang','--out'].includes(argv[i]) || !argv[i+1] || argv[i+1].startsWith('--'))
-      fail('usage: node issue18-build-local-stage.js --mobile ABS --ngang ABS --out FRESH_ABS');
-    args[argv[i].slice(2)] = argv[i+1];
+    if (!['--mobile','--ngang','--out','--mobile-sha','--ngang-sha'].includes(argv[i]) || !argv[i+1] || argv[i+1].startsWith('--') || Object.hasOwn(args,argv[i]==='--mobile-sha'?'mobileSha':argv[i]==='--ngang-sha'?'ngangSha':argv[i].slice(2)))
+      fail('usage: node issue18-build-local-stage.js --mobile ABS --ngang ABS --out NEW_ABS --mobile-sha SHA40 --ngang-sha SHA40');
+    const name=argv[i]==='--mobile-sha'?'mobileSha':argv[i]==='--ngang-sha'?'ngangSha':argv[i].slice(2);
+    args[name] = argv[i+1];
   }
+  if(argv.length!==10||!args.mobile||!args.ngang||!args.out||!args.mobileSha||!args.ngangSha)fail('all five CLI values are required');
   return args;
 }
 if (require.main === module) {
