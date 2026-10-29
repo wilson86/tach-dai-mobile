@@ -203,7 +203,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.25';
+  const UX_VERSION='1.0.26';
 
   function selectAllText(el){
     if(!el) return;
