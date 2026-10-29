@@ -12,7 +12,7 @@ const embedded=html.match(/<script>\s*([\s\S]*?)<\/script>/i);
 assert.ok(embedded);
 const script=embedded[1].slice(0,embedded[1].indexOf("loadSettings();"));
 assert.ok(script.includes("function initGroupedResults"));
-const els=Object.create(null), clipboard={text:""};
+const els=Object.create(null), clipboard={text:""}, durableStore=new Map();
 function element(tag="div"){
   const obj={
     tag,children:[],events:{},className:"",style:{},value:"",textContent:"",
@@ -31,6 +31,9 @@ function element(tag="div"){
 const ctx={
   console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
   navigator:{clipboard:{async writeText(text){clipboard.text=text;}}},
+  localStorage:{getItem(key){return durableStore.has(key)?durableStore.get(key):null;},
+    setItem(key,value){durableStore.set(key,String(value));},
+    removeItem(key){durableStore.delete(key);}},
   document:{
     getElementById(id){return els[id]||(els[id]=element(id));},
     createElement:element,body:{appendChild(){}},execCommand(){return true;},
@@ -89,8 +92,14 @@ async function main(){
   groups()[0].children[0].children[0].checked=true;
   groups()[0].children[0].children[0].events.change();
   await rules.cutSelectedOutput();
-  assert.equal(rules.els.input.value,"2d 19 b15n");
+  const groupSource=rules.els.input.value;
+  const prefix="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n";
+  assert.ok(groupSource.startsWith(prefix),"Cut must retain immutable origin in exact-output ledger");
+  const groupLedger=JSON.parse(groupSource.slice(prefix.length));
+  assert.equal(groupLedger.origin,original,"original source must remain auditably intact");
   const groupOutput=rules.els.output.value;
+  assert.deepEqual(Array.from(groupLedger.rows.map(r=>r.text)),groupOutput.split("\n"),
+    "only surviving rows may exist in exact-output ledger");
   assert.ok(groupOutput && !groupOutput.includes("219"));
   rules.run();
   assert.equal(rules.els.output.value,groupOutput,
