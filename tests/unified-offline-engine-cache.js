@@ -17,8 +17,10 @@ const SHA="7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea";
 assert.equal(version.version,"1.0.25");
 assert.equal(version.business_engine_sha256,SHA);
 assert.ok(engine.includes(SHA));
-assert.match(core,/const UX_VERSION='1\.0\.24'/u);
-assert.match(html,/unified-core\.js\?ux=1\.0\.24/u);
+assert.ok(core.includes("const UX_VERSION='"+version.version+"'"),
+  "Unified core identity must follow actual candidate version");
+assert.ok(html.includes("unified-core.js?ux="+version.version),
+  "Unified HTML must load the same versioned JS as its metadata");
 assert.match(html,/navigator\.serviceWorker\.register\('\.\.\/sw\.js',\{scope:'\.\.\/'\}\)/u);
 assert.match(html,/navigator\.serviceWorker\.register\('\.\/sw\.js',\{scope:'\.\/'\}\)/u);
 assert.match(html,/rootRegistration\.active/u);
