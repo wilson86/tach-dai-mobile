@@ -18,7 +18,7 @@ const NGANG_FILES=[
   'icon-192.png','icon-512.png'
 ];
 const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
-function fail(code,message){const e=new Error('STAGE_INTEGRITY_BLOCKED: '+message);e.code=code;throw e}
+function fail(code,message){const e=new Error('STAGE_INTEGRITY_BLOCKED ['+code+']: '+message);e.code=code;throw e}
 function root(name,p){
   if(typeof p!=='string'||!path.isAbsolute(p)||!fs.existsSync(p))
     fail('INVALID_ROOT',name+' must exist at an absolute path');
