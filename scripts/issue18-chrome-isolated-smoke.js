@@ -90,7 +90,22 @@ async function chromeSmoke(stage){
     assert.ok(found?.local,'One iframe routed outside localhost staging');
     assert.ok(found?.tach&&found?.ngang,'Mobile/Ngang child app input absent in real Chrome');
     assert.ok(found?.versions?.every(Boolean),'Versioned Unified/Mobile/Ngang UI missing');
-    const r=await command('Runtime.evaluate',{expression:"(async()=>{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');const results={};for(const [key,f] of [['mobile',a],['ngang',b]]){const d=f.contentDocument;const reg=d.querySelector('#region'),date=d.querySelector('#date');reg.value='mn';reg.dispatchEvent(new Event('change',{bubbles:true}));date.value='2026-10-15';date.dispatchEvent(new Event('change',{bubbles:true}));d.querySelector('#input').value='2d 89 98 b5n dx2,5n';d.querySelector('#runBtn').click();await new Promise(ok=>setTimeout(ok,120));results[key]=d.querySelector('#output').value}return results})()",awaitPromise:true,returnByValue:true});
+    // Unified owns date/region. Never bypass its shared controls by writing
+    // directly into an iframe; parent sync otherwise overwrites the oracle date
+    // between initial output and subsequent Cut/Undo.
+    const setShared=await command('Runtime.evaluate',{expression:"(()=>{const region=document.getElementById('sharedRegion'),date=document.getElementById('sharedDate'),today=document.getElementById('sharedToday');if(!region||!date||!today)return {error:'MISSING_UNIFIED_SETTINGS'};today.checked=false;region.value='mn';date.value='2026-10-15';date.dispatchEvent(new Event('change',{bubbles:true}));return {region:region.value,date:date.value,today:today.checked}})()",returnByValue:true});
+    ensure(setShared.result?.value?.date==='2026-10-15','Cannot set authoritative Unified date for N035');
+    let childrenReady;
+    for(let i=0;i<80;i++){
+      const check=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame')?.contentDocument,b=document.getElementById('ngangFrame')?.contentDocument;return {mobileDate:a?.getElementById('date')?.value,ngangDate:b?.getElementById('date')?.value,mobileRegion:a?.getElementById('region')?.value,ngangRegion:b?.getElementById('region')?.value,sharedDate:document.getElementById('sharedDate')?.value}})()",returnByValue:true});
+      childrenReady=check.result?.value;
+      if(childrenReady?.mobileDate==='2026-10-15'&&childrenReady?.ngangDate==='2026-10-15'&&
+         childrenReady?.mobileRegion==='mn'&&childrenReady?.ngangRegion==='mn')break;
+      await nap(90);
+    }
+    ensure(childrenReady?.mobileDate==='2026-10-15'&&childrenReady?.ngangDate==='2026-10-15',
+      'Unified shared date did not propagate to both engines: '+JSON.stringify(childrenReady));
+    const r=await command('Runtime.evaluate',{expression:"(async()=>{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');const results={};for(const [key,f] of [['mobile',a],['ngang',b]]){const d=f.contentDocument;if(d.querySelector('#region').value!=='mn'||d.querySelector('#date').value!=='2026-10-15')throw Error('N035_DATE_DRIFT_'+key);d.querySelector('#input').value='2d 89 98 b5n dx2,5n';d.querySelector('#runBtn').click();await new Promise(ok=>setTimeout(ok,120));results[key]=d.querySelector('#output').value}return results})()",awaitPromise:true,returnByValue:true});
     const output=r.result?.value||{};
     ensure(typeof output.mobile==='string'&&output.mobile.includes('89'),'Mobile real Chrome synthetic N035 output missing: '+JSON.stringify(output).slice(0,650));
     ensure(typeof output.ngang==='string'&&output.ngang.includes('89'),'Ngang real Chrome synthetic N035 output missing: '+JSON.stringify(output).slice(0,650));
