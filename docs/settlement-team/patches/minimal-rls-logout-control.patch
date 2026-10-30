@@ -1,0 +1,227 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index bed3559..7c7d66f 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -20,2 +20,5 @@ param(
+   [switch]$OfflineR6Lifecycle,
++  [switch]$MinimalRlsLogout,
++  [string]$MinimalClaimPath,
++  [switch]$OfflineMinimalClaimTest,
+   [string]$R6FixtureManifest
+@@ -48,2 +51,9 @@ $approvedController=$controller
+ $r6EvidenceType='REAL_POSTGRESQL';$r6LocalEvidenceType='ANDROID_LOCAL_STORAGE'
++function Test-MinimalRootScope([string]$Candidate,[string]$Session,[string]$SourceRoot){
++  if($Session -notmatch '^kts-bluestacks-[a-f0-9]{32}$'){return $false}
++  $suffix=$Session.Substring($Session.Length-12)
++  return ((Split-Path -Parent ([IO.Path]::GetFullPath($Candidate))) -eq (Split-Path -Parent $SourceRoot) -and (Split-Path -Leaf $Candidate) -match ('^phase-group-app-bluestacks-local-\d{8}-'+$suffix+'$'))
++}
++if($MinimalRlsLogout -and -not $OfflineR6Lifecycle -and [string]::IsNullOrWhiteSpace($MinimalClaimPath)){throw 'MINIMAL_CLAIM_REQUIRED'}
++if($OfflineMinimalClaimTest -and (-not $MinimalRlsLogout -or $OfflineR6Lifecycle -or $env:KTS_R6_ROOTLESS_TEST -ne '1' -or $env:NODE_ENV -ne 'test')){throw 'MINIMAL_CLAIM_TEST_DENIED'}
+ if($AdmissionControllerArtifact){if(-not $AdmissionOnly){throw 'ADMISSION_ARTIFACT_REQUIRES_ADMISSION_ONLY'};$controller=[IO.Path]::GetFullPath($AdmissionControllerArtifact)}
+@@ -528,2 +538,3 @@ function Invoke-R6AndroidEvidenceLifecycle($Service,$Ready,[string]$StopPath,[da
+   $stageOrder=@('LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT');$stageIndex=0;$driverRegistered=$false
++  if($MinimalRlsLogout){$stageOrder=@('LOCAL_PENDING','SYNC_COMMITTED','SUBMITTED','REVIEWED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT')}
+   $registrationDeadline=[datetimeoffset]::UtcNow.AddSeconds(30)
+@@ -693,5 +704,18 @@ try {
+   . (Join-Path $repo 'team-settlement\windows-reviewer-session-observation.ps1')
++  if($MinimalRlsLogout -and -not $OfflineR6Lifecycle){
++    $claimFull=[IO.Path]::GetFullPath($MinimalClaimPath);$claimParent=Join-Path $control 'minimal-authorizations'
++    if($OfflineMinimalClaimTest){$fixtureRoot=Split-Path -Parent (Split-Path -Parent $claimFull);Assert-True ($fixtureRoot.StartsWith((Join-Path $control 'evidence\minimal-admission-'),[StringComparison]::OrdinalIgnoreCase) -and [IO.Path]::GetFullPath($root) -eq [IO.Path]::GetFullPath((Join-Path $fixtureRoot 'never-created-root')) -and $CheckpointName -match '^MINIMAL_CLAIM_TEST_[a-f0-9]{32}\.json$') 'MINIMAL_CLAIM_TEST_SCOPE_INVALID';$claimParent=Join-Path $fixtureRoot 'minimal-authorizations'}
++    Assert-True ($HttpsPilot -and $GalaxyServeOnly -and -not $PublicQuickTunnel -and -not $AdmissionOnly -and (Split-Path -Parent $claimFull) -eq [IO.Path]::GetFullPath($claimParent) -and (Split-Path -Leaf $claimFull) -match '^minimal-[a-f0-9]{32}\.json\.claimed$' -and (Test-Path -LiteralPath $claimFull -PathType Leaf) -and -not ((Get-Item -LiteralPath $claimFull).Attributes -band [IO.FileAttributes]::ReparsePoint)) 'MINIMAL_CLAIM_INVALID'
++    $claim=Get-Content -Raw -LiteralPath $claimFull|ConvertFrom-Json;$authorizationPath=$claimFull.Substring(0,$claimFull.Length-8)
++    Assert-True ((Test-Path -LiteralPath $authorizationPath -PathType Leaf) -and -not ((Get-Item -LiteralPath $authorizationPath).Attributes -band [IO.FileAttributes]::ReparsePoint) -and -not ((Get-Item -LiteralPath $claimParent).Attributes -band [IO.FileAttributes]::ReparsePoint) -and (Get-KtsSha256 $authorizationPath) -eq $claim.authorization_sha256 -and $claim.purpose -eq 'KTS_MINIMAL_RLS_REVIEWER_LOGOUT' -and $claim.session_id -match '^kts-bluestacks-[a-f0-9]{32}$' -and [IO.Path]::GetFullPath([string]$claim.root) -eq [IO.Path]::GetFullPath($root) -and -not(Test-Path -LiteralPath $root) -and [datetimeoffset]::Parse($claim.expires_utc) -gt [datetimeoffset]::UtcNow) 'MINIMAL_CLAIM_IDENTITY_INVALID'
++    if(-not $OfflineMinimalClaimTest){Assert-True (Test-MinimalRootScope $root $claim.session_id $repo) 'MINIMAL_ROOT_SCOPE_INVALID'}
++    else{$validRoot=Join-Path (Split-Path -Parent $repo) ('phase-group-app-bluestacks-local-20261030-'+$claim.session_id.Substring($claim.session_id.Length-12));Assert-True ((Test-MinimalRootScope $validRoot $claim.session_id $repo) -and -not(Test-MinimalRootScope (Join-Path $control 'wrong-root') $claim.session_id $repo)) 'MINIMAL_ROOT_SCOPE_TEST_FAILED'}
++    Assert-True ($claim.runner_sha256 -eq (Get-KtsSha256 $PSCommandPath) -and $claim.driver_sha256 -eq (Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -and $claim.wrapper_sha256 -eq (Get-KtsSha256 (Join-Path $control 'Invoke-KtsBlueStacksLiveAcceptance.ps1'))) 'MINIMAL_CLAIM_SOURCE_MISMATCH'
++    $consumed=[IO.File]::Open($claimFull+'.runner-consumed',[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
++    try{$marker=[Text.UTF8Encoding]::new($false).GetBytes($run);$consumed.Write($marker,0,$marker.Length);$consumed.Flush($true)}finally{$consumed.Dispose()}
++    if($OfflineMinimalClaimTest){$result.status='PASS';$result.evidence_type='ROOTLESS_CLAIM_FIXTURE';$result.postgres_init='NOT_RUN';return}
++  }
+   Assert-True (Test-Path -LiteralPath $controller) 'ADMISSION_CONTROLLER_ARTIFACT_MISSING'
+   Assert-True ((Get-KtsSha256 $controller) -eq $approvedSource['tests/settlement-team-windows-pilot-controller.cjs']) 'ADMISSION_CONTROLLER_ARTIFACT_HASH_MISMATCH'
+-  Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq 'BE6D36AE91770C166369B4AB78F38303125D44E762121CB859ED46EFDC77EFDF') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
++  Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq 'D76ADFAD82EBEC984187751FD963FD0F784CD303A8E1C3C008110FD7FC286F34') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
+   if($OfflineR6Lifecycle){
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 66e9345..65fca64 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -12,2 +12,5 @@ param(
+   [switch]$OfflineR6FullLifecycle,
++  [switch]$MinimalRlsLogout,
++  [switch]$OfflineMinimalAdmissionSelfTest,
++  [string]$MinimalAuthorizationPath,
+   [string]$R6FixtureManifest
+@@ -16,2 +19,3 @@ Set-StrictMode -Version Latest
+ $ErrorActionPreference='Stop'
++if($MinimalRlsLogout -and -not $OfflineR6FullLifecycle -and [string]::IsNullOrWhiteSpace($MinimalAuthorizationPath)){throw 'MINIMAL_AUTHORIZATION_REQUIRED'}
+ 
+@@ -33,2 +37,16 @@ function Get-Sha256([string]$Path){
+ }
++function Claim-MinimalAuthorization([string]$Path,[string]$Session,[string]$Root,[string]$Runner,[string]$Driver){
++  $parent=Join-Path $ControlRoot 'minimal-authorizations';$full=[IO.Path]::GetFullPath($Path)
++  Assert-True ((Split-Path -Parent $full) -eq [IO.Path]::GetFullPath($parent) -and (Split-Path -Leaf $full) -match '^minimal-[a-f0-9]{32}\.json$') 'MINIMAL_AUTHORIZATION_PATH_INVALID'
++  Assert-True ((Test-Path -LiteralPath $full -PathType Leaf) -and -not ((Get-Item -LiteralPath $full).Attributes -band [IO.FileAttributes]::ReparsePoint) -and -not ((Get-Item -LiteralPath $parent).Attributes -band [IO.FileAttributes]::ReparsePoint)) 'MINIMAL_AUTHORIZATION_FILE_INVALID'
++  $permit=Get-Content -Raw -LiteralPath $full|ConvertFrom-Json
++  $expires=[datetimeoffset]::MinValue
++  Assert-True ($permit.authorization_id -match '^[a-f0-9]{32}$' -and (Split-Path -Leaf $full) -ceq ('minimal-'+$permit.authorization_id+'.json') -and $permit.purpose -eq 'KTS_MINIMAL_RLS_REVIEWER_LOGOUT' -and $permit.synthetic_only -eq $true -and $permit.max_sessions -eq 1 -and [datetimeoffset]::TryParse([string]$permit.expires_utc,[ref]$expires) -and $expires -gt [datetimeoffset]::UtcNow -and $expires -le [datetimeoffset]::UtcNow.AddHours(24)) 'MINIMAL_AUTHORIZATION_INVALID'
++  Assert-True ($permit.source_head -eq 'd0562c8979fceb5285b49b33ea4b2e353b31957c' -and $permit.runner_sha256 -eq (Get-Sha256 $Runner) -and $permit.driver_sha256 -eq (Get-Sha256 $Driver) -and $permit.wrapper_sha256 -eq (Get-Sha256 $PSCommandPath)) 'MINIMAL_AUTHORIZATION_SOURCE_MISMATCH'
++  Assert-True (-not(Test-Path -LiteralPath $Root)) 'MINIMAL_ROOT_ALREADY_EXISTS'
++  $claimPath=$full+'.claimed';$claim=[ordered]@{purpose=$permit.purpose;authorization_sha256=(Get-Sha256 $full);session_id=$Session;root=[IO.Path]::GetFullPath($Root);expires_utc=$expires.ToUniversalTime().ToString('o');runner_sha256=$permit.runner_sha256;driver_sha256=$permit.driver_sha256;wrapper_sha256=$permit.wrapper_sha256;claimed_utc=[datetimeoffset]::UtcNow.ToString('o')}
++  $bytes=[Text.UTF8Encoding]::new($false).GetBytes(($claim|ConvertTo-Json -Compress));$stream=[IO.File]::Open($claimPath,[IO.FileMode]::CreateNew,[IO.FileAccess]::Write,[IO.FileShare]::None)
++  try{$stream.Write($bytes,0,$bytes.Length);$stream.Flush($true)}finally{$stream.Dispose()}
++  return $claimPath
++}
+ function Invoke-IsolatedAdb([string[]]$Arguments){
+@@ -108,6 +126,6 @@ if($OfflineProcessExitSelfTest){
+ function Assert-AndroidDriverIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq 'BE6D36AE91770C166369B4AB78F38303125D44E762121CB859ED46EFDC77EFDF') 'ANDROID_DRIVER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq 'D76ADFAD82EBEC984187751FD963FD0F784CD303A8E1C3C008110FD7FC286F34') 'ANDROID_DRIVER_SOURCE_DRIFT'
+ }
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '7616B1EBCC1F1EFB351653BF443CA32650F7C859E5130875D89398C5FC4A426D') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '251EECC3CE977CC28FACBF944B355661E2C1703981BC68FDED5B1FD3A48CC510') 'R6_RUNNER_SOURCE_DRIFT'
+ }
+@@ -178,3 +196,4 @@ function Assert-AndroidWorkflowReceipt($WorkflowReceipt,[switch]$Rootless){
+   $steps=@($WorkflowReceipt.steps)
+-  foreach($step in 'login','draft_pending','offline_pending','offline_reload_persisted','reconnect_sync','submit_review','workspace_isolation_denied','reviewer_login','reviewed','reviewed_reload_persisted','logout'){
++  $expectedSteps=if($MinimalRlsLogout){@('login','draft_pending','reconnect_sync','submit_review','reviewer_login','reviewed','logout')}else{@('login','draft_pending','offline_pending','offline_reload_persisted','reconnect_sync','submit_review','workspace_isolation_denied','reviewer_login','reviewed','reviewed_reload_persisted','logout')}
++  foreach($step in $expectedSteps){
+     Assert-True ($steps -contains $step) "ANDROID_WORKFLOW_STEP_MISSING_$step"
+@@ -214,2 +233,3 @@ function Invoke-AndroidDriverAndHandoff([string]$Root,$Ready,$ReadyContract,[str
+     $expectedStages=@('LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT')
++    if($MinimalRlsLogout){$expectedStages=@('LOCAL_PENDING','SYNC_COMMITTED','SUBMITTED','REVIEWED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT')}
+     foreach($stage in $expectedStages){
+@@ -231,2 +251,3 @@ function Complete-R6RunnerCleanup([string]$Root,$RunnerProcess){
+   $ev=Join-Path $Root 'evidence';$cleanup=[ordered]@{status='FAIL';stage='FINAL_CLEANUP';sequence=10;session_id=$null;runner_exit_code=$null;watchdog='NOT_RUN';supervisor='NOT_RUN';owned_processes_closed=$false}
++  if($MinimalRlsLogout){$cleanup.sequence=8}
+   try{
+@@ -247,2 +268,28 @@ function Complete-R6RunnerCleanup([string]$Root,$RunnerProcess){
+ }
++if($OfflineMinimalAdmissionSelfTest){
++  Assert-True ($env:KTS_R6_ROOTLESS_TEST -eq '1' -and $env:NODE_ENV -eq 'test' -and -not $MinimalRlsLogout -and -not $OfflineR6FullLifecycle) 'MINIMAL_ADMISSION_TEST_DENIED'
++  $actualControl=$ControlRoot;$testRoot=Join-Path $actualControl ('evidence\minimal-admission-'+[guid]::NewGuid().ToString('N'));$ControlRoot=$testRoot
++  $dir=Join-Path $testRoot 'minimal-authorizations';New-Item -ItemType Directory -Path $dir -Force|Out-Null
++  $runner=Join-Path $actualControl 'Run-RealPilot20.ps1';$driver=Join-Path $actualControl 'android-chrome-cdp-workflow.cjs';Assert-R6RunnerIdentity $runner;Assert-AndroidDriverIdentity $driver
++  $permit=[ordered]@{authorization_id=[guid]::NewGuid().ToString('N');purpose='KTS_MINIMAL_RLS_REVIEWER_LOGOUT';synthetic_only=$true;max_sessions=1;expires_utc=[datetimeoffset]::UtcNow.AddMinutes(5).ToString('o');source_head='d0562c8979fceb5285b49b33ea4b2e353b31957c';runner_sha256=(Get-Sha256 $runner);driver_sha256=(Get-Sha256 $driver);wrapper_sha256=(Get-Sha256 $PSCommandPath)}
++  $authPath=Join-Path $dir ('minimal-'+$permit.authorization_id+'.json');Write-AtomicJson $authPath $permit
++  $syntheticRoot=Join-Path $testRoot 'never-created-root';$session='kts-bluestacks-'+[guid]::NewGuid().ToString('N')
++  $claim=Claim-MinimalAuthorization $authPath $session $syntheticRoot $runner $driver
++  $runnerTests=@();foreach($attempt in 1,2){
++    $checkpointName='MINIMAL_CLAIM_TEST_'+[guid]::NewGuid().ToString('N')+'.json';$out=Join-Path $testRoot "runner-$attempt.stdout";$err=Join-Path $testRoot "runner-$attempt.stderr"
++    $proc=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$runner,'-Root',$syntheticRoot,'-HttpsPilot','-GalaxyServeOnly','-MinimalRlsLogout','-MinimalClaimPath',$claim,'-OfflineMinimalClaimTest','-CheckpointName',$checkpointName) -RedirectStandardOutput $out -RedirectStandardError $err -WindowStyle Hidden -PassThru
++    $null=$proc.Handle
++    if(-not $proc.WaitForExit(20000)){Stop-Process -Id $proc.Id -ErrorAction SilentlyContinue;throw 'MINIMAL_CLAIM_TEST_TIMEOUT'}
++    $proc.Refresh();$runnerTests+=@([ordered]@{attempt=$attempt;exit_code=$proc.ExitCode;checkpoint=(Join-Path $actualControl $checkpointName)})
++  }
++  Assert-True ($runnerTests[0].exit_code -eq 0 -and $runnerTests[1].exit_code -ne 0 -and (Test-Path -LiteralPath ($claim+'.runner-consumed'))) 'MINIMAL_RUNNER_CLAIM_REPLAY_TEST_FAILED'
++  $againDenied=$false;try{[void](Claim-MinimalAuthorization $authPath $session $syntheticRoot $runner $driver)}catch{$againDenied=$true};Assert-True $againDenied 'MINIMAL_REPLAY_ACCEPTED'
++  $permit.authorization_id=[guid]::NewGuid().ToString('N');$driftPath=Join-Path $dir ('minimal-'+$permit.authorization_id+'.json');$permit.driver_sha256='0'*64;Write-AtomicJson $driftPath $permit
++  $driftDenied=$false;try{[void](Claim-MinimalAuthorization $driftPath $session $syntheticRoot $runner $driver)}catch{$driftDenied=$_.Exception.Message -eq 'MINIMAL_AUTHORIZATION_SOURCE_MISMATCH'};Assert-True $driftDenied 'MINIMAL_DRIFT_ACCEPTED'
++  $permit.driver_sha256=Get-Sha256 $driver;$permit.expires_utc=[datetimeoffset]::UtcNow.AddMinutes(-1).ToString('o');$permit.authorization_id=[guid]::NewGuid().ToString('N');$expiredPath=Join-Path $dir ('minimal-'+$permit.authorization_id+'.json');Write-AtomicJson $expiredPath $permit
++  $expiredDenied=$false;try{[void](Claim-MinimalAuthorization $expiredPath $session $syntheticRoot $runner $driver)}catch{$expiredDenied=$_.Exception.Message -eq 'MINIMAL_AUTHORIZATION_INVALID'};Assert-True $expiredDenied 'MINIMAL_EXPIRED_ACCEPTED'
++  Assert-True (-not(Test-Path -LiteralPath $syntheticRoot) -and -not(Test-Path -LiteralPath ($driftPath+'.claimed')) -and -not(Test-Path -LiteralPath ($expiredPath+'.claimed'))) 'MINIMAL_ADMISSION_TEST_SIDE_EFFECT'
++  $proof=[ordered]@{status='PASS';evidence_type='ROOTLESS_ADMISSION_FIXTURE';first_claim=(Test-Path -LiteralPath $claim);replay_denied=$againDenied;runner_claim_tests=$runnerTests;source_drift_denied=$driftDenied;expiry_denied=$expiredDenied;postgres_init='NOT_RUN';live_lease_created=$false;fixture=$testRoot}
++  Write-AtomicJson (Join-Path $testRoot 'MINIMAL_ADMISSION_TEST.json') $proof;$proof|ConvertTo-Json -Depth 6;exit 0
++}
+ if($OfflineR6FullLifecycle){
+@@ -260,3 +307,4 @@ if($OfflineR6FullLifecycle){
+     Assert-R6RunnerIdentity $runnerPath
+-    $runnerProcess=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$runnerPath,'-OfflineR6Lifecycle','-R6FixtureManifest',$configPath,'-Root',$root,'-CheckpointName',$config.checkpoint_name) -RedirectStandardOutput ($configPath+'.runner.stdout') -RedirectStandardError ($configPath+'.runner.stderr') -WindowStyle Hidden -PassThru
++    $runnerArgs=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$runnerPath,'-OfflineR6Lifecycle','-R6FixtureManifest',$configPath,'-Root',$root,'-CheckpointName',$config.checkpoint_name);if($MinimalRlsLogout){$runnerArgs+=@('-MinimalRlsLogout')}
++    $runnerProcess=Start-Process powershell.exe -ArgumentList $runnerArgs -RedirectStandardOutput ($configPath+'.runner.stdout') -RedirectStandardError ($configPath+'.runner.stderr') -WindowStyle Hidden -PassThru
+     $null=$runnerProcess.Handle;$readyPath=Join-Path $root 'evidence\GALAXY_SERVICE_READY.json'
+@@ -265,2 +313,3 @@ if($OfflineR6FullLifecycle){
+     $argsList=@('--base',$ready.base,'--evidence',(Join-Path $root 'evidence\android-ui'),'--mode','contract-fixture','--contract-manifest',$configPath,'--adb-path','C:\fixture\unused-adb.exe','--adb-serial','emulator-5584','--stage-dir',(Join-Path $root 'evidence\R6_STAGES'),'--stage-session',$contract.runner_session_id)
++    if($MinimalRlsLogout){$argsList+=@('--minimal-rls-logout')}
+     $workflowReceipt=Invoke-AndroidDriverAndHandoff $root $ready $contract $argsList ([int]$config.driver_timeout_ms) -Rootless
+@@ -398,2 +447,3 @@ $finalCheckpoint=Join-Path $ControlRoot 'KTS_ANDROID_ACCEPTANCE_R6_WRAPPER.json'
+ $runnerCheckpoint='KTS_ANDROID_RUNNER_R6_LIVE_SESSION.json'
++if($MinimalRlsLogout){$finalCheckpoint=Join-Path $ControlRoot ('KTS_MINIMAL_RLS_LOGOUT_'+$sessionId+'.json');$runnerCheckpoint='KTS_MINIMAL_RUNNER_'+$sessionId+'.json'}
+ $runnerProcess=$null;$flow=$null;$adbForward=$false;$runnerStarted=$false;$liveStarted=$false
+@@ -419,2 +469,3 @@ try{
+   $result.preflight='PASS'
++  $minimalClaim=$null;if($MinimalRlsLogout){$minimalClaim=Claim-MinimalAuthorization $MinimalAuthorizationPath $sessionId $root $runner $workflow;$result.minimal_authorization_claim=$minimalClaim}
+   Write-AtomicJson $lease ([ordered]@{authorization_id='lease-'+[guid]::NewGuid().ToString('N');session_id=$sessionId;state='PREFLIGHT';consumed=$false;synthetic_only=$true;max_duration_minutes=60;root=$root;created_utc=[DateTimeOffset]::UtcNow.ToString('o');history=@([ordered]@{state='PREFLIGHT';reason='OFFLINE_ANDROID_REHEARSAL_PASS'})})
+@@ -424,3 +475,4 @@ try{
+   $runnerOut=Join-Path $launchEvidence 'runner.stdout.log';$runnerErr=Join-Path $launchEvidence 'runner.stderr.log'
+-  $runnerProcess=Start-Process -FilePath powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$runner,'-Root',$root,'-HttpsPilot','-GalaxyServeOnly','-CheckpointName',$runnerCheckpoint) -WorkingDirectory $ControlRoot -RedirectStandardOutput $runnerOut -RedirectStandardError $runnerErr -PassThru
++  $runnerArgs=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$runner,'-Root',$root,'-HttpsPilot','-GalaxyServeOnly','-CheckpointName',$runnerCheckpoint);if($MinimalRlsLogout){$runnerArgs+=@('-MinimalRlsLogout','-MinimalClaimPath',$minimalClaim)}
++  $runnerProcess=Start-Process -FilePath powershell.exe -ArgumentList $runnerArgs -WorkingDirectory $ControlRoot -RedirectStandardOutput $runnerOut -RedirectStandardError $runnerErr -PassThru
+   $null=$runnerProcess.Handle
+@@ -455,2 +507,3 @@ try{
+   $driverArguments=@('--base','https://192.168.0.148:9448','--page-url',$url,'--evidence',$androidEvidence,'--mode','live','--credentials',$credentials,'--adb-path',('"{0}"' -f $AdbPath),'--adb-serial',$DeviceSerial,'--stage-dir',(Join-Path $root 'evidence\R6_STAGES'),'--stage-session',$readyContract.runner_session_id)
++  if($MinimalRlsLogout){$driverArguments+=@('--minimal-rls-logout')}
+   $workflowReceipt=Invoke-AndroidDriverAndHandoff $root $ready $readyContract $driverArguments
+diff --git a/android-chrome-cdp-workflow.cjs b/android-chrome-cdp-workflow.cjs
+index 42be911..8ae4281 100644
+--- a/android-chrome-cdp-workflow.cjs
++++ b/android-chrome-cdp-workflow.cjs
+@@ -20,2 +20,3 @@ const stageSession=process.argv.includes('--stage-session')?need('--stage-sessio
+ const contractFixture=mode==='contract-fixture';
++const minimalRlsLogout=process.argv.includes('--minimal-rls-logout');
+ const contractManifest=contractFixture?JSON.parse(fs.readFileSync(need('--contract-manifest'),'utf8').replace(/^\uFEFF/,'')):null;
+@@ -29,3 +30,4 @@ if((staleStartReproduction||failWithPicker) && mode!=='fixture')throw Error('AND
+ const driverDeadline=performance.now()+10*60*1000;
+-const milestones=['LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT'];
++const milestones=minimalRlsLogout?['LOCAL_PENDING','SYNC_COMMITTED','SUBMITTED','REVIEWED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT']:['LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT'];
++const workflowSteps=minimalRlsLogout?['login','draft_pending','reconnect_sync','submit_review','reviewer_login','reviewed','logout']:['login','draft_pending','offline_pending','offline_reload_persisted','reconnect_sync','submit_review','workspace_isolation_denied','reviewer_login','reviewed','reviewed_reload_persisted','logout'];
+ let stage='STARTUP';
+@@ -85,3 +87,3 @@ async function executeContractFixture(){
+     }
+-    const receipt={status:'PASS',mode:'ROOTLESS_CONTRACT_FIXTURE',session_id:stageSession,scope:{partner_id:'fake_customer_contract',business_date:'2026-10-26',region:'mn'},steps:['login','draft_pending','offline_pending','offline_reload_persisted','reconnect_sync','submit_review','workspace_isolation_denied','reviewer_login','reviewed','reviewed_reload_persisted','logout'],milestones:items,evidence:items,created_utc:new Date().toISOString()};
++    const receipt={status:'PASS',mode:'ROOTLESS_CONTRACT_FIXTURE',session_id:stageSession,scope:{partner_id:'fake_customer_contract',business_date:'2026-10-26',region:'mn'},steps:workflowSteps,milestones:items,evidence:items,created_utc:new Date().toISOString()};
+     atomicJson(path.join(evidence,'ANDROID_CHROME_CDP_WORKFLOW.json'),receipt);
+@@ -227,3 +229,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+       if(!local||local.payload?.synthetic!==true||local.payload?.demo_message!=='TEAM_PILOT_FAKE_DATA_ONLY'||local.scope?.business_date!=='2026-10-26'||local.scope?.region!=='mn')throw Error('ANDROID_LOCAL_PENDING_EVIDENCE_INVALID');
+-      draftId=local.id;const localPath=path.join(evidence,'ANDROID_LOCAL_PENDING.json');atomicJson(localPath,{status:'PASS',evidence_type:'ANDROID_LOCAL_STORAGE',draft:local});localEvidence={path:localPath,sha256:sha256(localPath)};evidenceItems.push(localEvidence);await sqlStage('LOCAL_PENDING',partner,true);await sqlStage('PRE_SYNC_SQL_ABSENCE',partner,true);
++      draftId=local.id;const localPath=path.join(evidence,'ANDROID_LOCAL_PENDING.json');atomicJson(localPath,{status:'PASS',evidence_type:'ANDROID_LOCAL_STORAGE',draft:local});localEvidence={path:localPath,sha256:sha256(localPath)};evidenceItems.push(localEvidence);await sqlStage('LOCAL_PENDING',partner,true);if(!minimalRlsLogout)await sqlStage('PRE_SYNC_SQL_ABSENCE',partner,true);
+     }
+@@ -233,3 +235,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+       // it is not a fixture-only status or a manually altered DOM value.
+-      await call('Network.enable');
++      if(!minimalRlsLogout){await call('Network.enable');
+       await call('Network.emulateNetworkConditions',{offline:true,latency:0,downloadThroughput:0,uploadThroughput:0,connectionType:'none'});
+@@ -237,3 +239,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+       await call('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1,connectionType:'none'});await call('Network.disable');await sleep(250);
+-      await reloadAndRelogin(credentials.operator,credentials.password,credentials.workspace_id,'operator-reloaded',partner);await waitFor(`document.getElementById('team-drafts').textContent.includes('PENDING')`,'ANDROID_OFFLINE_RELOAD_PERSISTENCE_TIMEOUT');evidenceItems.push(await ui('android-offline-reloaded'));
++      await reloadAndRelogin(credentials.operator,credentials.password,credentials.workspace_id,'operator-reloaded',partner);await waitFor(`document.getElementById('team-drafts').textContent.includes('PENDING')`,'ANDROID_OFFLINE_RELOAD_PERSISTENCE_TIMEOUT');evidenceItems.push(await ui('android-offline-reloaded'));}
+       await clickVisible('team-reconnect');await waitFor(`document.getElementById('team-drafts').textContent.includes('SYNCED')`,'ANDROID_RECONNECT_SYNC_TIMEOUT');evidenceItems.push(await ui('android-reconnect-synced'));evidenceItems.push(await screenshot('android-reconnect-synced'));
+@@ -241,6 +243,6 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+        await clickVisible('team-read');await sleep(150);evidenceItems.push(await ui('android-draft-read-attempt'));await waitFor(`document.getElementById('team-review-readonly').textContent.includes('DRAFT')`,'ANDROID_DRAFT_READ_TIMEOUT');await clickVisible('team-submit-review');await waitFor(`document.getElementById('team-review-attempts').textContent.includes('SYNCED')`,'ANDROID_SUBMIT_TIMEOUT');evidenceItems.push(await ui('android-review-submitted'));await sqlStage('SUBMITTED',partner);
+-      await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_LOGOUT_TIMEOUT');evidenceItems.push(await expectWorkspaceDenied(credentials.operator,credentials.password,credentials.workspace_id));await login(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer');await chooseScope(partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('PENDING_REVIEW')`,'ANDROID_PENDING_REVIEW_READ_TIMEOUT');await clickVisible('team-approve-review');await waitFor(`document.getElementById('team-review-attempts').textContent.includes('SYNCED')`,'ANDROID_APPROVE_TIMEOUT');await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_TIMEOUT');evidenceItems.push(await ui('android-reviewed'));evidenceItems.push(await screenshot('android-reviewed'));
+-      await sqlStage('REVIEWED',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_REVIEWER_PRE_RELOAD_LOGOUT_TIMEOUT');await reloadAndRelogin(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer-reloaded',partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_RELOAD_TIMEOUT');evidenceItems.push(await ui('android-reviewed-reloaded'));await sqlStage('RELOADED',partner);await sqlStage('CROSS_WORKSPACE_RLS',partner);await sqlStage('REVIEWER_SESSION_BEFORE_LOGOUT',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_FINAL_LOGOUT_TIMEOUT');evidenceItems.push(await ui('android-final-logout'));await sqlStage('REVIEWER_SESSION_AFTER_LOGOUT',partner);
++      await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_LOGOUT_TIMEOUT');if(!minimalRlsLogout)evidenceItems.push(await expectWorkspaceDenied(credentials.operator,credentials.password,credentials.workspace_id));await login(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer');await chooseScope(partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('PENDING_REVIEW')`,'ANDROID_PENDING_REVIEW_READ_TIMEOUT');await clickVisible('team-approve-review');await waitFor(`document.getElementById('team-review-attempts').textContent.includes('SYNCED')`,'ANDROID_APPROVE_TIMEOUT');await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_TIMEOUT');evidenceItems.push(await ui('android-reviewed'));evidenceItems.push(await screenshot('android-reviewed'));
++      await sqlStage('REVIEWED',partner);if(!minimalRlsLogout){await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_REVIEWER_PRE_RELOAD_LOGOUT_TIMEOUT');await reloadAndRelogin(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer-reloaded',partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_RELOAD_TIMEOUT');evidenceItems.push(await ui('android-reviewed-reloaded'));await sqlStage('RELOADED',partner);}await sqlStage('CROSS_WORKSPACE_RLS',partner);await sqlStage('REVIEWER_SESSION_BEFORE_LOGOUT',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_FINAL_LOGOUT_TIMEOUT');evidenceItems.push(await ui('android-final-logout'));await sqlStage('REVIEWER_SESSION_AFTER_LOGOUT',partner);
+     }
+-     const receipt={status:'PASS',mode:mode==='fixture'?'OFFLINE_FIXTURE_ONLY':'LIVE_ANDROID_UI',base,scope:{partner_id:partner,business_date:'2026-10-26',region:'mn'},ui_control_methods:{date:dateControlMethod},steps:['login','draft_pending','offline_pending','offline_reload_persisted','reconnect_sync','submit_review','workspace_isolation_denied','reviewer_login','reviewed','reviewed_reload_persisted','logout'],evidence:[...evidenceItems.map(x=>({path:x.path,sha256:x.sha256})),...datePickerEvidence],created_utc:new Date().toISOString()};
++     const receipt={status:'PASS',mode:mode==='fixture'?'OFFLINE_FIXTURE_ONLY':'LIVE_ANDROID_UI',base,scope:{partner_id:partner,business_date:'2026-10-26',region:'mn'},ui_control_methods:{date:dateControlMethod},steps:workflowSteps,evidence:[...evidenceItems.map(x=>({path:x.path,sha256:x.sha256})),...datePickerEvidence],created_utc:new Date().toISOString()};
+     atomicJson(path.join(evidence,'ANDROID_CHROME_CDP_WORKFLOW.json'),receipt);process.stdout.write(JSON.stringify({status:receipt.status,mode:receipt.mode,evidence_count:receipt.evidence.length})+'\n');
+diff --git a/tests/r6-rootless-integration.test.cjs b/tests/r6-rootless-integration.test.cjs
+index 4bc9fd6..54eb882 100644
+--- a/tests/r6-rootless-integration.test.cjs
++++ b/tests/r6-rootless-integration.test.cjs
+@@ -18,2 +18,4 @@ const outcomes=[];
+ const only=process.argv.includes('--scenario')?process.argv[process.argv.indexOf('--scenario')+1]:null;
++const minimal=process.argv.includes('--minimal-rls-logout');
++const launcher=process.argv.includes('--launcher');
+ const scenarios=only?[only]:['normal','driver_failure','missing_milestone','duplicate_milestone','invalid_event_identity','receipt_mismatch','timeout','cleanup_failure','invalid_session','rls_bypass','duplicate_sql_event','pre_sync_event','reload_drift','rls_reverse_leak','force_rls_disabled','missing_session_id','invalid_source_hash','deadline_expired'];
+@@ -39,3 +41,4 @@ for(const scenario of scenarios){
+   const start=Date.now();
+-  const result=spawnSync('powershell.exe',['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'Invoke-KtsBlueStacksLiveAcceptance.ps1'),'-SourceRoot',repo,'-ControlRoot',control,'-OfflineR6FullLifecycle','-R6FixtureManifest',configPath],{encoding:'utf8',windowsHide:true,env,timeout:80000,maxBuffer:1024*1024});
++  const wrapperArgs=launcher?['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'r6-rls-followup-worktree','team-settlement','Invoke-KtsMinimalRlsReviewer.ps1'),'-OfflineLifecycleManifest',configPath]:['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'Invoke-KtsBlueStacksLiveAcceptance.ps1'),'-SourceRoot',repo,'-ControlRoot',control,'-OfflineR6FullLifecycle','-R6FixtureManifest',configPath];if(minimal&&!launcher)wrapperArgs.push('-MinimalRlsLogout');
++  const result=spawnSync('powershell.exe',wrapperArgs,{encoding:'utf8',windowsHide:true,env,timeout:80000,maxBuffer:1024*1024});
+   fs.writeFileSync(configPath+'.wrapper.stdout',result.stdout||'');fs.writeFileSync(configPath+'.wrapper.stderr',result.stderr||'');
+@@ -61,3 +64,3 @@ for(const scenario of scenarios){
+     const cleanupProof=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','FINAL_CLEANUP.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.final_cleanup_milestone=cleanupProof.stage==='FINAL_CLEANUP'&&cleanupProof.sequence===10;
++    checks.final_cleanup_milestone=cleanupProof.stage==='FINAL_CLEANUP'&&cleanupProof.sequence===(minimal?8:10);
+     if(['reviewer_logout_not_revoked','invalid_event_identity','receipt_mismatch','rls_bypass','duplicate_sql_event','pre_sync_event','reload_drift','rls_reverse_leak','force_rls_disabled','invalid_session','invalid_source_hash'].includes(scenario)){
+@@ -69,5 +72,4 @@ for(const scenario of scenarios){
+     const completion=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_MILESTONE_COMPLETION.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.milestone_count=completion.stage_count===9;
+-    const pending=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_STAGES','PRE_SYNC_SQL_ABSENCE.evidence.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.no_event_before_sync=pending.snapshot.event_count===0&&pending.snapshot.receipt_count===0;
++    checks.milestone_count=completion.stage_count===(minimal?7:9);
++    if(!minimal){const pending=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_STAGES','PRE_SYNC_SQL_ABSENCE.evidence.json'),'utf8').replace(/^\uFEFF/,''));checks.no_event_before_sync=pending.snapshot.event_count===0&&pending.snapshot.receipt_count===0;}
+     const calls=fs.readFileSync(path.join(cfg.workdir,'evidence','MOCK_SQL_CALLS.jsonl'),'utf8').trim().split(/\r?\n/).map(x=>JSON.parse(x));
