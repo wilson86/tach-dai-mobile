@@ -79,7 +79,7 @@ async function chromeSmoke(stage){
     ensure(!navigation.errorText,'Chrome navigation rejected: '+JSON.stringify(navigation));
     let found,lastEval;
     for(let i=0;i<100;i++){
-      const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {location:location.href,title:document.title,ready:document.readyState,html:document.documentElement?.outerHTML?.slice(0,350),unified:!!a&&!!b,readyChildren:a?.contentDocument?.readyState==='complete'&&b?.contentDocument?.readyState==='complete',local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.26'),a?.contentDocument?.body?.textContent?.includes('2.0.37'),b?.contentDocument?.body?.textContent?.includes('1.0.36')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
+      const r=await command('Runtime.evaluate',{expression:"(()=>{try{const a=document.getElementById('tachFrame'),b=document.getElementById('ngangFrame');return {location:location.href,title:document.title,ready:document.readyState,html:document.documentElement?.outerHTML?.slice(0,350),unified:!!a&&!!b,readyChildren:a?.contentDocument?.readyState==='complete'&&b?.contentDocument?.readyState==='complete',local:!!a&&!!b&&a.src.startsWith(location.origin+'/Mobile/')&&b.src.startsWith(location.origin+'/Ngang/'),tach:!!a?.contentDocument?.querySelector('#input'),ngang:!!b?.contentDocument?.querySelector('#input'),versions:[document.body?.textContent?.includes('1.0.27'),a?.contentDocument?.body?.textContent?.includes('2.0.38'),b?.contentDocument?.body?.textContent?.includes('1.0.37')]}}catch(e){return {error:String(e)}}})()",returnByValue:true});
       lastEval=r;
       if(r.exceptionDetails)throw Error('CHROME_EVAL_EXCEPTION '+JSON.stringify(r.exceptionDetails).slice(0,1200));
       found=r.result?.value;
@@ -302,7 +302,7 @@ async function chromeSmoke(stage){
     console.log('ISSUE18_PUBLIC_CHROME_N035_THURSDAY_EXACT_ORACLE_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS '+JSON.stringify(swScopes));
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
-      origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.37','1.0.36','1.0.26'],
+      origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.38','1.0.37','1.0.27'],
       frames:2,source:'synthetic',modeOutputsDistinct:true,physicalWindows:'NOT_RUN',
       android:'NOT_RUN',production:'NO_GO',cost_usd:0
     }));
