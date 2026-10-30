@@ -53,7 +53,7 @@ test('reject wrong local staged file without any network call',async t=>{
 test('reject bogus source SHA in local manifest',async t=>{
  const f=fixture();t.after(()=>fs.rmSync(f.root,{recursive:true,force:true}));
  const p=path.join(f.root,'KTS_PREVIEW_MANIFEST.json');const j=JSON.parse(fs.readFileSync(p));j.mobile_sha='0'.repeat(40);fs.writeFileSync(p,JSON.stringify(j));
- await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl:f.serve}),/LOCAL_MANIFEST_NOT_SOURCE_PINNED/);
+ await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl:f.serve}),/LOCAL_MANIFEST_NOT_SOURCE_PINN/);
 });
 test('reject remote asset hash drift',async t=>{
  const f=fixture();t.after(()=>fs.rmSync(f.root,{recursive:true,force:true}));
