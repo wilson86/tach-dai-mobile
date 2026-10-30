@@ -47,6 +47,17 @@ function overlapsWorkspace(workspace,evidence){
   const b=path.win32.normalize(evidence).replace(/\\+$/,'').toLowerCase();
   return a===b||a.startsWith(b+'\\')||b.startsWith(a+'\\');
 }
+const REQUIRED_CHROME_RECEIPTS=Object.freeze([
+  'ISSUE18_PUBLIC_CHROME_CUT_RELOAD_UNDO_PASS',
+  'ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS',
+  'ISSUE18_PUBLIC_CHROME_N035_THURSDAY_EXACT_ORACLE_PASS',
+  'ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS',
+  'ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS'
+]);
+function chromeReceiptsComplete(stdout){
+  const lines=String(stdout||'').split(/\r?\n/);
+  return REQUIRED_CHROME_RECEIPTS.every(marker=>lines.some(line=>line===marker||line.startsWith(marker+' ')));
+}
 function selectChrome(){
   const supplied=process.env.CHROME_PATH;
   const candidates=supplied?[supplied]:[
@@ -86,6 +97,9 @@ function browserAfterAdmission({root,evidence,p,stamp}){
       exit_code:output.status,signal:output.signal||null,
       detail:String(output.error?.message||output.stderr||'CHROME_EXIT_NONZERO').slice(-6000),
       stdout:String(output.stdout||'').slice(-6000)};
+  if(!chromeReceiptsComplete(output.stdout))
+    return {status:'BLOCKED_CHROME',stage:stageDir,stage_receipt:stageReceipt,
+      error:'CHROME_RECEIPTS_MISSING',stdout:String(output.stdout||'').slice(-6000)};
   // Even success needs immutable checkout identities after real Chrome activity.
   const after=probe(root);
   if(JSON.stringify(after.source)!==JSON.stringify(p.source))block('POST_CHROME_SOURCE_DRIFT');
@@ -117,4 +131,4 @@ function run(args=process.argv.slice(2)){
 }
 if(require.main===module){try{const result=run();console.log(JSON.stringify(result));if(!result.success)process.exitCode=2;}
 catch(e){console.error(JSON.stringify({status:'BLOCKED',code:e.code||'UNKNOWN',detail:String(e.message),release:'NO_GO'}));process.exitCode=2;}}
-module.exports={parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,run};
+module.exports={parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplete,run};
