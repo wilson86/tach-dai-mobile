@@ -1,10 +1,10 @@
 'use strict';
 // $0 local Windows acceptance only. No Codex, network, deploy or checkout edits.
 const fs=require('node:fs'),path=require('node:path'),cp=require('node:child_process');
-const KTS_PIN='eec80f812ff0ab47109edcacc32f31eedaffca79';
-const NGANG_PIN='6f47f7c6b073c5df25da55b2b8f3bcc61513da20';
+const KTS_PIN='6210266f34620e4092d38605d970009e5579ef8b';
+const NGANG_PIN='afc777d01ba2346b7eb3a322afe9bbebc6068fc0';
 const MOBILE_BASE='737d689b5388fb1060bca5fbd1891e69328bed1d';
-const REVIEW_BRANCH='review/issue18-offline-parity-gate-20261030';
+const REVIEW_BRANCH='review/issue18-calendar-hash-reconcile-20261031';
 const READ_ONLY_GIT_ENV=Object.freeze({GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0'});
 function block(code){const e=new Error(code);e.code=code;throw e}
 function parseArgs(args){
@@ -14,7 +14,7 @@ function parseArgs(args){
   // The operator must supply the exact independently-reviewed SHA from
   // the checkpoint before this tool reads a checkout or writes a receipt.
   if(words.length<2||words.length>6||words.length%2!==0)block('USAGE');
-  const result={'--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence'};
+  const result={'--workspace':'C:\\KTS-QA\\issue18-calendar-review','--evidence':'C:\\KTS-QA\\issue18-calendar-evidence'};
   const allowed=new Set(['--workspace','--evidence','--mobile-sha']);
   const seen=new Set();
   for(let i=0;i<words.length;i+=2){
