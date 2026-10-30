@@ -8,7 +8,8 @@ const base='/isolated/qa-temp';
 const owned=path.join(base,'kts-issue18-headless-123456');
 const fakeFs={
   lstatSync:()=>({isDirectory:()=>true,isSymbolicLink:()=>false}),
-  realpathSync:p=>p
+  realpathSync:p=>p,
+  readdirSync:()=>[]
 };
 test('FAILED Chrome must preserve its generated profile as unresolved evidence',()=>{
   assert.equal(canCleanupChromeProfile(false,owned,base,fakeFs),false);
@@ -19,6 +20,24 @@ test('PASS only permits cleanup of exact owned first-level Chrome profile',()=>{
   assert.equal(canCleanupChromeProfile(true,path.join(base,'other-profile'),base,fakeFs),false);
   assert.equal(canCleanupChromeProfile(true,path.join(base,'child','kts-issue18-headless-foo'),base,fakeFs),false);
   assert.equal(canCleanupChromeProfile(true,path.join(base,'kts-issue18-headless-foo','..','user-file'),base,fakeFs),false);
+});
+test('successful profile cleanup refuses nested symlinks, junctions and special entries',()=>{
+  assert.equal(canCleanupChromeProfile(true,owned,base,{
+    ...fakeFs,readdirSync:dir=>dir===owned?[{
+      name:'Downloads',isSymbolicLink:()=>true,isDirectory:()=>false,isFile:()=>false
+    }]:[]
+  }),false);
+  assert.equal(canCleanupChromeProfile(true,owned,base,{
+    ...fakeFs,readdirSync:dir=>dir===owned?[{
+      name:'session',isSymbolicLink:()=>false,isDirectory:()=>true,isFile:()=>false
+    }]:[],
+    realpathSync:dir=>dir===path.join(owned,'session')?'/outside/redirect':dir
+  }),false);
+  assert.equal(canCleanupChromeProfile(true,owned,base,{
+    ...fakeFs,readdirSync:dir=>dir===owned?[{
+      name:'socket',isSymbolicLink:()=>false,isDirectory:()=>false,isFile:()=>false
+    }]:[]
+  }),false);
 });
 test('success cleanup refuses symlinks, nonfolders, redirected paths and unknown files',()=>{
   assert.equal(canCleanupChromeProfile(true,owned,base,{
