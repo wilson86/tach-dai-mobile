@@ -9,7 +9,7 @@
 - Mobile 2.0.38 / Unified 1.0.27 `f882330841a0e84d0f2ee29a75eed1cc1ae14b5b`.
 - Ngang 1.0.37 `afc777d01ba2346b7eb3a322afe9bbebc6068fc0`.
 - Owner's Windows receipt (2026-10-30T19:49:35Z) SHA-256 `e4728e595337bc9ac509398c2235fb1fdfd84188529c1455588a8a4b2fc7f93c`: **52/52 preflight checks**, isolated Chrome marker gate PASS, stage exact asset verification 21.
-- Exporter V2 SHA-256 `3a767f07dec8c5e7308ba4c588be285d8b8a710b3d217ac4198581e6e8934dfa`, committed to `scripts/KTS_issue18_prepare_preview.js` on the *distinct* preview-prep branch, with 7/7 focused Linux synthetic safety QA on identical Git blob. NOT Windows executed.
+- Exporter V2 SHA-256 `b37a5fa2864bfa203da63d7b5f8887dd2e98d58be87e228adab2eb315a19b85b`, committed to `scripts/KTS_issue18_prepare_preview.js` on the *distinct* preview-prep branch, with 8/8 focused Linux synthetic safety QA on identical Git blob. NOT Windows executed.
 
 ## Operator next-PC preparation — NO CODEX, no GitHub main merge, no deployment
 
@@ -20,8 +20,8 @@ Use ONE PowerShell block when owner is back at their authorized Windows C: PC. I
     $ErrorActionPreference = "Stop"
     $parent = "C:\KTS-QA"
     $file = Join-Path $parent "issue18-preview-export-v2.js"
-    $url = "https://raw.githubusercontent.com/wilson86/tach-dai-mobile/d2fa891f90ce1064996e9a9d293dbc90c0e58772/scripts/KTS_issue18_prepare_preview.js"
-    $expected = "3a767f07dec8c5e7308ba4c588be285d8b8a710b3d217ac4198581e6e8934dfa"
+    $url = "https://raw.githubusercontent.com/wilson86/tach-dai-mobile/2ca90e6b088bef194c06dd5d025c45670d5c56ce/scripts/KTS_issue18_prepare_preview.js"
+    $expected = "b37a5fa2864bfa203da63d7b5f8887dd2e98d58be87e228adab2eb315a19b85b"
 
     $rootItem = Get-Item -LiteralPath $parent -Force
     if (-not $rootItem.PSIsContainer -or
@@ -40,6 +40,10 @@ Use ONE PowerShell block when owner is back at their authorized Windows C: PC. I
 ```
 
 Expected successful JSON is `PREVIEW_FOLDER_READY_NOT_PUBLISHED`, `assets=21`, `release=NO_GO`. Export output `C:\KTS-QA\issue18-preview-upload-20261031` is new and separate; original 21-asset stage, the original stage manifest, and full native Windows JSON are retained. If blocked or partial export: **do not delete or overwrite output**, preserve failure as evidence, share the error for source-based diagnosis. If Node.exe is not installed in PATH, stop; no downloads/install are required as a troubleshooting shortcut.
+
+## Browser-isolation check added in exporter v3
+
+The prepared directory contains **one Cloudflare Pages `_headers` config**, in addition to the 21 SHA-pinned public assets and root landing page/robots/manifest. Cloudflare Pages interprets `_headers` (rather than serving it as app JavaScript) to set: `connect-src 'self'` and `frame-src 'self'` to prevent cross-origin app/iframe loads, `frame-ancestors 'self'` and `X-Frame-Options: SAMEORIGIN` to permit Unified's legitimate embedded child apps while preventing foreign sites embedding the preview, plus `X-Robots-Tag: noindex`. Source/test exact Git blob SHA-1 checked against locally executed test bytes. The **new** focused exporter test result is **8/8 PASS** locally on Linux; Cloudflare live HTTP response headers are **NOT_YET_OBSERVED**. Before Android money tests, independently inspect actual public preview HTTP response headers and verify CSP exists. `robots.txt` and `noindex` do not make the site private.
 
 ## New-origin HTTPS preview gate — explicit owner approval required
 
