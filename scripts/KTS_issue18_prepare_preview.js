@@ -39,7 +39,22 @@ function list(stage){
     }
   };walk(stage,'');return arr.sort();
 }
-function previewRoot(){return `<!doctype html>\n<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>KTS Issue #18 - PREVIEW ONLY</title></head><body><main><h1>KTS Issue #18 — BẢN THỬ NGHIỆM</h1><p>Chỉ thử với dữ liệu giả. Không sử dụng để nhận tin cược, xử lý tiền hoặc gửi Telegram. Bản này không phải production.</p><p><a href="./Mobile/app/">Mở KTS Unified (Tách Đài / Tách Ngang / Đá Vòng)</a></p><p>Ứng viên: Mobile 2.0.38 · Ngang 1.0.37 · Unified 1.0.27</p></main></body></html>\n`}
+function previewRoot(){return `<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>KTS Issue #18 - PREVIEW ONLY</title></head><body><main><h1>KTS Issue #18 — BẢN THỬ NGHIỆM</h1><p>Chỉ thử với dữ liệu giả. Không sử dụng để nhận tin cược, xử lý tiền hoặc gửi Telegram. Bản này không phải production.</p><p><a href="./Mobile/app/">Mở KTS Unified (Tách Đài / Tách Ngang / Đá Vòng)</a></p><p>Ứng viên: Mobile 2.0.38 · Ngang 1.0.37 · Unified 1.0.27</p></main></body></html>
+`}
+// Cloudflare Pages _headers applies to the entire separate-origin static
+// preview: prevent any phone test from loading customer/live endpoints or
+// embedding a production-mode Ngang iframe. Both child frames are same-origin.
+// Do not use frame-ancestors 'none': Unified legitimately embeds Mobile/Ngang.
+function previewHeaders(){return [
+  '/*',
+  "  Content-Security-Policy: default-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'none'; worker-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:",
+  '  X-Content-Type-Options: nosniff',
+  '  Referrer-Policy: no-referrer',
+  '  X-Robots-Tag: noindex, nofollow, noarchive',
+  '  X-Frame-Options: SAMEORIGIN',
+  ''
+].join('\n')}
 function exportPreview({root,stage,out,mobileSha,ngangSha,stageManifestSha},verifyFn){
   for(const p of [root,stage,out])if(typeof p!=='string'||!path.isAbsolute(p))stop('REQUIRES_ABSOLUTE_PATHS');
   const m=path.join(root,'Mobile'),n=path.join(root,'Ngang');
@@ -92,6 +107,7 @@ function exportPreview({root,stage,out,mobileSha,ngangSha,stageManifestSha},veri
   const welcome=previewRoot();
   fs.writeFileSync(path.join(out,'index.html'),welcome,{encoding:'utf8',flag:'wx'});
   fs.writeFileSync(path.join(out,'robots.txt'),'User-agent: *\nDisallow: /\n',{encoding:'utf8',flag:'wx'});
+  fs.writeFileSync(path.join(out,'_headers'),previewHeaders(),{encoding:'utf8',flag:'wx'});
   const manifest={schema:'KTS_ISSUE18_PREVIEW_EXPORT_V1',public_preview_only:true,release_authorized:false,
     forbidden_host:'wilson86.github.io',target_origin_policy:'SEPARATE_ORIGIN_REQUIRED',
     mobile_sha:mobileSha,ngang_sha:ngangSha,stage_manifest_sha256:stageManifestSha,
@@ -109,4 +125,4 @@ if(require.main===module){
     console.log(JSON.stringify(exportPreview(CONFIG,verify),null,2));
   }catch(e){console.error(e.message);process.exitCode=2;}
 }
-module.exports={CONFIG,MOBILE,NGANG,EXPECTED,exportPreview};
+module.exports={CONFIG,MOBILE,NGANG,EXPECTED,exportPreview,previewHeaders};
