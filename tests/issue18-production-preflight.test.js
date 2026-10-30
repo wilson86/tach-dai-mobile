@@ -2,7 +2,7 @@
 // Fail-closed CLI validation; no git, browser, workflow, production or network.
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {argsOf,admission,KTS_PYTESTS,MOBILE_TESTS,NGANG_TESTS}=require('../scripts/issue18-production-preflight.js');
+const {argsOf,admission,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS}=require('../scripts/issue18-production-preflight.js');
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
 const good=['--workspace','C:\\KTS-QA\\issue18',
   '--kts-sha',a,'--mobile-sha',b,'--ngang-sha',c];
@@ -38,6 +38,20 @@ test('release admission includes all audited regression tests but excludes live 
     assert.ok(MOBILE_TESTS.includes(required));
     assert.ok(NGANG_TESTS.includes(required));
   }
+});
+
+test('cross-surface JS admission is mandatory for N035 money and Cut/Undo ledger',()=>{
+  assert.deepEqual([...KTS_JS_TESTS],[
+    'KTSRouter/tests/test_n035_mode_specific_oracle.js',
+    'KTSRouter/tests/test_duplicate_approval_ui_parity.js',
+    'KTSRouter/tests/test_duplicate_cut_origin.js'
+  ]);
+  assert.equal(KTS_LEDGER_TEST,'KTSRouter/tests/test_legacy_ledger_retention.js');
+  assert.ok(Object.isFrozen(KTS_JS_TESTS),'cross-surface test gate must remain immutable');
+  assert.equal(new Set(KTS_JS_TESTS).size,KTS_JS_TESTS.length);
+  assert.ok(KTS_JS_TESTS.every(p=>/^KTSRouter\/tests\/test_[a-z0-9_]+\.js$/.test(p)));
+  assert.ok(!KTS_JS_TESTS.some(p=>/http|published|production|network/i.test(p)),
+    'no live endpoint or transport test in offline admission');
 });
 
 test('Router and Desktop N035 tests are offline source-bound only',()=>{
