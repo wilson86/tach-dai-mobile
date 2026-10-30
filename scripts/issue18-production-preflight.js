@@ -165,11 +165,9 @@ function admission(options,runCommand=processReadOnly){
   // Approved offline N035 Router/SQLite no-send and Desktop station-scope oracle.
   // Do not run historical scripts with hard-coded E: HTML paths, live runtime,
   // networked published checks, or external pytest plugins.
-  for(const file of KTS_PYTESTS){
-    const target=path.join(dirs.kts,file);
-    if(!fs.existsSync(target)||fs.lstatSync(target).isSymbolicLink())
-      block('MISSING_TEST','KTS/'+file);
-  }
+  // Every offline test source must stay inside its pinned C: repository;
+  // checking only lstat misses directory junctions inside tracked subfolders.
+  for(const file of KTS_PYTESTS) safeFile(dirs.kts,file);
   const kts=runCommand('python',['-B','-m','pytest','-q','-p','no:cacheprovider',
     ...KTS_PYTESTS],dirs.kts,180000);
   result.checks.push({name:'KTS_N035_ROUTER_SQLITE_AND_DESKTOP_OFFLINE',...kts});
@@ -197,9 +195,7 @@ function admission(options,runCommand=processReadOnly){
   for(const [name,dir,tests] of [
     ['MOBILE',dirs.mobile,MOBILE_TESTS],['NGANG',dirs.ngang,NGANG_TESTS]
   ])for(const test of tests){
-    const actual=path.join(dir,test);
-    if(!fs.existsSync(actual)||fs.lstatSync(actual).isSymbolicLink())
-      block('MISSING_TEST',name+'/'+test);
+    safeFile(dir,test);
     const r=runCommand(process.execPath,[test],dir,90000);
     result.checks.push({name:name+'/'+test,...r});
     if(r.exitCode!==0||r.error){result.status='BLOCKED_FOCUSED_TEST';return result;}
