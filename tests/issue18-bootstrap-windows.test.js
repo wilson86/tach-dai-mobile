@@ -76,7 +76,7 @@ function simulateBootstrap(existing,{dirty,wrongSha,junction}={}){
   const virtualFs={
     existsSync:p=>{
       const abs=win.resolve(p);
-      return ['C:\\\\','C:\\KTS-QA',root,'C:\\Temp'].includes(abs)||
+      return ["C:\\",'C:\\KTS-QA',root,'C:\\Temp'].includes(abs)||
         [...present].some(name=>abs===win.join(root,name)||abs===win.join(root,name,'.git'));
     },
     lstatSync:p=>({isDirectory:()=>true,
