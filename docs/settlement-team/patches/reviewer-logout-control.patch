@@ -1,0 +1,119 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 0d45f76..bed3559 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -407,2 +407,16 @@ function Capture-R6StageEvidence($Request,$Ready,[string]$Stage,[string]$Evidenc
+     $data=$localRecord;$query=$null
++  }elseif($Stage -in @('REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT')){
++    $phase=if($Stage -eq 'REVIEWER_SESSION_BEFORE_LOGOUT'){'BEFORE_LOGOUT'}else{'AFTER_LOGOUT'}
++    $start=([datetimeoffset]::Parse($result.started_utc)).ToUniversalTime().ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'",[Globalization.CultureInfo]::InvariantCulture)
++    $issued=$null
++    if($phase -eq 'AFTER_LOGOUT'){
++      $before=Get-Content -Raw -LiteralPath (Join-Path $EvidenceDir 'REVIEWER_SESSION_BEFORE_LOGOUT.evidence.json')|ConvertFrom-Json
++      Assert-True ($before.status -eq 'PASS' -and $before.session_id -eq $run) 'REVIEWER_SESSION_BASELINE_MISSING'
++      $issued=[string]$before.snapshot.issued_at
++    }
++    $query=Get-KtsReviewerSessionObservationSql -Phase $phase -Workspace $w -Reviewer ([string]$Ready.ids.reviewer) -SessionStartUtc $start -IssuedAtUtc $issued
++    $rows=@(Psql @('-X','-q','-t','-A','-v','ON_ERROR_STOP=1','-h','127.0.0.1','-p','55434','-U',$auth,'-d',$Database,'-c',$query) $ap|Where-Object {$_ -and $_.ToString().Trim()})
++    Assert-True ($rows.Count -eq 1) 'REVIEWER_SESSION_SQL_ROW_COUNT_INVALID'
++    $data=$rows[0]|ConvertFrom-Json
++    Assert-KtsReviewerSessionObservation -Phase $phase -Snapshot $data -ExpectedAuthRole $auth
+   }elseif($Stage -eq 'CROSS_WORKSPACE_RLS'){
+@@ -513,3 +527,3 @@ function Invoke-R6AndroidEvidenceLifecycle($Service,$Ready,[string]$StopPath,[da
+   $stageDir=Join-Path $evidence 'R6_STAGES'
+-  $stageOrder=@('LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS');$stageIndex=0;$driverRegistered=$false
++  $stageOrder=@('LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT');$stageIndex=0;$driverRegistered=$false
+   $registrationDeadline=[datetimeoffset]::UtcNow.AddSeconds(30)
+@@ -666,2 +680,3 @@ try {
+     'team-settlement/windows-r6-rls-baseline.ps1'='F17608F91EC43577DDBE5F9D4ED8BE0A4ADFFFA44B21EC3C730F5B2D6D9F1CF9'
++    'team-settlement/windows-reviewer-session-observation.ps1'='582318B7EAE3C8B41B3B0CEEB125B617D6BAA30BF78B714461490906C3A62BEF'
+   }
+@@ -670,2 +685,3 @@ try {
+   $expectedDirty+=@('?? team-settlement/windows-r6-rls-baseline.ps1')
++  $expectedDirty+=@('?? team-settlement/windows-reviewer-session-observation.ps1')
+   Assert-True (((@($dirty|Sort-Object) -join '|') -eq (@($expectedDirty|Sort-Object) -join '|'))) 'SOURCE_WORKTREE_UNEXPECTED'
+@@ -676,5 +692,6 @@ try {
+   . (Join-Path $repo 'team-settlement\windows-r6-rls-baseline.ps1')
++  . (Join-Path $repo 'team-settlement\windows-reviewer-session-observation.ps1')
+   Assert-True (Test-Path -LiteralPath $controller) 'ADMISSION_CONTROLLER_ARTIFACT_MISSING'
+   Assert-True ((Get-KtsSha256 $controller) -eq $approvedSource['tests/settlement-team-windows-pilot-controller.cjs']) 'ADMISSION_CONTROLLER_ARTIFACT_HASH_MISMATCH'
+-  Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq '6F4C8CAD03ED969DAA4501459E5CD88097DFD47D559FFA0FF6DB662BFF530C36') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
++  Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq 'BE6D36AE91770C166369B4AB78F38303125D44E762121CB859ED46EFDC77EFDF') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
+   if($OfflineR6Lifecycle){
+@@ -692,3 +709,3 @@ try {
+     $r6EvidenceType='MOCKED_POSTGRESQL_CONTRACT';$r6LocalEvidenceType='MOCKED_ANDROID_LOCAL_STORAGE'
+-    $bootstrap='fixture_bootstrap';$ledger='fixture_ledger';$db='fixture_db';$bp='fixture';$lp='fixture'
++    $bootstrap='fixture_bootstrap';$ledger='fixture_ledger';$auth='l20_auth_fixture';$db='fixture_db';$bp='fixture';$lp='fixture';$ap='fixture'
+     function Psql([string[]]$psqlArguments,[string]$password){
+@@ -698,2 +715,9 @@ try {
+       [IO.File]::AppendAllText((Join-Path $evidence 'MOCK_SQL_CALLS.jsonl'),(($record|ConvertTo-Json -Compress)+[Environment]::NewLine))
++      if($script:r6CurrentStage -in @('REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT')){
++        Assert-True ($role -eq $auth -and $sql.Contains('kts_auth.sessions')) 'R6_FIXTURE_AUTH_ROLE_INVALID'
++        $observation=[ordered]@{role=$auth;superuser=$false;bypass=$false;owned_count=0;active_count=1;issued_at=([datetimeoffset]::UtcNow.AddSeconds(1).ToString("yyyy-MM-dd'T'HH:mm:ss.ffffff'Z'",[Globalization.CultureInfo]::InvariantCulture))}
++        if($script:r6CurrentStage -eq 'REVIEWER_SESSION_AFTER_LOGOUT'){$observation.active_count=0;$observation.matching_count=1;$observation.revoked_count=1}
++        if($r6Fixture.scenario -eq 'reviewer_logout_not_revoked' -and $script:r6CurrentStage -eq 'REVIEWER_SESSION_AFTER_LOGOUT'){$observation.revoked_count=0}
++        return ($observation|ConvertTo-Json -Compress)
++      }
+       if($script:r6CurrentStage -eq 'CROSS_WORKSPACE_RLS'){
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 49ab083..66e9345 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -108,6 +108,6 @@ if($OfflineProcessExitSelfTest){
+ function Assert-AndroidDriverIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '6F4C8CAD03ED969DAA4501459E5CD88097DFD47D559FFA0FF6DB662BFF530C36') 'ANDROID_DRIVER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq 'BE6D36AE91770C166369B4AB78F38303125D44E762121CB859ED46EFDC77EFDF') 'ANDROID_DRIVER_SOURCE_DRIFT'
+ }
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '842E15F5A974B8339389F80C4D064F3544FDDE4053736FD13EEC5B5B5554DA34') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '7616B1EBCC1F1EFB351653BF443CA32650F7C859E5130875D89398C5FC4A426D') 'R6_RUNNER_SOURCE_DRIFT'
+ }
+@@ -213,3 +213,3 @@ function Invoke-AndroidDriverAndHandoff([string]$Root,$Ready,$ReadyContract,[str
+     Assert-AndroidWorkflowReceipt $workflowReceipt -Rootless:$Rootless
+-    $expectedStages=@('LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS')
++    $expectedStages=@('LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT')
+     foreach($stage in $expectedStages){
+@@ -230,3 +230,3 @@ function Invoke-AndroidDriverAndHandoff([string]$Root,$Ready,$ReadyContract,[str
+ function Complete-R6RunnerCleanup([string]$Root,$RunnerProcess){
+-  $ev=Join-Path $Root 'evidence';$cleanup=[ordered]@{status='FAIL';stage='FINAL_CLEANUP';sequence=8;session_id=$null;runner_exit_code=$null;watchdog='NOT_RUN';supervisor='NOT_RUN';owned_processes_closed=$false}
++  $ev=Join-Path $Root 'evidence';$cleanup=[ordered]@{status='FAIL';stage='FINAL_CLEANUP';sequence=10;session_id=$null;runner_exit_code=$null;watchdog='NOT_RUN';supervisor='NOT_RUN';owned_processes_closed=$false}
+   try{
+diff --git a/android-chrome-cdp-workflow.cjs b/android-chrome-cdp-workflow.cjs
+index 16b5f75..42be911 100644
+--- a/android-chrome-cdp-workflow.cjs
++++ b/android-chrome-cdp-workflow.cjs
+@@ -29,3 +29,3 @@ if((staleStartReproduction||failWithPicker) && mode!=='fixture')throw Error('AND
+ const driverDeadline=performance.now()+10*60*1000;
+-const milestones=['LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS'];
++const milestones=['LOCAL_PENDING','PRE_SYNC_SQL_ABSENCE','SYNC_COMMITTED','SUBMITTED','REVIEWED','RELOADED','CROSS_WORKSPACE_RLS','REVIEWER_SESSION_BEFORE_LOGOUT','REVIEWER_SESSION_AFTER_LOGOUT'];
+ let stage='STARTUP';
+@@ -242,3 +242,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+       await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_LOGOUT_TIMEOUT');evidenceItems.push(await expectWorkspaceDenied(credentials.operator,credentials.password,credentials.workspace_id));await login(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer');await chooseScope(partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('PENDING_REVIEW')`,'ANDROID_PENDING_REVIEW_READ_TIMEOUT');await clickVisible('team-approve-review');await waitFor(`document.getElementById('team-review-attempts').textContent.includes('SYNCED')`,'ANDROID_APPROVE_TIMEOUT');await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_TIMEOUT');evidenceItems.push(await ui('android-reviewed'));evidenceItems.push(await screenshot('android-reviewed'));
+-      await sqlStage('REVIEWED',partner);await reloadAndRelogin(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer-reloaded',partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_RELOAD_TIMEOUT');evidenceItems.push(await ui('android-reviewed-reloaded'));await sqlStage('RELOADED',partner);await sqlStage('CROSS_WORKSPACE_RLS',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_FINAL_LOGOUT_TIMEOUT');evidenceItems.push(await ui('android-final-logout'));
++      await sqlStage('REVIEWED',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_REVIEWER_PRE_RELOAD_LOGOUT_TIMEOUT');await reloadAndRelogin(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer-reloaded',partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_RELOAD_TIMEOUT');evidenceItems.push(await ui('android-reviewed-reloaded'));await sqlStage('RELOADED',partner);await sqlStage('CROSS_WORKSPACE_RLS',partner);await sqlStage('REVIEWER_SESSION_BEFORE_LOGOUT',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_FINAL_LOGOUT_TIMEOUT');evidenceItems.push(await ui('android-final-logout'));await sqlStage('REVIEWER_SESSION_AFTER_LOGOUT',partner);
+     }
+diff --git a/tests/r6-rootless-integration.test.cjs b/tests/r6-rootless-integration.test.cjs
+index 6f097e8..4bc9fd6 100644
+--- a/tests/r6-rootless-integration.test.cjs
++++ b/tests/r6-rootless-integration.test.cjs
+@@ -45,3 +45,3 @@ for(const scenario of scenarios){
+   const checks={actual_wrapper_entrypoint:!!evidence,expected_status:evidence?.status===expected,expected_exit:result.status===(expected==='PASS'?0:1),cleanup:evidence?.cleanup?.status==='PASS',watchdog:evidence?.cleanup?.watchdog===(scenario==='deadline_expired'?'NOT_RUN':'PASS'),supervisor:evidence?.cleanup?.supervisor===(scenario==='deadline_expired'?'NOT_RUN':'PASS'),no_postgres_root:!fs.existsSync(path.join(cfg.workdir,'pgdata')),no_lease:evidence?.lease_created===false};
+-  const expectedRunnerFailures={invalid_event_identity:'R6_COMMITTED_EVENT_CHANGED',receipt_mismatch:'R6_STAGE_RECEIPT_JOIN_INVALID',cleanup_failure:'GALAXY_SERVICE_STOP_FAILED_23',invalid_session:'R6_STAGE_SESSION_OR_ACTOR_MISMATCH',rls_bypass:'R6_RLS_ISOLATION_FAILED',duplicate_sql_event:'R6_STAGE_DUPLICATE_OR_DRAFT_MISMATCH',pre_sync_event:'R6_STAGE_COUNTS_INVALID',reload_drift:'R6_COMMITTED_EVENT_CHANGED',rls_reverse_leak:'R6_RLS_REVERSE_ISOLATION_FAILED',force_rls_disabled:'R6_FORCE_RLS_TABLE_NOT_ENABLED',missing_session_id:'R6_DRIVER_HANDSHAKE_INVALID',invalid_source_hash:'R6_STAGE_SEQUENCE_OR_SOURCE_INVALID'};
++  const expectedRunnerFailures={reviewer_logout_not_revoked:'REVIEWER_SESSION_REVOCATION_UNVERIFIED',invalid_event_identity:'R6_COMMITTED_EVENT_CHANGED',receipt_mismatch:'R6_STAGE_RECEIPT_JOIN_INVALID',cleanup_failure:'GALAXY_SERVICE_STOP_FAILED_23',invalid_session:'R6_STAGE_SESSION_OR_ACTOR_MISMATCH',rls_bypass:'R6_RLS_ISOLATION_FAILED',duplicate_sql_event:'R6_STAGE_DUPLICATE_OR_DRAFT_MISMATCH',pre_sync_event:'R6_STAGE_COUNTS_INVALID',reload_drift:'R6_COMMITTED_EVENT_CHANGED',rls_reverse_leak:'R6_RLS_REVERSE_ISOLATION_FAILED',force_rls_disabled:'R6_FORCE_RLS_TABLE_NOT_ENABLED',missing_session_id:'R6_DRIVER_HANDSHAKE_INVALID',invalid_source_hash:'R6_STAGE_SEQUENCE_OR_SOURCE_INVALID'};
+   if(expectedRunnerFailures[scenario])checks.demonstrated_failure_cause=evidence?.runner_failure===expectedRunnerFailures[scenario];
+@@ -61,4 +61,4 @@ for(const scenario of scenarios){
+     const cleanupProof=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','FINAL_CLEANUP.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.final_cleanup_milestone=cleanupProof.stage==='FINAL_CLEANUP'&&cleanupProof.sequence===8;
+-    if(['invalid_event_identity','receipt_mismatch','rls_bypass','duplicate_sql_event','pre_sync_event','reload_drift','rls_reverse_leak','force_rls_disabled','invalid_session','invalid_source_hash'].includes(scenario)){
++    checks.final_cleanup_milestone=cleanupProof.stage==='FINAL_CLEANUP'&&cleanupProof.sequence===10;
++    if(['reviewer_logout_not_revoked','invalid_event_identity','receipt_mismatch','rls_bypass','duplicate_sql_event','pre_sync_event','reload_drift','rls_reverse_leak','force_rls_disabled','invalid_session','invalid_source_hash'].includes(scenario)){
+       const failed=fs.readdirSync(path.join(cfg.workdir,'evidence','R6_STAGES')).filter(x=>x.endsWith('.receipt.json')).map(x=>JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_STAGES',x),'utf8').replace(/^\uFEFF/,''))).find(x=>x.status==='FAIL');
+@@ -69,3 +69,3 @@ for(const scenario of scenarios){
+     const completion=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_MILESTONE_COMPLETION.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.milestone_count=completion.stage_count===7;
++    checks.milestone_count=completion.stage_count===9;
+     const pending=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_STAGES','PRE_SYNC_SQL_ABSENCE.evidence.json'),'utf8').replace(/^\uFEFF/,''));
+@@ -75,2 +75,3 @@ for(const scenario of scenarios){
+     checks.restricted_rls_query=calls.some(x=>x.stage==='CROSS_WORKSPACE_RLS'&&x.role==='fixture_ledger'&&x.query.includes('SET LOCAL kts.workspace_id=')&&x.query.includes('ROLLBACK'));
++    checks.reviewer_session_observed=calls.filter(x=>x.stage.startsWith('REVIEWER_SESSION_')&&x.role==='l20_auth_fixture'&&x.query.includes('kts_auth.sessions')).length===2;
+     checks.final_sql_collection=calls.some(x=>x.stage==='FINAL');
