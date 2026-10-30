@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,run}=require('../scripts/issue18-run-windows.js');
+const {parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplete,run}=require('../scripts/issue18-run-windows.js');
 test('source workspace and C-only evidence defaults remain separate',()=>{
  assert.deepEqual(parseArgs([]),{'--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence'});
  assert.equal(overlapsWorkspace('C:\\KTS-QA\\issue18-review','C:\\KTS-QA\\issue18-evidence'),false);
@@ -21,6 +21,19 @@ test('browser pilot is opt-in and no extra tokens are accepted',()=>{
  assert.throws(()=>parseArgs(['--chrome','--workspace','C:\\QA','--evidence','C:\\receipts']),/USAGE/);
  assert.throws(()=>parseArgs(['--chrome','--chrome']),/USAGE/);
 });
+test('real Chrome exit code alone cannot qualify absent offline/Cut/N035 receipts',()=>{
+ const markers=[
+  'ISSUE18_PUBLIC_CHROME_CUT_RELOAD_UNDO_PASS',
+  'ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS',
+  'ISSUE18_PUBLIC_CHROME_N035_THURSDAY_EXACT_ORACLE_PASS',
+  'ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS ["/Mobile/"]',
+  'ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS {"origin":"http://127.0.0.1"}'
+ ];
+ assert.equal(chromeReceiptsComplete(markers.join('\n')),true);
+ for(let i=0;i<markers.length;i++)
+  assert.equal(chromeReceiptsComplete(markers.filter((_,j)=>j!==i).join('\n')),false);
+ assert.equal(chromeReceiptsComplete(''),false);
+}
 test('Git command policy refuses Git optional writes and credential prompt',()=>{
  assert.equal(READ_ONLY_GIT_ENV.GIT_OPTIONAL_LOCKS,'0');
  assert.equal(READ_ONLY_GIT_ENV.GIT_TERMINAL_PROMPT,'0');
