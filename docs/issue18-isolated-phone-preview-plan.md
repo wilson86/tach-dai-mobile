@@ -17,7 +17,7 @@ Owner's Windows JSON `issue18-2026-10-30T19-49-35-266Z-26104.json` (SHA-256 `e47
 
 A second repository at `https://wilson86.github.io/other-repo/` remains on the SAME `https://wilson86.github.io` origin as the currently used apps. `localStorage` and Cache Storage are origin-scoped (even when service workers have distinct path scopes). This can corrupt or cross-contaminate legacy Cut/Undo/ledger/cache expectations. **Never claim a same-origin GitHub Pages subpath is an isolated phone preview.**
 
-An independently verified free-tier host with a **different origin** (for example, a dedicated `.pages.dev` project) can technically host a self-contained static folder. Cloudflare Pages Direct Upload accepts a local folder or ZIP through its dashboard; free-tier limits must remain respected, with no paid upgrades or account/billing changes. Publishing even a preview requires **separate owner consent** and access to that provider. Static preview would ordinarily be accessible to anyone who discovers its URL; `robots.txt` alone is not access control. Do not upload private KTS/Router code, personal/customer tickets or secrets.
+An independently verified free-tier host with a **different origin** (for example, a dedicated `.pages.dev` project) can technically host a self-contained static folder. Cloudflare Pages Direct Upload accepts a local folder or ZIP through its dashboard; free-tier limits must remain respected, with no paid upgrades or account/billing changes. Cloudflare's official documented drag-and-drop Direct Upload supports folder/ZIP, maximum 1,000 files in a single upload and 25 MiB per asset; this static preview will have 25 small files. Docs: https://developers.cloudflare.com/pages/get-started/direct-upload/ and https://developers.cloudflare.com/pages/platform/limits/. Publishing even a preview requires **separate owner consent** and access to that provider. Static preview would ordinarily be accessible to anyone who discovers its URL; `robots.txt` alone is not access control. Do not upload private KTS/Router code, personal/customer tickets or secrets.
 
 ## Source-pinned staging and safe export
 
@@ -29,22 +29,22 @@ Stage manifest SHA-256:
 
 `scripts/issue18-verify-stage.js` on immutable Mobile SHA validates **21** public allowlisted assets, exact SHA/source bytes, local Ngang iframe `../../Ngang/`, 3-version/engine identity, and `release_authorized:false`.
 
-One standalone operator-prepared export helper was developed in ChatGPT container:
+A GitHub-pinned offline preview export helper and its focused tests are committed **on this preview-prep branch only** (the actual qualified application SHA remains unchanged):
 
 - Filename: `KTS_issue18_prepare_preview.js`
-- Exact SHA-256: `4c4b11489440b5ff0e153a53c9dcc1b1471df924375e065e2dca2db98d1900d6`
-- Paired focused offline test source: `KTS_issue18_prepare_preview.test.js`
-- Test source SHA-256: `c0861642aae61092d2839c02f517a427cf5cd6faa04bcc373ad07c7e609ac7e3`
-- Synthetic Linux Node 22 focused QA: **5 PASS, 0 FAIL**. This is **NOT Windows execution**, not production deployment, not Android acceptance.
-- Runtime requires Windows, normal nonlinked C: source checkout, *existing* verified stage and normal C: output parent; calls original source-bounded stage verifier. Fails if any extra/linked/corrupted/unexpected stage files or if preview export destination already exists; creates only NEW `C:\KTS-QA\issue18-preview-upload-20261031`. No overwrite, deletion, Git actions, credentials, network, CI or publishing.
+- Source: `scripts/KTS_issue18_prepare_preview.js`; SHA-256: `3a767f07dec8c5e7308ba4c588be285d8b8a710b3d217ac4198581e6e8934dfa`; Git blob SHA: `4f6ebae95baf12c3451df089402fb62cb4659a4f`.
+- Focused source test: `scripts/KTS_issue18_prepare_preview.test.js` (run with `node --test scripts/KTS_issue18_prepare_preview.test.js`).
+- Test SHA-256: `0e23355aff877f8c66bdfa2e22edaf5cf9096dca61fbb9ffd2c80169889ddbaa`; Git blob SHA: `c7ea744b6d60b39fd6d6cbc16d9cc06ee337b252`.
+- Synthetic Linux Node 22 focused QA: **7 PASS, 0 FAIL**, including two negative tests for post-verifier manifest and asset mutation. Code SHA identity on GitHub verified against `git hash-object` of independently tested local bytes. This is **NOT Windows execution**, not production deployment, not Android acceptance.
+- Runtime requires Windows, normal nonlinked C: source checkout, *existing* verified stage and normal C: output parent; calls original source-bounded stage verifier and rebinds every exported byte to the exact original stage manifest after validation. Fails if any extra/linked/corrupted/unexpected stage files or if preview export destination already exists; creates only NEW `C:\KTS-QA\issue18-preview-upload-20261031`. No overwrite, deletion, Git actions, credentials, network, CI or publishing.
 - Export copies **only 21 public staged asset bytes**, with already rewritten same-origin Ngang iframe `../../Ngang/` and Unified service-worker paths rooted at `/Mobile/`, plus nonproduction entry page/robots and per-file SHA manifest. It intentionally excludes private KTS/Router sources and local `ISSUE18_STAGE_MANIFEST.json` from upload. Hosted URL would be `https://<separate-preview-origin>/Mobile/app/`, not `/<repo>/Mobile/app/`. Do not upload the original whole C: evidence directory.
 
-IMPORTANT: The generated standalone source currently exists as conversation artifact and is NOT committed in this documentation-only branch. Verify its SHA-256 before executing it; never run arbitrary lookalike downloads. A source-authorized operator may run it locally to prepare the folder, but **publishing this folder still requires separate consent**.
+IMPORTANT: The older conversation attachment with SHA-256 `4c4b11489440b5ff0e153a53c9dcc1b1471df924375e065e2dca2db98d1900d6` is **superseded**; use only the new exact GitHub-pinned source with SHA-256 `3a767f07dec8c5e7308ba4c588be285d8b8a710b3d217ac4198581e6e8934dfa`. Do not run it while the PC is off. No independent native Windows QA has yet been executed on this helper. Export is not publication; **publishing this folder still requires separate owner consent**.
 
 ## Three-role release gate
 
 - **Project director:** Existing old URLs must remain unmodified while new preview is qualified. Production Pages `.github/workflows/deploy-pages.yml` triggers on pushes to `main` for BOTH public repositories; a main merge is immediate production-effecting, not preview. Both original Draft PRs (#23 Mobile, #15 Ngang) contain outdated coordinated SHA pins. No merge.
-- **Independent reviewer role:** Application candidate and 21 staged assets are SHA-bound; preview export helper 5/5 synthetic tests alone is not an uploaded/Android PASS. Other oracle cases remain fail-closed. Need manual full-cut/quota/device/old-origin cache acceptance on actual phone and coordinated rollback readiness.
+- **Independent reviewer role:** Application candidate and 21 staged assets are SHA-bound; preview export helper 7/7 synthetic tests alone is not an uploaded/Android PASS. Other oracle cases remain fail-closed. Need manual full-cut/quota/device/old-origin cache acceptance on actual phone and coordinated rollback readiness.
 - **End user:** The new preview is a different-origin standalone test. Only synthetic wagers. Test N035 Tách Đài vs Ngang exact amount, singleton Đá Vòng rejection, full/partial Cut -> reload -> Undo, original-message and ledger preservation, wrong-date HOLD, offline, update and reinstall.
 
 ## Stop/rollback controls
