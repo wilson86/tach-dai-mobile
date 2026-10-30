@@ -326,3 +326,37 @@ The bootstrap tool has two modes: no `--run-chrome` means **prepare/validate exa
 **Three-role decision:** Project director — eliminate QA hang on early browser staging failure, release NO_GO; independent reviewer role — original 404 leak REPRODUCED, fixed 5/5 source-executed mock regressions, native Windows NOT_RUN; end user — physical Cut/Undo/ledger/reload/offline/money accuracy remains unqualified on Windows/Android. `COST_USD=0; CODEX=NOT_USED; NO_MERGE=YES; NO_DEPLOY=YES; PROD_MUTATION=NONE; E_F_ACCESS=NONE; SKILLS=MANUAL_ONLY; CONTEXT=ELEVATED; RELEASE=NO_GO.`
 
 `CLEANUP_STATUS=NO_ACTION; FILES_REMOVED=0; SPACE_RECOVERED_MB=0; FILES_PRESERVED=all user and GitHub source/evidence/Git repositories; CLEANUP_BLOCKERS=native Node file retrieval unavailable due sandbox DNS (no files generated).`
+
+---
+## Calendar authority hash realignment — 2026-10-31 (candidate only, NO_GO)
+
+Real operator-run Windows gate at original `C:\KTS-QA\issue18-review` stopped at
+`BLOCKED_GENERATOR`, after exact canonical input bytes passed. Generator strict `--check`
+listed ONLY `Mobile/station_calendar.generated.js`,
+`Ngang/station_calendar.generated.js`, and
+`KTS/SharedBusinessEngine/BUILD_MANIFEST.json` as stale.
+
+**Verified root cause:** Both generated JS calendars embed legacy raw authority SHA-256
+`d2945b65f5ec90712c26c2700c9221ff93a006f1fcd0a17e877a23688b73851d`
+but immutable KTS canonical `calendar_authority.json` raw bytes SHA-256 is
+`edb384eadc4bb1bf9109727247776109fcc7d23835d7e8114076ff207bd5296d`.
+Old generated JS SHA-256 `fe0ac299505f1f198a69628f93e88c4a10faa2a04911bfa161e6f3426fbf4365`
+becomes `473d40e7415e8eff52a678fb850bbc48cd30f87b207cf94832c5856718ea76d5`
+with only that authority digest aligned. Engine identity
+`7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea`
+and station schedules remain unchanged.
+
+**Coordinated review branches (not releases):**
+- `wilson86/KTS:review/issue18-calendar-hash-reconcile-20261031@6210266f34620e4092d38605d970009e5579ef8b`: manifest's two generated JS artifact digests corrected.
+- `wilson86/tach-dai-ngang:review/issue18-calendar-hash-reconcile-20261031@afc777d01ba2346b7eb3a322afe9bbebc6068fc0`: generated JS authority digest corrected.
+- Mobile review helper branch of same name: generated JS and Windows exact SHA pins refreshed. Its full SHA must be independently resolved from a new checkpoint after all file edits.
+
+**No reuse of the old C: workspace**: old checkout and failed receipt are required rollback/evidence.
+New operator bootstrap explicitly uses separate `C:\KTS-QA\issue18-calendar-review`,
+with receipts at `C:\KTS-QA\issue18-calendar-evidence`.
+It remains fail-closed on existing unknown/dirty paths; no auto clean/reset.
+
+**QA scope:** static inspected GitHub outputs and SHA-256 provenance only; native generator
+strict `--check` on **new branch set NOT_RUN**; Windows Chrome/Android NOT_RUN.
+No paid/private CI; no Telegram/ACK, no production source mutation, merge or deploy.
+`COST_USD=0; RELEASE=NO_GO`.
