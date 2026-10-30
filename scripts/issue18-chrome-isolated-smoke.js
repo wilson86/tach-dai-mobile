@@ -63,14 +63,18 @@ function serve(stage){
 }
 async function chromeSmoke(stage){
   ensure(path.isAbsolute(stage)&&fs.statSync(stage).isDirectory(),'stage must be existing absolute directory');
-  const server=serve(stage);await new Promise((yes,no)=>server.once('error',no).listen(0,'127.0.0.1',yes));
-  const origin='http://127.0.0.1:'+server.address().port;
-  const served=await fetch(origin+'/Mobile/app/');
-  ensure(served.ok&&((await served.text()).includes('id="tachFrame"')),'loopback server did not serve the real Unified HTML');
-  const profile=fs.mkdtempSync(path.join(os.tmpdir(),'kts-issue18-headless-'));
-  const chrome=process.env.CHROME_PATH||'google-chrome';
-  let child,ws,smokePassed=false;
+  // The initial loopback listen/fetch/HTML gate belongs inside this same
+  // finally scope. Otherwise a failed /Mobile/app/ fetch leaks the server,
+  // leaving Node hanging until an unrelated outer timeout obscures the cause.
+  const server=serve(stage);
+  let profile,child,ws,smokePassed=false;
   try{
+    await new Promise((yes,no)=>server.once('error',no).listen(0,'127.0.0.1',yes));
+    const origin='http://127.0.0.1:'+server.address().port;
+    const served=await fetch(origin+'/Mobile/app/');
+    ensure(served.ok&&((await served.text()).includes('id="tachFrame"')),'loopback server did not serve the real Unified HTML');
+    profile=fs.mkdtempSync(path.join(os.tmpdir(),'kts-issue18-headless-'));
+    const chrome=process.env.CHROME_PATH||'google-chrome';
     const args=['--headless=new','--disable-gpu','--disable-dev-shm-usage','--no-sandbox',
       '--no-first-run','--no-default-browser-check','--disable-extensions','--disable-background-networking',
       '--remote-allow-origins=*','--remote-debugging-port=0','--user-data-dir='+profile,
@@ -348,11 +352,13 @@ async function chromeSmoke(stage){
       if(child.exitCode===null)child.kill('SIGKILL');
     }
     await new Promise(ok=>server.close(ok));
-    if(canCleanupChromeProfile(smokePassed,profile,os.tmpdir())){
-      try{fs.rmSync(profile,{recursive:true,force:true,maxRetries:4,retryDelay:150})}
-      catch(e){console.error('CHROME_TEST_PROFILE_CLEANUP_ONLY: '+e.message)}
-    }else{
-      console.error('CHROME_TEST_PROFILE_PRESERVED_FOR_REVIEW '+profile);
+    if(profile){
+      if(canCleanupChromeProfile(smokePassed,profile,os.tmpdir())){
+        try{fs.rmSync(profile,{recursive:true,force:true,maxRetries:4,retryDelay:150})}
+        catch(e){console.error('CHROME_TEST_PROFILE_CLEANUP_ONLY: '+e.message)}
+      }else{
+        console.error('CHROME_TEST_PROFILE_PRESERVED_FOR_REVIEW '+profile);
+      }
     }
   }
 }
