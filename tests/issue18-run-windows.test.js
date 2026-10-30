@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplete,run}=require('../scripts/issue18-run-windows.js');
+const {parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplete,assertExactMobileCommit,run}=require('../scripts/issue18-run-windows.js');
 const PIN='a'.repeat(40);
 test('source workspace and C-only evidence defaults remain separate',()=>{
  assert.deepEqual(parseArgs(['--mobile-sha',PIN]),{
@@ -44,6 +44,12 @@ test('any unreviewed or missing exact Mobile commit is refused before checkout a
  assert.throws(()=>parseArgs(['--mobile-sha','b'.repeat(39)]),/MOBILE_EXACT_SHA_REQUIRED/);
  assert.throws(()=>parseArgs(['--mobile-sha','B'.repeat(40)]),/MOBILE_EXACT_SHA_REQUIRED/);
  assert.throws(()=>parseArgs(['--mobile-sha',PIN,'--mobile-sha',PIN]),/USAGE/);
+});
+test('exact reviewed SHA comparison rejects unapproved descendants',()=>{
+ assert.doesNotThrow(()=>assertExactMobileCommit(PIN,PIN));
+ assert.throws(()=>assertExactMobileCommit('b'.repeat(40),PIN),/SOURCE_DRIFT/);
+ assert.throws(()=>assertExactMobileCommit(PIN,'b'.repeat(40)),/SOURCE_DRIFT/);
+ assert.throws(()=>assertExactMobileCommit(PIN,undefined),/MOBILE_EXACT_SHA_REQUIRED/);
 });
 test('Git command policy refuses Git optional writes and credential prompt',()=>{
  assert.equal(READ_ONLY_GIT_ENV.GIT_OPTIONAL_LOCKS,'0');
