@@ -8,11 +8,13 @@ const REVIEW_BRANCH='review/issue18-offline-parity-gate-20261030';
 const READ_ONLY_GIT_ENV=Object.freeze({GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0'});
 function block(code){const e=new Error(code);e.code=code;throw e}
 function parseArgs(args){
-  if(args.length!==0&&args.length!==4)block('USAGE');
+  const chrome=args.at(-1)==='--chrome';
+  const words=chrome?args.slice(0,-1):args;
+  if(words.length!==0&&words.length!==4)block('USAGE');
   const result={'--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence'};
-  for(let i=0;i<args.length;i+=2){if(!Object.hasOwn(result,args[i])||!args[i+1]||result._seen?.includes(args[i]))block('USAGE');
-    result._seen??=[];result._seen.push(args[i]);result[args[i]]=args[i+1];}
-  delete result._seen;return result;
+  for(let i=0;i<words.length;i+=2){if(!Object.hasOwn(result,words[i])||!words[i+1]||result._seen?.includes(words[i]))block('USAGE');
+    result._seen??=[];result._seen.push(words[i]);result[words[i]]=words[i+1];}
+  delete result._seen;if(chrome)result._chrome=true;return result;
 }
 function cOnly(p){if(process.platform!=='win32'||!path.win32.isAbsolute(p)||!/^C:\\/i.test(p))block('C_ONLY');return path.win32.resolve(p)}
 function safeExisting(p){
@@ -45,8 +47,53 @@ function overlapsWorkspace(workspace,evidence){
   const b=path.win32.normalize(evidence).replace(/\\+$/,'').toLowerCase();
   return a===b||a.startsWith(b+'\\')||b.startsWith(a+'\\');
 }
+function selectChrome(){
+  const supplied=process.env.CHROME_PATH;
+  const candidates=supplied?[supplied]:[
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
+  ];
+  for(const name of candidates){
+    if(!name)continue;
+    if(fs.existsSync(name)){
+      const checked=safeExisting(name);
+      if(!fs.statSync(checked).isFile())block('CHROME_NOT_FILE');
+      return checked;
+    }
+  }
+  block(supplied?'CHROME_PATH_UNAVAILABLE':'CHROME_NOT_INSTALLED_C');
+}
+function browserAfterAdmission({root,evidence,p,stamp}){
+  const chrome=selectChrome();
+  // This directory is generated *only after* exact source/QA gates passed.
+  // Stage and Chrome profile are local disposable evidence, never production.
+  const stageDir=path.win32.join(evidence,`issue18-stage-${stamp}-${process.pid}`);
+  const {stage}=require('./issue18-build-local-stage.js');
+  const {verify}=require('./issue18-verify-stage.js');
+  stage({mobile:p.paths.Mobile,ngang:p.paths.Ngang,out:stageDir,
+    mobileSha:p.source.mobile,ngangSha:p.source.ngang});
+  const stageReceipt=verify({mobile:p.paths.Mobile,ngang:p.paths.Ngang,out:stageDir,
+    mobileSha:p.source.mobile,ngangSha:p.source.ngang});
+  if(stageReceipt.status!=='STAGE_SOURCE_BYTES_PASS'||stageReceipt.release_authorized!==false)
+    block('STAGE_NOT_QUALIFIED');
+  const {safeFile}=require('./issue18-production-preflight.js');
+  const smoke=safeFile(p.paths.Mobile,'scripts/issue18-chrome-isolated-smoke.js');
+  const output=cp.spawnSync(process.execPath,[smoke,stageDir],{cwd:p.paths.Mobile,
+    shell:false,windowsHide:true,encoding:'utf8',timeout:240000,maxBuffer:4*1024*1024,
+    env:{...process.env,CHROME_PATH:chrome,...READ_ONLY_GIT_ENV}});
+  if(output.status!==0||output.signal||output.error)
+    return {status:'BLOCKED_CHROME',stage:stageDir,stage_receipt:stageReceipt,
+      exit_code:output.status,signal:output.signal||null,
+      detail:String(output.error?.message||output.stderr||'CHROME_EXIT_NONZERO').slice(-6000),
+      stdout:String(output.stdout||'').slice(-6000)};
+  // Even success needs immutable checkout identities after real Chrome activity.
+  const after=probe(root);
+  if(JSON.stringify(after.source)!==JSON.stringify(p.source))block('POST_CHROME_SOURCE_DRIFT');
+  return {status:'LOCAL_CHROME_PASS_ANDROID_PENDING',stage:stageDir,
+    stage_receipt:stageReceipt,stdout:String(output.stdout||'').slice(-6000)};
+}
 function run(args=process.argv.slice(2)){
-  const opts=parseArgs(args),root=safeExisting(opts['--workspace']),evidence=cOnly(opts['--evidence']);
+  const opts=parseArgs(args),chromeRequested=opts._chrome===true,root=safeExisting(opts['--workspace']),evidence=cOnly(opts['--evidence']);
   const parent=safeExisting(path.win32.dirname(evidence));
   if(overlapsWorkspace(root,evidence))block('OVERLAPPING_EVIDENCE');
   const p=probe(root);
@@ -57,10 +104,16 @@ function run(args=process.argv.slice(2)){
   if(!fs.existsSync(evidence))fs.mkdirSync(evidence,{recursive:false});
   safeExisting(evidence);
   const stamp=new Date().toISOString().replace(/[:.]/g,'-');
+  let browser={status:'NOT_RUN'};
+  if(chromeRequested&&result.status==='LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING')try{
+    browser=browserAfterAdmission({root,evidence,p,stamp});
+  }catch(e){browser={status:'BLOCKED_CHROME',error:e.code||'UNKNOWN',detail:String(e.message)};}
   const dest=path.win32.join(evidence,`issue18-${stamp}-${process.pid}.json`);
   fs.writeFileSync(dest,JSON.stringify({schema:'KTS_ISSUE18_LOCAL_EVIDENCE_V1',source:p.source,read_only_source:true,
-    evidence_file:dest,release:'NO_GO',cost_usd:0,preflight:result},null,2)+'\n',{encoding:'utf8',flag:'wx'});
-  return {file:dest,status:result.status,success:result.status==='LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING'};
+    evidence_file:dest,release:'NO_GO',cost_usd:0,preflight:result,browser},null,2)+'\n',{encoding:'utf8',flag:'wx'});
+  return {file:dest,status:result.status,browser:browser.status,
+    success:result.status==='LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING'&&
+      (!chromeRequested||browser.status==='LOCAL_CHROME_PASS_ANDROID_PENDING')};
 }
 if(require.main===module){try{const result=run();console.log(JSON.stringify(result));if(!result.success)process.exitCode=2;}
 catch(e){console.error(JSON.stringify({status:'BLOCKED',code:e.code||'UNKNOWN',detail:String(e.message),release:'NO_GO'}));process.exitCode=2;}}
