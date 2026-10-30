@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wilson86/tach-dai-ngang
-          ref: ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4
+          ref: 9de16cd903509492a2bbe41b0000bff95e8d5b6e
           path: Ngang
           persist-credentials: false
       - name: Assert locally available browser and Git source pins
@@ -35,14 +35,14 @@ jobs:
           google-chrome --version
           node --version
           test "$(git -C Mobile rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C Ngang rev-parse HEAD)" = "ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4"
+          test "$(git -C Ngang rev-parse HEAD)" = "9de16cd903509492a2bbe41b0000bff95e8d5b6e"
           node --check Mobile/scripts/issue18-chrome-isolated-smoke.js
           test -s Mobile/scripts/issue18-chrome-isolated-smoke.js
       - name: Stage and verify all 21 exact assets with immutable source pins
         shell: bash
         run: |
-          node Mobile/scripts/issue18-build-local-stage.js --mobile "$PWD/Mobile" --ngang "$PWD/Ngang" --out "$PWD/STAGE" --mobile-sha "$GITHUB_SHA" --ngang-sha ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4
-          node Mobile/scripts/issue18-verify-stage.js --mobile "$PWD/Mobile" --ngang "$PWD/Ngang" --out "$PWD/STAGE" --mobile-sha "$GITHUB_SHA" --ngang-sha ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4
+          node Mobile/scripts/issue18-build-local-stage.js --mobile "$PWD/Mobile" --ngang "$PWD/Ngang" --out "$PWD/STAGE" --mobile-sha "$GITHUB_SHA" --ngang-sha 9de16cd903509492a2bbe41b0000bff95e8d5b6e
+          node Mobile/scripts/issue18-verify-stage.js --mobile "$PWD/Mobile" --ngang "$PWD/Ngang" --out "$PWD/STAGE" --mobile-sha "$GITHUB_SHA" --ngang-sha 9de16cd903509492a2bbe41b0000bff95e8d5b6e
       - name: Actual headless Chrome isolated localhost Unified and two mode-specific synthetic N035 runs
         shell: bash
         run: node Mobile/scripts/issue18-chrome-isolated-smoke.js "$PWD/STAGE"
