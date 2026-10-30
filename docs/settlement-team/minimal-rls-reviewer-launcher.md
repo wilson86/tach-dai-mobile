@@ -24,7 +24,9 @@ the JSON. Required fields are `authorization_id`, `purpose` equal to
 `wrapper_sha256`. The wrapper writes a durable exclusive `.claimed` marker;
 the runner writes a second exclusive `.runner-consumed` marker. Neither marker
 is reset automatically after failure. The runner also restricts the fresh root
-to the approved project parent and the generated session suffix.
+to the approved project parent and the generated session suffix. The runner
+independently validates the permit's synthetic scope, source identities and
+expiry against the claim before consuming it.
 
 Call `team-settlement/Invoke-KtsMinimalRlsReviewer.ps1 -AuthorizationPath
 <path>` only after that separate authorization. `-OfflineAdmissionTest` and

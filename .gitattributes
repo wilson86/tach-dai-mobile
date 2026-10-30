@@ -5,4 +5,5 @@ docs/settlement-team/patches/r6-rls-integration-control.patch text eol=lf
 docs/settlement-team/patches/reviewer-logout-control.patch text eol=lf
 docs/settlement-team/patches/minimal-rls-logout-control.patch text eol=lf
 docs/settlement-team/patches/minimal-fixture-failure-control.patch text eol=lf
+docs/settlement-team/patches/minimal-claim-integrity-control.patch text eol=lf
 team-settlement/Invoke-KtsMinimalRlsReviewer.ps1 text eol=lf

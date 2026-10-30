@@ -1,0 +1,42 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 7c7d66f..f37e23f 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -710,2 +710,4 @@ try {
+     Assert-True ((Test-Path -LiteralPath $authorizationPath -PathType Leaf) -and -not ((Get-Item -LiteralPath $authorizationPath).Attributes -band [IO.FileAttributes]::ReparsePoint) -and -not ((Get-Item -LiteralPath $claimParent).Attributes -band [IO.FileAttributes]::ReparsePoint) -and (Get-KtsSha256 $authorizationPath) -eq $claim.authorization_sha256 -and $claim.purpose -eq 'KTS_MINIMAL_RLS_REVIEWER_LOGOUT' -and $claim.session_id -match '^kts-bluestacks-[a-f0-9]{32}$' -and [IO.Path]::GetFullPath([string]$claim.root) -eq [IO.Path]::GetFullPath($root) -and -not(Test-Path -LiteralPath $root) -and [datetimeoffset]::Parse($claim.expires_utc) -gt [datetimeoffset]::UtcNow) 'MINIMAL_CLAIM_IDENTITY_INVALID'
++    $authorization=Get-Content -Raw -LiteralPath $authorizationPath|ConvertFrom-Json
++    Assert-True ($authorization.authorization_id -match '^[a-f0-9]{32}$' -and (Split-Path -Leaf $authorizationPath) -ceq ('minimal-'+$authorization.authorization_id+'.json') -and $authorization.purpose -eq $claim.purpose -and $authorization.synthetic_only -is [bool] -and $authorization.synthetic_only -eq $true -and $authorization.max_sessions -eq 1 -and $authorization.source_head -eq $expected -and [datetimeoffset]::Parse($authorization.expires_utc).ToUniversalTime() -eq [datetimeoffset]::Parse($claim.expires_utc).ToUniversalTime() -and $authorization.runner_sha256 -ceq $claim.runner_sha256 -and $authorization.driver_sha256 -ceq $claim.driver_sha256 -and $authorization.wrapper_sha256 -ceq $claim.wrapper_sha256) 'MINIMAL_AUTHORIZATION_CLAIM_MISMATCH'
+     if(-not $OfflineMinimalClaimTest){Assert-True (Test-MinimalRootScope $root $claim.session_id $repo) 'MINIMAL_ROOT_SCOPE_INVALID'}
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 65fca64..3cf3a01 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -129,3 +129,3 @@ function Assert-AndroidDriverIdentity([string]$Path){
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '251EECC3CE977CC28FACBF944B355661E2C1703981BC68FDED5B1FD3A48CC510') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '7948F98E787266B04349B3D9A627335FC5806EDA1F3AEC98F7BB6BFA4EA9D435') 'R6_RUNNER_SOURCE_DRIFT'
+ }
+@@ -285,2 +285,9 @@ if($OfflineMinimalAdmissionSelfTest){
+   Assert-True ($runnerTests[0].exit_code -eq 0 -and $runnerTests[1].exit_code -ne 0 -and (Test-Path -LiteralPath ($claim+'.runner-consumed'))) 'MINIMAL_RUNNER_CLAIM_REPLAY_TEST_FAILED'
++  $forgedPermit=[ordered]@{};foreach($key in $permit.Keys){$forgedPermit[$key]=$permit[$key]};$forgedPermit.authorization_id=[guid]::NewGuid().ToString('N');$forgedPermit.synthetic_only=$false
++  $forgedPath=Join-Path $dir ('minimal-'+$forgedPermit.authorization_id+'.json');Write-AtomicJson $forgedPath $forgedPermit
++  $forgedClaim=Get-Content -Raw -LiteralPath $claim|ConvertFrom-Json;$forgedClaim.authorization_sha256=Get-Sha256 $forgedPath;$forgedClaimPath=$forgedPath+'.claimed';Write-AtomicJson $forgedClaimPath $forgedClaim
++  $forgedCheckpoint='MINIMAL_CLAIM_TEST_'+[guid]::NewGuid().ToString('N')+'.json';$forgedRunner=Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',$runner,'-Root',$syntheticRoot,'-HttpsPilot','-GalaxyServeOnly','-MinimalRlsLogout','-MinimalClaimPath',$forgedClaimPath,'-OfflineMinimalClaimTest','-CheckpointName',$forgedCheckpoint) -RedirectStandardOutput (Join-Path $testRoot 'forged.stdout') -RedirectStandardError (Join-Path $testRoot 'forged.stderr') -WindowStyle Hidden -PassThru
++  $null=$forgedRunner.Handle;if(-not $forgedRunner.WaitForExit(20000)){Stop-Process -Id $forgedRunner.Id -ErrorAction SilentlyContinue;throw 'MINIMAL_CLAIM_TEST_TIMEOUT'};$forgedRunner.Refresh()
++  $forgedResult=Get-Content -Raw -LiteralPath (Join-Path $actualControl $forgedCheckpoint)|ConvertFrom-Json
++  Assert-True ($forgedRunner.ExitCode -ne 0 -and $forgedResult.failure -eq 'MINIMAL_AUTHORIZATION_CLAIM_MISMATCH' -and -not(Test-Path -LiteralPath ($forgedClaimPath+'.runner-consumed'))) 'MINIMAL_FORGED_AUTHORIZATION_ACCEPTED'
+   $againDenied=$false;try{[void](Claim-MinimalAuthorization $authPath $session $syntheticRoot $runner $driver)}catch{$againDenied=$true};Assert-True $againDenied 'MINIMAL_REPLAY_ACCEPTED'
+@@ -291,3 +298,3 @@ if($OfflineMinimalAdmissionSelfTest){
+   Assert-True (-not(Test-Path -LiteralPath $syntheticRoot) -and -not(Test-Path -LiteralPath ($driftPath+'.claimed')) -and -not(Test-Path -LiteralPath ($expiredPath+'.claimed'))) 'MINIMAL_ADMISSION_TEST_SIDE_EFFECT'
+-  $proof=[ordered]@{status='PASS';evidence_type='ROOTLESS_ADMISSION_FIXTURE';first_claim=(Test-Path -LiteralPath $claim);replay_denied=$againDenied;runner_claim_tests=$runnerTests;source_drift_denied=$driftDenied;expiry_denied=$expiredDenied;postgres_init='NOT_RUN';live_lease_created=$false;fixture=$testRoot}
++  $proof=[ordered]@{status='PASS';evidence_type='ROOTLESS_ADMISSION_FIXTURE';first_claim=(Test-Path -LiteralPath $claim);replay_denied=$againDenied;runner_claim_tests=$runnerTests;forged_authorization_denied=$true;forged_checkpoint=(Join-Path $actualControl $forgedCheckpoint);source_drift_denied=$driftDenied;expiry_denied=$expiredDenied;postgres_init='NOT_RUN';live_lease_created=$false;fixture=$testRoot}
+   Write-AtomicJson (Join-Path $testRoot 'MINIMAL_ADMISSION_TEST.json') $proof;$proof|ConvertTo-Json -Depth 6;exit 0
+diff --git a/tests/r6-rootless-integration.test.cjs b/tests/r6-rootless-integration.test.cjs
+index 2c7b1ea..8af3e35 100644
+--- a/tests/r6-rootless-integration.test.cjs
++++ b/tests/r6-rootless-integration.test.cjs
+@@ -44,3 +44,3 @@ for(const scenario of scenarios){
+   let launcherPath=path.join(control,'r6-rls-followup-worktree','team-settlement','Invoke-KtsMinimalRlsReviewer.ps1');
+-  if(injectLauncherDrift){assert(launcher,'DRIFT_REQUIRES_LAUNCHER');const copy=path.join(dir,'unapproved-launcher.ps1');fs.writeFileSync(copy,fs.readFileSync(launcherPath,'utf8').replace('9DA554278366690954CCC0C7AF56DE4A2DCC3A40A9133943621680848FC2998D','0'.repeat(64)));launcherPath=copy;}
++  if(injectLauncherDrift){assert(launcher,'DRIFT_REQUIRES_LAUNCHER');const copy=path.join(dir,'unapproved-launcher.ps1');fs.writeFileSync(copy,fs.readFileSync(launcherPath,'utf8').replace('2CEB7BCFEB4F8D140F0E4576D5184093B38236F3D28A307BA41337E4DB64AE1D','0'.repeat(64)));launcherPath=copy;}
+   const wrapperArgs=launcher?['-NoProfile','-ExecutionPolicy','Bypass','-File',launcherPath,'-OfflineLifecycleManifest',configPath]:['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'Invoke-KtsBlueStacksLiveAcceptance.ps1'),'-SourceRoot',repo,'-ControlRoot',control,'-OfflineR6FullLifecycle','-R6FixtureManifest',configPath];if(minimal&&!launcher)wrapperArgs.push('-MinimalRlsLogout');
