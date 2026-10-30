@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),crypto=require('node:crypto');
-const {CONFIG,EXPECTED,exportPreview}=require('./KTS_issue18_prepare_preview.js');
+const {CONFIG,EXPECTED,exportPreview,previewHeaders}=require('./KTS_issue18_prepare_preview.js');
 function fixture(){
  const home=fs.mkdtempSync(path.join(os.tmpdir(),'issue18-preview-unit-'));
  const root=path.join(home,'source'),stage=path.join(home,'stage'),out=path.join(home,'preview');
@@ -73,4 +73,16 @@ test('post-verifier stage manifest mutation fails BEFORE creating upload folder'
  const tampered=()=>{fs.appendFileSync(path.join(f.stage,'ISSUE18_STAGE_MANIFEST.json'),'x');return f.verified()};
  assert.throws(()=>exportPreview(f.params,tampered),/STAGE_MANIFEST_DRIFT_AFTER_VERIFY/);
  assert.equal(fs.existsSync(f.out),false);
+});
+
+test('separate-origin Cloudflare preview headers refuse live network and cross-origin frames',t=>{
+ const f=fixture();t.after(()=>fs.rmSync(f.home,{recursive:true,force:true}));
+ exportPreview(f.params,f.verified);
+ const headers=fs.readFileSync(path.join(f.out,'_headers'),'utf8');
+ assert.equal(headers,previewHeaders());
+ for(const rule of ["connect-src 'self'", "frame-src 'self'", "frame-ancestors 'self'",
+   "worker-src 'self'", "script-src 'self' 'unsafe-inline'",'X-Robots-Tag: noindex',
+   'X-Frame-Options: SAMEORIGIN'])assert.ok(headers.includes(rule),rule);
+ assert.ok(!headers.includes('wilson86.github.io'));
+ assert.match(fs.readFileSync(path.join(f.out,'index.html'),'utf8'),/^<!doctype html>\n<html lang=/);
 });
