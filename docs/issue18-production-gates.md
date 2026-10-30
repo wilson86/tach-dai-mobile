@@ -151,7 +151,7 @@ From Windows PowerShell (no Codex):
 
 ```powershell
 Set-Location 'C:\KTS-QA\issue18-review\Mobile'
-node .\scripts\issue18-run-windows.js
+node .\scripts\issue18-run-windows.js --mobile-sha '<EXACT_REVIEW_SHA_FROM_GITHUB_CHECKPOINT>'
 ```
 
 The runner aborts if not on Windows C:, if the workspace/evidence path is linked, if the Git roots/branch/pins differ, or if the source tree is dirty. It then runs the pinned Python generator strict check, N035 offline pytest, 4 KTS JS checks, 26 Mobile and 15 Ngang JS regressions, and postflight Git integrity checks, saving an **append-only, unique JSON receipt** at `C:\KTS-QA\issue18-evidence\issue18-<timestamp>-<pid>.json`. The evidence folder is outside all three checkouts and created only after confirming the C: parent; preexisting file names cannot be overwritten (`wx`). An optional alternative root may be supplied with `--workspace ABS_C_DIR --evidence ABS_C_DIR`, but the safety guards remain.
@@ -206,7 +206,7 @@ The read-only Windows evidence entrypoint has a new **explicit opt-in** `--chrom
 
 ```powershell
 Set-Location 'C:\KTS-QA\issue18-review\Mobile'
-node .\scripts\issue18-run-windows.js --chrome
+node .\scripts\issue18-run-windows.js --mobile-sha '<EXACT_REVIEW_SHA_FROM_GITHUB_CHECKPOINT>' --chrome
 ```
 
 The helper first runs the **actual** SHA/clean-checkout-verified Gate A (Python strict generator, N035 Router/Desktop, four KTS cross-surface Node, 26 Mobile Node and 15 Ngang Node, postflight source pins). **Only** if Gate A returns `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING`, it creates a brand-new **append-only C:-only evidence stage** outside the three source checkouts, assembles and verifies the 21 original exact-commit assets plus two safe isolated Unified rewrites, and launches the existing `issue18-chrome-isolated-smoke.js` in a disposable Chrome profile against an ephemeral **127.0.0.1-only** server. Browser smoke explicitly exercises both mode outputs, N035 singleton reject, Cut/reload/Undo, 3 SW scopes offline and date-mismatch HOLD recovery. Its temporary profile is handled by that existing smoke; the stage remains as rollback/failure evidence until authorized cleanup.
@@ -216,3 +216,23 @@ The helper first runs the **actual** SHA/clean-checkout-verified Gate A (Python 
 **Observed QA, independent of any Windows claim:** Node **22.16.0** in a disposable Linux sandbox, `node --test tests/issue18-run-windows.test.js` => **7 PASS / 0 FAIL** on **byte-identical GitHub files**, including opt-in CLI rejection and all-five-receipt negative tests. Exact blob IDs: `scripts/issue18-run-windows.js` `d2a2486fd51fa7f2a7fb90ba59fffd4914f5b908` (SHA-256 `41ac2a23d10fcb1b4f81feb80b7938c5a890e7f3c943a3514d74781b84dc3277`) and `tests/issue18-run-windows.test.js` `6ca6f9a2634a772e74063814c329492fcd70b41d` (SHA-256 `65ab83906d67900480b4dcc6186815c8afe1528497313fb443fa29e18880e3d2`). Chromium 144.0.7559.96 is installed in this *Linux* sandbox but the complete source-pinned three-app stage was **not** available here; therefore **real browser PWA acceptance NOT_RUN**. The native Windows `--chrome` end-to-end path itself remains **NOT_RUN** and must not be called qualified until performed on the owner's PC.
 
 **Three-role gate:** project director = optional zero-cost browser step prepared, NO_GO release; independent reviewer = real 7/7 Node helper tests qualify only the launcher and receipts, no Windows/Chrome PASS; end user = still needs real Chrome/Android visual and monetary Cut/Undo acceptance and explicit owner approval. `COST_USD=0; CODEX=NOT_INVOKED; CI=NOT_TRIGGERED; MERGE=NO; DEPLOY=NO; PROD_MUTATION=NONE; SKILLS=MANUAL_ONLY; CONTEXT=ELEVATED.`
+
+
+## Critical identity gate: exact Mobile review SHA is now mandatory (2026-10-30)
+
+**Verified unsafe earlier condition:** Previously the Windows evidence launcher accepted any syntactically valid Mobile Git HEAD on `review/issue18-offline-parity-gate-20261030` as long as it descended from the old base commit. A source-executed minimal fake Windows/Git environment proved an arbitrary **unreviewed** synthetic 40-hex descendant could obtain `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING` and write a JSON receipt. This is **a QA launcher source-identity defect**, not a product-parser defect. Evidence: actual prior launcher Git blob `d2a2486fd51fa7f2a7fb90ba59fffd4914f5b908`, synthetic arbitrary HEAD `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`, resulting `success=true` and one receipt in fake filesystem.
+
+**Fix:** `scripts/issue18-run-windows.js` now requires `--mobile-sha` followed by **exactly 40 lowercase hex characters** from an **independently inspected GitHub checkpoint SHA**. It refuses missing/malformed/duplicate source pins before reading any source or writing evidence. `probe(root,pin)` compares `git rev-parse HEAD` against that exact value, in addition to KTS/Ngang fixed SHAs and Mobile review branch/ancestry/clean-checkout checks; it also uses the same pin after Chrome. This protects against unexpectedly advancing Mobile checkout after review. Do not replace the independent checkpoint SHA with `git rev-parse HEAD` from a checkout being tested—that would defeat the trust check.
+
+From the **clean, already prepared** Windows C: checkout, substitute the *actual reviewed full Mobile HEAD from GitHub checkpoint* for `<EXACT_REVIEW_SHA_FROM_GITHUB_CHECKPOINT>`. No Codex required:
+
+```powershell
+Set-Location 'C:\KTS-QA\issue18-review\Mobile'
+node .\scripts\issue18-run-windows.js --mobile-sha '<EXACT_REVIEW_SHA_FROM_GITHUB_CHECKPOINT>' --chrome
+```
+
+Without `--chrome`, the same command runs only Gate A. Both modes write fail-closed C:-only receipts outside source and **never** grant release permission. A source mismatch exits nonzero and aborts before writing a receipt. When the review branch advances, the independent GitHub checkpoint pin must change after re-review; old receipts remain tied to their own SHAs.
+
+**Observed scoped QA, not physical Windows:** Actual source-executed V8 regression callbacks from the GitHub test source, using mocked Node builtins, **9/9 PASS** on the final runner/test code SHA as of this checkpoint, including explicit SHA validation, unapproved synthetic descendant denial, Chrome option and old fail-closed checks. An additional source-executed virtual Windows/Git negative scenario rejected a synthetic unreviewed HEAD with `SOURCE_DRIFT` before receipt creation; an explicitly matching synthetic SHA could proceed. The older **7/7 actual Node.js sandbox PASS** was on the previous helper code SHA and is **not a new real-Node qualification of this modified SHA**. Windows, physical Chrome, Android, user money/Cut/Undo/ledger acceptance remain **NOT_RUN**.
+
+**Three-role decision:** PM = identity defect closed in candidate QA tool; reviewer = repro and exact-pin regression observed, real Windows still pending; end user = safe to begin offline acceptance only, not use live bets. `RELEASE=NO_GO; CODEX=NOT_USED; PRIVATE_CI=NOT_TRIGGERED; COST_USD=0; E/F_ACCESS=NONE; SKILLS=MANUAL_ONLY; CONTEXT=ELEVATED`.
