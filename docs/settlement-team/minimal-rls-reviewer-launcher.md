@@ -10,6 +10,8 @@ Apply the control patch only to the exact SHA identities recorded in the
 preceding batch checkpoint. Verify all resulting hashes and replay the focused
 offline tests before using the launcher. The launcher pins its wrapper, and the
 wrapper pins the runner and driver; the runner pins its source dependencies.
+The subsequent fixture-failure patch makes missing preflight evidence produce
+a durable test failure, and includes a disposable launcher-drift exercise.
 
 A future live run requires a separate, explicit owner authorization. The
 authorized operator must prepare one JSON file in the control directory's

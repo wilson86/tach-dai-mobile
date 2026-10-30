@@ -1,0 +1,38 @@
+diff --git a/tests/r6-rootless-integration.test.cjs b/tests/r6-rootless-integration.test.cjs
+index 54eb882..2c7b1ea 100644
+--- a/tests/r6-rootless-integration.test.cjs
++++ b/tests/r6-rootless-integration.test.cjs
+@@ -10,2 +10,3 @@ const write=(p,x)=>fs.writeFileSync(p,JSON.stringify(x,null,2));
+ const assert=(x,m)=>{if(!x)throw Error(m);};
++const readJsonIfPresent=p=>fs.existsSync(p)?JSON.parse(fs.readFileSync(p,'utf8').replace(/^\uFEFF/,'')):null;
+ const credentials={workspace_id:'fake_groupa_contract',operator:'fake_operator_contract',reviewer:'fake_reviewer_contract',password:'fixture-password-123'};
+@@ -20,2 +21,3 @@ const minimal=process.argv.includes('--minimal-rls-logout');
+ const launcher=process.argv.includes('--launcher');
++const injectLauncherDrift=process.argv.includes('--inject-launcher-drift');
+ const scenarios=only?[only]:['normal','driver_failure','missing_milestone','duplicate_milestone','invalid_event_identity','receipt_mismatch','timeout','cleanup_failure','invalid_session','rls_bypass','duplicate_sql_event','pre_sync_event','reload_drift','rls_reverse_leak','force_rls_disabled','missing_session_id','invalid_source_hash','deadline_expired'];
+@@ -41,3 +43,5 @@ for(const scenario of scenarios){
+   const start=Date.now();
+-  const wrapperArgs=launcher?['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'r6-rls-followup-worktree','team-settlement','Invoke-KtsMinimalRlsReviewer.ps1'),'-OfflineLifecycleManifest',configPath]:['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'Invoke-KtsBlueStacksLiveAcceptance.ps1'),'-SourceRoot',repo,'-ControlRoot',control,'-OfflineR6FullLifecycle','-R6FixtureManifest',configPath];if(minimal&&!launcher)wrapperArgs.push('-MinimalRlsLogout');
++  let launcherPath=path.join(control,'r6-rls-followup-worktree','team-settlement','Invoke-KtsMinimalRlsReviewer.ps1');
++  if(injectLauncherDrift){assert(launcher,'DRIFT_REQUIRES_LAUNCHER');const copy=path.join(dir,'unapproved-launcher.ps1');fs.writeFileSync(copy,fs.readFileSync(launcherPath,'utf8').replace('9DA554278366690954CCC0C7AF56DE4A2DCC3A40A9133943621680848FC2998D','0'.repeat(64)));launcherPath=copy;}
++  const wrapperArgs=launcher?['-NoProfile','-ExecutionPolicy','Bypass','-File',launcherPath,'-OfflineLifecycleManifest',configPath]:['-NoProfile','-ExecutionPolicy','Bypass','-File',path.join(control,'Invoke-KtsBlueStacksLiveAcceptance.ps1'),'-SourceRoot',repo,'-ControlRoot',control,'-OfflineR6FullLifecycle','-R6FixtureManifest',configPath];if(minimal&&!launcher)wrapperArgs.push('-MinimalRlsLogout');
+   const result=spawnSync('powershell.exe',wrapperArgs,{encoding:'utf8',windowsHide:true,env,timeout:80000,maxBuffer:1024*1024});
+@@ -61,8 +65,8 @@ for(const scenario of scenarios){
+   }else{
+-    const processProof=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','android-ui','DRIVER_PROCESS_RECEIPT.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.driver_process_closed=processProof.owned_process_closed===true;
+-    const cleanupProof=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','FINAL_CLEANUP.json'),'utf8').replace(/^\uFEFF/,''));
+-    checks.final_cleanup_milestone=cleanupProof.stage==='FINAL_CLEANUP'&&cleanupProof.sequence===(minimal?8:10);
++    const processProof=readJsonIfPresent(path.join(cfg.workdir,'evidence','android-ui','DRIVER_PROCESS_RECEIPT.json'));
++    checks.driver_process_closed=processProof?.owned_process_closed===true;
++    const cleanupProof=readJsonIfPresent(path.join(cfg.workdir,'evidence','FINAL_CLEANUP.json'));
++    checks.final_cleanup_milestone=cleanupProof?.stage==='FINAL_CLEANUP'&&cleanupProof?.sequence===(minimal?8:10);
+     if(['reviewer_logout_not_revoked','invalid_event_identity','receipt_mismatch','rls_bypass','duplicate_sql_event','pre_sync_event','reload_drift','rls_reverse_leak','force_rls_disabled','invalid_session','invalid_source_hash'].includes(scenario)){
+-      const failed=fs.readdirSync(path.join(cfg.workdir,'evidence','R6_STAGES')).filter(x=>x.endsWith('.receipt.json')).map(x=>JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_STAGES',x),'utf8').replace(/^\uFEFF/,''))).find(x=>x.status==='FAIL');
++      const stageDir=path.join(cfg.workdir,'evidence','R6_STAGES');const failed=fs.existsSync(stageDir)?fs.readdirSync(stageDir).filter(x=>x.endsWith('.receipt.json')).map(x=>readJsonIfPresent(path.join(stageDir,x))).find(x=>x?.status==='FAIL'):null;
+       checks.failure_evidence_not_pass=!!failed&&JSON.parse(fs.readFileSync(failed.evidence_path,'utf8').replace(/^\uFEFF/,'')).status==='FAIL'&&hash(failed.evidence_path)===failed.evidence_sha256;
+@@ -70,3 +74,3 @@ for(const scenario of scenarios){
+   }
+-  if(expected==='PASS'){
++  if(expected==='PASS'&&evidence?.status==='PASS'){
+     const completion=JSON.parse(fs.readFileSync(path.join(cfg.workdir,'evidence','R6_MILESTONE_COMPLETION.json'),'utf8').replace(/^\uFEFF/,''));
