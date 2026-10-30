@@ -5,6 +5,7 @@ const KTS_PIN='eec80f812ff0ab47109edcacc32f31eedaffca79';
 const NGANG_PIN='6f47f7c6b073c5df25da55b2b8f3bcc61513da20';
 const MOBILE_BASE='737d689b5388fb1060bca5fbd1891e69328bed1d';
 const REVIEW_BRANCH='review/issue18-offline-parity-gate-20261030';
+const READ_ONLY_GIT_ENV=Object.freeze({GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0'});
 function block(code){const e=new Error(code);e.code=code;throw e}
 function parseArgs(args){
   if(args.length!==0&&args.length!==4)block('USAGE');
@@ -19,7 +20,7 @@ function safeExisting(p){
   if(!fs.existsSync(p)||fs.lstatSync(p).isSymbolicLink()||fs.realpathSync.native(p).toLowerCase()!==p.toLowerCase())block('UNSAFE_PATH');
   return p;
 }
-function git(dir,args){const r=cp.spawnSync('git',args,{cwd:dir,encoding:'utf8',shell:false,windowsHide:true,timeout:15000});
+function git(dir,args){const r=cp.spawnSync('git',args,{cwd:dir,encoding:'utf8',shell:false,windowsHide:true,timeout:15000,env:{...process.env,...READ_ONLY_GIT_ENV}});
   if(r.status!==0||r.error||r.signal)block('GIT_PROBE_FAILED');return String(r.stdout).trim();}
 function probe(root){
   const paths=Object.fromEntries(['KTS','Mobile','Ngang'].map(k=>[k,safeExisting(path.win32.join(root,k))]));
@@ -37,10 +38,17 @@ function probe(root){
   if(path.win32.normalize(path.win32.dirname(__dirname)).toLowerCase()!==paths.Mobile.toLowerCase())block('RUN_FROM_PINNED_MOBILE');
   return {source:{kts:actual.KTS,mobile:actual.Mobile,ngang:actual.Ngang},paths};
 }
+// Windows paths are case-insensitive: never allow evidence to overlap a source workspace
+// using raw case-sensitive startsWith(), even if the CLI used a different casing.
+function overlapsWorkspace(workspace,evidence){
+  const a=path.win32.normalize(workspace).replace(/\\+$/,'').toLowerCase();
+  const b=path.win32.normalize(evidence).replace(/\\+$/,'').toLowerCase();
+  return a===b||a.startsWith(b+'\\')||b.startsWith(a+'\\');
+}
 function run(args=process.argv.slice(2)){
   const opts=parseArgs(args),root=safeExisting(opts['--workspace']),evidence=cOnly(opts['--evidence']);
   const parent=safeExisting(path.win32.dirname(evidence));
-  if(!evidence.startsWith(parent+'\\')||evidence===root||evidence.startsWith(root+'\\')||root.startsWith(evidence+'\\'))block('OVERLAPPING_EVIDENCE');
+  if(overlapsWorkspace(root,evidence))block('OVERLAPPING_EVIDENCE');
   const p=probe(root);
   const {admission}=require('./issue18-production-preflight.js');
   let result;
@@ -56,4 +64,4 @@ function run(args=process.argv.slice(2)){
 }
 if(require.main===module){try{const result=run();console.log(JSON.stringify(result));if(!result.success)process.exitCode=2;}
 catch(e){console.error(JSON.stringify({status:'BLOCKED',code:e.code||'UNKNOWN',detail:String(e.message),release:'NO_GO'}));process.exitCode=2;}}
-module.exports={parseArgs,cOnly,run};
+module.exports={parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,run};
