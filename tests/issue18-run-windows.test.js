@@ -11,9 +11,10 @@ test('source workspace and C-only evidence defaults remain separate',()=>{
 });
 test('overlapping evidence detected case-insensitively, including inside Mobile',()=>{
  const root='C:\\KTS-QA\\issue18-calendar-review';
- for(const bad of ['C:\\kts-qa\\ISSUE18-review','c:\\KTS-QA\\Issue18-Review\\mobile\\evidence','C:\\KTS-QA', 'C:\\KTS-QA\\issue18-calendar-review\\..\\issue18-calendar-review\\EVIDENCE'])
+ for(const bad of ['C:\\kts-qa\\ISSUE18-CALENDAR-review','c:\\KTS-QA\\Issue18-Calendar-Review\\mobile\\evidence','C:\\KTS-QA', 'C:\\KTS-QA\\issue18-calendar-review\\..\\issue18-calendar-review\\EVIDENCE'])
    assert.equal(overlapsWorkspace(root,bad),true,bad);
  assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-calendar-evidence'),false);
+ assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-review'),false,'old review folder is a separate rollback source');
  assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-calendar-review-other'),false);
 });
 test('browser pilot is opt-in and no extra tokens are accepted',()=>{
