@@ -50,7 +50,7 @@ test('Git command policy refuses Git optional writes and credential prompt',()=>
  assert.equal(READ_ONLY_GIT_ENV.GIT_TERMINAL_PROMPT,'0');
 });
 test('unknown, duplicate and partial override blocked',()=>{
- assert.throws(()=>parseArgs(['--workspace','C:\\X']),/USAGE/);
+ assert.throws(()=>parseArgs(['--workspace','C:\\X']),/MOBILE_EXACT_SHA_REQUIRED/);
  assert.throws(()=>parseArgs(['--workspace','C:\\X','--workspace','C:\\Y']),/USAGE/);
  assert.throws(()=>parseArgs(['--workspace','C:\\X','--unknown','C:\\Y']),/USAGE/);
 });
