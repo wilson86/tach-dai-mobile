@@ -5,20 +5,20 @@ const {parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplet
 const PIN='a'.repeat(40);
 test('source workspace and C-only evidence defaults remain separate',()=>{
  assert.deepEqual(parseArgs(['--mobile-sha',PIN]),{
-  '--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence','--mobile-sha':PIN
+  '--workspace':'C:\\KTS-QA\\issue18-calendar-review','--evidence':'C:\\KTS-QA\\issue18-calendar-evidence','--mobile-sha':PIN
  });
- assert.equal(overlapsWorkspace('C:\\KTS-QA\\issue18-review','C:\\KTS-QA\\issue18-evidence'),false);
+ assert.equal(overlapsWorkspace('C:\\KTS-QA\\issue18-calendar-review','C:\\KTS-QA\\issue18-calendar-evidence'),false);
 });
 test('overlapping evidence detected case-insensitively, including inside Mobile',()=>{
- const root='C:\\KTS-QA\\issue18-review';
- for(const bad of ['C:\\kts-qa\\ISSUE18-review','c:\\KTS-QA\\Issue18-Review\\mobile\\evidence','C:\\KTS-QA', 'C:\\KTS-QA\\issue18-review\\..\\issue18-review\\EVIDENCE'])
+ const root='C:\\KTS-QA\\issue18-calendar-review';
+ for(const bad of ['C:\\kts-qa\\ISSUE18-review','c:\\KTS-QA\\Issue18-Review\\mobile\\evidence','C:\\KTS-QA', 'C:\\KTS-QA\\issue18-calendar-review\\..\\issue18-calendar-review\\EVIDENCE'])
    assert.equal(overlapsWorkspace(root,bad),true,bad);
- assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-evidence'),false);
- assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-review-other'),false);
+ assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-calendar-evidence'),false);
+ assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-calendar-review-other'),false);
 });
 test('browser pilot is opt-in and no extra tokens are accepted',()=>{
  assert.deepEqual(parseArgs(['--mobile-sha',PIN,'--chrome']),{
-  '--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence',
+  '--workspace':'C:\\KTS-QA\\issue18-calendar-review','--evidence':'C:\\KTS-QA\\issue18-calendar-evidence',
   '--mobile-sha':PIN,_chrome:true
  });
  assert.equal(parseArgs(['--workspace','C:\\QA','--evidence','C:\\receipts','--mobile-sha',PIN,'--chrome'])._chrome,true);
