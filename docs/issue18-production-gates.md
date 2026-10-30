@@ -122,3 +122,20 @@ The Unified function came directly from the pinned real `app/unified-core.js`, e
 **Important caution (Cut):** An additional non-browser Cut/reload exploration with an incomplete synthetic DOM did not produce a meaningful selection; it was **inconclusive**, and is **neither** a verified product regression **nor** a PASS. The candidate uses checkbox/grouped selection behavior, which a minimal synthetic DOM cannot establish. Required original committed Node Cut/Undo QA, isolated real Chrome, storage failure/rollback and end-user checks remain NOT_RUN for the expanded review gate. Do not claim device/release readiness from isolated V8.
 
 **Three roles:** Director = continue focused acceptance and gate release; independent reviewer = actual N035 PWA entrypoint and Unified rejection PASS in-memory, Cut proof blocked; end user = do not use money/Cut flows in production before device acceptance. `RELEASE=NO_GO`.
+
+
+## Source-executed offline preflight control-flow verification (2026-10-30)
+
+**Scope explicitly limited:** Fetched the exact candidate `scripts/issue18-production-preflight.js` JavaScript from GitHub review HEAD (blob `66db0753a59923aad35eafd7f34393e043b4a7d4`), loaded its actual `admission()` entrypoint in isolated V8, and supplied **synthetic Windows C: filesystem/Git/process APIs**. Thus these tests exercise the **real orchestration code**, but replace the executed pytest/Node tests with controlled outcomes. **This is NOT a native Windows qualification, not the 47 original checks passing, and not device/browser QA.**
+
+| Synthetic scenario | Expected from actual preflight code | Observed |
+| --- | --- | --- |
+| All mocked subcommands success | `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING`, 47 result rows (46 subprocesses + final pin check) | **MATCH** |
+| First KTS N035 JavaScript command fails | `BLOCKED_KTS_JS_PARITY`, no Mobile/Ngang tests executed | **MATCH** |
+| Legacy ledger test fails | `BLOCKED_KTS_LEDGER`, no Mobile/Ngang tests executed | **MATCH** |
+| First Mobile test fails | `BLOCKED_FOCUSED_TEST`, no Ngang tests executed | **MATCH** |
+| KTS JS test path is unsafe | `UNSAFE_SOURCE_FILE` thrown before invoking that test | **MATCH** |
+
+**Synthetic control-flow QA: 5/5 PASS.** With all simulated success, command sequence is Python generator, Python Router/Desktop N035, 3 KTS JS entrypoints, 1 KTS legacy ledger JS, 25 Mobile Node and 15 Ngang Node, then 3 Git/identity rechecks. The total **47** is a count of receipt rows, NOT an actual claim of tests passing. GitHub source identity, Windows file access, real subprocess results, money/SQLite/Undo/Chrome/Android remain subject to exact pinned physical/local acceptance.
+
+**Reviewer caution:** No business rules, customer data, source repositories, PWA version or cache changed in this verification. The operator must run the full unmocked preflight in the C:-only test workspace. `COST_USD=0; RELEASE=NO_GO`.
