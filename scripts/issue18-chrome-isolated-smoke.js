@@ -21,8 +21,26 @@ function canCleanupChromeProfile(passed,profile,tmpDir,sourceFs=fs,sourcePath=pa
      !sourcePath.basename(target).startsWith('kts-issue18-headless-'))return false;
   try{
     const st=sourceFs.lstatSync(target);
-    return st.isDirectory()&&!st.isSymbolicLink()&&
-      norm(sourceFs.realpathSync(target))===norm(target);
+    if(!st.isDirectory()||st.isSymbolicLink()||
+       norm(sourceFs.realpathSync(target))!==norm(target))return false;
+    // Never recursively clean a generated profile that contains a link,
+    // junction, unknown special file or redirected subdirectory.
+    const stack=[target];
+    while(stack.length){
+      const dir=stack.pop();
+      for(const entry of sourceFs.readdirSync(dir,{withFileTypes:true})){
+        const child=sourcePath.join(dir,entry.name);
+        if(entry.isSymbolicLink()||(!entry.isDirectory()&&!entry.isFile()))
+          return false;
+        if(entry.isDirectory()){
+          const inner=sourceFs.lstatSync(child);
+          if(inner.isSymbolicLink()||!inner.isDirectory()||
+             norm(sourceFs.realpathSync(child))!==norm(child))return false;
+          stack.push(child);
+        }
+      }
+    }
+    return true;
   }catch(_){return false;}
 }
 function serve(stage){
