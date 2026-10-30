@@ -255,3 +255,32 @@ node .\scripts\issue18-run-windows.js --mobile-sha '<EXACT_REVIEW_HEAD_FROM_GITH
 ```
 
 **Three-role gate:** project director = transparent upstream Windows diagnosis added and no source mutation; independent reviewer = real pinned Node unit tests 5/5 plus **mocked** preflight 2/2 properly separated; end user = real Windows generator, Chrome, Android, money Cut/Undo and persistent ledger still **NOT_RUN**, release NO_GO. `COST_USD=0; CODEX=NOT_USED; GITHUB_CI=NOT_RUN; MERGE=NO; DEPLOY=NO; PRODUCTION_MUTATION=NONE; SKILLS=MANUAL_ONLY; CONTEXT=ELEVATED.`
+
+
+## No-Codex bootstrap for the missing three C:-only checkouts (latest)
+
+**Verified state before this batch:** source branch SHA for private KTS app `eec80f812ff0ab47109edcacc32f31eedaffca79`, public Ngang `6f47f7c6b073c5df25da55b2b8f3bcc61513da20`, and public Mobile review `review/issue18-offline-parity-gate-20261030` all matched their independently reviewed pins on GitHub. **This does NOT establish that any checkout exists on the owner's PC.** Earlier operator instructions assumed those checkouts were prepared. The new *optional, operator-run* `scripts/issue18-bootstrap-windows.js` closes that preparation gap without Codex, merge/deploy, CI or paid services.
+
+**What it can do after the operator invokes it on Windows:** restrict source and temporary files to C:; require `--mobile-sha` equal to the latest **independently reviewed full GitHub HEAD**; refuse unsafe Git environment overrides; create only `C:\KTS-QA\issue18-review/{KTS,Mobile,Ngang}` as new clean Git clones from the three fixed official branch/repositories, using **repo-local `core.autocrlf=false` before first checkout**. It verifies full branch name, exact KTS/Mobile/Ngang commits, official remote origin, clean index and normal `.git` directories. An existing full workspace is used only after **read-only exact validation**; a partially present or unknown workspace produces `PARTIAL_OR_UNKNOWN_WORKSPACE`. It never overwrites, deletes, resets, pulls or cleans existing source and never touches E:/F:. If cloning fails, keep partial objects as failure evidence and do not auto-clean; fix authentication/paths manually before another invocation.
+
+**Prerequisites:** Windows 11; Git CLI and Node.js already installed; Git credentials authorized locally for **private** `wilson86/KTS` (first clone fails closed if no authorization); Python/pytest and Chrome already installed if requesting the acceptance run. All must use no paid API or subscription. This code cannot remotely create files on the owner's computer from ChatGPT. Its user invocation is separate and voluntary.
+
+**Shortest operator path:** after inspecting the repository script on GitHub, copy the exact current Mobile review **HEAD SHA** into `$sha`. Download the public, **SHA-pinned** script only to the authorized C: folder, refusing a reparse-point parent and existing source script. Then invoke it. The example URL is a fixed file retrieval, *not* a connector to production.
+
+```powershell
+$sha = '<CURRENT_FULL_MOBILE_REVIEW_SHA_FROM_GITHUB>'
+$dir = 'C:\KTS-QA'
+if (Test-Path -LiteralPath $dir) {
+  if ((Get-Item -LiteralPath $dir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'UNSAFE_QA_PARENT' }
+} else { New-Item -ItemType Directory -Path $dir | Out-Null }
+$file = Join-Path $dir 'issue18-bootstrap-windows.js'
+if (Test-Path -LiteralPath $file) { throw 'BOOTSTRAP_ALREADY_EXISTS_KEEP_AND_REVIEW' }
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/wilson86/tach-dai-mobile/$sha/scripts/issue18-bootstrap-windows.js" -OutFile $file
+node $file --mobile-sha $sha --run-chrome
+```
+
+The bootstrap tool has two modes: no `--run-chrome` means **prepare/validate exact checkouts only**; with `--run-chrome` it first qualifies the three source clones, then invokes the existing exact-pin local Windows preflight + isolated Chrome stage and saves the separate detailed JSON receipt outside the clones at `C:\KTS-QA\issue18-evidence`. On a failing command it stops and leaves sources/evidence untouched, without deleting unique failure artifacts. Even `LOCAL_ACCEPTANCE_RECEIPT_REVIEW_REQUIRED` is **not a release approval**; Android/physical end-user QA and explicit release authorization remain.
+
+**Observed scoped QA:** Actual GitHub source of the new bootstrap helper (blob `ecf52271b8ba1a349fd8458506ae930b6da50243`) and regression test (blob `d5b15dd4a22eae8e11e235c2520e4b3902ef4c52`) loaded in V8 with mocked OS/Node internals: **6/6 pure admission/argument safety test callbacks PASS**, including strict repo/pin, partial workspace rejection, origin validation and non-Windows refusal. A separate **real git executable** in Linux isolated scratch confirmed `git clone -c core.autocrlf=false --branch … --single-branch --no-tags` preserves branch+HEAD, clean status, local `core.autocrlf=false` and byte-identical LF JSON; no private GitHub repository, Windows or browser execution was performed. All sandbox fixture Git repositories were deleted after QA. QA count is now **28 Mobile Node files + 15 Ngang** in **new unexecuted preflight**, public workflow count synchronized but NOT triggered. Original 25 Mobile + 15 Ngang **real Ubuntu CI** and final-source Chrome asset-equivalent evidence remain PASS only on their respective unchanged app SHA. No new application logic was changed.
+
+**Tri-role decision:** project director = operator C: bootstrap path ready for review, still NO_GO; independent reviewer role = isolated logic and actual Linux git command qualify only the preparation approach, Windows bootstrap NOT_RUN; end user = no production readiness until Windows receipts, Android actual Cut/Undo/ledger/reload/offline acceptance and owner approval. `COST_USD=0; CODEX=NOT_USED; CI=NOT_TRIGGERED; MERGE=NO; DEPLOY=NO; PROD_MUTATION=NONE; SKILLS=MANUAL_ONLY; CONTEXT=ELEVATED; RELEASE=NO_GO`.
