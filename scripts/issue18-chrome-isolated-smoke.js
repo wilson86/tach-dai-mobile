@@ -258,6 +258,21 @@ async function chromeSmoke(stage){
       'Both saved Cut ledgers must restore exact survivor wagers after returning to source date: '+JSON.stringify(repaired).slice(0,850));
     console.log('ISSUE18_CHROME_HOLD_RECOVERY_CYCLE_PASS '+cycle);
     }
+    // Actual Unified date-picker action (NOT a direct storage mutation):
+    // old wagers may never remain visible under the new date.
+    const changedOnUi=await command('Runtime.evaluate',{expression:"(()=>{const d=document.getElementById('sharedDate');d.value='2026-10-16';d.dispatchEvent(new Event('change',{bubbles:true}));const a=document.getElementById('tachFrame').contentDocument,b=document.getElementById('ngangFrame').contentDocument;return {shared:d.value,mobileDate:a.getElementById('date').value,ngangDate:b.getElementById('date').value,mobileOutput:a.getElementById('output').value,ngangOutput:b.getElementById('output').value,mobileStatus:a.getElementById('status').textContent,ngangStatus:b.getElementById('status').textContent}})()",returnByValue:true});
+    const scopeChanged=changedOnUi.result?.value||{};
+    ensure(scopeChanged.shared==='2026-10-16'&&scopeChanged.mobileDate==='2026-10-16'&&
+      scopeChanged.ngangDate==='2026-10-16'&&scopeChanged.mobileOutput===''&&scopeChanged.ngangOutput===''&&
+      scopeChanged.mobileStatus.includes('HOLD')&&scopeChanged.ngangStatus.includes('HOLD'),
+      'SCOPE_CHANGE_UNSAFE_STALE_WAGERS: '+JSON.stringify(scopeChanged).slice(0,1050));
+    // UI correction must recover the same survivor rows without new Cut.
+    const restoreShared=await command('Runtime.evaluate',{expression:"(()=>{const d=document.getElementById('sharedDate');d.value='2026-10-15';d.dispatchEvent(new Event('change',{bubbles:true}));const a=document.getElementById('tachFrame').contentDocument,b=document.getElementById('ngangFrame').contentDocument;return {date:d.value,mobile:a.getElementById('output').value,ngang:b.getElementById('output').value}})()",returnByValue:true});
+    const restoredShared=restoreShared.result?.value||{};
+    ensure(restoredShared.date==='2026-10-15'&&restoredShared.mobile===cutResult.output&&
+      restoredShared.ngang===nCut.output,
+      'Scope correction must restore existing surviving wagers: '+JSON.stringify(restoredShared).slice(0,900));
+    console.log('ISSUE18_PUBLIC_CHROME_UNIFIED_DATE_PICKER_HOLD_AND_RECOVER_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS');
     // Canonical owner N035: Thursday 2026-10-29 has TWO primary
     // stations tn/ag. Check exact output bytes in real offline Chrome.
