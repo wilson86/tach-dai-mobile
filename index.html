@@ -357,6 +357,36 @@ function updateUI(){
     `<span class="pill">${weekdayVN(d.getDay())} ${formatDateVN(d)}</span><br>`+
     stations.map(stationInfo).join(" - ");
   saveSettings();
+  reconcileStoredLedgerScope();
+}
+
+// Change of station/day while showing Cut results must not keep rows from
+// the old scope visible as if they belonged to the new draw. The authoritative
+// local receipt is immutable; never delete or re-split it on a scope change.
+function reconcileStoredLedgerScope(){
+  let saved;
+  try{saved=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);}
+  catch(_){
+    if(!inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX))return;
+    pendingIncompatibleLedger=true;
+    outputEl.value="";
+    resetOutputRecords();
+    setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
+    return;
+  }
+  if(!saved)return;
+  if(!parseExactOutputLedger(saved)||inputEl.value!==saved){
+    pendingIncompatibleLedger=true;
+    outputEl.value="";
+    resetOutputRecords();
+    setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
+    return;
+  }
+  if(pendingIncompatibleLedger){
+    pendingIncompatibleLedger=false;
+    inputEl.value=saved;
+    run();
+  }
 }
 
 function saveSettings(){
