@@ -297,3 +297,19 @@ The bootstrap tool has two modes: no `--run-chrome` means **prepare/validate exa
 **Three-role review:** manager = safe recovery from verified partial download implemented, no production write; independent reviewer = source-executed 9/9 mock regression and negative path/order checks PASS, native Windows NOT_RUN; end user = local acceptance remains required before handling real-money messages. `RELEASE=NO_GO; CODEX=NOT_USED; PAID_CI=NONE; MERGE=NO; DEPLOY=NO; COST_USD=0`.
 
 **Cleanup:** No generated scratch files, ZIPs or clone artifacts were created in local container in this batch; GitHub source and all prior QA/checkpoints preserved. `CLEANUP_STATUS=NO_ACTION; FILES_REMOVED=0; SPACE_RECOVERED_MB=0; FILES_PRESERVED=ALL; CLEANUP_BLOCKERS=NONE`.
+
+
+## Preserve unresolved Chrome failure evidence — safe cleanup gate (2026-10-31)
+
+**Reproduced source-level defect:** the previously pinned isolated browser QA script used `fs.rmSync(profile,{recursive:true,force:true})` in `finally`, whether Chrome succeeded or failed. A failure of the 5-cycle Unified HOLD/N035/offline/Cut/Undo smoke would therefore delete the temporary Chrome session even while its storage and service worker state could be needed to investigate an unresolved regression. This contradicts WILSON86 global artifact cleanup policy (preserve unresolved failure evidence). The user-created files/production state were not touched.
+
+**Fix isolated to QA harness** `scripts/issue18-chrome-isolated-smoke.js`:
+- The profile is only eligible for cleanup **after every Chrome synthetic acceptance check and final marker complete** (`smokePassed=true`). Any error before that preserves the profile; stderr includes `CHROME_TEST_PROFILE_PRESERVED_FOR_REVIEW <local path>`.
+- Successful cleanup is allowed only for a direct child named `kts-issue18-headless-*` under the verified temp directory, with normal directory/realpath identity. Recursive audit rejects symlinks, junctions, special entries, unexpected subdirectory realpaths and missing/unreadable paths. Any uncertainty = **KEEP**.
+- Production PWA HTML, app SW, money, source, generated engine and three business-repo pins are **UNMODIFIED**. The preflight's Mobile allowlist now includes `tests/issue18-chrome-profile-cleanup.test.js` as **29 Mobile + 15 Ngang**; dormant public workflow count aligned with **[skip ci]**, not run.
+
+**QA evidence, strictly scoped:** exact GitHub script blob `0a2bbb6fd057c475b8877e8662c609495cfedc01`, exact test blob `0a8e0e5731c89847460d6c184fba8f08cf17ef32`; JS parse PASS and **4/4 actual test callbacks PASS inside isolated V8 with Node fs/path/process mocked**. Covers failure preservation; narrowly scoped success cleanup; nested symlink/junction/special entries; unexpected and redirected targets. **Real native Node on this modified QA-script SHA, Chrome on Windows, physical Android are NOT_RUN.** The historical successful real Ubuntu Chrome workflow `40988211867` remains valid for **unchanged application assets at its own tested SHA**, but not as an execution receipt for this newly modified review-branch QA harness.
+
+**Three-role gate:** project director = removed evidence-loss risk without affecting product, `RELEASE=NO_GO`; independent reviewer role = 4/4 source-executed negative cases qualify the cleanup guard only, native Windows/Chrome failure exercise not yet performed; end user = real Cut/Undo/reload/ledger/offline and monetary correctness on physical Windows and Android remain required before live use. Strict hold: no auto-merge, deploy, Telegram, production, E:/F:, paid CI, Codex or release authorization. `COST_USD=0; CONTEXT=ELEVATED; SKILLS=MANUAL_ONLY`.
+
+`CLEANUP_STATUS=NO_ACTION; FILES_REMOVED=0; SPACE_RECOVERED_MB=0; FILES_PRESERVED=all source, QA records, generated profiles and unknown files; CLEANUP_BLOCKERS=none in this GitHub-only batch`.
