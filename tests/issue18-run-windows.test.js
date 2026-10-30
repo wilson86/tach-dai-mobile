@@ -13,6 +13,14 @@ test('overlapping evidence detected case-insensitively, including inside Mobile'
  assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-evidence'),false);
  assert.equal(overlapsWorkspace(root,'C:\\KTS-QA\\issue18-review-other'),false);
 });
+test('browser pilot is opt-in and no extra tokens are accepted',()=>{
+ assert.deepEqual(parseArgs(['--chrome']),{
+  '--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence',_chrome:true
+ });
+ assert.equal(parseArgs(['--workspace','C:\\QA','--evidence','C:\\receipts','--chrome'])._chrome,true);
+ assert.throws(()=>parseArgs(['--chrome','--workspace','C:\\QA','--evidence','C:\\receipts']),/USAGE/);
+ assert.throws(()=>parseArgs(['--chrome','--chrome']),/USAGE/);
+}
 test('Git command policy refuses Git optional writes and credential prompt',()=>{
  assert.equal(READ_ONLY_GIT_ENV.GIT_OPTIONAL_LOCKS,'0');
  assert.equal(READ_ONLY_GIT_ENV.GIT_TERMINAL_PROMPT,'0');
