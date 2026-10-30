@@ -58,3 +58,89 @@ test('outside Windows bootstrap cannot create/check out anything',()=>{
     assert.throws(()=>prepare(['--mobile-sha',PIN]),/C_ONLY/);
   }
 });
+
+
+// Run the real bootstrap source under an isolated Windows fs/git simulator.
+// The real runner/test process remains Linux-safe and cannot clone or write.
+function simulateBootstrap(existing,{dirty,wrongSha,junction}={}){
+  const vm=require('node:vm');
+  const fs=require('node:fs');
+  const win=require('node:path').win32;
+  const code=fs.readFileSync(require.resolve('../scripts/issue18-bootstrap-windows.js'),'utf8');
+  const present=new Set(existing);
+  const operations=[];
+  const root='C:\\KTS-QA\\issue18-review';
+  const sha={KTS:SOURCE[0].sha,Mobile:PIN,Ngang:SOURCE[2].sha};
+  const branch=Object.fromEntries(SOURCE.map(item=>[item.name,item.branch]));
+  const repo=Object.fromEntries(SOURCE.map(item=>[item.name,item.repo]));
+  const virtualFs={
+    existsSync:p=>{
+      const abs=win.resolve(p);
+      return ['C:\\\\','C:\\KTS-QA',root,'C:\\Temp'].includes(abs)||
+        [...present].some(name=>abs===win.join(root,name)||abs===win.join(root,name,'.git'));
+    },
+    lstatSync:p=>({isDirectory:()=>true,
+      isSymbolicLink:()=>junction==='KTS'&&win.resolve(p)===win.join(root,'KTS')}),
+    realpathSync:{native:p=>win.resolve(p)},
+    readdirSync:()=>[...present],
+    mkdirSync:()=>{throw Error('UNEXPECTED_WORKSPACE_CREATION');}
+  };
+  const remote={spawnSync:(name,args,options)=>{
+    if(name!=='git')throw Error('UNEXPECTED_EXECUTABLE');
+    operations.push({op:args[0],args:[...args],cwd:options.cwd,
+      optionalLocks:options.env.GIT_OPTIONAL_LOCKS});
+    if(args[0]==='clone'){
+      const name=win.basename(args.at(-1));
+      present.add(name);
+      return {status:0,stdout:'',stderr:'',signal:null,error:null};
+    }
+    const name=win.basename(options.cwd);
+    let stdout='';
+    if(args[0]==='rev-parse'&&args[1]==='--show-toplevel')stdout=options.cwd;
+    if(args[0]==='rev-parse'&&args[1]==='HEAD')
+      stdout=(wrongSha===name?'f'.repeat(40):sha[name]);
+    if(args[0]==='branch')stdout=branch[name];
+    if(args[0]==='remote')stdout='https://github.com/'+repo[name]+'.git';
+    if(args[0]==='status'&&dirty===name)stdout='?? stray.txt';
+    return {status:0,stdout,stderr:'',signal:null,error:null};
+  }};
+  const deps={'node:fs':virtualFs,'node:path':{win32:win},
+    'node:os':{tmpdir:()=> 'C:\\Temp'},'node:child_process':remote};
+  const runtime={platform:'win32',env:{},argv:[],execPath:'C:\\node.exe'};
+  const context={module:{exports:{}},process:runtime,require:name=>{
+    if(!Object.hasOwn(deps,name))throw Error('UNEXPECTED_REQUIRE '+name);
+    return deps[name];
+  }};
+  vm.runInNewContext(code,context,{filename:'issue18-bootstrap-windows.js'});
+  let outcome;
+  try{outcome=context.module.exports.prepare(['--mobile-sha',PIN]);}
+  catch(e){outcome={status:'BLOCKED',code:e.code};}
+  return {outcome,operations};
+}
+
+test('resumes verified partial checkout and does not reclone existing repositories',()=>{
+  const a=simulateBootstrap(['KTS']);
+  assert.equal(a.outcome.status,'C_ONLY_CHECKOUTS_READY');
+  assert.deepEqual(a.operations.filter(x=>x.op==='clone').map(x=>require('node:path').win32.basename(x.args.at(-1))),
+    ['Mobile','Ngang']);
+  assert.ok(a.operations.every(x=>x.optionalLocks==='0'));
+  const b=simulateBootstrap(['KTS','Ngang']);
+  assert.equal(b.outcome.status,'C_ONLY_CHECKOUTS_READY');
+  assert.equal(b.operations.filter(x=>x.op==='clone').length,1);
+  const c=simulateBootstrap(['KTS','Mobile','Ngang']);
+  assert.equal(c.outcome.status,'C_ONLY_CHECKOUTS_READY');
+  assert.equal(c.operations.filter(x=>x.op==='clone').length,0);
+});
+
+test('an untrusted existing source blocks before any clone',()=>{
+  for(const [present,options,expected] of [
+    [['KTS'],{dirty:'KTS'},'SOURCE_NOT_CLEAN'],
+    [['KTS'],{wrongSha:'KTS'},'SOURCE_SHA_DRIFT'],
+    [['KTS'],{junction:'KTS'},'UNSAFE_EXISTING_PATH'],
+    [['KTS','unknown'],{},'PARTIAL_OR_UNKNOWN_WORKSPACE']
+  ]){
+    const result=simulateBootstrap(present,options);
+    assert.equal(result.outcome.code,expected);
+    assert.equal(result.operations.filter(x=>x.op==='clone').length,0);
+  }
+});
