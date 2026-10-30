@@ -33,6 +33,10 @@ function safeExisting(p){
 }
 function git(dir,args){const r=cp.spawnSync('git',args,{cwd:dir,encoding:'utf8',shell:false,windowsHide:true,timeout:15000,env:{...process.env,...READ_ONLY_GIT_ENV}});
   if(r.status!==0||r.error||r.signal)block('GIT_PROBE_FAILED');return String(r.stdout).trim();}
+function assertExactMobileCommit(actual,expected){
+  if(!/^[0-9a-f]{40}$/.test(expected||''))block('MOBILE_EXACT_SHA_REQUIRED');
+  if(actual!==expected)block('SOURCE_DRIFT');
+}
 function probe(root,requiredMobileSha){
   if(!/^[0-9a-f]{40}$/.test(requiredMobileSha||''))block('MOBILE_EXACT_SHA_REQUIRED');
   const paths=Object.fromEntries(['KTS','Mobile','Ngang'].map(k=>[k,safeExisting(path.win32.join(root,k))]));
@@ -43,8 +47,8 @@ function probe(root,requiredMobileSha){
       block('GIT_ROOT_DRIFT');
   }
   const actual=Object.fromEntries(Object.entries(paths).map(([k,p])=>[k,git(p,['rev-parse','HEAD'])]));
-  if(actual.KTS!==KTS_PIN||actual.Ngang!==NGANG_PIN||actual.Mobile!==requiredMobileSha)
-    block('SOURCE_DRIFT');
+  if(actual.KTS!==KTS_PIN||actual.Ngang!==NGANG_PIN)block('SOURCE_DRIFT');
+  assertExactMobileCommit(actual.Mobile,requiredMobileSha);
   if(git(paths.Mobile,['branch','--show-current'])!==REVIEW_BRANCH)block('MOBILE_REVIEW_BRANCH_REQUIRED');
   if(git(paths.Mobile,['merge-base','--is-ancestor',MOBILE_BASE,actual.Mobile])!=='')block('UNEXPECTED_ANCESTRY');
   if(Object.values(paths).some(p=>git(p,['status','--porcelain','--untracked-files=all'])!==''))block('DIRTY_SOURCE');
@@ -142,4 +146,4 @@ function run(args=process.argv.slice(2)){
 }
 if(require.main===module){try{const result=run();console.log(JSON.stringify(result));if(!result.success)process.exitCode=2;}
 catch(e){console.error(JSON.stringify({status:'BLOCKED',code:e.code||'UNKNOWN',detail:String(e.message),release:'NO_GO'}));process.exitCode=2;}}
-module.exports={parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplete,run};
+module.exports={parseArgs,cOnly,overlapsWorkspace,READ_ONLY_GIT_ENV,chromeReceiptsComplete,assertExactMobileCommit,run};
