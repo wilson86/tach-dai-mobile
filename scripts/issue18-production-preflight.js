@@ -27,6 +27,7 @@ const MOBILE_TESTS=Object.freeze([
   'tests/duplicate-selector-tests.js',
   'tests/grouped-checkbox-results.js',
   'tests/issue18-build-local-stage.test.js',
+  'tests/issue18-canonical-byte-guard.test.js',
   'tests/issue18-git-source-pin.test.js',
   'tests/issue18-production-preflight.test.js',
   'tests/issue18-run-windows.test.js',
@@ -161,6 +162,13 @@ function admission(options,runCommand=processReadOnly){
     kts:options['--kts-sha'],mobile:options['--mobile-sha'],ngang:options['--ngang-sha']
   },versions:EXPECTED_VERSIONS,engine:ISSUE18_ENGINE,checks:[],chrome:'NOT_RUN',
     android:'NOT_RUN',production:'UNMODIFIED',release:'NO_GO',cost_usd:0};
+  // Git can report a checkout as clean while autocrlf changed JSON bytes.
+  // The strict generator hashes raw canonical inputs and then checks the
+  // exact manifest text; classify the drift before invoking Python.
+  const {inspectCanonicalBytes}=require('./issue18-canonical-byte-guard.js');
+  const raw=inspectCanonicalBytes(dirs.kts,safeFile);
+  result.checks.push({name:'CANONICAL_INPUT_RAW_BYTE_PINS',...raw});
+  if(!raw.ok){result.status='BLOCKED_CANONICAL_INPUT_BYTES';return result;}
   const py=runCommand('python',['-B','KTSRouter/scripts/build_shared_business_engine.py','--check',
     '--workspace-root',root],dirs.kts,180000);
   result.checks.push({name:'CANONICAL_GENERATOR_CHECK',...py});
