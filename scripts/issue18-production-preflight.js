@@ -29,6 +29,7 @@ const MOBILE_TESTS=Object.freeze([
   'tests/issue18-build-local-stage.test.js',
   'tests/issue18-canonical-byte-guard.test.js',
   'tests/issue18-bootstrap-windows.test.js',
+  'tests/issue18-chrome-profile-cleanup.test.js',
   'tests/issue18-git-source-pin.test.js',
   'tests/issue18-production-preflight.test.js',
   'tests/issue18-run-windows.test.js',
