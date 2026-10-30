@@ -60,7 +60,7 @@ jobs:
           const {spawnSync}=require('node:child_process');
           const path=require('node:path');
           const {MOBILE_TESTS,NGANG_TESTS}=require('./scripts/issue18-production-preflight.js');
-          if(MOBILE_TESTS.length!==28||NGANG_TESTS.length!==15)
+          if(MOBILE_TESTS.length!==29||NGANG_TESTS.length!==15)
             throw Error('SOURCE_DRIFT_OR_MISSING_TESTS');
           const failures=[];
           let passed=0;
