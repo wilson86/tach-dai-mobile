@@ -12,6 +12,15 @@ const KTS_PYTESTS=Object.freeze([
   'KTSRouter/tests/test_n035_router_no_send.py',
   'KTSRouter/tests/test_n035_desktop_oracle.py'
 ]);
+// Cross-surface JavaScript oracle: a Python PASS alone cannot qualify PWA
+// money, single-number DX, Cut/reload or saved ledger behavior.
+// These tests consume ONLY the three checked-out Git source trees.
+const KTS_JS_TESTS=Object.freeze([
+  'KTSRouter/tests/test_n035_mode_specific_oracle.js',
+  'KTSRouter/tests/test_duplicate_approval_ui_parity.js',
+  'KTSRouter/tests/test_duplicate_cut_origin.js'
+]);
+const KTS_LEDGER_TEST='KTSRouter/tests/test_legacy_ledger_retention.js';
 const MOBILE_TESTS=Object.freeze([
   'tests/davong-checkbox-ui-parity.js',
   'tests/davong-source-line-cut-provenance.js',
@@ -114,7 +123,15 @@ function verifiedRepo(dir,expectedSha){
   const dirty=processReadOnly('git',['status','--porcelain','--untracked-files=all'],dir);
   if(dirty.exitCode!==0||dirty.stdout.trim())block('DIRTY_SOURCE',dir+' contains local changes or unknown files');
 }
-function jsonAt(folder,filename){return JSON.parse(fs.readFileSync(path.join(folder,filename),'utf8'));}
+function safeFile(root,relative){
+  const file=path.join(root,relative);
+  if(!fs.existsSync(file)||fs.lstatSync(file).isSymbolicLink()||!fs.statSync(file).isFile()||
+     path.win32.normalize(fs.realpathSync.native(file)).toLowerCase()!==
+       path.win32.normalize(file).toLowerCase())
+    block('UNSAFE_SOURCE_FILE',relative+' must be a regular non-junction file in the pinned checkout');
+  return file;
+}
+function jsonAt(folder,filename){return JSON.parse(fs.readFileSync(safeFile(folder,filename),'utf8'));}
 function admission(options,runCommand=processReadOnly){
   const root=verifyWindowsWorkspace(options['--workspace']);
   // Fixture scripts may create disposable files under os.tmpdir(). Do not
@@ -156,6 +173,26 @@ function admission(options,runCommand=processReadOnly){
     ...KTS_PYTESTS],dirs.kts,180000);
   result.checks.push({name:'KTS_N035_ROUTER_SQLITE_AND_DESKTOP_OFFLINE',...kts});
   if(kts.exitCode!==0||kts.error){result.status='BLOCKED_KTS_OFFLINE';return result;}
+  // Run genuine generated-PWA and Unified entrypoints from the pinned three
+  // checkout tree; each test is synthetic and non-transporting.
+  for(const file of KTS_JS_TESTS){
+    safeFile(dirs.kts,file);
+    const r=runCommand(process.execPath,[file],dirs.kts,120000);
+    result.checks.push({name:'KTS_JS_CROSS_SURFACE/'+file,...r});
+    if(r.exitCode!==0||r.error||r.signal){
+      result.status='BLOCKED_KTS_JS_PARITY';return result;
+    }
+  }
+  // Legacy ledger rollback is an explicit operator safety criterion.
+  // Two positional HTML paths are required by this existing isolated test.
+  safeFile(dirs.kts,KTS_LEDGER_TEST);
+  const mobileHtml=safeFile(dirs.mobile,'index.html');
+  const ngangHtml=safeFile(dirs.ngang,'index.html');
+  const ledger=runCommand(process.execPath,[KTS_LEDGER_TEST,mobileHtml,ngangHtml],dirs.kts,120000);
+  result.checks.push({name:'KTS_JS_LEGACY_LEDGER_RETENTION',...ledger});
+  if(ledger.exitCode!==0||ledger.error||ledger.signal){
+    result.status='BLOCKED_KTS_LEDGER';return result;
+  }
   for(const [name,dir,tests] of [
     ['MOBILE',dirs.mobile,MOBILE_TESTS],['NGANG',dirs.ngang,NGANG_TESTS]
   ])for(const test of tests){
@@ -201,4 +238,4 @@ if(require.main===module){
     process.exitCode=2;
   }
 }
-module.exports={argsOf,admission,KTS_PYTESTS,MOBILE_TESTS,NGANG_TESTS};
+module.exports={argsOf,admission,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
