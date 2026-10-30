@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: wilson86/tach-dai-ngang
-          ref: ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4
+          ref: 9de16cd903509492a2bbe41b0000bff95e8d5b6e
           path: _ngang_candidate
           persist-credentials: false
       - name: Verify immutable candidate identities
@@ -39,7 +39,7 @@ jobs:
           node --check scripts/issue18-verify-stage.js
           node --check scripts/issue18-production-preflight.js
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          test "$(git -C _ngang_candidate rev-parse HEAD)" = "ae5f39e4a217967d92a30a2a3c1d1b6159ea26a4"
+          test "$(git -C _ngang_candidate rev-parse HEAD)" = "9de16cd903509492a2bbe41b0000bff95e8d5b6e"
           node - <<'NODE'
           const assert=require('node:assert/strict');
           const fs=require('node:fs');
