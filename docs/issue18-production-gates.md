@@ -86,3 +86,18 @@ Independent reviewer checks Router/backend no-send, Desktop parity, corpus/money
 | Production | **NO_GO** |
 
 Do not merge, publish, deploy, enable paid CI or send Telegram/ACK. COST_USD=0. Keep checkpoint, rollback and QA evidence; do not delete unknown files.
+
+
+## Independent GitHub-content engine execution (review-only evidence, 2026-10-30)
+
+This evidence is **in-memory V8 execution of the real generated JavaScript**, loaded from immutable GitHub file refs, not a fabricated mock, not an OS/browser/Android qualification and not a claim that the new KTS-side Node allowlist ran. Evaluated exact generated engine files at Mobile `737d689b5388fb1060bca5fbd1891e69328bed1d` and Ngang `6f47f7c6b073c5df25da55b2b8f3bcc61513da20`: the two JavaScript files are **byte-identical**, with identical Git blob `0131c6fafa1641ab6255dcd647af188a7c5784c6` and pinned engine SHA `7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea`.
+
+- **640 deterministic money-conservation cases PASS** on the actual `allocateStake` function: both `TACH_3_MIEN` and `NGANG`, amount 1 through 40, whole and plus-0.5 units, division counts 1–4. Each resulting monetary half-unit total exactly equals its input. Tests checked `null` rows for zero allocations without losing money.
+- Mode-specific proof: `allocateStake('5n', 2, 'TACH_3_MIEN') => ['2.5n','2.5n']`, while `allocateStake('5n', 2, 'NGANG') => ['2n','3n']`. This is the generic workflow allocation policy; do **not** substitute it for the special number-pair `DX` N035 oracle or say the two modes are equivalent.
+- The approved Quýt money transform on the actual engine returned `bao 100 -> 107` and `bl 101 -> 108` under `BAO_MULTIPLIER_CEIL`; `dx 101` was not multiplied.
+- Fail-closed parser behavior on actual engine: duplicate `11 11 dx6n` and `11 11 da6n` -> `DUPLICATE_NUMBER_PAIR_INVALID`; ordinary `11 11 b6n` -> `DUPLICATE_NUMBER_CONFIRM_REQUIRED`; `11 22 b6n` accepted.
+- The bare `2d 52 dx5n` text is rejected by `parseBetPayloadAst` without station context. **Contextual N035 validity must be verified through the real Mobile/Ngang entrypoints** (new offline admission gates), not inferred from a context-free parser call.
+
+The expanded offline preflight source was examined for executable JavaScript syntax using a JS parser on both the runner and its regression test (**2/2 syntax PASS**) and checked for expected allowlists, exact status/error paths and scoped HTML inputs. All four referenced KTS JS test files exist at the pinned KTS SHA. **New expanded native Windows preflight, Chrome and Android remain NOT_RUN**. Source/manifest check alone is not a production go-ahead.
+
+**Manager:** escalate to real Windows test only after exact-pin check; **Reviewer:** engine money invariant proof passed in-memory and KTS JS acceptance added but NOT_RUN; **End user:** no real UI Cut/Undo/ledger approval. `RELEASE=NO_GO; CODEX=NOT_INVOKED; PRIVATE_CI=NOT_TRIGGERED; COST_USD=0; PROD_MUTATION=NONE.`
