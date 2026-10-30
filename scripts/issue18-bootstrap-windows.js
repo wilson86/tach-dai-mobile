@@ -3,11 +3,11 @@
 // existing files or clone outside the explicitly scoped Windows QA workspace.
 // Does not create/trigger CI, release, publish or access customer data.
 const fs=require('node:fs'),path=require('node:path'),os=require('node:os'),cp=require('node:child_process');
-const WORKSPACE='C:\\KTS-QA\\issue18-review';
+const WORKSPACE='C:\\KTS-QA\\issue18-calendar-review';
 const SOURCE=Object.freeze([
-  Object.freeze({name:'KTS',repo:'wilson86/KTS',branch:'review/issue18-cache-isolation-authority-20261029',sha:'eec80f812ff0ab47109edcacc32f31eedaffca79'}),
-  Object.freeze({name:'Mobile',repo:'wilson86/tach-dai-mobile',branch:'review/issue18-offline-parity-gate-20261030',sha:null}),
-  Object.freeze({name:'Ngang',repo:'wilson86/tach-dai-ngang',branch:'review/issue18-cache-isolation-20261029',sha:'6f47f7c6b073c5df25da55b2b8f3bcc61513da20'})
+  Object.freeze({name:'KTS',repo:'wilson86/KTS',branch:'review/issue18-calendar-hash-reconcile-20261031',sha:'6210266f34620e4092d38605d970009e5579ef8b'}),
+  Object.freeze({name:'Mobile',repo:'wilson86/tach-dai-mobile',branch:'review/issue18-calendar-hash-reconcile-20261031',sha:null}),
+  Object.freeze({name:'Ngang',repo:'wilson86/tach-dai-ngang',branch:'review/issue18-calendar-hash-reconcile-20261031',sha:'afc777d01ba2346b7eb3a322afe9bbebc6068fc0'})
 ]);
 function fail(code){const e=new Error(code);e.code=code;throw e}
 function argsOf(args){
