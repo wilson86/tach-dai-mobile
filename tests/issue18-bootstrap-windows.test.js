@@ -85,8 +85,8 @@ function simulateBootstrap(existing,{dirty,wrongSha,junction}={}){
     readdirSync:()=>[...present],
     mkdirSync:()=>{throw Error('UNEXPECTED_WORKSPACE_CREATION');}
   };
-  const remote={spawnSync:(name,args,options)=>{
-    if(name!=='git')throw Error('UNEXPECTED_EXECUTABLE');
+  const remote={spawnSync:(program,args,options)=>{
+    if(program!=='git')throw Error('UNEXPECTED_EXECUTABLE');
     operations.push({op:args[0],args:[...args],cwd:options.cwd,
       optionalLocks:options.env.GIT_OPTIONAL_LOCKS});
     if(args[0]==='clone'){
