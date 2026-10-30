@@ -100,7 +100,7 @@ function verifyFolder(root,folder){
 }
 function processReadOnly(binary,argv,cwd,timeout=120000){
   const r=cp.spawnSync(binary,argv,{cwd,encoding:'utf8',shell:false,windowsHide:true,timeout,
-    maxBuffer:8*1024*1024,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PIP_NO_INDEX:'1',PYTEST_DISABLE_PLUGIN_AUTOLOAD:'1',PYTEST_ADDOPTS:''}});
+    maxBuffer:8*1024*1024,env:{...process.env,PYTHONDONTWRITEBYTECODE:'1',PIP_NO_INDEX:'1',PYTEST_DISABLE_PLUGIN_AUTOLOAD:'1',PYTEST_ADDOPTS:'',GIT_OPTIONAL_LOCKS:'0',GIT_TERMINAL_PROMPT:'0'}});
   return {exitCode:r.status,signal:r.signal||null,error:r.error?String(r.error.message):null,
     stdout:String(r.stdout||'').slice(-5000),stderr:String(r.stderr||'').slice(-5000)};
 }
