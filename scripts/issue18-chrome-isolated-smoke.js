@@ -192,6 +192,7 @@ async function chromeSmoke(stage){
     // (without rewriting any wager) when Unified opens on 2026-10-16.
     // Both ledgers are exactly the receipts produced by real trusted Cuts
     // earlier in this same isolated browser test. No forged production data.
+    for(let cycle=1;cycle<=5;cycle++){
     const stagedDate='2026-10-16',originalDate='2026-10-15';
     const injectLedger="(()=>{const s=window.localStorage;const wrong={region:'mn',date:'"+stagedDate+"',today:false};"+
       "s.setItem('kts_unified_shared_settings_v1',JSON.stringify(wrong));"+
@@ -240,6 +241,8 @@ async function chromeSmoke(stage){
     }
     ensure(repaired?.date===originalDate&&repaired?.mobile===cutResult.output&&repaired?.ngang===nCut.output,
       'Both saved Cut ledgers must restore exact survivor wagers after returning to source date: '+JSON.stringify(repaired).slice(0,850));
+    console.log('ISSUE18_CHROME_HOLD_RECOVERY_CYCLE_PASS '+cycle);
+    }
     console.log('ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS '+JSON.stringify(swScopes));
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
