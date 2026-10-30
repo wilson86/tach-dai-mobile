@@ -24,7 +24,7 @@ test('E: drive is never admitted as a test workspace',()=>{
 });
 
 test('release admission includes all audited regression tests but excludes live published fetch',()=>{
-  assert.equal(MOBILE_TESTS.length,26);
+  assert.equal(MOBILE_TESTS.length,27);
   assert.equal(NGANG_TESTS.length,15);
   for(const tests of [MOBILE_TESTS,NGANG_TESTS]){
     assert.equal(new Set(tests).size,tests.length,'no duplicate execution');
@@ -34,6 +34,8 @@ test('release admission includes all audited regression tests but excludes live 
       'external published endpoint must never be fetched by local preflight');
   }
   assert.ok(MOBILE_TESTS.includes('tests/issue18-run-windows.test.js'));
+  assert.ok(MOBILE_TESTS.includes('tests/issue18-canonical-byte-guard.test.js'));
+  assert.ok(!NGANG_TESTS.includes('tests/issue18-canonical-byte-guard.test.js'));
   assert.ok(!NGANG_TESTS.includes('tests/issue18-run-windows.test.js'),
     'Windows admission runner belongs only to Mobile checkout');
   for(const required of ['tests/source-output-cut-conservation.js',
