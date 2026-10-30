@@ -10,6 +10,21 @@ const assert=require('node:assert/strict');
 
 const nap=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 function ensure(ok,msg){if(!ok)throw Error('CHROME_STAGE_BLOCKED: '+msg)}
+// Never destroy a failed Chrome profile: it may be the only evidence of a
+// timing/caching defect. On success, clean ONLY the exact disposable profile
+// created inside the known temp directory, never a junction or unrelated path.
+function canCleanupChromeProfile(passed,profile,tmpDir,sourceFs=fs,sourcePath=path){
+  if(!passed||typeof profile!=='string'||typeof tmpDir!=='string')return false;
+  const root=sourcePath.resolve(tmpDir),target=sourcePath.resolve(profile);
+  const norm=value=>process.platform==='win32'?value.toLowerCase():value;
+  if(norm(sourcePath.dirname(target))!==norm(root)||
+     !sourcePath.basename(target).startsWith('kts-issue18-headless-'))return false;
+  try{
+    const st=sourceFs.lstatSync(target);
+    return st.isDirectory()&&!st.isSymbolicLink()&&
+      norm(sourceFs.realpathSync(target))===norm(target);
+  }catch(_){return false;}
+}
 function serve(stage){
   const root=fs.realpathSync(stage);
   const types={'.html':'text/html; charset=utf-8','.js':'text/javascript','.json':'application/json','.webmanifest':'application/manifest+json','.png':'image/png'};
@@ -36,7 +51,7 @@ async function chromeSmoke(stage){
   ensure(served.ok&&((await served.text()).includes('id="tachFrame"')),'loopback server did not serve the real Unified HTML');
   const profile=fs.mkdtempSync(path.join(os.tmpdir(),'kts-issue18-headless-'));
   const chrome=process.env.CHROME_PATH||'google-chrome';
-  let child,ws;
+  let child,ws,smokePassed=false;
   try{
     const args=['--headless=new','--disable-gpu','--disable-dev-shm-usage','--no-sandbox',
       '--no-first-run','--no-default-browser-check','--disable-extensions','--disable-background-networking',
@@ -306,6 +321,7 @@ async function chromeSmoke(stage){
       frames:2,source:'synthetic',modeOutputsDistinct:true,physicalWindows:'NOT_RUN',
       android:'NOT_RUN',production:'NO_GO',cost_usd:0
     }));
+    smokePassed=true;
   }finally{
     try{ws?.close()}catch(_){}
     if(child&&child.exitCode===null){
@@ -314,9 +330,13 @@ async function chromeSmoke(stage){
       if(child.exitCode===null)child.kill('SIGKILL');
     }
     await new Promise(ok=>server.close(ok));
-    try{fs.rmSync(profile,{recursive:true,force:true,maxRetries:4,retryDelay:150})}
-    catch(e){console.error('CHROME_TEST_PROFILE_CLEANUP_ONLY: '+e.message)}
+    if(canCleanupChromeProfile(smokePassed,profile,os.tmpdir())){
+      try{fs.rmSync(profile,{recursive:true,force:true,maxRetries:4,retryDelay:150})}
+      catch(e){console.error('CHROME_TEST_PROFILE_CLEANUP_ONLY: '+e.message)}
+    }else{
+      console.error('CHROME_TEST_PROFILE_PRESERVED_FOR_REVIEW '+profile);
+    }
   }
 }
 if(require.main===module)chromeSmoke(process.argv[2]).catch(e=>{console.error(e.stack||e);process.exitCode=2});
-module.exports={chromeSmoke};
+module.exports={chromeSmoke,canCleanupChromeProfile};
