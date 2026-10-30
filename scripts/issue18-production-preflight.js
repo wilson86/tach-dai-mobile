@@ -124,10 +124,13 @@ function verifiedRepo(dir,expectedSha){
   const dirty=processReadOnly('git',['status','--porcelain','--untracked-files=all'],dir);
   if(dirty.exitCode!==0||dirty.stdout.trim())block('DIRTY_SOURCE',dir+' contains local changes or unknown files');
 }
-function safeFile(root,relative){
+function safeFile(root,relative,sourceFs=fs){
   const file=path.join(root,relative);
-  if(!fs.existsSync(file)||fs.lstatSync(file).isSymbolicLink()||!fs.statSync(file).isFile()||
-     path.win32.normalize(fs.realpathSync.native(file)).toLowerCase()!==
+  // Dependency injection is for isolated no-filesystem regression only; native
+  // admission always uses the real fs module.
+  if(!sourceFs.existsSync(file)||sourceFs.lstatSync(file).isSymbolicLink()||
+     !sourceFs.statSync(file).isFile()||
+     path.win32.normalize(sourceFs.realpathSync.native(file)).toLowerCase()!==
        path.win32.normalize(file).toLowerCase())
     block('UNSAFE_SOURCE_FILE',relative+' must be a regular non-junction file in the pinned checkout');
   return file;
@@ -235,4 +238,4 @@ if(require.main===module){
     process.exitCode=2;
   }
 }
-module.exports={argsOf,admission,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
+module.exports={argsOf,admission,safeFile,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
