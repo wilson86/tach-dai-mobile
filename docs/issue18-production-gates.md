@@ -196,3 +196,23 @@ The runner aborts if not on Windows C:, if the workspace/evidence path is linked
 `RELEASE=NO_GO; CODEX=NOT_USED; GITHUB_ACTIONS=NOT_TRIGGERED; COST_USD=0; E_ACCESS=NONE; F_ACCESS=NONE; MERGE=NO; DEPLOY=NO; CONTEXT=ELEVATED; SKILLS=MANUAL_ONLY.`
 
 `CLEANUP_STATUS=NO_ACTION; FILES_REMOVED=0; SPACE_RECOVERED_MB=0; FILES_PRESERVED=all existing sandbox files and GitHub source; CLEANUP_BLOCKERS=unrelated pre-existing sandbox files not identified as owned by this batch are retained.`
+
+
+## Optional no-Codex Gate A + isolated Chrome Gate B in one Windows command (2026-10-30)
+
+The read-only Windows evidence entrypoint has a new **explicit opt-in** `--chrome` flag. The old command (no flag) is unchanged: run only Gate A preflight, save a JSON receipt, and retain `release=NO_GO`. The new flag does not publish, deploy, send or ACK messages, touch real Chrome profiles or production, nor grant device acceptance.
+
+**Prerequisites (not verified on the owner's machine):** all three clean, independent, source-pinned C:-only checkouts, already installed local Python/pytest + Node 22+, and Chrome on C:. No Codex, GitHub Actions or paid API is required. The helper locates Chrome in the usual C: program paths, or accepts a C:-only `CHROME_PATH` value. It will refuse symlinked/junction/other-drive paths. From a clean `C:\KTS-QA\issue18-review\Mobile` checkout on the documented review branch:
+
+```powershell
+Set-Location 'C:\KTS-QA\issue18-review\Mobile'
+node .\scripts\issue18-run-windows.js --chrome
+```
+
+The helper first runs the **actual** SHA/clean-checkout-verified Gate A (Python strict generator, N035 Router/Desktop, four KTS cross-surface Node, 26 Mobile Node and 15 Ngang Node, postflight source pins). **Only** if Gate A returns `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING`, it creates a brand-new **append-only C:-only evidence stage** outside the three source checkouts, assembles and verifies the 21 original exact-commit assets plus two safe isolated Unified rewrites, and launches the existing `issue18-chrome-isolated-smoke.js` in a disposable Chrome profile against an ephemeral **127.0.0.1-only** server. Browser smoke explicitly exercises both mode outputs, N035 singleton reject, Cut/reload/Undo, 3 SW scopes offline and date-mismatch HOLD recovery. Its temporary profile is handled by that existing smoke; the stage remains as rollback/failure evidence until authorized cleanup.
+
+**Fail-closed condition:** A subprocess exit code 0 is insufficient. The new launcher additionally requires all five independent existing stdout receipt markers: `ISSUE18_PUBLIC_CHROME_CUT_RELOAD_UNDO_PASS`, `ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS`, `ISSUE18_PUBLIC_CHROME_N035_THURSDAY_EXACT_ORACLE_PASS`, `ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS`, and `ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS`. Missing any one => `BLOCKED_CHROME`, never Browser PASS. A second source-Git pin check follows. No source checkout writes should occur. A new unique `issue18-<timestamp>-<pid>.json` receipt records both `preflight` and `browser` outcomes. If Gate A fails, `browser.status=NOT_RUN`; if Chrome fails, `browser.status=BLOCKED_CHROME`, `success=false`. Only a qualified local Chrome run can produce `LOCAL_CHROME_PASS_ANDROID_PENDING`; `release` remains **NO_GO** regardless.
+
+**Observed QA, independent of any Windows claim:** Node **22.16.0** in a disposable Linux sandbox, `node --test tests/issue18-run-windows.test.js` => **7 PASS / 0 FAIL** on **byte-identical GitHub files**, including opt-in CLI rejection and all-five-receipt negative tests. Exact blob IDs: `scripts/issue18-run-windows.js` `d2a2486fd51fa7f2a7fb90ba59fffd4914f5b908` (SHA-256 `41ac2a23d10fcb1b4f81feb80b7938c5a890e7f3c943a3514d74781b84dc3277`) and `tests/issue18-run-windows.test.js` `6ca6f9a2634a772e74063814c329492fcd70b41d` (SHA-256 `65ab83906d67900480b4dcc6186815c8afe1528497313fb443fa29e18880e3d2`). Chromium 144.0.7559.96 is installed in this *Linux* sandbox but the complete source-pinned three-app stage was **not** available here; therefore **real browser PWA acceptance NOT_RUN**. The native Windows `--chrome` end-to-end path itself remains **NOT_RUN** and must not be called qualified until performed on the owner's PC.
+
+**Three-role gate:** project director = optional zero-cost browser step prepared, NO_GO release; independent reviewer = real 7/7 Node helper tests qualify only the launcher and receipts, no Windows/Chrome PASS; end user = still needs real Chrome/Android visual and monetary Cut/Undo acceptance and explicit owner approval. `COST_USD=0; CODEX=NOT_INVOKED; CI=NOT_TRIGGERED; MERGE=NO; DEPLOY=NO; PROD_MUTATION=NONE; SKILLS=MANUAL_ONLY; CONTEXT=ELEVATED.`
