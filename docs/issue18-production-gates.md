@@ -139,3 +139,23 @@ The Unified function came directly from the pinned real `app/unified-core.js`, e
 **Synthetic control-flow QA: 5/5 PASS.** With all simulated success, command sequence is Python generator, Python Router/Desktop N035, 3 KTS JS entrypoints, 1 KTS legacy ledger JS, 25 Mobile Node and 15 Ngang Node, then 3 Git/identity rechecks. The total **47** is a count of receipt rows, NOT an actual claim of tests passing. GitHub source identity, Windows file access, real subprocess results, money/SQLite/Undo/Chrome/Android remain subject to exact pinned physical/local acceptance.
 
 **Reviewer caution:** No business rules, customer data, source repositories, PWA version or cache changed in this verification. The operator must run the full unmocked preflight in the C:-only test workspace. `COST_USD=0; RELEASE=NO_GO`.
+
+
+## One-command Windows C:-only evidence collector (without Codex)
+
+A new **review-branch only** entrypoint, `scripts/issue18-run-windows.js`, performs the complete existing exact-source `admission()` and preserves the resulting diagnostic JSON in a separate C:-only folder without requiring Codex or an online API. It does not stage/deploy an app, publish, send Telegram or change production; it always sets `release=NO_GO`. This is intended to reduce the owner's manual steps **when the existing three isolated C:-only clean checkouts are already present**. It does NOT clone, reset, fetch, pull, overwrite or otherwise alter source, and does NOT claim a successful Windows result until locally executed.
+
+Preconditions: `C:\KTS-QA\issue18-review\KTS`, `...\Mobile`, `...\Ngang` are clean normal Git clones (no junctions, no linked worktrees), with Node + Python/pytest already installed locally. The private KTS checkout must be at exactly `eec80f812ff0ab47109edcacc32f31eedaffca79`; Ngang at `6f47f7c6b073c5df25da55b2b8f3bcc61513da20`; Mobile must be on `review/issue18-offline-parity-gate-20261030` and descend from `737d689b5388fb1060bca5fbd1891e69328bed1d`, with no uncommitted files. The new runner is executed from that **same** Mobile checkout.
+
+From Windows PowerShell (no Codex):
+
+```powershell
+Set-Location 'C:\KTS-QA\issue18-review\Mobile'
+node .\scripts\issue18-run-windows.js
+```
+
+The runner aborts if not on Windows C:, if the workspace/evidence path is linked, if the Git roots/branch/pins differ, or if the source tree is dirty. It then runs the pinned Python generator strict check, N035 offline pytest, 4 KTS JS checks, 25 Mobile and 15 Ngang JS regressions, and postflight Git integrity checks, saving an **append-only, unique JSON receipt** at `C:\KTS-QA\issue18-evidence\issue18-<timestamp>-<pid>.json`. The evidence folder is outside all three checkouts and created only after confirming the C: parent; preexisting file names cannot be overwritten (`wx`). An optional alternative root may be supplied with `--workspace ABS_C_DIR --evidence ABS_C_DIR`, but the safety guards remain.
+
+`LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING` means only Gate A passed; browser Chrome, real Android, personal data and release authorization remain separate gates. A failing test exits nonzero and writes the failing admission receipt; failures of preliminary source/disk safety checks abort without writing any checkout files.
+
+**Evidence at this checkpoint:** tests of the committed helper's CLI validation/default C: paths and non-Windows refusal **5/5 PASS** using the exact GitHub JavaScript code in isolated V8; local Node test file covers defaults, invalid overrides and non-Windows refusal (3 cases). **Windows live execution NOT_RUN; no Actions triggered.** Do not claim device or full admission PASS from these helper-unit results. `COST_USD=0; RELEASE=NO_GO`.
