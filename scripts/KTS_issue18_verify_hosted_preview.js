@@ -22,7 +22,7 @@ function sha256(b){return crypto.createHash('sha256').update(b).digest('hex')}
 function checkUrl(u){
   let parsed; try{parsed=new URL(u)}catch(_){die('INVALID_URL')}
   if(parsed.protocol!=='https:'||parsed.username||parsed.password||parsed.port||parsed.search||parsed.hash||
-     parsed.pathname!=='/'||/^[a-z\d-]+(?:\.[a-z\d-]+)?\.pages\.dev$/i.test(parsed.hostname)===false)
+     parsed.pathname!=='/'||!/^[a-z\d-]+(?:\.[a-z\d-]+)?\.pages\.dev$/i.test(parsed.hostname))
     die('HTTPS_SEPARATE_PAGES_DEV_ORIGIN_REQUIRED');
   if(parsed.hostname==='wilson86.github.io')die('PRODUCTION_ORIGIN_FORBIDDEN');
   return parsed;
