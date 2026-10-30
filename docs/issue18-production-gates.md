@@ -159,3 +159,20 @@ The runner aborts if not on Windows C:, if the workspace/evidence path is linked
 `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING` means only Gate A passed; browser Chrome, real Android, personal data and release authorization remain separate gates. A failing test exits nonzero and writes the failing admission receipt; failures of preliminary source/disk safety checks abort without writing any checkout files.
 
 **Evidence at this checkpoint:** tests of the committed helper's CLI validation/default C: paths and non-Windows refusal **5/5 PASS** using the exact GitHub JavaScript code in isolated V8; local Node test file covers defaults, invalid overrides and non-Windows refusal (3 cases). **Windows live execution NOT_RUN; no Actions triggered.** Do not claim device or full admission PASS from these helper-unit results. `COST_USD=0; RELEASE=NO_GO`.
+
+
+## Additional safety review — Windows receipt path and Git index (2026-10-30)
+
+**Defects fixed only in candidate QA tools; application source remains pinned/unchanged.**
+
+1. `scripts/issue18-run-windows.js` previously used case-sensitive `startsWith` to reject evidence paths inside or containing the C: workspace. Real Windows paths are case-insensitive, so a path with mixed-case spelling could bypass this safety gate. The new pure `overlapsWorkspace` routine normalizes and case-folds both Windows paths, rejects identical/ancestor/descendant paths and allows only independent evidence folders. GitHub source and exact test bytes are verified with blob SHA.
+2. `git status` may refresh the optional Git index even when the test runner intends to be read-only. The helper's Git probes now force `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, regardless of inherited settings. The preflight's child process wrapper applies the same overrides to its subprocesses. This limits optional Git writes and interactive credential requests; it does not imply every existing synthetic test is side-effect free.
+
+**Observed QA, not Windows qualification:** Isolated Linux Node 22 `node --test tests/issue18-run-windows.test.js` -> **5/5 PASS** (C: defaults, mixed-case path overlaps, Git environment policy, invalid arguments, non-Windows refusal). Exact tested Git blobs: runner `48f685f214e7eb8b91f55c67ab5646b1f87a2f6b`, tests `1418b68e18cb45434dd6d2a5fd0b45c3e960a0e8`. The revised `scripts/issue18-production-preflight.js` (blob `b8e9814209883fe26046ee8dd2689ed3cc0b2cd2`) passed JS syntax parsing and **2 source-executed isolated V8 orchestrator simulations**: all-success returns `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING` with 47 synthetic receipt rows / 46 mocked subprocess calls / 18 Git calls all configured read-only; first KTS JS N035 error returns `BLOCKED_KTS_JS_PARITY` with no subsequent PWA tests. The **47 rows and 46 mocks are not genuine application test receipts**.
+
+**Three-role review:**
+- Project director: no uncontrolled input/QA path writes authorized; additional blocker removed before local Windows test. RELEASE NO_GO pending device acceptance.
+- Independent reviewer: verified patch scope + exactly tested helper bytes, negative path tests, preflight fail-closed orchestration; no claims of actual Windows or full native app PASS.
+- End user: Cut/Undo/reload, real financial output and Android offline/cache still need live-device isolated acceptance; no production wagers allowed.
+
+`CODEX=NOT_USED; GITHUB_ACTIONS=NOT_REQUESTED; COST_USD=0; MERGE=NO; DEPLOY=NO; PRODUCTION_MUTATION=NONE; RELEASE=NO_GO.`
