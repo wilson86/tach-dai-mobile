@@ -1,0 +1,48 @@
+name: KTS Issue18 Isolated Real Chrome Pilot - NO DEPLOY
+on:
+  push:
+    branches: [review/issue18-staging-commit-pins-20261030]
+    paths:
+      - .github/workflows/issue18-public-chrome-local-only.yml
+      - scripts/issue18-chrome-isolated-smoke.js
+permissions:
+  contents: read
+concurrency:
+  group: issue18-browser-local-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  chrome-local-only:
+    name: Headless Chrome on loopback source-stage only
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Mobile exact head without credentials
+        uses: actions/checkout@v4
+        with:
+          path: Mobile
+          persist-credentials: false
+      - name: Checkout pinned Ngang (PUBLIC)
+        uses: actions/checkout@v4
+        with:
+          repository: wilson86/tach-dai-ngang
+          ref: 6f47f7c6b073c5df25da55b2b8f3bcc61513da20
+          path: Ngang
+          persist-credentials: false
+      - name: Assert locally available browser and Git source pins
+        shell: bash
+        run: |
+          command -v google-chrome
+          google-chrome --version
+          node --version
+          test "$(git -C Mobile rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C Ngang rev-parse HEAD)" = "6f47f7c6b073c5df25da55b2b8f3bcc61513da20"
+          node --check Mobile/scripts/issue18-chrome-isolated-smoke.js
+          test -s Mobile/scripts/issue18-chrome-isolated-smoke.js
+      - name: Stage and verify all 21 exact assets with immutable source pins
+        shell: bash
+        run: |
+          node Mobile/scripts/issue18-build-local-stage.js --mobile "$PWD/Mobile" --ngang "$PWD/Ngang" --out "$PWD/STAGE" --mobile-sha "$GITHUB_SHA" --ngang-sha 6f47f7c6b073c5df25da55b2b8f3bcc61513da20
+          node Mobile/scripts/issue18-verify-stage.js --mobile "$PWD/Mobile" --ngang "$PWD/Ngang" --out "$PWD/STAGE" --mobile-sha "$GITHUB_SHA" --ngang-sha 6f47f7c6b073c5df25da55b2b8f3bcc61513da20
+      - name: Actual headless Chrome isolated localhost Unified and two mode-specific synthetic N035 runs
+        shell: bash
+        run: node Mobile/scripts/issue18-chrome-isolated-smoke.js "$PWD/STAGE"

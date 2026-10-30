@@ -1,0 +1,86 @@
+name: KTS Issue18 Public Candidate Native Node QA - NO DEPLOY
+
+on:
+  push:
+    branches:
+      - review/issue18-staging-commit-pins-20261030
+    paths:
+      - .github/workflows/issue18-public-qa-only.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: issue18-public-native-qa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node-qa:
+    name: Public standard Ubuntu Node - read-only
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout pinned Mobile candidate
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout pinned public Ngang candidate
+        uses: actions/checkout@v4
+        with:
+          repository: wilson86/tach-dai-ngang
+          ref: 6f47f7c6b073c5df25da55b2b8f3bcc61513da20
+          path: _ngang_candidate
+          persist-credentials: false
+      - name: Verify immutable candidate identities
+        shell: bash
+        run: |
+          node --version
+          node --check scripts/issue18-build-local-stage.js
+          node --check scripts/issue18-verify-stage.js
+          node --check scripts/issue18-production-preflight.js
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git -C _ngang_candidate rev-parse HEAD)" = "6f47f7c6b073c5df25da55b2b8f3bcc61513da20"
+          node - <<'NODE'
+          const assert=require('node:assert/strict');
+          const fs=require('node:fs');
+          const mobile=JSON.parse(fs.readFileSync('version.json','utf8'));
+          const unified=JSON.parse(fs.readFileSync('app/version.json','utf8'));
+          const ngang=JSON.parse(fs.readFileSync('_ngang_candidate/version.json','utf8'));
+          const hash='7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
+          assert.equal(mobile.version,'2.0.38');
+          assert.equal(unified.version,'1.0.27');
+          assert.equal(ngang.version,'1.0.37');
+          for(const v of [mobile,unified,ngang])assert.equal(v.business_engine_sha256,hash);
+          console.log('CROSS_REPO_ENGINE_AND_VERSION_IDENTITY=PASS');
+          NODE
+      - name: Run explicitly audited offline Mobile and Ngang Node regressions
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const {spawnSync}=require('node:child_process');
+          const path=require('node:path');
+          const {MOBILE_TESTS,NGANG_TESTS}=require('./scripts/issue18-production-preflight.js');
+          if(MOBILE_TESTS.length!==25||NGANG_TESTS.length!==15)
+            throw Error('SOURCE_DRIFT_OR_MISSING_TESTS');
+          const failures=[];
+          let passed=0;
+          for(const [label,cwd,tests] of [
+            ['MOBILE',process.cwd(),MOBILE_TESTS],
+            ['NGANG',path.resolve('_ngang_candidate'),NGANG_TESTS]
+          ]){
+            for(const file of tests){
+              console.log('\nBEGIN '+label+' '+file);
+              const result=spawnSync(process.execPath,[file],{
+                cwd,shell:false,stdio:'inherit',timeout:120000,
+                env:{...process.env,CI:'true',GIT_OPTIONAL_LOCKS:'0'}
+              });
+              if(result.error||result.signal||result.status!==0){
+                const reason='BLOCKED '+label+' '+file+': '+String(result.error?.message||result.signal||result.status);
+                console.error(reason);failures.push(reason);
+              }else{passed++;console.log('PASS '+label+' '+file);}
+            }
+          }
+          console.log('PUBLIC_NATIVE_QA_SUMMARY '+JSON.stringify({passed,failed:failures.length,failures}));
+          if(failures.length)throw Error('PUBLIC_NATIVE_QA_BLOCKED_ON_'+failures.length+'_FILES');
+          console.log('PUBLIC_NATIVE_QA_ALL_AUDITED_FILES_PASS');
+          NODE

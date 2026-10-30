@@ -41,6 +41,8 @@ const multi=U.transformDaVongText(".. 32 b20n\n"+clean.split("\n")[1],bridge,"mb
 assert.equal(multi.ok,false);
 assert.deepEqual(Array.from(multi.outputs),[],"double prefix dot remains invalid");
 assert.equal(r.normalizeInput("32 b10.50n"),"32 b10.50n","money decimals stay intact");
+const candidateVersion=JSON.parse(read("version.json"));
 assert.equal(r.KTS_BUSINESS_ENGINE.ENGINE_SHA256,
- "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb");
+ candidateVersion.business_engine_sha256,
+ "MB dot parity test must use the candidate engine identity, never an old pinned release");
 console.log("MB DOT TELEGRAM ĐÁ VÒNG PARITY: PASS");

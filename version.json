@@ -1,6 +1,6 @@
 {
-  "version": "2.0.32",
-  "updated": "2026-10-17",
-  "notes": "Stage-only MB leading-dot normalization, raw-prefix Router safety gate, unchanged business engine; NOT DEPLOYED",
-  "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb"
+  "version": "2.0.38",
+  "updated": "2026-10-30",
+  "notes": "Canonical duplicate-number confirmation gate; calendar generated from KTS station_schedule_authority.json; explicit unordered DX pairs and full station coverage.",
+  "business_engine_sha256": "7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea"
 }

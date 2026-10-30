@@ -32,6 +32,11 @@ function loadRules() {
     selectionEnd: 0,
     style: {},
     focus() {},
+    closest() { return this; },
+    after() {},
+    append() {},
+    appendChild() {},
+    setAttribute() {},
     select() { this.selectionStart = 0; this.selectionEnd = this.value.length; },
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
     remove() {}
@@ -41,6 +46,8 @@ function loadRules() {
     async writeText(value) { this.text = value; }
   };
   const context = {
+    crypto:require('node:crypto').webcrypto,TextEncoder,Uint8Array,
+    localStorage:(()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)}})(),
     console,
     Set,
     Date,
@@ -50,14 +57,14 @@ function loadRules() {
     Error,
     navigator: { clipboard },
     document: {
-      getElementById(id) { return elements[id] || (elements[id] = element()); },
+      getElementById(id) { if(id==="duplicateConfirmPanel"&&!elements[id])return null; return elements[id] || (elements[id] = element()); },
       createElement: element,
       body: { appendChild() {} },
       execCommand() { return true; }
     }
   };
   vm.createContext(context);
-  vm.runInContext(`${calendar}\n${businessEngine}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,distributeAmountExactly,auditMoneyConservation,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),engine:KTS_BUSINESS_ENGINE,elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
+  vm.runInContext(`${calendar}\n${businessEngine}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,distributeAmountExactly,auditMoneyConservation,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),confirmDuplicate:()=>document.getElementById("duplicateConfirmBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),getWorkingLedger:()=>JSON.parse(JSON.stringify(workingLedger)),engine:KTS_BUSINESS_ENGINE,elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
   return context.__rules;
 }
 
@@ -70,6 +77,32 @@ function expectThrow(fn, expected) {
 
 async function main() {
 const rules = loadRules();
+
+  // Synthetic MB fixture: 'đau' is a narrowly
+  // stake-bound spelling for ĐẦU, but duplicates still need a money oracle.
+  const mbDauRaw="mb 10 dd 4n 21 32 b6n 43 đau 8n đuôi 12n 54 65 b10n";
+  const mbDauNormalized=rules.normalizeInput(mbDauRaw);
+  assert.match(mbDauNormalized,/43 đầu 8n đuôi 12n/u);
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(mbDauNormalized,"mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))));
+  assert.deepEqual(
+    Array.from(rules.engine.extractStakeOccurrences(mbDauNormalized)).filter(x=>x.selector==="DAU"||x.selector==="DUOI").map(x=>x.amount),
+    ["8n","12n"]
+  );
+  // Non-wager language stays verbatim after ordinary lowercase normalization.
+  assert.equal(rules.normalizeInput("Đau bụng 50n"),"đau bụng 50n");
+  assert.equal(rules.normalizeInput("98 đau buồn 50n"),"98 đau buồn 50n");
+  assert.equal(rules.normalizeInput("98 đau 50"),"98 đau 50");
+  const mbDuplicated90="mb 11 22 33 22 b6n 44 55 b10n";
+  expectThrow(
+    ()=>rules.validateCheckOnlyLine(mbDuplicated90,"mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))),
+    /^DUPLICATE_NUMBER_CONFIRM_REQUIRED:/u
+  );
+  // Explicitly separate clauses MAY repeat 90; never guess that operator edit.
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(
+    "mb 11 22 33 b6n 22 b6n 44 55 b10n",
+    "mb",rules.getSchedule("mb",new Date("2026-10-28T12:00:00"))
+  ));
+
 const assertHalfUnitSplit=(amount,count)=>{
   const parts=rules.distributeAmountExactly(`${amount}n`,count).filter(Boolean);
   const units=parts.map(part=>{const m=part.match(/^(\d+)(?:[.,](\d+))?n$/u);assert.ok(m,`bad split token ${part}`);assert.ok(!m[2]||/^0*$/u.test(m[2])||/^50*$/u.test(m[2]),`quarter/other fraction ${part}`);return Number(m[1])*2+(m[2]&&!/^0*$/u.test(m[2])?1:0);});
@@ -284,14 +317,14 @@ rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
 
-// Selecting the full source-equivalent group is executable and removes only it.
+// Selecting a source-equivalent group keeps the immutable origin in the ledger.
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "3d 64 51 dx 5n");
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
 assert.equal(ui.output.value, secondOutput);
-assert.equal(outputRecords().length, 3);
-assert.deepEqual(outputRecords().map(record => record.sourceLine), [1, 1, 1]);
+assert.equal(outputRecords().filter(record=>record.alive).length, 3);
+assert.deepEqual(outputRecords().filter(record=>record.alive).map(record => record.sourceLine), [2, 2, 2]);
 
 // Undo restores the complete source/output bijection.
 rules.triggerUndo();
@@ -305,7 +338,7 @@ rules.run();
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = firstOutput.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "3d 64 51 dx 5n");
+assert.match(ui.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u);
 rules.triggerUndo();
 assert.equal(ui.input.value, initialInput);
 assert.equal(ui.output.value, `${firstOutput}\n${secondOutput}`);
@@ -323,7 +356,8 @@ assert.equal(ui.output.value, "qn 22 10 dd 5n");
 ui.output.selectionStart = 0;
 ui.output.selectionEnd = ui.output.value.length;
 await rules.cutSelectedOutput();
-assert.equal(ui.input.value, "");
+assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).origin,"2d 22 10 dd 5n");
+assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).rows.length,0);
 assert.equal(ui.output.value, "");
 assert.equal(outputRecords().length, 0);
 
@@ -334,7 +368,7 @@ assert.equal(ui.output.value, "dn 22 10 dd 5n\nqn 22 10 dd 5n\ndn 22 10 dd 5n\nq
 ui.input.value = "3d 22 22 dx 5n";
 rules.run();
 assert.match(ui.output.value, /PHÁT HIỆN TIN SAI/);
-assert.match(ui.output.value, /trùng số 22/);
+assert.match(ui.output.value, /DUPLICATE_NUMBER_PAIR_INVALID:/);
 
   // PWA direct-UI regression: this path must never depend on Router bridge.
   ui.region.value = "mn";
@@ -377,7 +411,8 @@ assert.match(ui.output.value, /trùng số 22/);
   ui.output.selectionStart = 0;
   ui.output.selectionEnd = ui.output.value.length;
   await rules.cutSelectedOutput();
-  assert.equal(ui.input.value, "");
+  assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).origin,separatorMessage);
+  assert.equal(JSON.parse(ui.input.value.split('\n').slice(1).join('\n')).rows.length,0);
   assert.equal(ui.output.value, "");
   rules.triggerUndo();
   assert.equal(ui.input.value, separatorMessage);
@@ -408,6 +443,25 @@ assert.match(sw, /self\.skipWaiting\(\)/);
 assert.match(sw, /req\.mode === "navigate"/);
 assert.match(sw, /caches\.match\("\.\/index\.html"\)/);
 assert.ok(!/live xổ số/i.test(html), "không được có LIVE xổ số");
+
+
+  // Synthetic UI contract: accept corrected MB wager, but
+  // reject the two-line paste atomically when second line repeats 90.
+  const photoInputOne="mb 10 dd 4n 21 32 b6n 43 đau 8n đuôi 12n 54 65 b10n";
+  const photoInputTwo="mb 11 22 33 22 b6n 44 55 b10n";
+  const photoUI=rules.elements;
+  photoUI.region.value="mb"; photoUI.date.value="2026-10-28"; photoUI.today.checked=false;
+  photoUI.input.value=photoInputOne;
+  rules.run();
+  assert.match(photoUI.output.value,/43 đầu (?:8n|4n) đuôi (?:12n|6n)/u);
+  assert.ok(rules.getOutputRecords().length>0,"valid MB đầu/đuôi must materialize");
+  photoUI.input.value=photoInputOne+"\n"+photoInputTwo;
+  rules.run();
+  assert.equal(photoUI.output.value,"XÁC NHẬN SỐ TRÙNG CẦN THIẾT");
+  assert.equal(rules.getOutputRecords().length,0,"unconfirmed duplicate must reject all outputs");
+  await rules.confirmDuplicate();
+  assert.ok(rules.getOutputRecords().length>0,"confirmed full source must materialize only after revalidation");
+  assert.deepEqual(rules.getWorkingLedger().duplicateConfirmation.physicalLines,[2]);
 
 console.log("CORE RULES: PASS");
 console.log("DAT RULE: PASS");

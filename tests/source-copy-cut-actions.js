@@ -25,11 +25,11 @@ const dom={
  getElementById(id){return els[id]||(els[id]=element(id))},
  createElement:element,body:{appendChild(){}},execCommand(){return true},addEventListener(){}
 };
-const storage=new Map();
+const storage=new Map();let failWrites=false;
 const ctx={
  console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
  navigator:{clipboard:{async writeText(value){clipboard.value=value}}},
- localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){storage.set(k,v)},removeItem(k){storage.delete(k)}},
+ localStorage:{getItem(k){return storage.get(k)||null},setItem(k,v){if(failWrites)throw Error("quota");storage.set(k,v)},removeItem(k){if(failWrites)throw Error("quota");storage.delete(k)}},
  document:dom,
  setTimeout(){},clearTimeout(){}
 };
@@ -39,7 +39,7 @@ vm.runInContext(calendar+"\n"+engine+"\n"+script+
  "\nglobalThis.__api={run,initGroupedResults,cutSelectedOutput,copyLedgerWork,parseExactOutputLedger,restorePersistedExactOutputLedger,serializeExactOutputLedger,renderLedgerWork,records:()=>outputRecords.map(r=>({...r})),input:inputEl,output:outputEl,region:regionEl,date:dateEl,undo:()=>document.getElementById('undoBtn').events.click()};",ctx);
 const p=ctx.__api;
 const groups=()=>els.resultGroups.children;
-const rows=()=>els.ledgerWorkRows.children;
+const choose=text=>{const label=groups().flatMap(g=>g.children.slice(1)).find(x=>x.children[1].textContent===text);assert.ok(label,text);const box=label.children[0];box.checked=true;box.events.change()};
 async function main(){
  p.initGroupedResults();p.region.value="mn";p.date.value="2026-10-15";
  const full="2d 89 98 b5n dx2,5n\n2d 19 b15n";
@@ -49,6 +49,11 @@ async function main(){
  p.input.selectionStart=0;p.input.selectionEnd=firstLine.length;
  await els.sourceCopyBtn.events.click();
  assert.equal(clipboard.value,firstLine,"Copy nguồn copies selected human text");
+ failWrites=true;
+ await els.sourceCutBtn.events.click();failWrites=false;
+ assert.equal(p.input.value,full,"failed source Cut must restore full input");
+ assert.equal(p.output.value,originalOutput,"failed source Cut must restore exact rows");
+ assert.match(els.status.textContent,/Không lưu được thao tác Cắt nguồn/u);
  await els.sourceCutBtn.events.click();
  assert.equal(p.input.value,"2d 19 b15n","Cắt nguồn removes the selected entire source line");
  assert.ok(!p.output.value.includes("89 98"));
@@ -58,25 +63,24 @@ async function main(){
  assert.equal(p.output.value,originalOutput);
  // Child row partial CUT uses local ledger: upper shows only readable results.
  p.input.value=firstLine;p.run();
- const checkbox=groups()[0].children[3].children[0];
- checkbox.checked=true;checkbox.events.change();
+ choose(p.records().find(r=>r.text.includes(' dx')).text);
  await p.cutSelectedOutput();
  const ledger=p.input.value;
  assert.ok(ledger.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"));
  assert.equal(p.input.style.display,"none");
- assert.equal(rows().length,2);
+ const remaining=p.output.value;assert.equal(els.ledgerSourceView.value,remaining);
  // Copy nguồn while in ledger state MUST never export the technical JSON.
- await els.sourceCopyBtn.events.click();
+ await els.copyBtn.events.click();
  assert.equal(clipboard.value,p.output.value);
  assert.ok(!clipboard.value.includes("[[KTS_EXACT_OUTPUT_LEDGER_V1]]"));
- // Cắt dòng nguồn with one selected upper row maps to existing wager ledger.
- const upper=rows()[0].children[0];upper.checked=true;upper.events.change();
- await els.sourceCutBtn.events.click();
- assert.equal(rows().length,1);
- assert.equal(p.output.value.split("\n").length,1);
- p.run();assert.equal(p.output.value.split("\n").length,1);
+ // Current UI selects and cuts result rows in the lower pane.
+ const survivor=p.records().find(r=>r.alive).text;choose(survivor);
+ await els.cutBtn.events.click();
+ assert.equal(els.ledgerSourceView.value,p.output.value);
+ assert.equal(p.output.value.split("\n").length,remaining.split("\n").length-1);
+ const after=p.output.value;p.run();assert.equal(p.output.value,after);
  p.undo();assert.equal(p.input.value,ledger);
- assert.equal(rows().length,2);
+ assert.equal(els.ledgerSourceView.value,remaining);
  console.log("SOURCE ACTIONS AND HUMAN-READABLE LEDGER: PASS");
 }
 main().catch(e=>{console.error(e.stack||e);process.exitCode=1;});
