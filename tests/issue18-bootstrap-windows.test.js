@@ -4,10 +4,10 @@ const {WORKSPACE,SOURCE,argsOf,classifyChildren,planWorkspace,expectedOrigin,cPa
  =require('../scripts/issue18-bootstrap-windows.js');
 const PIN='a'.repeat(40);
 test('bootstrap targets only known three repos in explicit C: scope',()=>{
-  assert.equal(WORKSPACE,'C:\\KTS-QA\\issue18-review');
+  assert.equal(WORKSPACE,'C:\\KTS-QA\\issue18-calendar-review');
   assert.deepEqual(SOURCE.map(s=>s.name),['KTS','Mobile','Ngang']);
-  assert.equal(SOURCE[0].sha,'eec80f812ff0ab47109edcacc32f31eedaffca79');
-  assert.equal(SOURCE[2].sha,'6f47f7c6b073c5df25da55b2b8f3bcc61513da20');
+  assert.equal(SOURCE[0].sha,'6210266f34620e4092d38605d970009e5579ef8b');
+  assert.equal(SOURCE[2].sha,'afc777d01ba2346b7eb3a322afe9bbebc6068fc0');
   assert.equal(SOURCE[1].sha,null);
   assert.ok(SOURCE.every(s=>s.branch.startsWith('review/issue18-')));
 });
@@ -69,7 +69,7 @@ function simulateBootstrap(existing,{dirty,wrongSha,junction}={}){
   const code=fs.readFileSync(require.resolve('../scripts/issue18-bootstrap-windows.js'),'utf8');
   const present=new Set(existing);
   const operations=[];
-  const root='C:\\KTS-QA\\issue18-review';
+  const root='C:\\KTS-QA\\issue18-calendar-review';
   const sha={KTS:SOURCE[0].sha,Mobile:PIN,Ngang:SOURCE[2].sha};
   const branch=Object.fromEntries(SOURCE.map(item=>[item.name,item.branch]));
   const repo=Object.fromEntries(SOURCE.map(item=>[item.name,item.repo]));
