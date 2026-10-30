@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict');
-const {judge,required,cli}=require('./issue18-evidence-gate.js');
+const {judge,required,cli}=require('../scripts/issue18-evidence-gate.js');
 const mobile='a6cbffde732e022131d7c79349e1b8bffd6f1f56';
 const ngang='6f47f7c6b073c5df25da55b2b8f3bcc61513da20';
 const profile={KTS_PYTESTS:['router','desktop'],KTS_JS_TESTS:['n035','duplicate','undo'],KTS_LEDGER_TEST:'KTSRouter/tests/test_legacy_ledger_retention.js',MOBILE_TESTS:Array.from({length:27},(_,i)=>'m'+i),NGANG_TESTS:Array.from({length:15},(_,i)=>'n'+i)};
