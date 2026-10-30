@@ -33,7 +33,7 @@ test('real Chrome exit code alone cannot qualify absent offline/Cut/N035 receipt
  for(let i=0;i<markers.length;i++)
   assert.equal(chromeReceiptsComplete(markers.filter((_,j)=>j!==i).join('\n')),false);
  assert.equal(chromeReceiptsComplete(''),false);
-}
+});
 test('Git command policy refuses Git optional writes and credential prompt',()=>{
  assert.equal(READ_ONLY_GIT_ENV.GIT_OPTIONAL_LOCKS,'0');
  assert.equal(READ_ONLY_GIT_ENV.GIT_TERMINAL_PROMPT,'0');
