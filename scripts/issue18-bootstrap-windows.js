@@ -20,10 +20,22 @@ function classifyChildren(children){
   if(!Array.isArray(children))fail('BAD_LISTING');
   const normalized=children.map(x=>String(x).toLowerCase());
   if(normalized.length===0)return 'CREATE_NEW_ONLY';
-  const wanted=['kts','mobile','ngang'];
-  if(normalized.length===3&&new Set(normalized).size===3&&wanted.every(x=>normalized.includes(x)))
-    return 'VERIFY_EXISTING_ONLY';
-  fail('PARTIAL_OR_UNKNOWN_WORKSPACE');
+  const wanted=new Set(SOURCE.map(item=>item.name.toLowerCase()));
+  if(new Set(normalized).size!==normalized.length||normalized.some(name=>!wanted.has(name)))
+    fail('PARTIAL_OR_UNKNOWN_WORKSPACE');
+  return normalized.length===SOURCE.length?'VERIFY_EXISTING_ONLY':'RESUME_VERIFIED_ONLY';
+}
+// A partial workspace is safe to resume ONLY after every already-present
+// checkout has passed the same full SHA/branch/origin/clean validation.
+// Compute all required preflight verifications BEFORE the first clone.
+function planWorkspace(children){
+  const mode=classifyChildren(children);
+  const present=new Set(children.map(name=>String(name).toLowerCase()));
+  return {
+    mode,
+    verify:SOURCE.filter(item=>present.has(item.name.toLowerCase())).map(item=>item.name),
+    clone:SOURCE.filter(item=>!present.has(item.name.toLowerCase())).map(item=>item.name)
+  };
 }
 function expectedOrigin(origin,repo){
   const escaped=repo.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
@@ -81,20 +93,26 @@ function prepare(args=process.argv.slice(2)){
   const opts=argsOf(args);
   checkEnvironment();
   const root=ensureRoot();
-  const mode=classifyChildren(fs.readdirSync(root));
+  const plan=planWorkspace(fs.readdirSync(root));
   const items=SOURCE.map(x=>({...x,sha:x.sha||opts.mobileSha}));
-  if(mode==='CREATE_NEW_ONLY'){
-    for(const item of items){
-      const dest=path.win32.join(root,item.name);
-      if(fs.existsSync(dest))fail('DESTINATION_APPEARED');
-      // core.autocrlf=false applies BEFORE initial checkout and is saved only
-      // inside newly created isolated clones. No global Git configuration.
-      // Never delete a partial clone on failure: preserve error evidence.
-      git(['clone','-c','core.autocrlf=false','--branch',item.branch,'--single-branch',
-        '--no-tags','https://github.com/'+item.repo+'.git',dest],root,300000);
-      assertCleanPinned(dest,item);
-    }
-  }else for(const item of items)assertCleanPinned(path.win32.join(root,item.name),item);
+  // Fail closed before creating ANY missing clone if an existing folder
+  // is dirty, untrusted, a reparse point or at an unexpected SHA.
+  for(const item of items){
+    if(plan.verify.includes(item.name))assertCleanPinned(path.win32.join(root,item.name),item);
+  }
+  for(const item of items){
+    if(!plan.clone.includes(item.name))continue;
+    const dest=path.win32.join(root,item.name);
+    if(fs.existsSync(dest))fail('DESTINATION_APPEARED');
+    // core.autocrlf=false applies BEFORE initial checkout and is saved only
+    // inside newly created isolated clones. No global Git configuration.
+    // Never delete a partial clone on failure: preserve error evidence.
+    git(['clone','-c','core.autocrlf=false','--branch',item.branch,'--single-branch',
+      '--no-tags','https://github.com/'+item.repo+'.git',dest],root,300000);
+    assertCleanPinned(dest,item);
+  }
+  // Recheck all cloned and previously verified identities before admission.
+  for(const item of items)assertCleanPinned(path.win32.join(root,item.name),item);
   // The built-in launcher performs its OWN strict SHA/branch/clean-source checks.
   if(!opts.runChrome)return {status:'C_ONLY_CHECKOUTS_READY',source:Object.fromEntries(items.map(x=>[x.name,x.sha])),
     executed_admission:false,release:'NO_GO',cost_usd:0};
@@ -115,4 +133,4 @@ if(require.main===module){
   catch(e){console.error(JSON.stringify({status:'BLOCKED',code:e.code||'UNKNOWN',release:'NO_GO',cost_usd:0}));
     process.exitCode=2;}
 }
-module.exports={WORKSPACE,SOURCE,argsOf,classifyChildren,expectedOrigin,cPath,prepare};
+module.exports={WORKSPACE,SOURCE,argsOf,classifyChildren,planWorkspace,expectedOrigin,cPath,prepare};
