@@ -33,8 +33,10 @@ test('release admission includes all audited regression tests but excludes live 
     assert.ok(!tests.some(item=>item.includes('verify-published-artifact')),
       'external published endpoint must never be fetched by local preflight');
   }
-  for(const required of ['tests/issue18-run-windows.test.js',
-    'tests/source-output-cut-conservation.js',
+  assert.ok(MOBILE_TESTS.includes('tests/issue18-run-windows.test.js'));
+  assert.ok(!NGANG_TESTS.includes('tests/issue18-run-windows.test.js'),
+    'Windows admission runner belongs only to Mobile checkout');
+  for(const required of ['tests/source-output-cut-conservation.js',
     'tests/ledger-readable-working-ui.js','tests/source-copy-cut-actions.js']){
     assert.ok(MOBILE_TESTS.includes(required));
     assert.ok(NGANG_TESTS.includes(required));
