@@ -10,11 +10,20 @@ function block(code){const e=new Error(code);e.code=code;throw e}
 function parseArgs(args){
   const chrome=args.at(-1)==='--chrome';
   const words=chrome?args.slice(0,-1):args;
-  if(words.length!==0&&words.length!==4)block('USAGE');
+  // An ancestor/branch check alone accepts any future unreviewed commit.
+  // The operator must supply the exact independently-reviewed SHA from
+  // the checkpoint before this tool reads a checkout or writes a receipt.
+  if(words.length<2||words.length>6||words.length%2!==0)block('USAGE');
   const result={'--workspace':'C:\\KTS-QA\\issue18-review','--evidence':'C:\\KTS-QA\\issue18-evidence'};
-  for(let i=0;i<words.length;i+=2){if(!Object.hasOwn(result,words[i])||!words[i+1]||result._seen?.includes(words[i]))block('USAGE');
-    result._seen??=[];result._seen.push(words[i]);result[words[i]]=words[i+1];}
-  delete result._seen;if(chrome)result._chrome=true;return result;
+  const allowed=new Set(['--workspace','--evidence','--mobile-sha']);
+  const seen=new Set();
+  for(let i=0;i<words.length;i+=2){
+    if(!allowed.has(words[i])||!words[i+1]||seen.has(words[i]))block('USAGE');
+    seen.add(words[i]);result[words[i]]=words[i+1];
+  }
+  if(!/^[0-9a-f]{40}$/.test(result['--mobile-sha']||''))block('MOBILE_EXACT_SHA_REQUIRED');
+  if(chrome)result._chrome=true;
+  return result;
 }
 function cOnly(p){if(process.platform!=='win32'||!path.win32.isAbsolute(p)||!/^C:\\/i.test(p))block('C_ONLY');return path.win32.resolve(p)}
 function safeExisting(p){
@@ -24,7 +33,8 @@ function safeExisting(p){
 }
 function git(dir,args){const r=cp.spawnSync('git',args,{cwd:dir,encoding:'utf8',shell:false,windowsHide:true,timeout:15000,env:{...process.env,...READ_ONLY_GIT_ENV}});
   if(r.status!==0||r.error||r.signal)block('GIT_PROBE_FAILED');return String(r.stdout).trim();}
-function probe(root){
+function probe(root,requiredMobileSha){
+  if(!/^[0-9a-f]{40}$/.test(requiredMobileSha||''))block('MOBILE_EXACT_SHA_REQUIRED');
   const paths=Object.fromEntries(['KTS','Mobile','Ngang'].map(k=>[k,safeExisting(path.win32.join(root,k))]));
   for(const p of Object.values(paths)){
     const dotgit=safeExisting(path.win32.join(p,'.git'));
@@ -33,7 +43,8 @@ function probe(root){
       block('GIT_ROOT_DRIFT');
   }
   const actual=Object.fromEntries(Object.entries(paths).map(([k,p])=>[k,git(p,['rev-parse','HEAD'])]));
-  if(actual.KTS!==KTS_PIN||actual.Ngang!==NGANG_PIN||!/^[a-f0-9]{40}$/.test(actual.Mobile))block('SOURCE_DRIFT');
+  if(actual.KTS!==KTS_PIN||actual.Ngang!==NGANG_PIN||actual.Mobile!==requiredMobileSha)
+    block('SOURCE_DRIFT');
   if(git(paths.Mobile,['branch','--show-current'])!==REVIEW_BRANCH)block('MOBILE_REVIEW_BRANCH_REQUIRED');
   if(git(paths.Mobile,['merge-base','--is-ancestor',MOBILE_BASE,actual.Mobile])!=='')block('UNEXPECTED_ANCESTRY');
   if(Object.values(paths).some(p=>git(p,['status','--porcelain','--untracked-files=all'])!==''))block('DIRTY_SOURCE');
@@ -101,7 +112,7 @@ function browserAfterAdmission({root,evidence,p,stamp}){
     return {status:'BLOCKED_CHROME',stage:stageDir,stage_receipt:stageReceipt,
       error:'CHROME_RECEIPTS_MISSING',stdout:String(output.stdout||'').slice(-6000)};
   // Even success needs immutable checkout identities after real Chrome activity.
-  const after=probe(root);
+  const after=probe(root,p.source.mobile);
   if(JSON.stringify(after.source)!==JSON.stringify(p.source))block('POST_CHROME_SOURCE_DRIFT');
   return {status:'LOCAL_CHROME_PASS_ANDROID_PENDING',stage:stageDir,
     stage_receipt:stageReceipt,stdout:String(output.stdout||'').slice(-6000)};
@@ -110,7 +121,7 @@ function run(args=process.argv.slice(2)){
   const opts=parseArgs(args),chromeRequested=opts._chrome===true,root=safeExisting(opts['--workspace']),evidence=cOnly(opts['--evidence']);
   const parent=safeExisting(path.win32.dirname(evidence));
   if(overlapsWorkspace(root,evidence))block('OVERLAPPING_EVIDENCE');
-  const p=probe(root);
+  const p=probe(root,opts['--mobile-sha']);
   const {admission}=require('./issue18-production-preflight.js');
   let result;
   try{result=admission({'--workspace':root,'--kts-sha':p.source.kts,'--mobile-sha':p.source.mobile,'--ngang-sha':p.source.ngang});}
