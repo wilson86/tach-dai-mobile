@@ -4,7 +4,9 @@ const assert=require('node:assert/strict');
 const path=require('node:path');
 const {canCleanupChromeProfile}=require('../scripts/issue18-chrome-isolated-smoke.js');
 
-const base='/isolated/qa-temp';
+// Resolve the drive-implicit fixture once. On Windows, path.resolve() adds
+// the current drive; an unresolved base silently skipped mocked child checks.
+const base=path.resolve('/isolated/qa-temp');
 const owned=path.join(base,'kts-issue18-headless-123456');
 const fakeFs={
   lstatSync:()=>({isDirectory:()=>true,isSymbolicLink:()=>false}),
@@ -22,6 +24,7 @@ test('PASS only permits cleanup of exact owned first-level Chrome profile',()=>{
   assert.equal(canCleanupChromeProfile(true,path.join(base,'kts-issue18-headless-foo','..','user-file'),base,fakeFs),false);
 });
 test('successful profile cleanup refuses nested symlinks, junctions and special entries',()=>{
+  assert.equal(path.resolve(owned),owned,'fixture must be an absolute normalized profile path');
   assert.equal(canCleanupChromeProfile(true,owned,base,{
     ...fakeFs,readdirSync:dir=>dir===owned?[{
       name:'Downloads',isSymbolicLink:()=>true,isDirectory:()=>false,isFile:()=>false
