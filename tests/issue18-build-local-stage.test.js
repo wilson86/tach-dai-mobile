@@ -22,7 +22,7 @@ function fixture() {
   }
   fs.writeFileSync(path.join(mobile,'app/index.html'),html);
   fs.writeFileSync(path.join(mobile,'app/sw.js'),sw);
-  for (const [f,version] of [[path.join(mobile,'version.json'),'2.0.37'],[path.join(mobile,'app/version.json'),'1.0.26'],[path.join(ngang,'version.json'),'1.0.36']])
+  for (const [f,version] of [[path.join(mobile,'version.json'),'2.0.38'],[path.join(mobile,'app/version.json'),'1.0.27'],[path.join(ngang,'version.json'),'1.0.37']])
     fs.writeFileSync(f, JSON.stringify({version,business_engine_sha256:HASH}));
   return {base,mobile,ngang,out};
 }
