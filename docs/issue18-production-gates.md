@@ -101,3 +101,24 @@ This evidence is **in-memory V8 execution of the real generated JavaScript**, lo
 The expanded offline preflight source was examined for executable JavaScript syntax using a JS parser on both the runner and its regression test (**2/2 syntax PASS**) and checked for expected allowlists, exact status/error paths and scoped HTML inputs. All four referenced KTS JS test files exist at the pinned KTS SHA. **New expanded native Windows preflight, Chrome and Android remain NOT_RUN**. Source/manifest check alone is not a production go-ahead.
 
 **Manager:** escalate to real Windows test only after exact-pin check; **Reviewer:** engine money invariant proof passed in-memory and KTS JS acceptance added but NOT_RUN; **End user:** no real UI Cut/Undo/ledger approval. `RELEASE=NO_GO; CODEX=NOT_INVOKED; PRIVATE_CI=NOT_TRIGGERED; COST_USD=0; PROD_MUTATION=NONE.`
+
+
+## Actual PWA entrypoint N035 proof in isolated JavaScript runtime (2026-10-30)
+
+Independently fetched the pinned **actual** `index.html`, `station_calendar.generated.js`, and `business_engine.generated.js` files from BOTH original review commits: Mobile `737d689b5388fb1060bca5fbd1891e69328bed1d`, Ngang `6f47f7c6b073c5df25da55b2b8f3bcc61513da20`. Executed each app's real `validateCheckOnlyLine` and `processLine` functions in a fresh isolated V8 context with a minimal synthetic DOM. The fixture uses `2026-10-29`, MN, stations TN/AG and ticket `2d 52 dx5n`.
+
+| Actual entrypoint | Expected | Observed |
+| --- | --- | --- |
+| Mobile Tách Đài | `tn ag 52 dx5n` | **MATCH** |
+| Ngang Tách Ngang | `2d 52 dx2.5n` × 2 lines | **MATCH** |
+| Mobile missing second station | HOLD | `RELATIVE_2D_ACTIVE_SCOPE_UNAVAILABLE` |
+| Ngang missing second station | HOLD | `RELATIVE_2D_ACTIVE_SCOPE_UNAVAILABLE` |
+| Mobile duplicate active station | HOLD | `RELATIVE_2D_ACTIVE_SCOPE_DUPLICATE` |
+| Ngang duplicate active station | HOLD | `RELATIVE_2D_ACTIVE_SCOPE_DUPLICATE` |
+| Unified/Đá Vòng `transformDaVongText` with genuine Mobile entrypoint API | Reject, no materialized output | `ok=false`, `outputs=[]`, `DA_VONG_NEEDS_AT_LEAST_TWO_NUMBERS` |
+
+The Unified function came directly from the pinned real `app/unified-core.js`, executed in V8, not from an invented imitation. The result directly supports the signed N035 authority. It does **not** certify native Windows Chrome, Android or persistent browser storage.
+
+**Important caution (Cut):** An additional non-browser Cut/reload exploration with an incomplete synthetic DOM did not produce a meaningful selection; it was **inconclusive**, and is **neither** a verified product regression **nor** a PASS. The candidate uses checkbox/grouped selection behavior, which a minimal synthetic DOM cannot establish. Required original committed Node Cut/Undo QA, isolated real Chrome, storage failure/rollback and end-user checks remain NOT_RUN for the expanded review gate. Do not claim device/release readiness from isolated V8.
+
+**Three roles:** Director = continue focused acceptance and gate release; independent reviewer = actual N035 PWA entrypoint and Unified rejection PASS in-memory, Cut proof blocked; end user = do not use money/Cut flows in production before device acceptance. `RELEASE=NO_GO`.
