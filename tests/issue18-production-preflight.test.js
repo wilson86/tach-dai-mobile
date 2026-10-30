@@ -2,7 +2,7 @@
 // Fail-closed CLI validation; no git, browser, workflow, production or network.
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {argsOf,admission,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS}=require('../scripts/issue18-production-preflight.js');
+const {argsOf,admission,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS,safeFile}=require('../scripts/issue18-production-preflight.js');
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
 const good=['--workspace','C:\\KTS-QA\\issue18',
   '--kts-sha',a,'--mobile-sha',b,'--ngang-sha',c];
@@ -53,6 +53,37 @@ test('cross-surface JS admission is mandatory for N035 money and Cut/Undo ledger
   assert.ok(KTS_JS_TESTS.every(p=>/^KTSRouter\/tests\/test_[a-z0-9_]+\.js$/.test(p)));
   assert.ok(!KTS_JS_TESTS.some(p=>/http|published|production|network/i.test(p)),
     'no live endpoint or transport test in offline admission');
+});
+
+test('safeFile admits a regular resolved test source without writing to disk',()=>{
+  const path=require('node:path');
+  const base=path.join(process.cwd(),'synthetic-source-root');
+  const mock={
+    existsSync:()=>true,
+    lstatSync:()=>({isSymbolicLink:()=>false}),
+    statSync:()=>({isFile:()=>true}),
+    realpathSync:{native:p=>p}
+  };
+  assert.equal(safeFile(base,'tests/issue18-run-windows.test.js',mock),
+    path.join(base,'tests/issue18-run-windows.test.js'));
+});
+
+test('safeFile refuses missing files, symlinks and parent junction traversal',()=>{
+  const path=require('node:path');
+  const base=path.join(process.cwd(),'synthetic-source-root');
+  const clean={
+    existsSync:()=>true,
+    lstatSync:()=>({isSymbolicLink:()=>false}),
+    statSync:()=>({isFile:()=>true}),
+    realpathSync:{native:p=>p}
+  };
+  const target='tests/issue18-run-windows.test.js';
+  assert.throws(()=>safeFile(base,target,{...clean,existsSync:()=>false}),/regular non-junction file/);
+  assert.throws(()=>safeFile(base,target,{...clean,lstatSync:()=>({isSymbolicLink:()=>true})}),/regular non-junction file/);
+  assert.throws(()=>safeFile(base,target,{...clean,realpathSync:{native:()=>path.join(base,'elsewhere',target)}}),
+    /regular non-junction file/);
+  assert.throws(()=>safeFile(base,target,{...clean,realpathSync:{native:()=> 'E:\\\\private-data\\\\'+target}}),
+    /regular non-junction file/);
 });
 
 test('Router and Desktop N035 tests are offline source-bound only',()=>{
