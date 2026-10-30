@@ -24,7 +24,7 @@ node scripts/issue18-production-preflight.js `
   --ngang-sha '<NGANG_HEAD>'
 ```
 
-The tool refuses non-C: workspace paths, unexpected SHA, dirty checkouts, symlink/junction source paths, mismatched versions/engine or missing assets. It invokes the canonical Python generator strict --check, then **2 offline KTS N035 pytest modules** (Router synthetic SQLite no-send and Desktop station-pair oracle), **4 additional KTS-side JavaScript cross-surface/ledger checks** (N035 Mobile/Ngang/Đá Vòng money oracle, canonical duplicate approval parity, approved-duplicate partial Cut/reload, legacy ledger retention), followed by **25 Mobile + 15 Ngang** explicitly audited, locally runnable Node regression files (all checked-in JavaScript tests except Ngang `tests/verify-published-artifact.js`, which calls the live website and must NOT run in offline admission). No GitHub Actions, package install, API, production mutation or network is required. The Python test command disables external pytest plugin autoload and cache writes. If Python pytest is not already installed offline, the gate reports BLOCKED: do not pip-install online or claim PASS. This test set excludes old scripts with hardcoded E: paths, the Telegram runtime and published-site fetches. Save its JSON evidence in Issue #18. Any failing command blocks the gate. This source-level allowlist is NOT proof that tests have run. The stage-integrity test suite now includes 9 negative/positive cases; they must execute with native Node on the pinned final source.
+The tool refuses non-C: workspace paths, unexpected SHA, dirty checkouts, symlink/junction source paths, mismatched versions/engine or missing assets. It invokes the canonical Python generator strict --check, then **2 offline KTS N035 pytest modules** (Router synthetic SQLite no-send and Desktop station-pair oracle), **4 additional KTS-side JavaScript cross-surface/ledger checks** (N035 Mobile/Ngang/Đá Vòng money oracle, canonical duplicate approval parity, approved-duplicate partial Cut/reload, legacy ledger retention), followed by **26 Mobile + 15 Ngang** explicitly audited, locally runnable Node regression files (all checked-in JavaScript tests except Ngang `tests/verify-published-artifact.js`, which calls the live website and must NOT run in offline admission). No GitHub Actions, package install, API, production mutation or network is required. The Python test command disables external pytest plugin autoload and cache writes. If Python pytest is not already installed offline, the gate reports BLOCKED: do not pip-install online or claim PASS. This test set excludes old scripts with hardcoded E: paths, the Telegram runtime and published-site fetches. Save its JSON evidence in Issue #18. Any failing command blocks the gate. This source-level allowlist is NOT proof that tests have run. The stage-integrity test suite now includes 9 negative/positive cases; they must execute with native Node on the pinned final source.
 
 
 ### Expanded KTS JavaScript safety gate (review branch only)
@@ -130,13 +130,13 @@ The Unified function came directly from the pinned real `app/unified-core.js`, e
 
 | Synthetic scenario | Expected from actual preflight code | Observed |
 | --- | --- | --- |
-| All mocked subcommands success | `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING`, 47 result rows (46 subprocesses + final pin check) | **MATCH** |
+| All mocked subcommands success | `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING`, 48 result rows (47 subprocesses + final pin check) | **MATCH** |
 | First KTS N035 JavaScript command fails | `BLOCKED_KTS_JS_PARITY`, no Mobile/Ngang tests executed | **MATCH** |
 | Legacy ledger test fails | `BLOCKED_KTS_LEDGER`, no Mobile/Ngang tests executed | **MATCH** |
 | First Mobile test fails | `BLOCKED_FOCUSED_TEST`, no Ngang tests executed | **MATCH** |
 | KTS JS test path is unsafe | `UNSAFE_SOURCE_FILE` thrown before invoking that test | **MATCH** |
 
-**Synthetic control-flow QA: 5/5 PASS.** With all simulated success, command sequence is Python generator, Python Router/Desktop N035, 3 KTS JS entrypoints, 1 KTS legacy ledger JS, 25 Mobile Node and 15 Ngang Node, then 3 Git/identity rechecks. The total **47** is a count of receipt rows, NOT an actual claim of tests passing. GitHub source identity, Windows file access, real subprocess results, money/SQLite/Undo/Chrome/Android remain subject to exact pinned physical/local acceptance.
+**Synthetic control-flow QA: 5/5 PASS.** With all simulated success, command sequence is Python generator, Python Router/Desktop N035, 3 KTS JS entrypoints, 1 KTS legacy ledger JS, 26 Mobile Node and 15 Ngang Node, then 3 Git/identity rechecks. The total **48** is a count of receipt rows, NOT an actual claim of tests passing. GitHub source identity, Windows file access, real subprocess results, money/SQLite/Undo/Chrome/Android remain subject to exact pinned physical/local acceptance.
 
 **Reviewer caution:** No business rules, customer data, source repositories, PWA version or cache changed in this verification. The operator must run the full unmocked preflight in the C:-only test workspace. `COST_USD=0; RELEASE=NO_GO`.
 
@@ -154,7 +154,7 @@ Set-Location 'C:\KTS-QA\issue18-review\Mobile'
 node .\scripts\issue18-run-windows.js
 ```
 
-The runner aborts if not on Windows C:, if the workspace/evidence path is linked, if the Git roots/branch/pins differ, or if the source tree is dirty. It then runs the pinned Python generator strict check, N035 offline pytest, 4 KTS JS checks, 25 Mobile and 15 Ngang JS regressions, and postflight Git integrity checks, saving an **append-only, unique JSON receipt** at `C:\KTS-QA\issue18-evidence\issue18-<timestamp>-<pid>.json`. The evidence folder is outside all three checkouts and created only after confirming the C: parent; preexisting file names cannot be overwritten (`wx`). An optional alternative root may be supplied with `--workspace ABS_C_DIR --evidence ABS_C_DIR`, but the safety guards remain.
+The runner aborts if not on Windows C:, if the workspace/evidence path is linked, if the Git roots/branch/pins differ, or if the source tree is dirty. It then runs the pinned Python generator strict check, N035 offline pytest, 4 KTS JS checks, 26 Mobile and 15 Ngang JS regressions, and postflight Git integrity checks, saving an **append-only, unique JSON receipt** at `C:\KTS-QA\issue18-evidence\issue18-<timestamp>-<pid>.json`. The evidence folder is outside all three checkouts and created only after confirming the C: parent; preexisting file names cannot be overwritten (`wx`). An optional alternative root may be supplied with `--workspace ABS_C_DIR --evidence ABS_C_DIR`, but the safety guards remain.
 
 `LOCAL_DETERMINISTIC_PASS_BROWSER_PENDING` means only Gate A passed; browser Chrome, real Android, personal data and release authorization remain separate gates. A failing test exits nonzero and writes the failing admission receipt; failures of preliminary source/disk safety checks abort without writing any checkout files.
 
@@ -176,3 +176,23 @@ The runner aborts if not on Windows C:, if the workspace/evidence path is linked
 - End user: Cut/Undo/reload, real financial output and Android offline/cache still need live-device isolated acceptance; no production wagers allowed.
 
 `CODEX=NOT_USED; GITHUB_ACTIONS=NOT_REQUESTED; COST_USD=0; MERGE=NO; DEPLOY=NO; PRODUCTION_MUTATION=NONE; RELEASE=NO_GO.`
+
+
+## Further offline admission repair — self-test pin and safe source paths (30 October 2026)
+
+**Why this batch:** The original expanded preflight listed **25** Mobile test files and omitted the new `tests/issue18-run-windows.test.js` guarding its own one-command Windows evidence launcher. Thus the native admission could report success without exercising a recently added safety-critical test. The candidate now pins **26 Mobile Node tests**, 15 Ngang tests, 4 KTS cross-surface JS checks, and 2 KTS pytest modules. Inactive `issue18-public-qa-only.yml` allowlist count updated to 26 to avoid stale CI assertions if the code is later reviewed there. **No GitHub Actions were intentionally launched.**
+
+**Further safety:** All KTS pytest and Mobile/Ngang Node test source paths now pass the existing `safeFile` C:-checkout regular-file realpath guard, not just `lstat` on the last file. This protects against test-directory junctions redirecting execution out of the pinned workspace. Added isolated dependency injection only to test `safeFile` without touching real filesystem; the production path always uses the real `fs` module.
+
+**Real defect reproduced and corrected:** The first revision of the self-test check mistakenly demanded that *Ngang* also contain Mobile's Windows runner test, causing an inevitable test FAIL. Source-executed regression caught it. The contract now requires `tests/issue18-run-windows.test.js` in Mobile **only**, while preserving all three cross-app shared test assertions on both modes.
+
+**Observed evidence, carefully classified:**
+- Pinned source-executed V8 Windows filesystem/Git/process simulation of revised preflight: **3/3 PASS** (green route 48 simulated receipt rows and 47 mocked subprocesses, blocked Python test source junction, blocked Mobile runner source junction). This is not Windows native QA.
+- Source-executed V8 test callbacks from the **actual new 8-test** `tests/issue18-production-preflight.test.js` with mocked Node modules/assertions: **8/8 PASS** after the Mobile-only test fix. Initial negative run produced 7/8 and proved the allowlist defect, now fixed.
+- Both revised JS files passed source-level syntax parsing. These tests do **not** establish that the actual pytest/Node regression suite ran on native Windows, Chrome or Android.
+
+**Three-role milestone review:** Project director: QA admission now covers its own launcher and rejects symlinked test sources, but release still NO_GO. Independent reviewer: verified the test-scoping regression and a fail-closed correction, simulation evidence is not actual Windows Node. End user: N035 money/Cut/Undo on real Chrome/Android remains NOT_RUN. No source engine, parser, version, cache, user ledger, production or money behavior changed.
+
+`RELEASE=NO_GO; CODEX=NOT_USED; GITHUB_ACTIONS=NOT_TRIGGERED; COST_USD=0; E_ACCESS=NONE; F_ACCESS=NONE; MERGE=NO; DEPLOY=NO; CONTEXT=ELEVATED; SKILLS=MANUAL_ONLY.`
+
+`CLEANUP_STATUS=NO_ACTION; FILES_REMOVED=0; SPACE_RECOVERED_MB=0; FILES_PRESERVED=all existing sandbox files and GitHub source; CLEANUP_BLOCKERS=unrelated pre-existing sandbox files not identified as owned by this batch are retained.`
