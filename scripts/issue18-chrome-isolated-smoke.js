@@ -259,6 +259,32 @@ async function chromeSmoke(stage){
     console.log('ISSUE18_CHROME_HOLD_RECOVERY_CYCLE_PASS '+cycle);
     }
     console.log('ISSUE18_PUBLIC_CHROME_WRONG_DATE_HOLD_AND_RECOVERY_BOTH_MODES_PASS');
+    // Canonical owner N035: Thursday 2026-10-29 has TWO primary
+    // stations tn/ag. Check exact output bytes in real offline Chrome.
+    // Prior synthetic Cut receipts have already been validated; clear ONLY
+    // this disposable profile's two fake ledgers before testing new wagers.
+    const n035Setup=await command('Runtime.evaluate',{expression:"(()=>{const s=window.localStorage;for(const k of ['tachDaiMobileExactOutputLedgerV1','tachDaiNgangExactOutputLedgerV1'])s.removeItem(k);const v={region:'mn',date:'2026-10-29',today:false};for(const k of ['kts_unified_shared_settings_v1','tachDaiMobileSettings','tachDaiNgangSettings'])s.setItem(k,JSON.stringify(v));return {date:v.date,day:new Date('2026-10-29T12:00:00').getDay()}})()",returnByValue:true});
+    ensure(n035Setup.result?.value?.day===4,'N035 oracle date must be Thursday for primary stations tn/ag');
+    await command('Page.reload',{ignoreCache:false});
+    let n035Ready;
+    for(let i=0;i<100;i++){
+      const q=await command('Runtime.evaluate',{expression:"(()=>{const a=document.getElementById('tachFrame')?.contentDocument,b=document.getElementById('ngangFrame')?.contentDocument;return {shared:document.getElementById('sharedDate')?.value,mobile:a?.getElementById('date')?.value,ngang:b?.getElementById('date')?.value}})()",returnByValue:true});
+      n035Ready=q.result?.value;
+      if(n035Ready?.shared==='2026-10-29'&&n035Ready?.mobile==='2026-10-29'&&n035Ready?.ngang==='2026-10-29')break;
+      await nap(100);
+    }
+    ensure(n035Ready?.mobile==='2026-10-29'&&n035Ready?.ngang==='2026-10-29',
+      'Unified must synchronize N035 Thursday across both apps: '+JSON.stringify(n035Ready));
+    const n035Output=await command('Runtime.evaluate',{expression:"(()=>{const r={};for(const [mode,id] of [['mobile','tachFrame'],['ngang','ngangFrame']]){const d=document.getElementById(id).contentDocument;d.getElementById('input').value='2d 52 dx5n';d.getElementById('runBtn').click();r[mode]={output:d.getElementById('output').value,status:d.getElementById('status').textContent,calendar:d.getElementById('schedule')?.textContent}}const input=document.getElementById('dvInput');input.value='2d 52 dx5n';document.getElementById('dvRun').click();r.davong={output:document.getElementById('dvOutput').value,status:document.getElementById('dvStatus').textContent};return r})()",returnByValue:true});
+    if(n035Output.exceptionDetails)throw Error('N035_BROWSER_EXCEPTION '+JSON.stringify(n035Output.exceptionDetails).slice(0,800));
+    const n035=n035Output.result?.value||{};
+    ensure(n035.mobile?.output?.trim()==='tn ag 52 dx5n',
+      'N035 Thursday Tách Đài exact two-station singleton DX oracle: '+JSON.stringify(n035).slice(0,1000));
+    ensure(n035.ngang?.output?.trim()==='2d 52 dx2.5n\n2d 52 dx2.5n',
+      'N035 Thursday Tách Ngang money-halving oracle: '+JSON.stringify(n035).slice(0,1000));
+    ensure(n035.davong?.output===''&&/lỗi|sai|không|từ chối|ít nhất|error/i.test(n035.davong?.status||''),
+      'N035 singleton DX must be rejected by Đá Vòng: '+JSON.stringify(n035.davong).slice(0,500));
+    console.log('ISSUE18_PUBLIC_CHROME_N035_THURSDAY_EXACT_ORACLE_PASS');
     console.log('ISSUE18_PUBLIC_CHROME_OFFLINE_3_SCOPE_PASS '+JSON.stringify(swScopes));
     console.log('ISSUE18_PUBLIC_CHROME_LOCAL_ONLY_PASS '+JSON.stringify({
       origin:'http://127.0.0.1:<ephemeral>',versions:['2.0.37','1.0.36','1.0.26'],
