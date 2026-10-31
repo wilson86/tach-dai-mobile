@@ -19,9 +19,10 @@ Both actual test sources cover **Full Cut → simulated browser reload → Undo 
 ## Separate-origin hosted-source verification tool
 
 On the PREVIEW-PREP review branch (never merge into public main as a test) the two new files are:
-- `scripts/KTS_issue18_verify_hosted_preview.js` local Linux Node v22 tested bytes SHA-256 `1c11bf0bc7240e8c43ff193d666942fd8d45d1a2e23ba30d77c17a07a2caf89e`, Git blob `e05d956b9fb2b82e79935aa6104084eb7c0560ec`, first source-pin commit `c18f74b212a311b652631ed5bc98d398a970cd45`.
-- `scripts/KTS_issue18_verify_hosted_preview.test.js` SHA-256 `a9405c1f15c347e32ffc12a4de5e707c360c33a23ce7ed6f18c680dfbcd2f570`, Git blob `08792c318673a05d9e2c9b0ce60e5064430ab0b7`.
-- Actual sandbox execution: `node --test KTS_issue18_verify_hosted_preview.test.js` on Node v22.16.0, **8 PASS / 0 FAIL**. Synthetic injected `fetch`, **no external network access**, user PC/offline NOT_RUN. Test Git blob matches exact executed bytes, verified with `git hash-object`.
+- `scripts/KTS_issue18_verify_hosted_preview.js` local Linux Node v22 tested bytes SHA-256 `f74a4fdc2907965be36f228785677d8758e686814a9c747180e2e9f7286f0d94`, Git blob `69682b3abdc895491d400ddb8fd5dfc72d75c25d`, first source-pin commit `f51fc0a1b4ca42c7265938ff58181c64274bc923`.
+- `scripts/KTS_issue18_verify_hosted_preview.test.js` SHA-256 `33e70784695b8a2c02b85a16392f8e7690adfbf686efda9c7f83ac67b6f2e2f4`, Git blob `0679194bbcf61446d7d036adab54692b7d7214fe`.
+- Actual sandbox execution: `node --test KTS_issue18_verify_hosted_preview.test.js` on Node v22.16.0, **10 PASS / 0 FAIL**. Synthetic injected `fetch`, **no external network access**, user PC/offline NOT_RUN. Test Git blob matches exact executed bytes, verified with `git hash-object`.
+- **2026-10-31 fail-closed security repair:** Two negative fixtures first proved real failures in the ORIGINAL hosted verifier: (a) CSP substring acceptance allowed `connect-src 'self' https://other.example` and `frame-src 'self' https://other.example` to pass; (b) stage file mutation during remote fetch could make a changed remote file pass because code re-read changed local bytes after earlier source validation. The hardened verifier now parses CSP directives, rejects unknown/duplicate/permissive directives, and **snapshots the approved hashes before any HTTP**. Re-run of the 8 original tests + 2 new negatives: **10/10 PASS** on Node.js 22, on source identical to the SHA-pinned GitHub Git blobs. Both are tooling fixes; application/money engine untouched. This is NOT actual hosted service or Android QA.
 - Only accepts an origin-root `https://<project>.pages.dev/` or `https://<branch>.<project>.pages.dev/`, no URL credentials/path/port/query/fragment; won't access `wilson86.github.io`. For each run first checks immutable **local export** manifest `KTS_PREVIEW_MANIFEST.json` with exact source SHAs and all 21 local asset hashes (no remote HTTP before local validation), then GETs 24 expected hosted response paths with no redirects, checks HTTP 200, local-vs-hosted SHA256 bytes, and CSP/frame/robots/nosniff HTTP response headers. Cloudflare Pages canonical HTML routes map `index.html` to `/`, `Mobile/index.html` to `/Mobile/`, `Ngang/index.html` to `/Ngang/`, and `Mobile/app/index.html` to `/Mobile/app/` (Cloudflare docs: https://developers.cloudflare.com/pages/configuration/serving-pages/).
 - The exported folder is **only** `C:\KTS-QA\issue18-preview-upload-20261031`; no private Router/Desktop or customer evidence uploaded. A public Cloudflare Pages preview may be discoverable; `robots.txt` and `X-Robots-Tag: noindex` are not authentication.
 - The verifier **does not** run without an explicitly supplied preview URL. It is read-only: no uploads, writes, deletes, paid API, merges, Telegram sends or customer data. Server GETs could count against the host's normal free-tier request limits; confirm zero charge before deployment.
@@ -34,8 +35,8 @@ From owner Windows PowerShell, with the **previously generated and verified 21-a
 & {
     $ErrorActionPreference = 'Stop'
     $target = 'C:\KTS-QA\issue18-hosted-preview-verify-v1.js'
-    $url = 'https://raw.githubusercontent.com/wilson86/tach-dai-mobile/c18f74b212a311b652631ed5bc98d398a970cd45/scripts/KTS_issue18_verify_hosted_preview.js'
-    $expected = '1c11bf0bc7240e8c43ff193d666942fd8d45d1a2e23ba30d77c17a07a2caf89e'
+    $url = 'https://raw.githubusercontent.com/wilson86/tach-dai-mobile/f51fc0a1b4ca42c7265938ff58181c64274bc923/scripts/KTS_issue18_verify_hosted_preview.js'
+    $expected = 'f74a4fdc2907965be36f228785677d8758e686814a9c747180e2e9f7286f0d94'
     if(Test-Path -LiteralPath $target) { throw 'VERIFIER_EXISTS_KEEP_UNCHANGED' }
     Invoke-WebRequest -Uri $url -OutFile $target -UseBasicParsing -TimeoutSec 30
     $actual = (Get-FileHash -LiteralPath $target -Algorithm SHA256).Hash.ToLowerInvariant()
