@@ -3,7 +3,7 @@
   else root.KTS_UNIFIED=factory();
 })(typeof globalThis!=='undefined'?globalThis:this,function(){
   'use strict';
-  const CONTRACT='DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2';
+  const CONTRACT='DX_NUMBER_PAIR_REQUIRES_TWO_DISTINCT_NUMBERS_ALL_MODES_V3';
   const PAIR_RE=/^(.*?)(\d{1,4}(?:[\s,;]+\d{1,4})*)\s*(dx|đx|da|đá|đa)\s*(\d+(?:[.,]\d+)?(?:n|d|đ)?)\s*$/iu;
 
   function literalDxCount(line){
