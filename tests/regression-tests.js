@@ -166,9 +166,12 @@ assert.deepEqual(
   Array.from(rules.processLine("Dna +qn 17 b30n", "mt", mtSaturday)),
   ["dn 17 b30n", "qn 17 b30n"]
 );
+// Owner Android correction 2026-10-31: station pair does not create a second NUMBER.
+expectThrow(() => rules.validateCheckOnlyLine("Dna +qn 17 dx 2n", "mt", mtSaturday), /DX_REQUIRES_AT_LEAST_TWO_NUMBERS/);
+expectThrow(() => rules.processLine("Dna +qn 17 dx 2n", "mt", mtSaturday), /DX_REQUIRES_AT_LEAST_TWO_NUMBERS/);
 assert.deepEqual(
-  Array.from(rules.processLine("Dna +qn 17 dx 2n", "mt", mtSaturday)),
-  ["dn qn 17 dx 2n"]
+  Array.from(rules.processLine("Dna +qn 17 71 dx 2n", "mt", mtSaturday)),
+  ["dn qn 17 71 dx 2n"]
 );
 assert.deepEqual(
   Array.from(rules.processLine("Dna +qn 17 da 2n", "mt", mtSaturday)),
