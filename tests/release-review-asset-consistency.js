@@ -13,6 +13,12 @@ const unifiedVersion=JSON.parse(read("app/version.json"));
 const engine=read("business_engine.generated.js"),calendar=read("station_calendar.generated.js");
 const SHA="0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487";
 const MOBILE="2.0.39",UNIFIED="1.0.28";
+const issue18StaleUpdateUi=rootHtml;
+assert.ok(issue18StaleUpdateUi.includes("HOLD: Engine chưa đồng bộ."),"stale engine must show update action");
+assert.ok(issue18StaleUpdateUi.includes("HOLD: Manifest/engine chưa đồng bộ."),"stale root version hash must show HOLD");
+assert.ok(issue18StaleUpdateUi.includes('if (res.ok) {'),"failed version fetch must not suppress service worker update");
+assert.ok(issue18StaleUpdateUi.includes("if (swRegistration) await swRegistration.update()"),"sw update should remain reachable");
+
 assert.equal(rootVersion.version,MOBILE);
 assert.equal(unifiedVersion.version,UNIFIED);
 assert.equal(rootVersion.business_engine_sha256,SHA);
