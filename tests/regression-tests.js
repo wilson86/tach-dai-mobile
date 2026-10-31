@@ -82,6 +82,14 @@ function expectThrow(fn, expected) {
 
 async function main() {
 const rules = loadRules();
+// A released new-version shell cannot use the previous generated engine.
+// Execute these checks BEFORE positive money QA to identify stale artifacts
+// rather than misdiagnosing a HOLD as a parser/money regression.
+const ownerExpectedEngineSha="0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487";
+assert.equal(version.business_engine_sha256,ownerExpectedEngineSha,"stale root version.json: generator --check needed");
+assert.equal(rules.engine.ENGINE_SHA256,ownerExpectedEngineSha,"stale business_engine.generated.js: regenerate from canonical KTS source");
+assert.ok(html.includes('EXPECTED_BUSINESS_ENGINE_SHA256="'+ownerExpectedEngineSha+'"'),"standalone shell must pin canonical engine");
+
   {
     const stale=loadRules(true);
     const stations=stale.getSchedule("mn",new Date("2026-10-29T12:00:00"));
