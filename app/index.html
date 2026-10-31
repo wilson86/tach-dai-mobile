@@ -23,7 +23,7 @@
 </head>
 <body>
 <div class="shell">
-  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.28</span></div><div class="badge">PC tắt vẫn chạy</div></div>
+  <div class="head"><div class="title">KTS Tách Đài <span style="font-size:12px;color:#667085;font-weight:650">Unified 1.0.29</span></div><div class="badge">PC tắt vẫn chạy</div></div>
   <div id="sharedSettings" class="card shared-settings">
     <div class="controls">
       <div><label class="small" for="sharedRegion">Miền dùng chung</label><select id="sharedRegion"><option value="mn">Miền Nam</option><option value="mt">Miền Trung</option><option value="mb">Miền Bắc</option></select></div>
@@ -41,6 +41,7 @@
 
   <section id="pane-tach" class="pane active"><iframe id="tachFrame" class="frame" src="../" title="Tách Đài 3 Miền" allow="clipboard-write"></iframe></section>
   <section id="pane-ngang" class="pane"><iframe id="ngangFrame" class="frame" src="https://wilson86.github.io/tach-dai-ngang/" title="Tách Đài Ngang 3 Miền" allow="clipboard-write"></iframe></section>
+  <div id="ngangEngineHold" class="status err" role="alert" hidden>HOLD: Tách Ngang chưa đồng bộ engine với Unified. Không được tách hoặc tính cược ở chế độ này. Cần cập nhật cả hai ứng dụng rồi tải lại.</div>
 
   <section id="pane-davong" class="pane">
     <div class="contract">ĐÁ VÒNG: số đá phải đủ 2 chữ số · DX/ĐX tách mọi cặp không đảo · MB cho phép DA trong chế độ Đá Vòng · MN/MT: 2d/3d + DA dùng semantics DX · mỗi cặp giữ nguyên tiền.</div>
@@ -77,14 +78,24 @@
     </div>
   </section>
 </div>
-<script src="./unified-core.js?ux=1.0.28"></script>
+<script src="./unified-core.js?ux=1.0.29"></script>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
 const EXPECTED_ENGINE='0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487';
 const modeButtons=[...document.querySelectorAll('.tab')];
+function ngangFrameReady(){
+  return typeof checkUnifiedNgangFrame==='function'&&
+    checkUnifiedNgangFrame($('ngangFrame'));
+}
 function setMode(mode){
   if(!['tach','ngang','davong'].includes(mode)) mode='tach';
+  // Even a SAME-ORIGIN remote iframe may be on an older published engine.
+  // Do not allow selecting it or syncing any raw source before SHA parity.
+  if(mode==='ngang'&&!ngangFrameReady()){
+    $('ngangEngineHold').hidden=false;
+    mode='tach';
+  }
   modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
   for(const name of ['tach','ngang','davong']) $(`pane-${name}`).classList.toggle('active',name===mode);
   try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
@@ -126,7 +137,9 @@ function hideChildModeSettings(frameId,state){
 }
 function syncFrameSettings(frameId,state){
   try{
-    const frame=$(frameId), win=frame&&frame.contentWindow, doc=frame&&frame.contentDocument;
+    const frame=$(frameId);
+    if(frameId==='ngangFrame'&&!ngangFrameReady())return; // HOLD old hosted Ngang
+    const win=frame&&frame.contentWindow, doc=frame&&frame.contentDocument;
     if(!win||!doc) return;
     const region=doc.getElementById('region'), date=doc.getElementById('date'), today=doc.getElementById('today');
     if(!region||!date||!today) return;
@@ -296,7 +309,14 @@ $('sharedRegion').addEventListener('change',syncSharedSettings);
 $('sharedDate').addEventListener('change',()=>{$('sharedToday').checked=false;syncSharedSettings()});
 $('sharedToday').addEventListener('change',syncSharedSettings);
 $('tachFrame').addEventListener('load',()=>{syncSharedSettings();try{const w=engine();if(w.KTS_BUSINESS_ENGINE.ENGINE_SHA256===EXPECTED_ENGINE)setDvStatus('Engine đã sẵn sàng.','ok')}catch(e){setDvStatus(String(e.message||e),'err')}});
-$('ngangFrame').addEventListener('load',syncSharedSettings);
+$('ngangFrame').addEventListener('load',()=>{
+  const frame=$('ngangFrame'),ready=ngangFrameReady();
+  $('ngangEngineHold').hidden=ready;
+  frame.style.pointerEvents=ready?'':'none';
+  frame.tabIndex=ready?0:-1;
+  if(ready)syncSharedSettings();
+  else if($('pane-ngang').classList.contains('active'))setMode('tach');
+});
 loadSharedSettings();
 // The Unified app-scope SW alone cannot intercept offline navigation to ../,
 // where the Tách Đài iframe and canonical engine live. Proactively ensure its
@@ -322,9 +342,9 @@ async function prepareOfflineEngine(){
         }
       });
     })));
-    const cache=await caches.open('kts-tach-unified-v1.0.28-owner-singleton-dx-0a0e54');
+    const cache=await caches.open('kts-tach-unified-v1.0.29-owner-singleton-dx-0a0e54');
     const expected=['../','../index.html','../station_calendar.generated.js',
-      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.28'];
+      '../business_engine.generated.js','./index.html','./unified-core.js?ux=1.0.29'];
     for(const path of expected){
       const request=new URL(path,location.href).href;
       const response=await cache.match(request);
