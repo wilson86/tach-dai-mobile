@@ -61,7 +61,11 @@ function validateLocal(root){
     die('EXTERNAL_NGANG_IFRAME');
   if(!sw.includes('/Mobile/app')||sw.includes('/tach-dai-mobile/app'))die('SW_PREVIEW_PATH_INVALID');
   if(!readLocal(root,'index.html').toString('utf8').includes('BẢN THỬ NGHIỆM'))die('PREVIEW_BANNER_MISSING');
-  return {manifest,files:[...ROOT_FILES,...assetNames]};
+  // Freeze the hashes BEFORE network I/O. Comparing to live local bytes after a
+  // fetch would let a post-verification replacement forge a passing receipt.
+  const expectedHashes=Object.assign(Object.create(null),manifest.assets);
+  for(const file of ROOT_FILES)expectedHashes[file]=sha256(readLocal(root,file));
+  return {manifest,files:[...ROOT_FILES,...assetNames],expectedHashes};
 }
 function canonicalRemotePath(file){
   if(file==='index.html')return '';
@@ -69,12 +73,28 @@ function canonicalRemotePath(file){
   return file;
 }
 function enforceHeaders(headers){
+  // CSP must have EXCLUSIVE, exact directives. A substring match accepts
+  // "connect-src 'self' https://evil" or a second permissive directive.
+  const source=Object.freeze({
+    'default-src':"'self'",'connect-src':"'self'",'frame-src':"'self'",
+    'frame-ancestors':"'self'",'worker-src':"'self'",'object-src':"'none'",
+    'form-action':"'none'",'base-uri':"'self'",
+    'script-src':"'self' 'unsafe-inline'",
+    'style-src':"'self' 'unsafe-inline'",'img-src':"'self' data:"
+  });
+  const required=['default-src','connect-src','frame-src','frame-ancestors',
+    'worker-src','object-src','form-action'];
   const csp=headers.get('content-security-policy')||'';
-  for(const required of ["default-src 'self'","connect-src 'self'","frame-src 'self'",
-       "frame-ancestors 'self'","worker-src 'self'","object-src 'none'",
-       "form-action 'none'"]){
-    if(!csp.includes(required))die('CSP_MISSING:'+required);
+  const seen=new Set();
+  for(const directive of csp.split(';')){
+    const tokens=directive.trim().split(/\s+/u).filter(Boolean);
+    if(!tokens.length)continue;
+    const [name,...values]=tokens;
+    if(!Object.hasOwn(source,name)||seen.has(name)||values.join(' ')!==source[name])
+      die('CSP_UNSAFE_DIRECTIVE:'+name);
+    seen.add(name);
   }
+  for(const name of required)if(!seen.has(name))die('CSP_MISSING:'+name);
   if((headers.get('x-frame-options')||'').toUpperCase()!=='SAMEORIGIN')die('XFRAME_MISSING');
   if(!(headers.get('x-robots-tag')||'').includes('noindex'))die('NOINDEX_MISSING');
   if((headers.get('x-content-type-options')||'').toLowerCase()!=='nosniff')die('NOSNIFF_MISSING');
@@ -96,7 +116,7 @@ async function verifyHosted({origin,root,fetchImpl=globalThis.fetch}){
     if(Number.isFinite(length)&&length>3*1024*1024)die('REMOTE_FILE_TOO_LARGE:'+file);
     const body=Buffer.from(await response.arrayBuffer());
     if(body.length>3*1024*1024)die('REMOTE_BODY_TOO_LARGE:'+file);
-    if(sha256(body)!==sha256(readLocal(local,file)))die('REMOTE_HASH_MISMATCH:'+file);
+    if(sha256(body)!==inventory.expectedHashes[file])die('REMOTE_HASH_MISMATCH:'+file);
     count++;bytesChecked+=body.length;
   }
   return {status:'HOSTED_PREVIEW_SOURCE_AND_HEADERS_PASS',origin:base.origin,
