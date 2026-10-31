@@ -189,6 +189,17 @@ for(const source of ["2d 52 68 dx5n","tn ag 52 68 dx5n"]){
   assert.doesNotThrow(()=>rules.validateCheckOnlyLine(source,"mn",issue18Thursday));
   assert.ok(Array.from(rules.processLine(source,"mn",issue18Thursday)).length>0);
 }
+
+// The same THURSDAY source is one FULL-stake station-pair DX exposure in
+// Tách Đài; do not accidentally use Ngang's horizontal 2.5n+2.5n split.
+const ownerDxDai=Array.from(rules.processLine("2d 52 68 dx5n","mn",issue18Thursday));
+assert.deepEqual(ownerDxDai,["tn ag 52 68 dx5n"]);
+assert.deepEqual(
+  Array.from(rules.processLine("tn ag 52 68 dx5n","mn",issue18Thursday)),
+  ownerDxDai
+);
+assert.equal(rules.auditMoneyConservation("2d 52 68 dx5n",ownerDxDai).status,"PASS");
+
 // A duplicate number DX is NOT an authorized distinct-number pair either.
 expectThrow(()=>rules.validateCheckOnlyLine("2d 52 52 dx5n","mn",issue18Thursday),/DUPLICATE_NUMBER_PAIR_INVALID/);
 
