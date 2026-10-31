@@ -79,3 +79,63 @@ P016: operator approved the ONE leading-dot MB chat case in 2026-10-17 private c
 **Production requires a separate owner release decision after these gates.** Both public `deploy-pages.yml` workflows automatically deploy on `main` changes; neither may be merged just to test on a real phone. Draft Mobile PR #23/Ngang PR #15 record old release SHA pins, so review exact verified final SHAs and rollback snapshot rather than treating draft PR title as authority.
 
 `RELEASE=NO_GO | ANDROID=NOT_RUN | EXTERNAL_PREVIEW=NOT_DEPLOYED | COST_USD=0 | MERGE=NO | DEPLOY=NO | E/F_ACCESS=NONE`
+
+
+## 2026-10-31 — Windows post-export CHECK ONLY: PowerShell node -e quotation failure recovery
+
+Operator **already successfully exported** 21 app assets to the C: preview folder. The later read-only check failed with:
+\`SyntaxError: Expected ',', got ':'\` at \`require(node:fs)\`. Root cause is PowerShell/Windows native argument quoting stripping JavaScript string quotes in the **assistant-provided \`node -e '...'\` block**. This is **NOT** evidence of app/asset/engine failure. **DO NOT rerun the successful exporter or remove/overwrite the preview folder.**
+
+Fix: feed JavaScript program text to Node via **stdin** (\`node -\`), keeping double quotes intact, **no additional script files, HTTP requests, login, app edits or writes**. Node \`process.argv.slice(2)\` returns three given paths when invoked with \`node - <verifier> <exporter> <folder>\`. On failure, retain all files and stdout/stderr. It is C:-only.
+
+\`\`\`powershell
+& {
+    $ErrorActionPreference = 'Stop'
+    $base = 'C:\KTS-QA'
+    $folder = Join-Path $base 'issue18-preview-upload-20261031'
+    $exporter = Join-Path $base 'issue18-preview-export-v3.js'
+    $verifier = Join-Path $base 'issue18-hosted-preview-verify-v3.js'
+    $exporterSHA = 'b37a5fa2864bfa203da63d7b5f8887dd2e98d58be87e228adab2eb315a19b85b'
+    $verifierSHA = '914afe6f74817f935f64f1ac9d37abb9e729cf54cb18581d4b41cc28c640194f'
+
+    foreach ($p in @($folder,$exporter,$verifier)) {
+        if (-not (Test-Path -LiteralPath $p)) { throw "MISSING_REQUIRED_ITEM: $p" }
+    }
+    if (-not (Test-Path -LiteralPath $folder -PathType Container)) { throw 'PREVIEW_NOT_A_FOLDER' }
+    if ((Get-FileHash -LiteralPath $exporter -Algorithm SHA256).Hash.ToLowerInvariant() -ne $exporterSHA) {
+        throw 'EXPORTER_SHA_MISMATCH'
+    }
+    if ((Get-FileHash -LiteralPath $verifier -Algorithm SHA256).Hash.ToLowerInvariant() -ne $verifierSHA) {
+        throw 'VERIFIER_SHA_MISMATCH'
+    }
+    Get-Command node -ErrorAction Stop | Out-Null
+    $js = @'
+"use strict";
+const fs = require("node:fs");
+const path = require("node:path");
+const [v, e, root] = process.argv.slice(2);
+const admission = require(v);
+const exporter = require(e);
+const checked = admission.validateLocal(root);
+if (checked.files.length !== 24 || Object.keys(checked.manifest.assets).length !== 21) {
+  throw new Error("INVALID_EXPECTED_ASSET_COUNT");
+}
+if (fs.readFileSync(path.join(root, "_headers"), "utf8") !== exporter.previewHeaders()) {
+  throw new Error("SECURITY_HEADERS_MISMATCH");
+}
+console.log(JSON.stringify({
+  status: "KTS_LOCAL_PACKAGE_VERIFIED",
+  files: 25,
+  assets: 21,
+  hosted_preview: "NOT_DEPLOYED",
+  android: "NOT_RUN",
+  production: "NO_GO",
+  cost_usd: 0
+}, null, 2));
+'@
+    $js | & node - $verifier $exporter $folder
+    if ($LASTEXITCODE -ne 0) { throw 'KTS_LOCAL_VERIFICATION_BLOCKED_KEEP_ALL_FILES' }
+}
+\`\`\`
+
+**Expected only after this real operator run:** \`KTS_LOCAL_PACKAGE_VERIFIED\`, \`files:25\`, \`assets:21\`, \`hosted_preview:NOT_DEPLOYED\`, \`production:NO_GO\`. Until then \`LOCAL_FINAL_PACKAGE_ADMISSION=NOT_RUN\`. After PASS, public Cloudflare Pages separate-origin preview requires separate explicit owner approval, no paid billing and no uploading private Router/customer data; Android canary and production GO are further distinct gates. Do not use \`node -e\` for PowerShell JavaScript multi-line commands again.
