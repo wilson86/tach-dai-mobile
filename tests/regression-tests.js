@@ -173,6 +173,25 @@ assert.deepEqual(
   Array.from(rules.processLine("Dna +qn 17 71 dx 2n", "mt", mtSaturday)),
   ["dn qn 17 71 dx 2n"]
 );
+
+// Issue #18: REAL Android 2026-10-31 regression; number group ≠ station group.
+// No amount may be produced by either the UI preflight or direct renderer.
+const issue18Thursday=rules.getSchedule("mn",new Date("2026-10-29T12:00:00"));
+for(const source of [
+  "2d 52 dx5n",
+  "tn ag 52 dx5n",
+  "2d 52 b10n 68 dd5n 52 dx5n"
+]){
+  expectThrow(()=>rules.validateCheckOnlyLine(source,"mn",issue18Thursday),/DX_REQUIRES_AT_LEAST_TWO_NUMBERS/);
+  expectThrow(()=>rules.processLine(source,"mn",issue18Thursday),/DX_REQUIRES_AT_LEAST_TWO_NUMBERS/);
+}
+for(const source of ["2d 52 68 dx5n","tn ag 52 68 dx5n"]){
+  assert.doesNotThrow(()=>rules.validateCheckOnlyLine(source,"mn",issue18Thursday));
+  assert.ok(Array.from(rules.processLine(source,"mn",issue18Thursday)).length>0);
+}
+// A duplicate number DX is NOT an authorized distinct-number pair either.
+expectThrow(()=>rules.validateCheckOnlyLine("2d 52 52 dx5n","mn",issue18Thursday),/DUPLICATE_NUMBER_PAIR_INVALID/);
+
 assert.deepEqual(
   Array.from(rules.processLine("Dna +qn 17 da 2n", "mt", mtSaturday)),
   ["dn qn 17 da 2n"]
