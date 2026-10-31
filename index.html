@@ -207,6 +207,19 @@ const EXACT_OUTPUT_LEDGER_APP_ID="tach-dai-mobile";
 let workingLedger=null;
 function cloneLedger(value){return value?JSON.parse(JSON.stringify(value)):null;}
 function engineSha(){return String(KTS_BUSINESS_ENGINE.ENGINE_SHA256||"");}
+// A refreshed PWA shell must never materialize money with a stale cached
+// generated business engine. This input hash is pinned to canonical KTS source.
+const EXPECTED_BUSINESS_ENGINE_SHA256="0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487";
+function assertBusinessEnginePinned(){
+  if(engineSha()!==EXPECTED_BUSINESS_ENGINE_SHA256) throw Error("BUSINESS_ENGINE_MISMATCH");
+}
+function holdIfBusinessEngineStale(){
+  if(engineSha()===EXPECTED_BUSINESS_ENGINE_SHA256)return false;
+  outputEl.value="";
+  resetOutputRecords();
+  setStatus("HOLD: BUSINESS_ENGINE_MISMATCH — engine/cache chưa đồng bộ, chưa tính tiền.","err");
+  return true;
+}
 function ledgerDate(){return String(dateEl.value||localDateISO());}
 function durableUndoReceipt(){
   const last=undoStack[undoStack.length-1];
@@ -236,6 +249,7 @@ function serializeExactOutputLedger(){
 }
 function parseExactOutputLedger(raw){
   if(!raw.startsWith(EXACT_OUTPUT_LEDGER_PREFIX))return null;
+  if(engineSha()!==EXPECTED_BUSINESS_ENGINE_SHA256)return false;
   try{
     const ledger=JSON.parse(raw.slice(EXACT_OUTPUT_LEDGER_PREFIX.length));
     if(ledger?.schema!=="KTS_EXACT_OUTPUT_LEDGER_V1"||
@@ -856,6 +870,7 @@ function validateSingletonTwoStationDx(head,rest,stations){
     KTS_BUSINESS_ENGINE.resolveTwoDScope(rest.split(/\s+/u),stations);
 }
 function validateCheckOnlyLine(line,region,stations){
+  assertBusinessEnginePinned();
   let s=normalizeInput(line);
   if(!s) return true;
 
@@ -1193,6 +1208,7 @@ function expandExplicitStationPair(first,second,rest){
   return out;
 }
 function processLine(line,region,stations){
+  assertBusinessEnginePinned();
   let s=normalizeInput(line);
   if(!s)return [];
   // Issue #18: rendering is a second public entrypoint (Router/ledger calls it
@@ -1393,6 +1409,7 @@ async function copySourceView(){
   setStatus(ok?"Đã copy tin nguồn":"Copy tin nguồn thất bại.",ok?"ok":"err");
 }
 async function cutSelectedSourceLines(){
+  if(holdIfBusinessEngineStale())return;
   if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
     await cutSelectedOutput();renderLedgerWork();return;
   }
@@ -1606,6 +1623,7 @@ function scheduleFullInputSync(){
 }
 
 function syncAfterAnyInputEdit(){
+  if(holdIfBusinessEngineStale())return;
   if(!inputEl.value.trim().startsWith(EXACT_OUTPUT_LEDGER_PREFIX)) persistExactOutputLedger();
   // Fast path: xóa nguyên dòng/tin -> KQ đổi ngay, không cần debounce.
   if(syncPureInputDeletionNow()) return;
@@ -1798,6 +1816,7 @@ function restoreCutDraft(receipt){
 }
 
 async function cutSelectedOutput(){
+  if(holdIfBusinessEngineStale())return;
   rememberOutputSelection();
   const indexes=groupedResultReady?checkedAliveRecordIndexes():selectedAliveRecordIndexes();
   if(!indexes.length){
@@ -1846,6 +1865,7 @@ function resolveExplicitSourceRegion(text){
 }
 
 function run(options={}){
+  if(holdIfBusinessEngineStale())return;
   if(pendingIncompatibleLedger){
     try{
       const stored=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY)||"";
@@ -2023,6 +2043,7 @@ $("clearBtn").addEventListener("click",()=>{
   inputEl.focus();
 });
 $("undoBtn").addEventListener("click",()=>{
+  if(holdIfBusinessEngineStale())return;
   const s=undoStack[undoStack.length-1]; if(!s)return;
   // Undo must be durable before it becomes visible. A failed storage write
   // must not make a Cut appear undone only until the next reload.
