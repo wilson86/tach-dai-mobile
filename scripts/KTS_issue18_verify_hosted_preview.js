@@ -41,7 +41,33 @@ function checkRoot(root){
     die('UNSAFE_LOCAL_EXPORT_ROOT');
   return resolved;
 }
+// Check the ENTIRE upload tree, not just the 21 declared app assets. A user
+// might accidentally add private files before a public Cloudflare Direct Upload.
+function checkExportInventory(root){
+  const allowed=[...ROOT_FILES,...assetNames,'_headers'].sort();
+  const found=[];
+  const walk=(dir,prefix='')=>{
+    for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
+      const file=path.join(dir,entry.name);
+      if(entry.isSymbolicLink()||fs.lstatSync(file).isSymbolicLink())
+        die('EXPORT_SYMLINK_FORBIDDEN');
+      const rel=prefix?prefix+'/'+entry.name:entry.name;
+      if(entry.isDirectory()){
+        const resolved=fs.realpathSync(file);
+        const normalized=v=>process.platform==='win32'?v.toLowerCase():v;
+        if(!normalized(resolved).startsWith(normalized(root+path.sep)))
+          die('EXPORT_JUNCTION_OUTSIDE_ROOT');
+        walk(file,rel);
+      }else if(entry.isFile())found.push(rel);
+      else die('EXPORT_SPECIAL_FILE_FORBIDDEN');
+    }
+  };
+  walk(root);
+  if(JSON.stringify(found.sort())!==JSON.stringify(allowed))
+    die('EXPORT_INVENTORY_MISMATCH');
+}
 function validateLocal(root){
+  checkExportInventory(root);
   const manifestBytes=readLocal(root,'KTS_PREVIEW_MANIFEST.json');
   let manifest;try{manifest=JSON.parse(manifestBytes)}catch(_){die('BAD_LOCAL_MANIFEST')}
   if(manifest.schema!=='KTS_ISSUE18_PREVIEW_EXPORT_V1'||manifest.public_preview_only!==true||
@@ -83,7 +109,8 @@ function enforceHeaders(headers){
     'style-src':"'self' 'unsafe-inline'",'img-src':"'self' data:"
   });
   const required=['default-src','connect-src','frame-src','frame-ancestors',
-    'worker-src','object-src','form-action'];
+    'worker-src','object-src','form-action','base-uri','script-src',
+    'style-src','img-src'];
   const csp=headers.get('content-security-policy')||'';
   const seen=new Set();
   for(const directive of csp.split(';')){
@@ -134,4 +161,4 @@ if(require.main===module){
     }catch(e){console.error(e.message||e);process.exitCode=2;}
   })();
 }
-module.exports={verifyHosted,checkUrl,validateLocal,enforceHeaders,canonicalRemotePath,assetNames};
+module.exports={verifyHosted,checkUrl,validateLocal,enforceHeaders,canonicalRemotePath,assetNames,checkExportInventory};
