@@ -203,7 +203,7 @@
 ;(function installUnifiedMobileUx(){
   'use strict';
   if(typeof document==='undefined') return;
-  const UX_VERSION='1.0.28';
+  const UX_VERSION='1.0.29';
 
   function selectAllText(el){
     if(!el) return;
@@ -739,6 +739,19 @@
   else init();
 })();
 
+// Issue18 fail-closed cross-frame parity: the hosted Ngang iframe may still
+// run the PREVIOUS published engine when the candidate Unified shell is newer.
+// Only read/sync a frame with the exact canonical generator digest.
+function checkUnifiedNgangFrame(frame){
+  try{
+    const w=frame?.contentWindow;
+    return !!(w&&w.KTS_BUSINESS_ENGINE&&
+      w.KTS_BUSINESS_ENGINE.ENGINE_SHA256==='0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487'&&
+      typeof w.validateCheckOnlyLine==='function'&&
+      typeof w.processLine==='function');
+  }catch(_){return false;} // Cross-origin/blocked iframe MUST HOLD.
+}
+
 // Unified source-input authority: Tách Đài, Tách Ngang and Đá Vòng share the
 // same raw source text on phone and desktop browsers. Result state remains
 // mode-local; only the operator's source text is synchronized.
@@ -758,7 +771,7 @@
   function sources(){
     const list=[];
     try{const frame=document.getElementById('tachFrame'),el=frame?.contentDocument?.getElementById('input');if(el)list.push({mode:'tach',el,win:frame.contentWindow})}catch(_){}
-    try{const frame=document.getElementById('ngangFrame'),el=frame?.contentDocument?.getElementById('input');if(el)list.push({mode:'ngang',el,win:frame.contentWindow})}catch(_){}
+    try{const frame=document.getElementById('ngangFrame');if(checkUnifiedNgangFrame(frame)){const el=frame.contentDocument?.getElementById('input');if(el)list.push({mode:'ngang',el,win:frame.contentWindow})}}catch(_){}
     const dv=document.getElementById('dvInput');if(dv)list.push({mode:'davong',el:dv});
     return list;
   }
