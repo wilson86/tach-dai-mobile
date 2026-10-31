@@ -192,6 +192,40 @@ for(const source of ["2d 52 68 dx5n","tn ag 52 68 dx5n"]){
 // A duplicate number DX is NOT an authorized distinct-number pair either.
 expectThrow(()=>rules.validateCheckOnlyLine("2d 52 52 dx5n","mn",issue18Thursday),/DUPLICATE_NUMBER_PAIR_INVALID/);
 
+// Owner's real Android DX failure must be rejected by the actual standalone
+// run() entrypoint, not only the parser or direct renderer. Start from valid
+// output to prove an invalid ticket cannot leave stale money behind.
+{
+  const singletonUi=rules.elements;
+  singletonUi.region.value="mn";
+  singletonUi.date.value="2026-10-29";  // Thursday: TN / AG
+  singletonUi.today.checked=false;
+  singletonUi.input.value="2d 52 68 dx5n";
+  rules.run();
+  assert.ok(rules.getOutputRecords().length>0,"valid two-number DX baseline required");
+  for(const [raw,badLine] of [
+    ["2d 52 dx5n",1],
+    ["tn ag 52 dx5n",1],
+    ["2d 52 b10n\n2d 52 dx5n",2],
+    ["2d 52 dx5n\n2d 52 b10n",1],
+    ["2d 52 b10n 68 dd5n 52 dx5n",1]
+  ]){
+    singletonUi.input.value=raw;
+    rules.run();
+    assert.match(singletonUi.output.value,/PHÁT HIỆN TIN SAI/u,raw);
+    assert.match(singletonUi.output.value,/DX_REQUIRES_AT_LEAST_TWO_NUMBERS/u,raw);
+    assert.match(singletonUi.output.value,new RegExp(`Dòng ${badLine}:`),raw);
+    assert.equal(rules.getOutputRecords().length,0,"no stale/partial money rows: "+raw);
+    assert.equal(rules.getWorkingLedger(),null,"no Cut/Undo working ledger for invalid source: "+raw);
+    assert.equal(singletonUi.input.value,raw,"source must remain editable and unchanged");
+    assert.ok(!singletonUi.input.value.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]"));
+  }
+  singletonUi.input.value="tn ag 52 68 dx5n";
+  rules.run();
+  assert.ok(rules.getOutputRecords().length>0,"valid DX resumes after invalid hold");
+}
+
+
 assert.deepEqual(
   Array.from(rules.processLine("Dna +qn 17 da 2n", "mt", mtSaturday)),
   ["dn qn 17 da 2n"]
