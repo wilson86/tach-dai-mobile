@@ -42,8 +42,8 @@ assert.ok(app.includes("frame.style.pointerEvents=ready?'':'none'"),"block stale
 // Execute the real selector and shared-input admission functions with a
 // synthetic DOM: the older hosted iframe may never become the active mode
 // or share its raw input with the new Unified app.
-const selectorSource=(app.match(/function setMode\\(mode\\)\\{[\\s\\S]*?\\n\\}/u)||[])[0];
-const sourcesSource=(core.match(/function sources\\(\\)\\{[\\s\\S]*?\\n  \\}/u)||[])[0];
+const selectorSource=(app.match(/function setMode\(mode\)\{[\s\S]*?\n\}/u)||[])[0];
+const sourcesSource=(core.match(/function sources\(\)\{[\s\S]*?\n  \}/u)||[])[0];
 assert.ok(selectorSource&&sourcesSource,"missing actual Unified mode/source admission functions");
 for(const [label,matching] of [["stale",false],["matching",true]]){
   const state=new Map(),hold={hidden:true},saved=[];
