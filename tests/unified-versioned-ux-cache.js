@@ -39,4 +39,41 @@ assert.ok(app.includes("if(mode==='ngang'&&!ngangFrameReady())"),"Unified mode s
 assert.ok(app.includes("if(frameId==='ngangFrame'&&!ngangFrameReady())return"),"Unified settings must not sync into stale Ngang");
 assert.ok(app.includes('id="ngangEngineHold"'),"visible HOLD explanation required");
 assert.ok(app.includes("frame.style.pointerEvents=ready?'':'none'"),"block stale embedded frame interaction");
+// Execute the real selector and shared-input admission functions with a
+// synthetic DOM: the older hosted iframe may never become the active mode
+// or share its raw input with the new Unified app.
+const selectorSource=(app.match(/function setMode\\(mode\\)\\{[\\s\\S]*?\\n\\}/u)||[])[0];
+const sourcesSource=(core.match(/function sources\\(\\)\\{[\\s\\S]*?\\n  \\}/u)||[])[0];
+assert.ok(selectorSource&&sourcesSource,"missing actual Unified mode/source admission functions");
+for(const [label,matching] of [["stale",false],["matching",true]]){
+  const state=new Map(),hold={hidden:true},saved=[];
+  const frame={
+    contentWindow:{
+      ...valid.contentWindow,
+      KTS_BUSINESS_ENGINE:{ENGINE_SHA256:matching?expectedSha:"7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea"}
+    },
+    contentDocument:{getElementById:id=>id==="input"?{value:"2d 52 68 dx5n"}:null}
+  };
+  const panes=Object.fromEntries(["tach","ngang","davong"].map(mode=>["pane-"+mode,{
+    classList:{toggle(name,active){state.set("pane-"+mode,active)}}
+  }]));
+  const buttons=["tach","ngang","davong"].map(mode=>({
+    dataset:{mode},
+    classList:{toggle(name,active){state.set("tab-"+mode,active)}}
+  }));
+  const doc={getElementById:id=>({
+    ...panes,ngangFrame:frame,ngangEngineHold:hold,dvInput:{value:"2d 52 68 dx5n"}
+  })[id]||null};
+  const setMode=(new Function("$","ngangFrameReady","modeButtons","localStorage","updateDvSchedule",
+    "return ("+selectorSource+")"))(doc.getElementById,()=>checkNgangFrame(frame),
+    buttons,{setItem(key,val){saved.push([key,val])}},()=>{});
+  const sources=(new Function("document","checkUnifiedNgangFrame",
+    "return ("+sourcesSource+")"))(doc,checkNgangFrame);
+  setMode("ngang");
+  assert.equal(state.get("tab-ngang")===true,matching,label+": wrong selected Ngang tab");
+  assert.equal(sources().some(item=>item.mode==="ngang"),matching,label+": wrong shared-source admission");
+  assert.equal(state.get("tab-tach"),!matching,label+": wrong safe fallback mode");
+  assert.equal(hold.hidden,matching,label+": incorrect HOLD warning state");
+  assert.equal(saved.at(-1)[1],matching?"ngang":"tach",label+": forbidden mode persisted");
+}
 console.log("UNIFIED VERSIONED UX CACHE: PASS");
