@@ -77,3 +77,27 @@ test('reject unknown resource and fake 200, no output or storage writes',async t
  const fetchImpl=async(u,o)=>new Response('custom 404 SPA fallback',{status:200,headers:validHeaders});
  await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl}),/REMOTE_HASH_MISMATCH/);
 });
+test('reject permissive, duplicate, and unknown CSP source directives',()=>{
+ const {enforceHeaders}=require('./KTS_issue18_verify_hosted_preview.js');
+ for(const unsafe of [
+   validHeaders['content-security-policy'].replace("connect-src 'self'","connect-src 'self' https://other.example"),
+   validHeaders['content-security-policy'].replace("frame-src 'self'","frame-src 'self' https://wilson86.github.io"),
+   validHeaders['content-security-policy']+'; connect-src *',
+   validHeaders['content-security-policy'].replace("img-src 'self' data:","img-src *"),
+ ])assert.throws(()=>enforceHeaders(new Headers({...validHeaders,'content-security-policy':unsafe})),/CSP_UNSAFE_DIRECTIVE/);
+ assert.doesNotThrow(()=>enforceHeaders(new Headers(validHeaders)));
+});
+test('reject staged asset modified after validation but before hosted comparison',async t=>{
+ const f=fixture();t.after(()=>fs.rmSync(f.root,{recursive:true,force:true}));
+ let modified=false;
+ const fetchImpl=(url,options)=>{
+   if(url===HOST+'Ngang/sw.js'){
+     fs.writeFileSync(path.join(f.root,'Ngang','sw.js'),'injected AFTER validation');
+     modified=true;
+     return new Response('injected AFTER validation',{status:200,headers:validHeaders});
+   }
+   return f.serve(url,options);
+ };
+ await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl}),/REMOTE_HASH_MISMATCH:Ngang\/sw.js/);
+ assert.equal(modified,true);
+});
