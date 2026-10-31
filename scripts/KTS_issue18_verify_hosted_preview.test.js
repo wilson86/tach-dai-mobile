@@ -17,6 +17,7 @@ function fixture(){
  }
  tmp['index.html']=Buffer.from('<h1>BẢN THỬ NGHIỆM</h1>');
  tmp['robots.txt']=Buffer.from('User-agent: *\nDisallow: /');
+ tmp['_headers']=Buffer.from('/*\n  Content-Security-Policy: '+validHeaders['content-security-policy']+'\n');
  const manifest={schema:'KTS_ISSUE18_PREVIEW_EXPORT_V1',public_preview_only:true,release_authorized:false,
   target_origin_policy:'SEPARATE_ORIGIN_REQUIRED',mobile_sha:shas.mobile,ngang_sha:shas.ngang,
   stage_manifest_sha256:shas.stage,assets:Object.fromEntries(assetNames.map(f=>[f,sha(tmp[f])]))};
@@ -100,4 +101,27 @@ test('reject staged asset modified after validation but before hosted comparison
  };
  await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl}),/REMOTE_HASH_MISMATCH:Ngang\/sw.js/);
  assert.equal(modified,true);
+});
+
+test('refuse unexpected private artifacts, including nested files, before network',async t=>{
+ const f=fixture();t.after(()=>fs.rmSync(f.root,{recursive:true,force:true}));
+ const extra=path.join(f.root,'Mobile','private-user-tickets.json');
+ fs.writeFileSync(extra,'SYNTHETIC_SECRET');
+ let fetches=0;
+ await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl:()=>{fetches++;throw Error('unexpected network')}}),/EXPORT_INVENTORY_MISMATCH/);
+ assert.equal(fetches,0);
+});
+test('refuse absent _headers as an incomplete public deployment package',async t=>{
+ const f=fixture();t.after(()=>fs.rmSync(f.root,{recursive:true,force:true}));
+ fs.unlinkSync(path.join(f.root,'_headers'));
+ let fetches=0;
+ await assert.rejects(()=>verifyHosted({origin:HOST,root:f.root,fetchImpl:()=>{fetches++;throw Error('unexpected network')}}),/EXPORT_INVENTORY_MISMATCH/);
+ assert.equal(fetches,0);
+});
+test('reject missing inline script, style, image and base CSP directives',()=>{
+ const {enforceHeaders}=require('./KTS_issue18_verify_hosted_preview.js');
+ for(const drop of ['script-src','style-src','img-src','base-uri']){
+   const csp=validHeaders['content-security-policy'].split('; ').filter(x=>!x.startsWith(drop+' ')).join('; ');
+   assert.throws(()=>enforceHeaders(new Headers({...validHeaders,'content-security-policy':csp})),new RegExp('CSP_MISSING:'+drop));
+ }
 });
