@@ -13,7 +13,7 @@ const sw = fs.readFileSync(path.join(root, "sw.js"), "utf8");
 const manifest = JSON.parse(fs.readFileSync(path.join(root, "manifest.webmanifest"), "utf8"));
 const version = JSON.parse(fs.readFileSync(path.join(root, "version.json"), "utf8"));
 
-function loadRules() {
+function loadRules(forceStaleEngine=false) {
   const match = html.match(/<script>\s*([\s\S]*?)<\/script>/i);
   assert.ok(match, "index.html phải có script ứng dụng");
   const marker = 'loadSettings();';
@@ -65,6 +65,11 @@ function loadRules() {
   };
   vm.createContext(context);
   vm.runInContext(`${calendar}\n${businessEngine}\n${source}\nglobalThis.__rules={getSchedule,normalizeInput,preprocessChatText,validateCheckOnlyLine,processLine,distributeAmountExactly,auditMoneyConservation,run,cutSelectedOutput,triggerUndo:()=>document.getElementById("undoBtn").trigger("click"),confirmDuplicate:()=>document.getElementById("duplicateConfirmBtn").trigger("click"),getOutputRecords:()=>outputRecords.map(r=>({...r})),getWorkingLedger:()=>JSON.parse(JSON.stringify(workingLedger)),engine:KTS_BUSINESS_ENGINE,elements:{input:inputEl,output:outputEl,region:regionEl,date:dateEl,today:todayEl},clipboard:navigator.clipboard};`, context);
+  // Inject stale generated engine in a test-only VM, never in application code.
+  if(forceStaleEngine)vm.runInContext(
+    "globalThis.KTS_BUSINESS_ENGINE=Object.freeze({...globalThis.KTS_BUSINESS_ENGINE,ENGINE_SHA256:'0'.repeat(64)});",
+    context
+  );
   return context.__rules;
 }
 
@@ -77,6 +82,24 @@ function expectThrow(fn, expected) {
 
 async function main() {
 const rules = loadRules();
+  {
+    const stale=loadRules(true);
+    const stations=stale.getSchedule("mn",new Date("2026-10-29T12:00:00"));
+    assert.throws(()=>stale.validateCheckOnlyLine("2d 52 68 dx5n","mn",stations),/BUSINESS_ENGINE_MISMATCH/);
+    assert.throws(()=>stale.processLine("2d 52 68 dx5n","mn",stations),/BUSINESS_ENGINE_MISMATCH/);
+    const uiStale=stale.elements;
+    uiStale.region.value="mn";
+    uiStale.date.value="2026-10-29";
+    uiStale.today.checked=false;
+    uiStale.input.value="2d 52 68 dx5n";
+    stale.run();
+    assert.equal(uiStale.output.value,"","no money with stale cached engine");
+    assert.equal(stale.getOutputRecords().length,0,"no rows with stale cached engine");
+    assert.equal(stale.getWorkingLedger(),null,"no ledger with stale cached engine");
+    assert.equal(uiStale.input.value,"2d 52 68 dx5n","original source stays editable");
+    await stale.cutSelectedOutput();
+    assert.equal(uiStale.input.value,"2d 52 68 dx5n","Cut cannot mutate stale-engine input");
+  }
 
   // Synthetic MB fixture: 'đau' is a narrowly
   // stake-bound spelling for ĐẦU, but duplicates still need a money oracle.
