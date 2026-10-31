@@ -1195,6 +1195,12 @@ function expandExplicitStationPair(first,second,rest){
 function processLine(line,region,stations){
   let s=normalizeInput(line);
   if(!s)return [];
+  // Issue #18: rendering is a second public entrypoint (Router/ledger calls it
+  // directly). A DX singleton must fail BEFORE any output can materialize,
+  // including named-station and mixed-clause source, not only via run() UI.
+  // Limit this guard to literal DX/ĐX; do not change valid DA/DAT semantics.
+  if(/(?:^|\s)(?:dx|đx)(?=\s|\d)/iu.test(s))
+    validateCheckOnlyLine(s,region,stations);
   const mr=s.match(/^(mn|mt|mb)\s+(.+)$/);
   if(mr){ s=mr[2].trim(); }
   const m=s.match(/^(2dphu|2d|3d|4d)\s+(.+)$/);
