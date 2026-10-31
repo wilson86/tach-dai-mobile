@@ -2115,6 +2115,13 @@ const APP_VERSION = "2.0.39";
 let swRegistration = null;
 
 async function checkForAppUpdate() {
+  // Mismatched generated adapters are already HOLD: offer a safe user-driven
+  // cache update even if version.json has the same app version or is offline.
+  // Never clear the old PWA's storage/ledger or force an automatic reload.
+  if(engineSha()!==EXPECTED_BUSINESS_ENGINE_SHA256){
+    $("updateText").textContent="HOLD: Engine chưa đồng bộ. Cập nhật ứng dụng trước khi xử lý cược.";
+    $("updateBanner").style.display="block";
+  }
   // file:// không hỗ trợ Service Worker/PWA update.
   if (!("serviceWorker" in navigator) || location.protocol === "file:") return;
 
@@ -2123,15 +2130,18 @@ async function checkForAppUpdate() {
       cache: "no-store",
       headers: { "Cache-Control": "no-cache" }
     });
-    if (!res.ok) return;
-    const data = await res.json();
-
-    if (data.version && data.version !== APP_VERSION) {
-      $("updateText").textContent = `Có bản mới v${data.version}.`;
-      $("updateBanner").style.display = "block";
+    if (res.ok) {
+      const data = await res.json();
+      if(data.business_engine_sha256 && data.business_engine_sha256!==EXPECTED_BUSINESS_ENGINE_SHA256){
+        $("updateText").textContent="HOLD: Manifest/engine chưa đồng bộ. Cập nhật ứng dụng trước khi xử lý cược.";
+        $("updateBanner").style.display="block";
+      }else if(data.version && data.version!==APP_VERSION){
+        $("updateText").textContent=`Có bản mới v${data.version}.`;
+        $("updateBanner").style.display="block";
+      }
     }
   } catch (_) {
-    // Offline: im lặng, dùng bản đã cache.
+    // Offline: preserve source/ledger, and keep the SHA mismatch HOLD visible.
   }
 
   try {
