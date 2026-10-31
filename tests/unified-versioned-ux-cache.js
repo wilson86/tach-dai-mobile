@@ -24,7 +24,7 @@ assert.match(core,/if\(output&&!nativeOutput&&!doc\.getElementById\('resultGroup
 assert.equal(app.split("Unified "+version).length-1,1,"displayed Unified version must match metadata once");
 // Issue18: Unified cannot select or synchronize a hosted Ngang iframe with
 // a stale generated money engine, even if it is same-origin / cached.
-const guardSource=(core.match(/function checkUnifiedNgangFrame\\(frame\\)\\{[\\s\\S]*?\\n\\}/u)||[])[0];
+const guardSource=(core.match(/function checkUnifiedNgangFrame\(frame\)\{[\s\S]*?\n\}/u)||[])[0];
 assert.ok(guardSource,"missing a fail-closed Unified Ngang engine gate");
 const checkNgangFrame=(new Function("return ("+guardSource+")"))();
 const expectedSha="0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487";
