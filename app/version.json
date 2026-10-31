@@ -1,8 +1,8 @@
 {
-  "version": "1.0.27",
-  "updated": "2026-10-30",
-  "business_engine_sha256": "7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea",
-  "contract": "DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2",
+  "version": "1.0.28",
+  "updated": "2026-10-31",
+  "business_engine_sha256": "0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487",
+  "contract": "DX_NUMBER_PAIR_REQUIRES_TWO_DISTINCT_NUMBERS_ALL_MODES_V3",
   "modes": [
     "tach",
     "ngang",
@@ -28,5 +28,5 @@
     "shared_input_across_modes",
     "desktop_phone_same_davong_group_ui"
   ],
-  "notes": "Canonical duplicate approval preflight and envelope; DAT/DX hard reject. Candidate only; NOT DEPLOYED."
+  "notes": "Issue #18 real Android operator correction: one-number DX/ĐX must HOLD/REJECT in Mobile, Ngang and DaVong. Generated engine SHA bound. Candidate WIP only; not deployed."
 }
