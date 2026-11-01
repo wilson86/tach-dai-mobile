@@ -48,6 +48,21 @@ ordering and a missing ledger-session recheck, not a real PostgreSQL race.
 Any candidate must define how session revocation and the ledger commit are
 serialized and demonstrate that behavior with real isolated PostgreSQL.
 
+Draft replay additionally needs an explicit actor-bound receipt contract.
+The current server digest covers action, scope, expected revision and payload,
+but not actor. In `002_draft_transaction.sql`, the replay lookup checks the
+request hash and event existence, but unlike `advance_review` does not check
+the saved event's actor, kind, scope or revision before returning it. The
+server receipt shape does not contain those fields. A focused test executes
+the actual server and repository JS with a simulated replay response: two
+different operator actors produce the same digest and both receive `SYNCED`
+for that response. This is an offline characterization, not proof that the
+scenario was exercised against PostgreSQL. The eventual design must reject
+another actor's replay while preserving same-actor retries and must validate
+the saved event's full context without treating caller-provided hashes as
+authority. The necessary contract and compatibility change require review;
+changing the digest alone would invalidate existing recovery receipts.
+
 ## Mandatory synthetic verification before any promotion
 
 | Invariant | Required observable negative and positive result |
