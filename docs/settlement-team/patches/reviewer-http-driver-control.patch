@@ -1,0 +1,62 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index fefa6a4..5a21a14 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -735,3 +735,3 @@ try {
+   Assert-True ((Get-KtsSha256 $controller) -eq $approvedSource['tests/settlement-team-windows-pilot-controller.cjs']) 'ADMISSION_CONTROLLER_ARTIFACT_HASH_MISMATCH'
+-  Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq 'D76ADFAD82EBEC984187751FD963FD0F784CD303A8E1C3C008110FD7FC286F34') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
++  Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq '8C0C211F224DFE3ED7101BEF46C235D66553EECDB70971FD0E743E62B55ECD4D') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
+   if($OfflineR6Lifecycle){
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 053c6dd..b9241bd 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -126,6 +126,6 @@ if($OfflineProcessExitSelfTest){
+ function Assert-AndroidDriverIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq 'D76ADFAD82EBEC984187751FD963FD0F784CD303A8E1C3C008110FD7FC286F34') 'ANDROID_DRIVER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '8C0C211F224DFE3ED7101BEF46C235D66553EECDB70971FD0E743E62B55ECD4D') 'ANDROID_DRIVER_SOURCE_DRIFT'
+ }
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '448F911AA2C50B34E5CE36C1F1683D5A54C0869941F824FF991BEF73C63144A0') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '85E789CBEC2F02A73A3230F32D4C0DF3157E38D3720925EA633E140EB63A8AF1') 'R6_RUNNER_SOURCE_DRIFT'
+ }
+diff --git a/android-chrome-cdp-workflow.cjs b/android-chrome-cdp-workflow.cjs
+index 8ae4281..da37959 100644
+--- a/android-chrome-cdp-workflow.cjs
++++ b/android-chrome-cdp-workflow.cjs
+@@ -122,3 +122,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+   if(contractFixture){await executeContractFixture();return;}
+-  let currentPageUrl=pageUrl||base+'/';let cdp;let call;
++  let currentPageUrl=pageUrl||base+'/';let cdp;let call;let reviewerProof=null;
+   async function attach(){const pages=await getJson('http://127.0.0.1:9222/json');const page=pages.find(x=>x.type==='page'&&x.url===currentPageUrl);if(!page||!page.webSocketDebuggerUrl)throw Error('ANDROID_CDP_TARGET_NOT_FOUND');cdp=await connect(page.webSocketDebuggerUrl);call=(m,p)=>cdp.call(m,p);await call('Runtime.enable');await call('Page.enable');cdp.onEvent('Page.javascriptDialogOpening',params=>{const approved=params.type==='confirm'&&typeof params.message==='string'&&/(?:GỬI DUYỆT|PHÊ DUYỆT).*GIẢ/u.test(params.message);if(approved)void call('Page.handleJavaScriptDialog',{accept:true}).catch(()=>{});});}
+@@ -178,3 +178,20 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+     async function clickVisible(id){await scrollTo(id);await click(id);}
+-    async function login(subject,password,workspace,role){await scrollTo('team-subject');await fill('team-subject',subject);await fill('team-workspace',workspace);await fill('team-password',password);await clickSelector('#team-login button[type="submit"]','ANDROID_LOGIN_SUBMIT_NOT_VISIBLE_'+role);await waitFor(`document.getElementById('team-context').textContent.includes('Đã đăng nhập:')`,'ANDROID_LOGIN_TIMEOUT_'+role);const state=await ui(`android-${role}-login`);await screenshot(`android-${role}-login`);return state;}
++    async function login(subject,password,workspace,role){
++      await scrollTo('team-subject');await fill('team-subject',subject);await fill('team-workspace',workspace);await fill('team-password',password);
++      let capture=null;
++      if(mode==='live'&&minimalRlsLogout&&role==='reviewer'){
++        const root='C:\\KTS-Settlement\\w20-2d63c84e\\r6-integration-90db435\\team-settlement';
++        const modules=[['reviewer-cdp-session-capture.cjs','8E2F0DDB7C57EB5A77529984FA7AD1CBD28ED0F351BAEF59E0F39F60F455D3A9'],['reviewer-logout-http-proof.cjs','2A29F859011B6CF226969140CCD0FF2AAC56706A4D4154D8919F38F6295DFB8F'],['reviewer-session-https-observer.cjs','103047E0493AB19BCD337241F627F34EA2F10D5E1B1E42EF26F7E2094C0CD311']];
++        for(const [file,expected] of modules)if(sha256(path.join(root,file))!==expected)throw Error('REVIEWER_PROOF_SOURCE_DRIFT');
++        const caPath='C:\\KTS-Settlement\\w20-2d63c84e\\kts-settlement-private-ca-v1\\public\\kts-settlement-private-root-ca-v1.cer';
++        if(sha256(caPath)!=='D677164D7E16CEE0DF1993B4466E728E983B9FBD01F55AF78955E1622EC41149')throw Error('REVIEWER_PROOF_CA_DRIFT');
++        const {captureReviewerLogin}=require(path.join(root,modules[0][0]));const {createReviewerLogoutHttpProof}=require(path.join(root,modules[1][0]));const {createReviewerSessionObserver}=require(path.join(root,modules[2][0]));
++        const ca=Buffer.from(new (require('node:crypto').X509Certificate)(fs.readFileSync(caPath)).toString());
++        reviewerProof=createReviewerLogoutHttpProof({observeSession:createReviewerSessionObserver({ca}),expectedWorkspace:workspace,expectedReviewer:subject});
++        await call('Network.enable');capture=captureReviewerLogin({cdp,base}).then(value=>({value}),()=>({failed:true}));
++      }
++      await clickSelector('#team-login button[type="submit"]','ANDROID_LOGIN_SUBMIT_NOT_VISIBLE_'+role);await waitFor(`document.getElementById('team-context').textContent.includes('Đã đăng nhập:')`,'ANDROID_LOGIN_TIMEOUT_'+role);
++      if(capture){let captured=await capture;if(captured.failed)throw Error('REVIEWER_CDP_CAPTURE_UNVERIFIED');const proof=await reviewerProof.beforeLogout(captured.value);captured.value=null;captured=null;await call('Network.disable');const file=path.join(evidence,'REVIEWER_HTTP_BEFORE_LOGOUT.json');atomicJson(file,{...proof,evidence_type:'LIVE_HTTPS'});evidenceItems.push({path:file,sha256:sha256(file)});}
++      const state=await ui(`android-${role}-login`);await screenshot(`android-${role}-login`);return state;
++    }
+     let dateControlMethod='NOT_USED';async function chooseScope(existingPartner){await clickVisible('team-directory');await waitFor(`document.getElementById('team-counterparties').children.length>0`,'ANDROID_COUNTERPARTY_DIRECTORY_TIMEOUT');const partner=existingPartner||await evalExpr(`(()=>{const text=document.getElementById('team-counterparties').firstElementChild?.textContent||'';return text.split(' • ')[0];})()`);if(!/^(?:fake|demo|synthetic)_[A-Za-z0-9_-]{1,64}$/.test(partner))throw Error('ANDROID_COUNTERPARTY_INVALID');await fill('team-partner',partner);await scrollTo('team-date');dateControlMethod=await fillDate('team-date','2026-10-26');return partner;}
+@@ -244,3 +261,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+       await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_LOGOUT_TIMEOUT');if(!minimalRlsLogout)evidenceItems.push(await expectWorkspaceDenied(credentials.operator,credentials.password,credentials.workspace_id));await login(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer');await chooseScope(partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('PENDING_REVIEW')`,'ANDROID_PENDING_REVIEW_READ_TIMEOUT');await clickVisible('team-approve-review');await waitFor(`document.getElementById('team-review-attempts').textContent.includes('SYNCED')`,'ANDROID_APPROVE_TIMEOUT');await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_TIMEOUT');evidenceItems.push(await ui('android-reviewed'));evidenceItems.push(await screenshot('android-reviewed'));
+-      await sqlStage('REVIEWED',partner);if(!minimalRlsLogout){await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_REVIEWER_PRE_RELOAD_LOGOUT_TIMEOUT');await reloadAndRelogin(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer-reloaded',partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_RELOAD_TIMEOUT');evidenceItems.push(await ui('android-reviewed-reloaded'));await sqlStage('RELOADED',partner);}await sqlStage('CROSS_WORKSPACE_RLS',partner);await sqlStage('REVIEWER_SESSION_BEFORE_LOGOUT',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_FINAL_LOGOUT_TIMEOUT');evidenceItems.push(await ui('android-final-logout'));await sqlStage('REVIEWER_SESSION_AFTER_LOGOUT',partner);
++      await sqlStage('REVIEWED',partner);if(!minimalRlsLogout){await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_REVIEWER_PRE_RELOAD_LOGOUT_TIMEOUT');await reloadAndRelogin(credentials.reviewer,credentials.password,credentials.workspace_id,'reviewer-reloaded',partner);await clickVisible('team-read');await waitFor(`document.getElementById('team-review-readonly').textContent.includes('REVIEWED')`,'ANDROID_REVIEWED_RELOAD_TIMEOUT');evidenceItems.push(await ui('android-reviewed-reloaded'));await sqlStage('RELOADED',partner);}await sqlStage('CROSS_WORKSPACE_RLS',partner);await sqlStage('REVIEWER_SESSION_BEFORE_LOGOUT',partner);await clickVisible('team-logout');await waitFor(`document.getElementById('team-context').textContent.includes('Chưa đăng nhập')`,'ANDROID_FINAL_LOGOUT_TIMEOUT');evidenceItems.push(await ui('android-final-logout'));if(mode==='live'&&minimalRlsLogout){if(!reviewerProof)throw Error('REVIEWER_HTTP_PROOF_MISSING');const proof=await reviewerProof.afterLogout({uiLogoutConfirmed:true});const file=path.join(evidence,'REVIEWER_HTTP_AFTER_LOGOUT.json');atomicJson(file,{...proof,evidence_type:'LIVE_HTTPS'});evidenceItems.push({path:file,sha256:sha256(file)});}await sqlStage('REVIEWER_SESSION_AFTER_LOGOUT',partner);
+     }
+@@ -260,2 +277,3 @@ async function clearStalePicker(){for(let attempt=0;attempt<3;attempt++){const s
+   } finally {
++    reviewerProof?.discard();
+     // A failed date interaction must not poison the next launch with a
