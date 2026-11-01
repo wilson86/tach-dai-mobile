@@ -1,7 +1,7 @@
 # Windows synthetic pilot Job Object candidate
 
 The control runner `C:\KTS-Settlement\w20-2d63c84e\Run-RealPilot20.ps1`
-(local SHA-256 `4D6C645F66EC0F16E1C131E6B3AC7B4FF98816D447079BDCD2559D3B83223803`)
+(local SHA-256 `4328A1DE83723B365A6BC90E517048479BDC89094A8B352C617738656199A8DD`)
 now creates `pg_ctl ... start` in a session Job Object using the pinned
 `team-settlement/windows-pilot-owned-job.cs`. Windows process creation uses
 the job-list attribute, so the child is assigned atomically before resume.
@@ -16,6 +16,10 @@ functions, calls `Invoke-PgCtl` against a disposable fake `pg_ctl.exe`, and
 verifies exact-root rejection, altered helper rejection, and child cleanup.
 An initial test exposed missing short-lived-process exit code; the helper now
 holds the process handle before resuming it. No PostgreSQL was initialized.
+`windows-pilot-runner-job-failure-fixture.ps1` additionally exercises nonzero
+exit and timeout using a disposable executable; both errors propagate and its
+job-owned descendant exits after disposal. Timeout cleanup now uses the exact
+process handle and a bounded five-second wait, instead of an unbounded wait.
 
 This is a candidate, not live qualification: the whole canonical entrypoint,
 actual pg_ctl/postmaster process tree, PostgreSQL graceful shutdown, independent
