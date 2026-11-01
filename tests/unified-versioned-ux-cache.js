@@ -36,6 +36,7 @@ assert.equal(checkNgangFrame(null),false,"missing iframe cannot be selected");
 assert.equal(checkNgangFrame({get contentWindow(){throw Error("cross-origin");}}),false,"foreign-origin Ngang cannot be selected");
 assert.ok(core.includes("if(checkUnifiedNgangFrame(frame))"),"shared source must not propagate into an unqualified Ngang frame");
 assert.ok(app.includes("if(mode==='ngang'&&!ngangFrameReady())"),"Unified mode selector must block stale Ngang");
+assert.ok(app.includes("if(localStorage.getItem('kts_unified_mode_v1')==='ngang')setMode('ngang')"),"A stored Ngang mode must be restored after iframe passes engine SHA gate");
 assert.ok(app.includes("if(frameId==='ngangFrame'&&!ngangFrameReady())return"),"Unified settings must not sync into stale Ngang");
 assert.ok(app.includes('id="ngangEngineHold"'),"visible HOLD explanation required");
 assert.ok(app.includes("frame.style.pointerEvents=ready?'':'none'"),"block stale embedded frame interaction");
