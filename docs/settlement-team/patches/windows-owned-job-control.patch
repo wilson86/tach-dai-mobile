@@ -1,6 +1,22 @@
 --- a/Run-RealPilot20.ps1
 +++ b/Run-RealPilot20.ps1
-@@ -584,6 +584,17 @@
+@@ -10,6 +10,7 @@
+   [switch]$DnsProbeTest,
+   [switch]$TunnelDnsLiveTest,
+   [switch]$PgCtlNativeTest,
++  [switch]$OfflineOwnedJobEntrypointTest,
+   [switch]$HttpsPilot,
+   [switch]$GalaxyServeOnly,
+   [switch]$PublicQuickTunnel,
+@@ -59,6 +60,7 @@
+ if($AdmissionControllerArtifact){if(-not $AdmissionOnly){throw 'ADMISSION_ARTIFACT_REQUIRES_ADMISSION_ONLY'};$controller=[IO.Path]::GetFullPath($AdmissionControllerArtifact)}
+ if($AdmissionR6BaselineArtifact -and -not $AdmissionOnly){throw 'ADMISSION_R6_BASELINE_REQUIRES_ADMISSION_ONLY'}
+ $pgStarted=$false; $supervisor=$null; $node=$null; $probeOrigin=$null; $p8787Before=$null; $publicSessionLease=$null; $result=[ordered]@{session_id=$run;source_head=$expected;status='FAIL';synthetic_only=$true;cost_usd=0;production_mutation='NONE';started_utc=[datetimeoffset]::UtcNow.ToString('o')}
++if($OfflineOwnedJobEntrypointTest -and (-not $AdmissionOnly -or $env:KTS_R6_ROOTLESS_TEST -ne '1' -or $env:NODE_ENV -ne 'test' -or $PgCtlNativeTest -or $OfflineR6Lifecycle -or $HttpsPilot -or $PublicQuickTunnel -or $GalaxyServeOnly -or $MinimalRlsLogout)){throw 'OWNED_JOB_ENTRYPOINT_TEST_DENIED'}
+ function Assert-True($value,$message){if(-not $value){throw $message}}
+ function Assert-ChildExitCode($Process,[string]$FailurePrefix){
+   Assert-True ($Process.WaitForExit(30000)) ($FailurePrefix+'TIMEOUT')
+@@ -584,6 +586,17 @@
    AtomicJson (Join-Path $evidence 'R6_MILESTONE_COMPLETION.json') ([ordered]@{status='PASS';session_id=$run;evidence_type=$r6EvidenceType;stages=$stageOrder;stage_count=$stageIndex;draft_id=(Get-Content -Raw -LiteralPath (Join-Path $stageDir 'LOCAL_PENDING.request.json')|ConvertFrom-Json).draft_id;final_sql_path=$sqlPath;final_sql_sha256=(Get-KtsSha256 $sqlPath)})
    return $snapshot
  }
@@ -18,7 +34,7 @@
  function Invoke-PgCtl {
    param([string[]]$pgCtlArguments,[string]$stage,[int]$TimeoutSeconds=60)
    Assert-True ($stage -match '^[a-z0-9-]+$') 'PGCTL_STAGE_INVALID'
-@@ -598,7 +609,7 @@
+@@ -598,7 +611,7 @@
    $logIndex=[array]::IndexOf($pgCtlArguments,'-l')
    if($logIndex -ge 0 -and $logIndex -lt ($pgCtlArguments.Count-1)){$serverLogPath=$pgCtlArguments[$logIndex+1]}
    $receiptPath=Join-Path $evidence ("pgctl-$stage.receipt.json")
@@ -27,7 +43,7 @@
    try {
      # Do not redirect pg_ctl's std handles. postgres can inherit redirected
      # handles and retain them after pg_ctl exits. Server output is captured by
-@@ -606,15 +617,22 @@
+@@ -606,15 +619,22 @@
      # Start-Process on Windows PowerShell 5.1 flattens an argument array. Quote
      # each native argument explicitly so pg_ctl receives -o's complete value.
      $argumentLine=(($pgCtlArguments|ForEach-Object{'"'+$_.Replace('"','\\"')+'"'}) -join ' ')
@@ -55,7 +71,25 @@
      AtomicJson $receiptPath $receipt
    }
    if($timedOut){throw "PG_CTL_TIMEOUT_$stage"}
-@@ -1039,6 +1057,7 @@
+@@ -736,6 +756,17 @@
+   Assert-True (Test-Path -LiteralPath $controller) 'ADMISSION_CONTROLLER_ARTIFACT_MISSING'
+   Assert-True ((Get-KtsSha256 $controller) -eq $approvedSource['tests/settlement-team-windows-pilot-controller.cjs']) 'ADMISSION_CONTROLLER_ARTIFACT_HASH_MISMATCH'
+   Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq '8C0C211F224DFE3ED7101BEF46C235D66553EECDB70971FD0E743E62B55ECD4D') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
++  if($OfflineOwnedJobEntrypointTest){
++    Assert-True ($AdmissionOnly -and $env:KTS_R6_ROOTLESS_TEST -eq '1' -and $env:NODE_ENV -eq 'test' -and -not $PgCtlNativeTest -and -not $OfflineR6Lifecycle -and -not $HttpsPilot -and -not $PublicQuickTunnel -and -not $GalaxyServeOnly -and -not $MinimalRlsLogout) 'OWNED_JOB_ENTRYPOINT_TEST_DENIED'
++    Assert-True (-not(Test-Path -LiteralPath $root)) 'OWNED_JOB_ENTRYPOINT_ROOT_EXISTS'
++    $fixture=Join-Path $control 'r6-grants-d06feeb\tests\windows-pilot-runner-owned-job-fixture.ps1'
++    Assert-True ((Get-KtsSha256 $fixture) -eq '1E551A9C20CB7B3273433E9BD13C9D2DB0DA43ACBBA9541054FD9EFFA453E21A') 'OWNED_JOB_ENTRYPOINT_FIXTURE_DRIFT'
++    $fixtureOutput=@(& { . $fixture -UseRunnerFunctions })
++    Assert-True (($fixtureOutput -join "`n") -match 'RUNNER_JOB_INVOCATION=PASS;ROOT_GUARD=PASS;SOURCE_DRIFT=PASS;DESCENDANT_CLEANUP=PASS;POSTGRESQL=NOT_RUN') 'OWNED_JOB_ENTRYPOINT_FIXTURE_FAILED'
++    $result.status='PASS';$result.owned_job_entrypoint='PASS_DISPOSABLE';$result.postgres_init='NOT_RUN'
++    Write-Output 'OWNED_JOB_CANONICAL_ENTRYPOINT=PASS_DISPOSABLE;POSTGRESQL=NOT_RUN'
++    return
++  }
+   if($OfflineR6Lifecycle){
+     Assert-True ($env:KTS_R6_ROOTLESS_TEST -eq '1' -and $env:NODE_ENV -eq 'test' -and -not $HttpsPilot -and -not $PublicQuickTunnel -and -not $GalaxyServeOnly) 'R6_ROOTLESS_MODE_INVALID'
+     $fixturePath=[IO.Path]::GetFullPath($R6FixtureManifest)
+@@ -1039,6 +1070,7 @@
  finally {
    if($probeOrigin){try{Stop-ExactOwnedProcess $probeOrigin 'terminal-dns-probe-origin'|Out-Null}catch{$result.dns_probe_shutdown_failure=$_.Exception.Message}}
    if($pgStarted){try{Invoke-PgCtl @('-D',$pgdata,'-m','fast','-w','stop') 'terminal-stop'}catch{$result.shutdown_failure=$_.Exception.Message}}

@@ -1,10 +1,13 @@
+param([switch]$UseRunnerFunctions)
 $ErrorActionPreference='Stop'
 $runner='C:\KTS-Settlement\w20-2d63c84e\Run-RealPilot20.ps1'
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($runner,[ref]$tokens,[ref]$errors)
 if($errors.Count){throw 'RUNNER_PARSE_FAILED'}
 foreach($name in @('Get-KtsOwnedPgJob','Invoke-PgCtl')){
   $fn=$ast.Find({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name},$true)
-  if(-not $fn){throw "RUNNER_FUNCTION_MISSING_$name"};Invoke-Expression $fn.Extent.Text
+  if(-not $fn){throw "RUNNER_FUNCTION_MISSING_$name"}
+  if(-not $UseRunnerFunctions){Invoke-Expression $fn.Extent.Text}
+  elseif(-not(Get-Command $name -CommandType Function -ErrorAction SilentlyContinue)){throw "INHERITED_RUNNER_FUNCTION_MISSING_$name"}
 }
 function Assert-True($value,$message){if(-not $value){throw $message}}
 function Get-KtsSha256($p){(Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash}

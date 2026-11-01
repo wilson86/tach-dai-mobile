@@ -1,7 +1,7 @@
 # Windows synthetic pilot Job Object candidate
 
 The control runner `C:\KTS-Settlement\w20-2d63c84e\Run-RealPilot20.ps1`
-(local SHA-256 `D5B90625210B7342E0D116A589A20F8DD83ADD893043785FFC5CBA2C3E7274EF`)
+(local SHA-256 `00EB5FE91AC923373DF9D8611E219F270926E9FAB8D03768D69FF598D6F8A009`)
 now creates `pg_ctl ... start` in a session Job Object using the pinned
 `team-settlement/windows-pilot-owned-job.cs`. Windows process creation uses
 the job-list attribute, so the child is assigned atomically before resume.
@@ -36,8 +36,13 @@ functions, supervisor and watchdog with a disposable fake pg_ctl and child.
 After the launcher is killed, the child exits and both terminal receipts pass.
 The manifest intentionally has no child PID: the job/process handle, not the
 watchdog's empty-manifest receipt, proves that disposable child's exit.
+The runner's guarded `OfflineOwnedJobEntrypointTest` admission path now invokes
+the pinned disposable fixture using its own loaded `Invoke-PgCtl` and job
+functions. It passed through the canonical PowerShell entrypoint with a fake
+executable, and a call without the required test environment was rejected.
+This does not exercise the real PostgreSQL lifecycle.
 
-This is a candidate, not live qualification: the whole canonical entrypoint,
+This is a candidate, not live qualification: the live runner lifecycle,
 actual pg_ctl/postmaster process tree, PostgreSQL graceful shutdown, and
 independent review are NOT_RUN. Never
 promote live readiness based on these fixture tests. PostgreSQL synthetic work
