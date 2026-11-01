@@ -27,7 +27,9 @@ assert.ok(engine.includes(SHA));
 assert.ok(calendar.length>0);
 assert.ok(rootHtml.includes('const APP_VERSION = "'+MOBILE+'"'));
 assert.ok(rootHtml.includes("v"+MOBILE));
-assert.ok(rootSW.includes('tach-dai-mobile-v'+MOBILE+'-duplicate-number-confirmation'));
+const rootCache=(rootSW.match(/^const CACHE_NAME = "([^"]+)";$/mu)||[])[1];
+assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject',
+  'root SW cache must identify the approved singleton-DX candidate, not an earlier duplicate-confirmation build');
 assert.ok(rootSW.includes('JSON.stringify({version:"'+MOBILE+'"})'));
 assert.ok(unifiedHtml.includes("Unified "+UNIFIED));
 assert.ok(unifiedHtml.includes('./unified-core.js?ux='+UNIFIED));
