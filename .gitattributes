@@ -8,6 +8,7 @@ docs/settlement-team/patches/minimal-fixture-failure-control.patch text eol=lf
 docs/settlement-team/patches/minimal-claim-integrity-control.patch text eol=lf
 docs/settlement-team/patches/minimal-expiry-control.patch text eol=lf
 docs/settlement-team/patches/ledger-audit-runner-control.patch text eol=lf
+docs/settlement-team/patches/any-column-audit-runner.patch text eol=lf
 team-settlement/windows-ledger-grant-psql.cjs text eol=lf
 team-settlement/ledger-scope-grant-audit.cjs text eol=crlf
 team-settlement/reviewer-cdp-session-capture.cjs text eol=lf

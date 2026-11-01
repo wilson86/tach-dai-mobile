@@ -1,0 +1,21 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 5a21a14..87e25b0 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -433,5 +433,5 @@ function Capture-R6StageEvidence($Request,$Ready,[string]$Stage,[string]$Evidenc
+     if($MinimalRlsLogout -and -not $OfflineR6Lifecycle){
+-      $auditRoot=Join-Path $control 'r6-integration-90db435\team-settlement'
++      $auditRoot=Join-Path $control 'r6-grants-d06feeb\team-settlement'
+       $auditBridge=Join-Path $auditRoot 'windows-ledger-grant-psql.cjs';$auditModule=Join-Path $auditRoot 'ledger-scope-grant-audit.cjs'
+-      Assert-True ((Get-KtsSha256 $auditBridge) -eq '08EF57104E522D946A15393263E3544CC1F77AABE9E77DF7138A2BD75F299F1B' -and (Get-KtsSha256 $auditModule) -eq 'AE95F3C601BDA99DF0234F7D38403E33586839EC705C677EEB4D9C4449CEA189') 'LEDGER_AUDIT_SOURCE_DRIFT'
++      Assert-True ((Get-KtsSha256 $auditBridge) -eq '08EF57104E522D946A15393263E3544CC1F77AABE9E77DF7138A2BD75F299F1B' -and (Get-KtsSha256 $auditModule) -eq 'EAE28F780E35DB6F9C6118A5800B193628B90542A3074F5F6A59A80F5D74171F') 'LEDGER_AUDIT_SOURCE_DRIFT'
+       $oldPassword=$env:PGPASSWORD;$oldDb=$env:KTS_LEDGER_AUDIT_DB;$oldRole=$env:KTS_LEDGER_AUDIT_ROLE
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index b9241bd..9ed9a88 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -129,3 +129,3 @@ function Assert-AndroidDriverIdentity([string]$Path){
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq '85E789CBEC2F02A73A3230F32D4C0DF3157E38D3720925EA633E140EB63A8AF1') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq 'A4A0EC8D02AC6C4F29C328EC8E8CBA6C11A886D0E76181AED0CDB0D3A8EB1724') 'R6_RUNNER_SOURCE_DRIFT'
+ }

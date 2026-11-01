@@ -9,7 +9,7 @@ $ErrorActionPreference='Stop'
 $control='C:\KTS-Settlement\w20-2d63c84e'
 $source='C:\KTS-Settlement\android-pilot-stage-a-52f860a\tach-dai-mobile-b2-group-app'
 $wrapper=Join-Path $control 'Invoke-KtsBlueStacksLiveAcceptance.ps1'
-$expected='AE43500D0E0F5EA768E8763782F5A44B749884594C632D7FF20778D78EBF322B'
+$expected='8317883B8D3BFAC6610FB9554BE7CDAC37DC12CA80A60760AE4342E592861D56'
 if(-not(Test-Path -LiteralPath $wrapper -PathType Leaf)){throw 'MINIMAL_WRAPPER_SOURCE_DRIFT'}
 $stream=[IO.File]::OpenRead($wrapper)
 try{$sha=[Security.Cryptography.SHA256]::Create();try{$actual=([BitConverter]::ToString($sha.ComputeHash($stream))).Replace('-','')}finally{$sha.Dispose()}}finally{$stream.Dispose()}
