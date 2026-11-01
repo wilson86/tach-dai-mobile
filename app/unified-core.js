@@ -759,7 +759,11 @@ function checkUnifiedNgangFrame(frame){
   'use strict';
   if(typeof document==='undefined') return;
   const SESSION_KEY='KTS_UNIFIED_SHARED_INPUT_V1';
+  // A successful Cut becomes a mode-local ledger. Never replay its original
+  // ticket into another mode on refresh; only explicit editing/Undo can unhold.
+  const CUT_HOLD_KEY='KTS_UNIFIED_CUT_SOURCE_HOLD_V1';
   let shared='';
+  let cutHold=false;
   let syncing=false;
   const seen=new WeakMap();
   const frameTokens=new WeakMap();
@@ -767,6 +771,27 @@ function checkUnifiedNgangFrame(frame){
   const isExactLedger=value=>String(value||'').trim().startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]');
   function saved(){try{return sessionStorage.getItem(SESSION_KEY)||''}catch(_){return ''}}
   function persist(value){try{sessionStorage.setItem(SESSION_KEY,value)}catch(_){}}
+  function persistCutHold(hold){
+    cutHold=!!hold;
+    try{
+      if(cutHold)sessionStorage.setItem(CUT_HOLD_KEY,'1');
+      else sessionStorage.removeItem(CUT_HOLD_KEY);
+    }catch(_){}
+  }
+  function holdCutLedger(originItem,ledgerText){
+    if(originItem)modeLocalLedger.set(originItem.mode,ledgerText);
+    const oldShared=shared;
+    persistCutHold(true);
+    shared='';persist(shared);
+    syncing=true;
+    try{
+      for(const item of sources()){
+        if(item.el!==originItem?.el&&!isExactLedger(item.el.value)&&
+           String(item.el.value||'')===oldShared)item.el.value='';
+        seen.set(item.el,String(item.el.value||''));
+      }
+    }finally{syncing=false}
+  }
   function activeMode(){return document.querySelector('.tab.active')?.dataset?.mode||'tach'}
   function sources(){
     const list=[];
@@ -782,11 +807,12 @@ function checkUnifiedNgangFrame(frame){
     // Exact-output ledgers are mode-local state, never shared source text.
     // Propagating one would overwrite a sibling's valid raw message.
     if(isExactLedger(text)){
-      if(originItem)modeLocalLedger.set(originItem.mode,text);
+      if(originItem)holdCutLedger(originItem,text);
       seen.set(origin,text);
       return;
     }
     if(originItem)modeLocalLedger.delete(originItem.mode);
+    persistCutHold(false);
     shared=text;persist(shared);syncing=true;
     try{
       for(const item of sources()){
@@ -817,7 +843,14 @@ function checkUnifiedNgangFrame(frame){
     if(!seen.has(el)){
       const now=String(el.value||'');
       if(isExactLedger(now)){
-        modeLocalLedger.set(item.mode,now);seen.set(el,now);return;
+        holdCutLedger(item,now);seen.set(el,now);return;
+      }
+      if(cutHold){
+        // A child may rehydrate an old raw input before its sibling ledger.
+        // Reject that implicit replay; a new user input event can still edit.
+        if(now)el.value='';
+        seen.set(el,'');
+        return;
       }
       if(!shared&&now)publish(now,el);else if(now!==shared)el.value=shared;
       seen.set(el,String(el.value||''));
@@ -833,7 +866,9 @@ function checkUnifiedNgangFrame(frame){
     }
   }
   function install(){
-    shared=saved();refresh();
+    cutHold=(()=>{try{return sessionStorage.getItem(CUT_HOLD_KEY)==='1'}catch(_){return false}})();
+    shared=cutHold?'':saved();
+    refresh();
     for(const id of ['tachFrame','ngangFrame'])document.getElementById(id)?.addEventListener('load',()=>setTimeout(refresh,0));
     document.querySelector('.tabs')?.addEventListener('click',()=>setTimeout(refresh,0));
   }
