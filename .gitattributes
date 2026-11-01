@@ -10,6 +10,7 @@ docs/settlement-team/patches/minimal-expiry-control.patch text eol=lf
 docs/settlement-team/patches/ledger-audit-runner-control.patch text eol=lf
 docs/settlement-team/patches/any-column-audit-runner.patch text eol=lf
 docs/settlement-team/patches/both-role-probe-windows-control.patch text eol=lf
+docs/settlement-team/patches/role-membership-windows-control.patch text eol=lf
 team-settlement/role-probe.cjs text eol=crlf
 team-settlement/windows-ledger-grant-psql.cjs text eol=lf
 team-settlement/ledger-scope-grant-audit.cjs text eol=crlf
