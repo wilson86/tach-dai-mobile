@@ -77,4 +77,69 @@ for(const [label,matching] of [["stale",false],["matching",true]]){
   if(matching)assert.equal(saved.at(-1)[1],"ngang",label+": must persist matching mode");
   else assert.equal(saved.length,0,label+": must not overwrite preferred Ngang while loading");
 }
+// Live-source regression: a successful Cut must NEVER restore the cut raw
+// wager into a sibling mode on F5. An explicit Undo may intentionally restore.
+const sharedBegin=core.indexOf(";(function installUnifiedSharedInput(){");
+const sharedEnd=core.indexOf("\n})();",sharedBegin);
+assert.ok(sharedBegin>=0&&sharedEnd>sharedBegin,"shared input controller missing");
+const sharedFactory=core.slice(sharedBegin,sharedEnd+"\n})();".length);
+const origTicket="2d 52 68 dx5n";
+const ledgerTicket="[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n"+JSON.stringify({origin:origTicket,rows:[]});
+const storage={"KTS_UNIFIED_SHARED_INPUT_V1":origTicket};
+const session={
+  getItem:key=>storage[key]??null,
+  setItem:(key,value)=>{storage[key]=String(value)},
+  removeItem:key=>{delete storage[key]}
+};
+function createSharedController(tachInitial,ngangInitial){
+  const entry=value=>({value,events:{},addEventListener(type,fn){this.events[type]=fn}});
+  const tach=entry(tachInitial),ngang=entry(ngangInitial),dv=entry(tachInitial),callbacks={};
+  const ngangWindow={
+    KTS_BUSINESS_ENGINE:{ENGINE_SHA256:expectedSha},
+    validateCheckOnlyLine(){},processLine(){},
+    addEventListener(type,fn){callbacks[type]=fn}
+  };
+  const frame=(el,win)=>({
+    contentDocument:{getElementById:id=>id==="input"?el:null},
+    contentWindow:win,addEventListener(){}
+  });
+  const frames={
+    tachFrame:frame(tach,{addEventListener(){}}),
+    ngangFrame:frame(ngang,ngangWindow),
+    dvInput:dv
+  };
+  const doc={
+    readyState:"complete",
+    getElementById:id=>frames[id]||null,
+    querySelector:()=>({dataset:{mode:"ngang"},addEventListener(){}})
+  };
+  (new Function("document","sessionStorage","checkUnifiedNgangFrame","setTimeout",sharedFactory))(
+    doc,session,checkNgangFrame,()=>{});
+  return {tach,ngang,dv,ngangWindow,callbacks};
+}
+const cutStart=createSharedController(origTicket,origTicket);
+cutStart.ngang.value=ledgerTicket;
+cutStart.callbacks["kts:working-source"]({detail:{
+  schema:"KTS_WORKING_SOURCE_V1",
+  token:cutStart.ngangWindow.__KTS_UNIFIED_FRAME_TOKEN__,
+  value:ledgerTicket
+}});
+assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,"","Cut must revoke shared original ticket");
+assert.equal(storage.KTS_UNIFIED_CUT_SOURCE_HOLD_V1,"1","Cut hold must survive refresh");
+assert.equal(cutStart.tach.value,"","Cut must clear old raw ticket in Tách Đài");
+assert.equal(cutStart.dv.value,"","Cut must clear old raw ticket in Đá Vòng");
+assert.equal(cutStart.ngang.value,ledgerTicket,"Cut must never mutate local Ngang ledger");
+const afterF5=createSharedController(origTicket,ledgerTicket);
+assert.equal(afterF5.tach.value,"","F5 must not resurrect cut ticket from cached Tách Đài");
+assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,"","F5 must not resurrect source session");
+assert.equal(afterF5.ngang.value,ledgerTicket,"F5 must preserve Ngang ledger for inspection");
+afterF5.ngang.value=origTicket; // explicit working-source Undo event
+afterF5.callbacks["kts:working-source"]({detail:{
+  schema:"KTS_WORKING_SOURCE_V1",
+  token:afterF5.ngangWindow.__KTS_UNIFIED_FRAME_TOKEN__,
+  value:origTicket
+}});
+assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,origTicket,"Undo may explicitly restore raw source");
+assert.equal(storage.KTS_UNIFIED_CUT_SOURCE_HOLD_V1,undefined,"Undo releases cut hold");
+assert.equal(afterF5.tach.value,origTicket,"Undo may restore sibling source");
 console.log("UNIFIED VERSIONED UX CACHE: PASS");
