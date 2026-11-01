@@ -138,6 +138,7 @@ if __name__=='__main__':
     if sys.argv[1:]==['--owner']: owner()
     elif sys.argv[1:]==['--owner-suspended']: owner(suspended=True)
     elif len(sys.argv)==3 and sys.argv[1]=='--owner-tree': owner(tree_file=sys.argv[2])
+    elif sys.argv[1:]==['--tree-only']: run_case(False,tree=True);print('REAL_POSTGRESQL=NOT_RUN')
     elif not sys.argv[1:]:
-        run_case(False,tree=True);print('REAL_POSTGRESQL=NOT_RUN')
+        run_case(True);run_case(False);run_case(False,tree=True);print('REAL_POSTGRESQL=NOT_RUN')
     else: raise SystemExit('INVALID_FIXTURE_ARGUMENT')
