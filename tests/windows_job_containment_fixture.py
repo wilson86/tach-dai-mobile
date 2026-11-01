@@ -10,6 +10,7 @@ import os
 import queue
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -61,7 +62,7 @@ k.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD];k.WaitForSingleO
 def must(ok):
     if not ok: raise ctypes.WinError(ctypes.get_last_error())
 
-def owner(suspended=False):
+def owner(suspended=False,tree_file=None):
     job=k.CreateJobObjectW(None,None);must(job)
     info=EXTENDED_LIMIT();info.BasicLimitInformation.LimitFlags=0x2000 # KILL_ON_JOB_CLOSE
     must(k.SetInformationJobObject(job,9,ctypes.byref(info),ctypes.sizeof(info)))
@@ -71,7 +72,14 @@ def owner(suspended=False):
     job_list=(wintypes.HANDLE*1)(job)
     must(k.UpdateProcThreadAttribute(storage,0,0x0002000D,ctypes.byref(job_list),ctypes.sizeof(job_list),None,None))
     startup=STARTUPINFOEX();startup.StartupInfo.cb=ctypes.sizeof(startup);startup.lpAttributeList=ctypes.cast(storage,ctypes.c_void_p);proc=PROCESS_INFORMATION()
-    cmd=ctypes.create_unicode_buffer(subprocess.list2cmdline([sys.executable,'-c','import time; time.sleep(30)']))
+    child_code='import time; time.sleep(30)'
+    if tree_file:
+        child_code=('import subprocess,sys,time,pathlib; '
+          'p=subprocess.Popen([sys.executable,"-c","import time; time.sleep(30)"],'
+          'stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=0x08000000); '
+          'pathlib.Path(sys.argv[1]).write_text(str(p.pid)); time.sleep(30)')
+    child_args=[sys.executable,'-c',child_code]+([tree_file] if tree_file else [])
+    cmd=ctypes.create_unicode_buffer(subprocess.list2cmdline(child_args))
     try:
         must(k.CreateProcessW(sys.executable,cmd,None,None,False,0x4|0x08000000|0x00080000,None,None,ctypes.byref(startup.StartupInfo),ctypes.byref(proc)))
     finally: k.DeleteProcThreadAttributeList(storage)
@@ -86,18 +94,32 @@ def owner(suspended=False):
     finally:
         k.CloseHandle(proc.hThread);k.CloseHandle(proc.hProcess);k.CloseHandle(job)
 
-def run_case(suspended):
-    parent=subprocess.Popen([sys.executable,__file__,'--owner-suspended' if suspended else '--owner'],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+def run_case(suspended,tree=False):
+    marker=None
+    if tree:
+        fd,marker=tempfile.mkstemp(prefix='kts-job-tree-',suffix='.txt');os.close(fd)
+    mode=['--owner-tree',marker] if tree else ['--owner-suspended' if suspended else '--owner']
+    parent=subprocess.Popen([sys.executable,__file__]+mode,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
     q=queue.Queue()
     threading.Thread(target=lambda:q.put(parent.stdout.readline()),daemon=True).start()
-    child=None; child_handle=None
+    child=None; child_handle=None; grandchild_handle=None
     try:
         line=q.get(timeout=8).strip();child=int(line)
         child_handle=k.OpenProcess(0x00100001,False,child);must(child_handle)
         assert k.WaitForSingleObject(child_handle,0)==258,'fixture child did not start'
+        if tree:
+            end=time.monotonic()+5; contents=''
+            while time.monotonic()<end:
+                with open(marker,encoding='ascii') as f: contents=f.read().strip()
+                if contents: break
+                time.sleep(.05)
+            assert contents.isdigit(),'grandchild PID was not recorded'
+            grandchild_handle=k.OpenProcess(0x00100001,False,int(contents));must(grandchild_handle)
+            assert k.WaitForSingleObject(grandchild_handle,0)==258,'grandchild did not start'
         parent.kill();parent.wait(timeout=5)
         assert k.WaitForSingleObject(child_handle,5000)==0,'job failed to terminate child after owner exit'
-        print(('SUSPENDED' if suspended else 'RUNNING')+'_CHILD_OWNER_EXIT=PASS')
+        if tree: assert k.WaitForSingleObject(grandchild_handle,5000)==0,'job failed to terminate grandchild'
+        print(('TREE' if tree else 'SUSPENDED' if suspended else 'RUNNING')+'_CHILD_OWNER_EXIT=PASS')
     finally:
         if parent.poll() is None: parent.kill();parent.wait(timeout=5)
         if child_handle:
@@ -105,10 +127,17 @@ def run_case(suspended):
                 if k.WaitForSingleObject(child_handle,0)==258: k.TerminateProcess(child_handle,1)
                 k.WaitForSingleObject(child_handle,3000)
             finally: k.CloseHandle(child_handle)
+        if grandchild_handle:
+            try:
+                if k.WaitForSingleObject(grandchild_handle,0)==258: k.TerminateProcess(grandchild_handle,1)
+                k.WaitForSingleObject(grandchild_handle,3000)
+            finally: k.CloseHandle(grandchild_handle)
+        if marker: os.unlink(marker)
 
 if __name__=='__main__':
     if sys.argv[1:]==['--owner']: owner()
     elif sys.argv[1:]==['--owner-suspended']: owner(suspended=True)
+    elif len(sys.argv)==3 and sys.argv[1]=='--owner-tree': owner(tree_file=sys.argv[2])
     elif not sys.argv[1:]:
-        run_case(True);run_case(False);print('REAL_POSTGRESQL=NOT_RUN')
+        run_case(False,tree=True);print('REAL_POSTGRESQL=NOT_RUN')
     else: raise SystemExit('INVALID_FIXTURE_ARGUMENT')

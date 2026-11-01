@@ -108,3 +108,6 @@ both disposable Python children exited. This is not connected to the runner,
 does not exercise pg_ctl/PostgreSQL descendants, and does not prove graceful
 shutdown or replace the existing supervisor. Job nesting, breakaway settings,
 ownership and actual PostgreSQL tree cleanup require separate verification.
+The same fixture also spawned a disposable grandchild and held explicit Windows
+process handles to both descendants; both exited after the job owner was killed.
+This demonstrates a simple synthetic tree on this host, not PostgreSQL behavior.
