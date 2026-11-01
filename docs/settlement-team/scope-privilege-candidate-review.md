@@ -39,6 +39,14 @@ database-side session-bound design needs an explicitly reviewed contract for
 proof transport and revocation races. A raw bearer or reusable session hash
 must not be added to SQL parameters or logs without a separate disclosure
 and retention analysis. The current contract supplies no such proof to SQL.
+`settlement-team-session-revocation-gap.test.cjs` executes the actual server,
+auth and ledger JavaScript with separate synthetic transaction adapters. In
+that fixture, the session is marked revoked after the auth transaction ends
+and before the ledger transaction begins; the ledger fixture still accepts
+the write while membership remains active. This confirms application-level
+ordering and a missing ledger-session recheck, not a real PostgreSQL race.
+Any candidate must define how session revocation and the ledger commit are
+serialized and demonstrate that behavior with real isolated PostgreSQL.
 
 ## Mandatory synthetic verification before any promotion
 
