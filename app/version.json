@@ -1,5 +1,5 @@
 {
-  "version": "1.0.29",
+  "version": "1.0.30",
   "updated": "2026-10-31",
   "business_engine_sha256": "0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487",
   "contract": "DX_NUMBER_PAIR_REQUIRES_TWO_DISTINCT_NUMBERS_ALL_MODES_V3",
@@ -28,5 +28,5 @@
     "shared_input_across_modes",
     "desktop_phone_same_davong_group_ui"
   ],
-  "notes": "Issue #18 WIP: Unified blocks a stale/cross-origin hosted Ngang iframe before mode selection or source propagation; canonical engine 0a0e remains the same. No deployment."
+  "notes": "Issue #18 WIP: after Cut, prevent old shared raw wager from replaying into sibling modes on F5; preserve Ngang selected mode until SHA-validated iframe becomes ready. Engine SHA unchanged, no deploy."
 }
