@@ -22,8 +22,7 @@ DECLARE
   v_actor text;
   v_role text;
   v_saved kts_team.idempotency_receipts%ROWTYPE;
-  v_replay_revision bigint;
-  v_replay_feed_seq bigint;
+  v_replay_event kts_team.scope_events%ROWTYPE;
   v_revision bigint;
   v_feed_seq bigint;
   v_state text;
@@ -65,13 +64,27 @@ BEGIN
     IF v_saved.request_sha256<>p_request_sha256 THEN
       RAISE EXCEPTION 'TEAM_IDEMPOTENCY_CONFLICT';
     END IF;
-    SELECT scope_revision, feed_seq INTO v_replay_revision, v_replay_feed_seq
+    -- Same-key retry must belong to the current actor, exact scope and
+    -- original event kind/revision. A matching digest alone is insufficient.
+    -- The actor GUC is provided by the trusted API; this check does NOT
+    -- make a direct ledger DB connection actor-authenticated.
+    SELECT * INTO v_replay_event
     FROM kts_team.scope_events
     WHERE workspace_id=p_workspace_id AND event_id=v_saved.event_id;
     IF NOT FOUND THEN RAISE EXCEPTION 'TEAM_IDEMPOTENCY_RECEIPT_ORPHANED'; END IF;
+    IF v_replay_event.actor_user_id IS DISTINCT FROM v_actor OR
+       v_replay_event.partner_id IS DISTINCT FROM p_partner_id OR
+       v_replay_event.business_date IS DISTINCT FROM p_business_date OR
+       v_replay_event.region IS DISTINCT FROM p_region OR
+       v_replay_event.scope_revision IS DISTINCT FROM (p_expected_revision+1) OR
+       v_replay_event.event_kind IS DISTINCT FROM
+         (CASE WHEN p_expected_revision=0 THEN 'DRAFT_CREATED' ELSE 'DRAFT_CHANGED' END) OR
+       v_replay_event.payload_sha256 IS DISTINCT FROM p_request_sha256 THEN
+      RAISE EXCEPTION 'TEAM_IDEMPOTENCY_CONTEXT_MISMATCH';
+    END IF;
     RETURN jsonb_build_object(
       'event_id',v_saved.event_id,'replayed',true,
-      'new_revision',v_replay_revision,'feed_seq',v_replay_feed_seq);
+      'new_revision',v_replay_event.scope_revision,'feed_seq',v_replay_event.feed_seq);
   END IF;
 
   INSERT INTO kts_team.scopes(workspace_id,partner_id,business_date,region,state,revision)
