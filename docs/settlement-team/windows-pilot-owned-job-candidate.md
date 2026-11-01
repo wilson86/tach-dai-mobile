@@ -8,6 +8,12 @@ the job-list attribute, so the child is assigned atomically before resume.
 The job closes on runner exit or its absolute deadline; graceful `pg_ctl stop`
 and the independent supervisor/watchdog remain in place. This control runner
 is outside Git and must be verified by its exact hash before reuse.
+The reviewable `patches/windows-owned-job-control.patch` reconstructs these
+runner changes from the verified baseline SHA-256
+`8A5E6FB5AC8796AB5D749387DEA7DB364BB678493F1218F9B5C098F05AB21C5B`.
+It was replayed only onto a disposable LF-normalized copy and matched the
+current runner's LF-normalized text; this is not proof of byte-identical
+Windows line endings or authorization to apply it to a live runner.
 
 Offline evidence: `tests/windows-pilot-owned-job-fixture.ps1` tested disposal,
 deadline and owner termination with disposable PowerShell children. The
