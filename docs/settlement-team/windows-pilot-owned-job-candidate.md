@@ -21,8 +21,14 @@ exit and timeout using a disposable executable; both errors propagate and its
 job-owned descendant exits after disposal. Timeout cleanup now uses the exact
 process handle and a bounded five-second wait, instead of an unbounded wait.
 
+`windows-job-supervisor-crash-fixture.ps1` uses the actual extracted runner
+functions, supervisor and watchdog with a disposable fake pg_ctl and child.
+After the launcher is killed, the child exits and both terminal receipts pass.
+The manifest intentionally has no child PID: the job/process handle, not the
+watchdog's empty-manifest receipt, proves that disposable child's exit.
+
 This is a candidate, not live qualification: the whole canonical entrypoint,
-actual pg_ctl/postmaster process tree, PostgreSQL graceful shutdown, independent
-supervisor/watchdog interactions and independent review are NOT_RUN. Never
+actual pg_ctl/postmaster process tree, PostgreSQL graceful shutdown, and
+independent review are NOT_RUN. Never
 promote live readiness based on these fixture tests. PostgreSQL synthetic work
 requires separate authorization and a fresh isolated root.
