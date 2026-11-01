@@ -4,11 +4,22 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
-const sql=fs.readFileSync('team-settlement/migrations/002_draft_transaction.sql','utf8');
-const replayStart=sql.indexOf('  IF FOUND THEN\n    IF v_saved.request_sha256');
-const replayEnd=sql.indexOf('\n  END IF;',replayStart);
-assert.ok(replayStart>0 && replayEnd>replayStart,'UNEXPECTED_REPLAY_BLOCK');
-const replay=sql.slice(replayStart,replayEnd);
+// Normalize line endings for a source scan so Windows Git checkouts (CRLF)
+// and Unix checkouts (LF) exercise the same assertions.
+const rawSql=fs.readFileSync('team-settlement/migrations/002_draft_transaction.sql','utf8');
+const sql=rawSql.replace(/\r\n/g,'\n');
+function replayBlock(source){
+  const normalized=source.replace(/\r\n/g,'\n');
+  const start=normalized.indexOf('  IF FOUND THEN\n    IF v_saved.request_sha256');
+  const end=normalized.indexOf('\n  END IF;',start);
+  assert.ok(start>0 && end>start,'UNEXPECTED_REPLAY_BLOCK');
+  return normalized.slice(start,end);
+}
+const replay=replayBlock(rawSql);
+
+test('source scan is equivalent for LF and CRLF checkouts',()=>{
+  assert.equal(replayBlock(sql),replayBlock(sql.replace(/\n/g,'\r\n')));
+});
 
 test('same-key draft replay is bound to the original actor and exact business scope',()=>{
   for(const expression of [
