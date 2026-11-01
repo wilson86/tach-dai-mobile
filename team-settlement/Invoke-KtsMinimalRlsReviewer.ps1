@@ -22,6 +22,12 @@ if(-not [string]::IsNullOrWhiteSpace($OfflineLifecycleManifest)){
   & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper -SourceRoot $source -ControlRoot $control -OfflineMinimalAdmissionSelfTest
 }else{
   if([string]::IsNullOrWhiteSpace($AuthorizationPath)){throw 'MINIMAL_AUTHORIZATION_REQUIRED'}
-  & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $wrapper -SourceRoot $source -ControlRoot $control -MinimalRlsLogout -MinimalAuthorizationPath $AuthorizationPath
+  # The pinned runner currently grants the ledger role direct scope writes.
+  # Until the restricted-role audit is wired and qualified, do not start it.
+  $runner=Join-Path $control 'Run-RealPilot20.ps1'
+  if(-not(Test-Path -LiteralPath $runner -PathType Leaf)){throw 'MINIMAL_LEDGER_GRANTS_UNVERIFIED'}
+  $runnerText=[IO.File]::ReadAllText($runner)
+  if($runnerText.Contains('GRANT INSERT,UPDATE ON kts_team.scopes TO $ledger')){throw 'MINIMAL_DIRECT_SCOPE_GRANTS_BLOCKED'}
+  throw 'MINIMAL_LEDGER_GRANT_AUDIT_NOT_INTEGRATED'
 }
 exit $LASTEXITCODE
