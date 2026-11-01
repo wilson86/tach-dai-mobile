@@ -88,3 +88,14 @@ synthetic test authorization permits it. Preserve original SQL and data;
 record before/after catalogs, role identities and evidence hashes. Offline
 fixtures cannot establish these PostgreSQL guarantees. Independent review is
 required before any runtime privilege or migration change.
+
+The existing `PgCtlNativeTest` registers the postmaster only after `pg_ctl -w
+start` and readiness return. Its watchdog acts only on manifest PIDs. A focused
+real-process test (`settlement-team-watchdog-unregistered-child.test.cjs`)
+shows that the actual watchdog returns PASS for an empty manifest while a
+disposable unregistered child remains alive; the fixture then terminates its
+own child. This is evidence of a registration-gap cleanup risk, not evidence
+of a PostgreSQL orphan. Before using this lifecycle for the SQL regression,
+cover the interval between process creation and durable registration with an
+ownership-scoped mechanism and test launcher failure in that interval. Do not
+infer process-tree cleanup from an empty-manifest terminal receipt.
