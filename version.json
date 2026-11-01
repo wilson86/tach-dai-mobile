@@ -1,6 +1,6 @@
 {
-  "version": "2.0.38",
-  "updated": "2026-10-30",
-  "notes": "Canonical duplicate-number confirmation gate; calendar generated from KTS station_schedule_authority.json; explicit unordered DX pairs and full station coverage.",
-  "business_engine_sha256": "7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea"
+  "version": "2.0.39",
+  "updated": "2026-10-31",
+  "notes": "Issue #18 owner Android money oracle: literal DX/ĐX requires two distinct numbers; singleton DX rejects atomically in all modes. Preserve original source and station-pair money semantics for valid DX.",
+  "business_engine_sha256": "0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487"
 }
