@@ -29,6 +29,17 @@ protected authority. Both options require changes outside a simple grant edit.
 No such mechanism is implemented or approved here; do not substitute an
 unchecked actor argument, client-set GUC, or a new privileged role alone.
 
+The present `server-ledger-api.cjs` verifies the session through the auth
+service, then passes an actor object to the ledger repository; it does not
+pass the session bearer into the ledger transaction. The auth service hashes
+the bearer to find an active session, while the ledger repository starts a
+separate transaction and rechecks membership. The focused session/repository
+fixture confirms this handoff but cannot prove runtime isolation. Therefore a
+database-side session-bound design needs an explicitly reviewed contract for
+proof transport and revocation races. A raw bearer or reusable session hash
+must not be added to SQL parameters or logs without a separate disclosure
+and retention analysis. The current contract supplies no such proof to SQL.
+
 ## Mandatory synthetic verification before any promotion
 
 | Invariant | Required observable negative and positive result |
