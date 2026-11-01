@@ -813,10 +813,12 @@ function checkUnifiedNgangFrame(frame){
     }
     if(originItem)modeLocalLedger.delete(originItem.mode);
     persistCutHold(false);
+    // Another mode may hold an immutable Cut ledger. A new raw draft must
+    // NEVER replace that mode's protected source, receipt, or Undo state.
     shared=text;persist(shared);syncing=true;
     try{
       for(const item of sources()){
-        if(item.el!==origin&&String(item.el.value||'')!==shared)item.el.value=shared;
+        if(item.el!==origin&&!isExactLedger(item.el.value)&&String(item.el.value||'')!==shared)item.el.value=shared;
         seen.set(item.el,String(item.el.value||''));
       }
     }finally{syncing=false}
