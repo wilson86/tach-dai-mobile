@@ -89,16 +89,20 @@ function ngangFrameReady(){
     checkUnifiedNgangFrame($('ngangFrame'));
 }
 function setMode(mode){
+  let persistMode=true;
   if(!['tach','ngang','davong'].includes(mode)) mode='tach';
   // Even a SAME-ORIGIN remote iframe may be on an older published engine.
   // Do not allow selecting it or syncing any raw source before SHA parity.
   if(mode==='ngang'&&!ngangFrameReady()){
     $('ngangEngineHold').hidden=false;
+    // On F5 the iframe is not ready yet. Show safe Tách Đài temporarily,
+    // but DO NOT overwrite a previously selected Ngang mode in storage.
+    persistMode=false;
     mode='tach';
   }
   modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
   for(const name of ['tach','ngang','davong']) $(`pane-${name}`).classList.toggle('active',name===mode);
-  try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
+  if(persistMode)try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
   if(mode==='davong') updateDvSchedule();
 }
 modeButtons.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
@@ -314,7 +318,11 @@ $('ngangFrame').addEventListener('load',()=>{
   $('ngangEngineHold').hidden=ready;
   frame.style.pointerEvents=ready?'':'none';
   frame.tabIndex=ready?0:-1;
-  if(ready)syncSharedSettings();
+  if(ready){
+    syncSharedSettings();
+    // Restore only after engine SHA and APIs have passed the same-origin gate.
+    try{if(localStorage.getItem('kts_unified_mode_v1')==='ngang')setMode('ngang')}catch(_){}
+  }
   else if($('pane-ngang').classList.contains('active'))setMode('tach');
 });
 loadSharedSettings();
