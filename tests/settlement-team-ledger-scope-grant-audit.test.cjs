@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {auditLedgerScopeGrants,LEDGER_SCOPE_GRANT_SQL}=require('../team-settlement/ledger-scope-grant-audit.cjs');
-const safe={role:'l20_ledger_synthetic',superuser:false,bypass_rls:false,role_memberships_present:false,
+const safe={role:'l20_ledger_synthetic',session_role:'l20_ledger_synthetic',superuser:false,bypass_rls:false,role_memberships_present:false,
   scope_insert:false,scope_update:false,scope_delete:false,scope_truncate:false,scope_any_column_insert:false,scope_any_column_update:false,state_update:false,
   revision_update:false,reviewed_by_update:false,submitted_by_update:false,locked_at_update:false};
 async function run(row){return auditLedgerScopeGrants({query:async()=>({rows:[row]}),expectedRole:safe.role,syntheticOnly:true});}
@@ -35,7 +35,7 @@ test('INSERT, table UPDATE, column UPDATE and DELETE each block actor-boundary r
 });
 
 test('ambiguous or privileged database role evidence is rejected',async()=>{
-  for(const row of [null,{}, {...safe,role:'unexpected_role'}, {...safe,superuser:true},
+  for(const row of [null,{}, {...safe,role:'unexpected_role'}, {...safe,session_role:'privileged_login'}, {...safe,session_role:null}, {...safe,session_role:undefined}, {...safe,superuser:true},
     {...safe,bypass_rls:true}, {...safe,scope_update:null}, {...safe,scope_insert:'t'}]){
     await assert.rejects(run(row),/EVIDENCE_INVALID|ROLE_PRIVILEGED/);
   }

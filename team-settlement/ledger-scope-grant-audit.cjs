@@ -4,7 +4,7 @@
 // able to mutate scopes directly can bypass application-only CAS/review checks
 // even if FORCE RLS hides all *other* workspaces.
 const LEDGER_SCOPE_GRANT_SQL = [
-  'SELECT current_user AS role,',
+  'SELECT current_user AS role, session_user AS session_role,',
   '  COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname=current_user),true) AS superuser,',
   '  COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),true) AS bypass_rls,',
   "  EXISTS(SELECT 1 FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user)) AS role_memberships_present,",
@@ -31,6 +31,7 @@ async function auditLedgerScopeGrants({query,expectedRole,syntheticOnly=false}={
   try{const result=await query(LEDGER_SCOPE_GRANT_SQL);rows=result && result.rows;}
   catch(_){throw Error('LEDGER_GRANT_AUDIT_SQL_UNVERIFIED');}
   if(!Array.isArray(rows)||rows.length!==1||!rows[0]||rows[0].role!==expectedRole||
+      rows[0].session_role!==expectedRole||
       BOOLEAN_FIELDS.some(key=>typeof rows[0][key]!=='boolean'))throw Error('LEDGER_GRANT_AUDIT_EVIDENCE_INVALID');
   const r=rows[0];
   if(r.superuser||r.bypass_rls)throw Error('LEDGER_GRANT_AUDIT_ROLE_PRIVILEGED');
