@@ -1,7 +1,8 @@
 \set ON_ERROR_STOP on
 -- FUTURE disposable synthetic test only; never run on an existing pilot root.
 -- Prerequisites: migrations 001-004, postgres-smoke.sql and postgres-draft.sql.
--- Expected to FAIL against the current function until actor-bound replay is fixed.
+-- Source now checks actor/scope/event context; this real PostgreSQL regression
+-- has NOT RUN on the changed SHA. Never treat a source check as DB PASS.
 -- All test data is in this transaction; failure/disconnect rolls it back.
 DO $$
 BEGIN
