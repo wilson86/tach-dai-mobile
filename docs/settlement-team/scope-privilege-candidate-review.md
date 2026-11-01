@@ -48,27 +48,25 @@ ordering and a missing ledger-session recheck, not a real PostgreSQL race.
 Any candidate must define how session revocation and the ledger commit are
 serialized and demonstrate that behavior with real isolated PostgreSQL.
 
-Draft replay additionally needs an explicit actor-bound receipt contract.
-The current server digest covers action, scope, expected revision and payload,
-but not actor. In `002_draft_transaction.sql`, the replay lookup checks the
-request hash and event existence, but unlike `advance_review` does not check
-the saved event's actor, kind, scope or revision before returning it. The
-server receipt shape does not contain those fields. A focused test executes
-the actual server and repository JS with a simulated replay response: two
-different operator actors produce the same digest and both receive `SYNCED`
-for that response. This is an offline characterization, not proof that the
-scenario was exercised against PostgreSQL. The eventual design must reject
-another actor's replay while preserving same-actor retries and must validate
-the saved event's full context without treating caller-provided hashes as
-authority. The necessary contract and compatibility change require review;
-changing the digest alone would invalidate existing recovery receipts.
-`team-settlement/tests/postgres-draft-replay-actor-regression.sql` is a future
-disposable-PostgreSQL regression: it requires an explicitly named fixture DB
-and opt-in setting, makes its synthetic writes in a rolled-back transaction,
-checks same-actor replay, and fails if a second operator can replay the receipt.
-It has not been executed against PostgreSQL and is expected to fail with the
-current implementation. Its smoke-writer role is deliberately privileged to
-exercise the existing function; it is not a proof of least-privilege admission.
+Draft replay requires an actor-bound receipt contract.
+The server digest still covers action, scope, expected revision and payload,
+but not actor. On the 2026-11-01 isolated development branch,
+`002_draft_transaction.sql` was hardened to compare the saved event's
+actor, kind, scope, revision and payload hash before honoring a same-key replay.
+It preserves the original event and feed identity for a matching retry.
+This is **source hardening**, not proof of PostgreSQL behavior, independent
+SQL actor binding, or an authorization decision by the database. The actor GUC
+can still be forged by a direct SQL caller; role/grant redesign remains blocked.
+The existing focused JavaScript characterization deliberately simulates an
+unvalidated SQL replay and therefore still shows two actors receiving `SYNCED`
+when given that mocked response. That fixture does not evaluate the updated
+PostgreSQL function or establish a live exploit.
+The associated `team-settlement/tests/postgres-draft-replay-actor-regression.sql`
+uses a disposable database and opt-in fixture setting, writes in a rollback-only
+transaction and checks same-actor retry against different-actor denial.
+**It has not run against PostgreSQL on the new source SHA.** The privileged
+smoke-writer fixture is not evidence of least-privilege admission. Any change
+to request digests or recovery receipts remains a separate compatibility gate.
 
 ## Mandatory synthetic verification before any promotion
 
@@ -111,3 +109,15 @@ ownership and actual PostgreSQL tree cleanup require separate verification.
 The same fixture also spawned a disposable grandchild and held explicit Windows
 process handles to both descendants; both exited after the job owner was killed.
 This demonstrates a simple synthetic tree on this host, not PostgreSQL behavior.
+
+## Follow-up checkpoint — 2026-11-01 (source + Windows containment)
+
+- **Project:** KTS Settlement only; repo `wilson86/tach-dai-mobile`, branch `codex/r6-rls-followup-20261029`.
+- **Owner-reported Windows containment HEAD:** `d2c251454cdc192fe9b66620c216fd15ae86d966`, checkpoint `C:\KTS-Settlement\w20-2d63c84e\KTS_WINDOWS_JOB_TREE_D2C2514.json`, SHA-256 `170F3BDB175B17C5FD17B7A4D484934388008E204C3E1CD7F4ACD1377A9D57DB`. Direct Windows checkpoint bytes are **NOT VERIFIED** here. On GitHub, `tests/windows_job_containment_fixture.py` has suspended-child, resumed-child and descendant-tree synthetic modes. Child/grandchild exit is **operator-reported PASS**, not rerun remotely; **actual pg_ctl/PostgreSQL tree and runner integration NOT_RUN**.
+- **Source hardening after containment HEAD:** `006e94ab35316f33d042bcc5bad55ae5bf78cea3` updates only the synthetic draft SQL replay path, rejecting wrong actor, business scope, event kind, revision and saved payload hash; `f1be5747d9ad94ae9e4317a77454e9a23ed4608d` adds targeted static test; `4411ff24f0a288eb9bc7009b27c90b64d1779711` corrects the future SQL regression's status. No deployed schema, Windows runner or production data was modified.
+- **New QA:** `tests/settlement-team-draft-replay-context-static.test.cjs` executed in a V8 synthetic Node-test shim against the exact GitHub SQL/test blobs: **3/3 PASS**. This is **STATIC SOURCE QA**, not native Node, PostgreSQL or Windows SQL proof. An additional source invariant inspection asserted 10 replay/transaction properties before the SQL commit. Existing same-SHA PASS cases were not rerun.
+- **Remaining hard blockers:** real PostgreSQL SQL regression NOT_RUN; runtime ledger scope `INSERT/UPDATE` still conflicts with required no-direct-write actor boundary; spoofable actor GUC; session revocation across separate auth/ledger transactions; atomic containment of actual `pg_ctl`/postmaster and watchdog/supervisor shutdown; restricted-role cross-workspace RLS and Android Reviewer logout still NOT_RUN. Do not claim LIVE_READY on Job Object synthetic evidence.
+- **Next batch (max 3):** (1) inspect/replay updated SQL regression in an isolated offline PostgreSQL test only when appropriately authorized, including legitimate same-key retries and wrong-actor denial; (2) review least-privilege/actor-binding plan and keep current live grant/admission block in place; (3) qualify Windows Job Object integration with owned `pg_ctl` process hierarchy, clean termination/recovery and SHA-bound evidence before requesting any new single-use live authorization. Do not connect to production or reuse R6 lease/root.
+- **Gate:** `RELEASE_READINESS=BLOCKED`; `R6_LEASE=CONSUMED`; `R7=NOT_STARTED`; `GITHUB_CI=NOT_RUN`; `REAL_PG_RLS=NOT_RUN`; `REAL_REVIEWER_LOGOUT=NOT_RUN`; `MERGE=NO`; `DEPLOY=NO`; `PRODUCTION_MUTATION=NONE`; `E_ACCESS=NO`; `F_ACCESS=NO`; `COST_USD=0`.
+- **Policy / Skills:** actual five WILSON86 skills found and read at `wilson86/AI_ORCHESTRATOR` seed SHA `59630fd445c87b57598c88b0d47cc1296a8ebabd` under `.agents/skills/{zero-cost-guard,qa-evidence-gate,bug-reproduction,safe-goal-loop,github-handoff}/SKILL.md`. Proposed context-guard manually loaded from PR #11; native discovery **NOT_VERIFIED**, `MANUAL_ONLY`. Context risk `UNKNOWN` (no exact remaining percentage).
+- **Cleanup:** `CLEANUP_STATUS=NOT_RUN_WINDOWS`; `FILES_REMOVED=0`; `SPACE_RECOVERED_MB=0`; `FILES_PRESERVED=PROJECT_SOURCE_AND_ROLLBACK_UNCHANGED`; `CLEANUP_BLOCKERS=NO_WINDOWS_WORKSPACE_ACCESS`.
