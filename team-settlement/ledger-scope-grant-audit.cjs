@@ -10,13 +10,16 @@ const LEDGER_SCOPE_GRANT_SQL = [
   "  has_table_privilege(current_user,'kts_team.scopes','INSERT') AS scope_insert,",
   "  has_table_privilege(current_user,'kts_team.scopes','UPDATE') AS scope_update,",
   "  has_table_privilege(current_user,'kts_team.scopes','DELETE') AS scope_delete,",
+  "  has_table_privilege(current_user,'kts_team.scopes','TRUNCATE') AS scope_truncate,",
+  "  has_any_column_privilege(current_user,'kts_team.scopes','INSERT') AS scope_any_column_insert,",
+  "  has_any_column_privilege(current_user,'kts_team.scopes','UPDATE') AS scope_any_column_update,",
   "  has_column_privilege(current_user,'kts_team.scopes','state','UPDATE') AS state_update,",
   "  has_column_privilege(current_user,'kts_team.scopes','revision','UPDATE') AS revision_update,",
   "  has_column_privilege(current_user,'kts_team.scopes','reviewed_by','UPDATE') AS reviewed_by_update,",
   "  has_column_privilege(current_user,'kts_team.scopes','submitted_by','UPDATE') AS submitted_by_update,",
   "  has_column_privilege(current_user,'kts_team.scopes','locked_at','UPDATE') AS locked_at_update"
 ].join('\n');
-const BOOLEAN_FIELDS = ['superuser','bypass_rls','scope_insert','scope_update','scope_delete',
+const BOOLEAN_FIELDS = ['superuser','bypass_rls','scope_insert','scope_update','scope_delete','scope_truncate','scope_any_column_insert','scope_any_column_update',
   'state_update','revision_update','reviewed_by_update','submitted_by_update','locked_at_update'];
 
 async function auditLedgerScopeGrants({query,expectedRole,syntheticOnly=false}={}){

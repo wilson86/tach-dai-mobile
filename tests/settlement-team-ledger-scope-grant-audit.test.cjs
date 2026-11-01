@@ -3,7 +3,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {auditLedgerScopeGrants,LEDGER_SCOPE_GRANT_SQL}=require('../team-settlement/ledger-scope-grant-audit.cjs');
 const safe={role:'l20_ledger_synthetic',superuser:false,bypass_rls:false,
-  scope_insert:false,scope_update:false,scope_delete:false,state_update:false,
+  scope_insert:false,scope_update:false,scope_delete:false,scope_truncate:false,scope_any_column_insert:false,scope_any_column_update:false,state_update:false,
   revision_update:false,reviewed_by_update:false,submitted_by_update:false,locked_at_update:false};
 async function run(row){return auditLedgerScopeGrants({query:async()=>({rows:[row]}),expectedRole:safe.role,syntheticOnly:true});}
 
@@ -12,6 +12,8 @@ test('grant audit uses one read-only privileges query and never claims actor/RLS
   const a=await auditLedgerScopeGrants({syntheticOnly:true,expectedRole:safe.role,query:async sql=>{
     count++;assert.equal(sql,LEDGER_SCOPE_GRANT_SQL);
     assert.match(sql,/has_column_privilege/);
+    assert.match(sql,/has_any_column_privilege\(current_user,'kts_team\.scopes','UPDATE'\)/);
+    assert.match(sql,/has_any_column_privilege\(current_user,'kts_team\.scopes','INSERT'\)/);
     assert.doesNotMatch(sql,/\b(?:INSERT INTO|UPDATE kts|DELETE FROM|SET ROLE|set_config)\b/i);
     return {rows:[safe]};
   }});
@@ -23,7 +25,7 @@ test('grant audit uses one read-only privileges query and never claims actor/RLS
 });
 
 test('INSERT, table UPDATE, column UPDATE and DELETE each block actor-boundary readiness',async()=>{
-  for(const key of ['scope_insert','scope_update','scope_delete','state_update','revision_update',
+  for(const key of ['scope_insert','scope_update','scope_delete','scope_truncate','scope_any_column_insert','scope_any_column_update','state_update','revision_update',
     'reviewed_by_update','submitted_by_update','locked_at_update']){
     const a=await run({...safe,[key]:true});
     assert.equal(a.status,'BLOCKED_DIRECT_SCOPE_MUTATION');
