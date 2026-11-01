@@ -11,6 +11,7 @@ function Write-AtomicJson($path,$value){[IO.File]::WriteAllText($path,($value|Co
 $MinimalRlsLogout=$false
 $base=Join-Path ([IO.Path]::GetTempPath()) ('kts-cleanup-receipts-'+[guid]::NewGuid().ToString('N'))
 $root=Join-Path $base 'fixture';$ev=Join-Path $root 'evidence'
+$fixtureProcess=$null
 New-Item -ItemType Directory -Path $ev -Force | Out-Null
 try {
   $missing=Complete-R6RunnerCleanup $root $null
@@ -23,6 +24,19 @@ try {
   Write-AtomicJson (Join-Path $ev 'SUPERVISOR_TERMINAL.json') @{status='PASS';session_id='fixture_session'}
   $pass=Complete-R6RunnerCleanup $root $null
   if($pass.status -ne 'PASS'){throw 'VALID_RECEIPTS_REJECTED'}
+  Write-AtomicJson (Join-Path $root 'REAL_PILOT_MANIFEST.json') @{session_id='fixture_session';pids=@(@{pid=2147483647})}
+  $badIdentity=Complete-R6RunnerCleanup $root $null
+  if($badIdentity.status -ne 'FAIL'){throw 'MALFORMED_OWNERSHIP_ACCEPTED'}
+  Write-AtomicJson (Join-Path $root 'REAL_PILOT_MANIFEST.json') @{session_id='fixture_session';pids=$null}
+  $nullPids=Complete-R6RunnerCleanup $root $null
+  if($nullPids.status -ne 'FAIL'){throw 'NULL_OWNERSHIP_ACCEPTED'}
+  $fixtureProcess=Start-Process powershell.exe -ArgumentList @('-NoProfile','-Command','Start-Sleep -Seconds 20') -WindowStyle Hidden -PassThru
+  $fixtureProcess.Refresh()
+  Write-AtomicJson (Join-Path $root 'REAL_PILOT_MANIFEST.json') @{session_id='fixture_session';pids=@(@{pid=$fixtureProcess.Id;name=$fixtureProcess.ProcessName;started_utc=$fixtureProcess.StartTime.ToUniversalTime().ToString('o')})}
+  $liveProcess=Complete-R6RunnerCleanup $root $null
+  if($liveProcess.status -ne 'FAIL'){throw 'OWNED_PROCESS_STILL_RUNNING_ACCEPTED'}
+  $fixtureProcess.Kill();if(-not $fixtureProcess.WaitForExit(5000)){throw 'FIXTURE_PROCESS_CLEANUP_TIMEOUT'}
+  Write-AtomicJson (Join-Path $root 'REAL_PILOT_MANIFEST.json') @{session_id='fixture_session';pids=@()}
   Write-AtomicJson (Join-Path $ev 'WATCHDOG_TERMINAL.json') @{status='FAIL'}
   $fail=Complete-R6RunnerCleanup $root $null
   if($fail.status -ne 'FAIL'){throw 'FAILED_RECEIPT_ACCEPTED'}
@@ -32,6 +46,7 @@ try {
   if($wrongSession.status -ne 'FAIL'){throw 'WRONG_SESSION_ACCEPTED'}
   Write-Output 'CLEANUP_RECEIPT_FIXTURE=PASS (SYNTHETIC)'
 } finally {
+  if($fixtureProcess){$fixtureProcess.Refresh();if(-not $fixtureProcess.HasExited){$fixtureProcess.Kill();[void]$fixtureProcess.WaitForExit(5000)};$fixtureProcess.Dispose()}
   foreach($name in @('GALAXY_SERVICE_STOP','WATCHDOG_TERMINAL.json','SUPERVISOR_TERMINAL.json','FINAL_CLEANUP.json')){Remove-Item -LiteralPath (Join-Path $ev $name) -Force -ErrorAction SilentlyContinue}
   Remove-Item -LiteralPath (Join-Path $root 'REAL_PILOT_MANIFEST.json') -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $ev -Force;Remove-Item -LiteralPath $root -Force;Remove-Item -LiteralPath $base -Force
