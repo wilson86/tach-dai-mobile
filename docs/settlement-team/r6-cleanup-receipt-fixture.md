@@ -8,6 +8,12 @@ SHA-256 after the local fix was
 `75DB9EF2BDAA9A8E09EF3D15AB3598BE9A219FE910EFFD8D8BFE66C571063CA9`;
 after the separately tested runner hash update it is
 `053CA14EDCA0FA7FBC9CC30F666D82FBCC2E2376387F547C09D494B462F6DCDE`.
+`patches/windows-cleanup-control.patch` records these local wrapper changes from
+the preserved baseline with SHA-256
+`8317883B8D3BFAC6610FB9554BE7CDAC37DC12CA80A60760AE4342E592861D56`.
+It was applied only to a disposable LF-normalized copy, which matched the
+current wrapper's LF-normalized text; repeat application was rejected. This
+does not establish byte-identical line endings or authorize live use.
 
 `tests/r6-cleanup-receipt-fixture.ps1` extracts and executes the actual function
 with synthetic files. Missing/invalid manifest, a FAIL watchdog receipt and a

@@ -21,3 +21,4 @@ docs/settlement-team/patches/reviewer-http-driver-control.patch text eol=lf
 team-settlement/Invoke-KtsMinimalRlsReviewer.ps1 text eol=lf
 team-settlement/windows-pilot-owned-job.cs text eol=lf
 docs/settlement-team/patches/windows-owned-job-control.patch text eol=lf
+docs/settlement-team/patches/windows-cleanup-control.patch text eol=lf
