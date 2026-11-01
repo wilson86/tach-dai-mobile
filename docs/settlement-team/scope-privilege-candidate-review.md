@@ -62,6 +62,13 @@ another actor's replay while preserving same-actor retries and must validate
 the saved event's full context without treating caller-provided hashes as
 authority. The necessary contract and compatibility change require review;
 changing the digest alone would invalidate existing recovery receipts.
+`team-settlement/tests/postgres-draft-replay-actor-regression.sql` is a future
+disposable-PostgreSQL regression: it requires an explicitly named fixture DB
+and opt-in setting, makes its synthetic writes in a rolled-back transaction,
+checks same-actor replay, and fails if a second operator can replay the receipt.
+It has not been executed against PostgreSQL and is expected to fail with the
+current implementation. Its smoke-writer role is deliberately privileged to
+exercise the existing function; it is not a proof of least-privilege admission.
 
 ## Mandatory synthetic verification before any promotion
 
