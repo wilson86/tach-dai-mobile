@@ -1,0 +1,21 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 87e25b0..130e271 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -691,2 +691,3 @@ try {
+     'team-settlement/team-composition.cjs'='A7955AD7450B657B2D50CF06AF45F27DC015AD0F9AD6017B965095DDE2915A55'
++    'team-settlement/role-probe.cjs'='877A7EB465593F12ADB5D2C97C6EC4673987BC389643AD2294E535053805F247'
+     'tests/settlement-team-role-diagnostic.test.cjs'='ACAEF77F2AC9179BAF814255D94670F6830AF7E576E374F77447991E4DE70815'
+@@ -710,2 +711,3 @@ try {
+   $expectedDirty+=@('?? team-settlement/windows-r6-rls-baseline.ps1')
++  $expectedDirty+=@(' M team-settlement/role-probe.cjs')
+   $expectedDirty+=@('?? team-settlement/windows-reviewer-session-observation.ps1')
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 9ed9a88..42589c3 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -129,3 +129,3 @@ function Assert-AndroidDriverIdentity([string]$Path){
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq 'A4A0EC8D02AC6C4F29C328EC8E8CBA6C11A886D0E76181AED0CDB0D3A8EB1724') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq 'DCBFAD25AC59CF4F25981C18E98B74E3AE1DA21AFB35F210EECB7570334A8EFD') 'R6_RUNNER_SOURCE_DRIFT'
+ }
