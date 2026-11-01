@@ -4,8 +4,10 @@ The Windows control file `C:\KTS-Settlement\w20-2d63c84e\Invoke-KtsBlueStacksLiv
 previously set cleanup PASS when the runner manifest was absent. The control
 file is outside this Git checkout; the local fix requires a readable manifest,
 nonempty session ID, and `pids` property before terminal receipts can qualify.
-SHA-256 after the local fix:
-`75DB9EF2BDAA9A8E09EF3D15AB3598BE9A219FE910EFFD8D8BFE66C571063CA9`.
+SHA-256 after the local fix was
+`75DB9EF2BDAA9A8E09EF3D15AB3598BE9A219FE910EFFD8D8BFE66C571063CA9`;
+after the separately tested runner hash update it is
+`39D69B9F1E92E6589D5323D5F61AC3260C759EE50B9AC9894B4E76FCAD71A499`.
 
 `tests/r6-cleanup-receipt-fixture.ps1` extracts and executes the actual function
 with synthetic files. Missing/invalid manifest, a FAIL watchdog receipt and a
