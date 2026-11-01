@@ -99,3 +99,12 @@ of a PostgreSQL orphan. Before using this lifecycle for the SQL regression,
 cover the interval between process creation and durable registration with an
 ownership-scoped mechanism and test launcher failure in that interval. Do not
 infer process-tree cleanup from an empty-manifest terminal receipt.
+
+`tests/windows_job_containment_fixture.py` explores a possible mitigation on
+this Windows host: `CreateProcessW` uses the job-list process-creation attribute
+to place a suspended child in a kill-on-close Job Object atomically. The test
+kills the job owner once with the child still suspended and once after resume;
+both disposable Python children exited. This is not connected to the runner,
+does not exercise pg_ctl/PostgreSQL descendants, and does not prove graceful
+shutdown or replace the existing supervisor. Job nesting, breakaway settings,
+ownership and actual PostgreSQL tree cleanup require separate verification.
