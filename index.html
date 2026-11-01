@@ -1929,7 +1929,8 @@ function run(options={}){
     }
     outputEl.value="PHÁT HIỆN TIN SAI:\n\n"+errors.map(e=>`Dòng ${e.line}: ${e.msg}\n→ ${e.raw}`).join("\n\n");
     const scopeHold=errors.some(e=>/RELATIVE_2D_ACTIVE_SCOPE_(?:UNAVAILABLE|DUPLICATE)/u.test(String(e.msg)));
-    setStatus(scopeHold?"HOLD: chưa xác định được hai đài khác nhau; chưa tính tiền.":`Có ${errors.length} lỗi`,"err");
+    const singletonDx=errors.some(e=>/DX_REQUIRES_AT_LEAST_TWO_NUMBERS/u.test(String(e.msg)));
+    setStatus(scopeHold?"HOLD: chưa xác định được hai đài khác nhau; chưa tính tiền.":singletonDx?"DX cần ít nhất hai số; chưa tính tiền.":`Có ${errors.length} lỗi`,"err");
     if(!options.preserveInputSelection) selectLine(inputEl,errors[0].line);
     return;
   }
