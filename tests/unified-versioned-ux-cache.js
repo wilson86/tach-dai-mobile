@@ -13,7 +13,7 @@ const version=JSON.parse(read("version.json")).version;
 const cache=(sw.match(/const CACHE='([^']+)'/u)||[])[1];
 const source=(app.match(/<script src="\.\/unified-core\.js\?ux=([\d.]+)"><\/script>/u)||[])[1];
 const ux=(core.match(/const UX_VERSION='([^']+)'/u)||[])[1];
-assert.equal(version,"1.0.29","duplicate approval candidate must advance without downgrade");
+assert.equal(version,"1.0.30","duplicate approval candidate must advance without downgrade");
 assert.equal(source,version,"HTML URL must uniquely identify new Unified JavaScript");
 assert.equal(ux,version,"embedded UX version must match shell");
 assert.ok(cache && cache.includes("v"+version+"-"),"service-worker cache key must advance");
@@ -74,6 +74,7 @@ for(const [label,matching] of [["stale",false],["matching",true]]){
   assert.equal(sources().some(item=>item.mode==="ngang"),matching,label+": wrong shared-source admission");
   assert.equal(state.get("tab-tach"),!matching,label+": wrong safe fallback mode");
   assert.equal(hold.hidden,matching,label+": incorrect HOLD warning state");
-  assert.equal(saved.at(-1)[1],matching?"ngang":"tach",label+": forbidden mode persisted");
+  if(matching)assert.equal(saved.at(-1)[1],"ngang",label+": must persist matching mode");
+  else assert.equal(saved.length,0,label+": must not overwrite preferred Ngang while loading");
 }
 console.log("UNIFIED VERSIONED UX CACHE: PASS");
