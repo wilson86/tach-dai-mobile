@@ -762,8 +762,12 @@ function checkUnifiedNgangFrame(frame){
   // A successful Cut becomes a mode-local ledger. Never replay its original
   // ticket into another mode on refresh; only explicit editing/Undo can unhold.
   const CUT_HOLD_KEY='KTS_UNIFIED_CUT_SOURCE_HOLD_V1';
+  // A deliberate NEW ticket may coexist with a protected Cut ledger in
+  // another mode. This marker is set only by a real input/edit event.
+  const FRESH_AFTER_CUT_KEY='KTS_UNIFIED_FRESH_DRAFT_AFTER_CUT_V1';
   let shared='';
   let cutHold=false;
+  let freshDraftAfterCut=false;
   let syncing=false;
   const seen=new WeakMap();
   const frameTokens=new WeakMap();
@@ -778,9 +782,17 @@ function checkUnifiedNgangFrame(frame){
       else sessionStorage.removeItem(CUT_HOLD_KEY);
     }catch(_){}
   }
+  function persistFreshDraft(allow){
+    freshDraftAfterCut=!!allow;
+    try{
+      if(freshDraftAfterCut)sessionStorage.setItem(FRESH_AFTER_CUT_KEY,'1');
+      else sessionStorage.removeItem(FRESH_AFTER_CUT_KEY);
+    }catch(_){}
+  }
   function holdCutLedger(originItem,ledgerText){
     if(originItem)modeLocalLedger.set(originItem.mode,ledgerText);
     const oldShared=shared;
+    persistFreshDraft(false);
     persistCutHold(true);
     shared='';persist(shared);
     syncing=true;
@@ -811,7 +823,14 @@ function checkUnifiedNgangFrame(frame){
       seen.set(origin,text);
       return;
     }
-    if(originItem)modeLocalLedger.delete(originItem.mode);
+    if(originItem){
+      const ownerUndo=modeLocalLedger.has(originItem.mode);
+      const otherCut=Array.from(modeLocalLedger.keys()).some(mode=>mode!==originItem.mode);
+      // Undo/edit of the owner ledger restores its source; typing another
+      // ticket while a sibling ledger exists protects BOTH states on F5.
+      persistFreshDraft(!ownerUndo&&(otherCut||freshDraftAfterCut));
+      modeLocalLedger.delete(originItem.mode);
+    }
     persistCutHold(false);
     // Another mode may hold an immutable Cut ledger. A new raw draft must
     // NEVER replace that mode's protected source, receipt, or Undo state.
@@ -845,6 +864,11 @@ function checkUnifiedNgangFrame(frame){
     if(!seen.has(el)){
       const now=String(el.value||'');
       if(isExactLedger(now)){
+        if(freshDraftAfterCut&&!cutHold&&shared){
+          // A different mode already received explicit new input AFTER Cut.
+          // Keep its draft and this mode's immutable ledger on refresh.
+          modeLocalLedger.set(item.mode,now);seen.set(el,now);return;
+        }
         holdCutLedger(item,now);seen.set(el,now);return;
       }
       if(cutHold){
@@ -869,6 +893,7 @@ function checkUnifiedNgangFrame(frame){
   }
   function install(){
     cutHold=(()=>{try{return sessionStorage.getItem(CUT_HOLD_KEY)==='1'}catch(_){return false}})();
+    freshDraftAfterCut=(()=>{try{return !cutHold&&sessionStorage.getItem(FRESH_AFTER_CUT_KEY)==='1'}catch(_){return false}})();
     shared=cutHold?'':saved();
     refresh();
     for(const id of ['tachFrame','ngangFrame'])document.getElementById(id)?.addEventListener('load',()=>setTimeout(refresh,0));
