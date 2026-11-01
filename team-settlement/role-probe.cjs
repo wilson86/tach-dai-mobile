@@ -12,6 +12,12 @@ const PROBE_SQL = `SELECT current_user AS role,
   NOT (has_table_privilege(current_user, 'kts_team.memberships', 'INSERT')
     OR has_table_privilege(current_user, 'kts_team.memberships', 'UPDATE')
     OR has_table_privilege(current_user, 'kts_team.memberships', 'DELETE')) AS membership_write_denied,
+  NOT (has_table_privilege(current_user, 'kts_team.scopes', 'INSERT')
+    OR has_table_privilege(current_user, 'kts_team.scopes', 'UPDATE')
+    OR has_table_privilege(current_user, 'kts_team.scopes', 'DELETE')
+    OR has_table_privilege(current_user, 'kts_team.scopes', 'TRUNCATE')
+    OR has_any_column_privilege(current_user, 'kts_team.scopes', 'INSERT')
+    OR has_any_column_privilege(current_user, 'kts_team.scopes', 'UPDATE')) AS direct_scope_write_denied,
   COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname=current_user),true) AS superuser,
   COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),true) AS bypass_rls`;
 
@@ -63,11 +69,11 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
        auth.auth_schema!==true || auth.team_schema!==true ||
        auth.credential_read!==true || auth.session_read!==true ||
        auth.session_insert!==true || auth.session_revoke!==true ||
-       auth.membership_read!==true || auth.membership_write_denied!==true ||
+       auth.membership_read!==true || auth.membership_write_denied!==true || auth.direct_scope_write_denied!==true ||
        auth.financial_write_denied!==true ||
        auth.event_read!==false || auth.draft_execute!==false ||
        ledger.auth_schema!==false || ledger.event_read!==true ||
-       ledger.draft_execute!==true || ledger.membership_write_denied!==true)deny();
+       ledger.draft_execute!==true || ledger.membership_write_denied!==true || ledger.direct_scope_write_denied!==true)deny();
     qualified=true;
     return Object.freeze({qualified:true,auth_role:auth.role,ledger_role:ledger.role});
   } finally {
