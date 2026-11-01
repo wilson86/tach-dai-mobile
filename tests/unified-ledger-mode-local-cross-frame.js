@@ -42,11 +42,12 @@ function makeFrame(el,{ngang=false}={}){
   return {contentDocument:{getElementById(id){return id==="input"?el:null}},
     contentWindow:win,addEventListener(){}};
 }
-function build({tachValue=raw,ngangValue=raw,sessionValue=raw,davongValue=raw,held=false}={}){
+function build({tachValue=raw,ngangValue=raw,sessionValue=raw,davongValue=raw,held=false,fresh=false}={}){
   const tach=input(tachValue),ngang=input(ngangValue),davong=input(davongValue);
   const tachFrame=makeFrame(tach),ngangFrame=makeFrame(ngang,{ngang:true});
   const store=new Map([["KTS_UNIFIED_SHARED_INPUT_V1",sessionValue]]);
   if(held)store.set("KTS_UNIFIED_CUT_SOURCE_HOLD_V1","1");
+  if(fresh)store.set("KTS_UNIFIED_FRESH_DRAFT_AFTER_CUT_V1","1");
   const sessionStorage={getItem(k){return store.has(k)?store.get(k):null},
     setItem(k,v){store.set(k,String(v))},removeItem(k){store.delete(k)}};
   let mode="tach";
@@ -90,6 +91,8 @@ function build({tachValue=raw,ngangValue=raw,sessionValue=raw,davongValue=raw,he
   assert.equal(t.shared(),newer,"explicit fresh ticket can be shared");
   assert.equal(t.davong.value,newer,"fresh ticket may propagate to non-ledger sibling");
   assert.equal(t.cutHold(),undefined,"explicit edit clears F5 replay hold");
+  assert.equal(t.store.get("KTS_UNIFIED_FRESH_DRAFT_AFTER_CUT_V1"),"1",
+    "fresh draft after another mode's Cut gets a persistent origin marker");
 }
 {
   const t=build({tachValue:raw,ngangValue:ngangLedger,sessionValue:raw});
@@ -115,5 +118,16 @@ function build({tachValue=raw,ngangValue=raw,sessionValue=raw,davongValue=raw,he
   assert.equal(t.ngang.value,ngangLedger,"F5 must preserve protected Ngang ledger");
   assert.equal(t.tach.value,"","F5 must not resurrect stale source in Tách Đài");
   assert.equal(t.shared(),"","F5 must keep Cut raw revoked from session");
+}
+{
+  // A true previously typed independent draft must remain after F5 even when
+  // the sibling restores an old protected Cut receipt. This was a verified
+  // regression that lost the fresh wager on the previous Unified 1.0.31.
+  const t=build({tachValue:newer,ngangValue:ngangLedger,sessionValue:newer,fresh:true});
+  assert.equal(t.ngang.value,ngangLedger,"F5 keeps protected old Ngang Cut ledger");
+  assert.equal(t.tach.value,newer,"F5 keeps the distinct newly typed Tách Đài draft");
+  assert.equal(t.shared(),newer,"F5 preserves independent fresh shared draft");
+  assert.equal(t.store.get("KTS_UNIFIED_FRESH_DRAFT_AFTER_CUT_V1"),"1",
+    "F5 must retain explicit-new-draft evidence");
 }
 console.log("UNIFIED MODE-LOCAL CUT LEDGER SHARING: PASS");
