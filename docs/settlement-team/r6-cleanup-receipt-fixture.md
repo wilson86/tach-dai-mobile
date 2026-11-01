@@ -7,7 +7,7 @@ nonempty session ID, and `pids` property before terminal receipts can qualify.
 SHA-256 after the local fix was
 `75DB9EF2BDAA9A8E09EF3D15AB3598BE9A219FE910EFFD8D8BFE66C571063CA9`;
 after the separately tested runner hash update it is
-`C9F68FBDEFE4DC33A91E0788200E3946951B57088B2BBCBB1D2471A0E8E103AD`.
+`053CA14EDCA0FA7FBC9CC30F666D82FBCC2E2376387F547C09D494B462F6DCDE`.
 
 `tests/r6-cleanup-receipt-fixture.ps1` extracts and executes the actual function
 with synthetic files. Missing/invalid manifest, a FAIL watchdog receipt and a

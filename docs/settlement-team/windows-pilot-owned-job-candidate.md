@@ -1,7 +1,7 @@
 # Windows synthetic pilot Job Object candidate
 
 The control runner `C:\KTS-Settlement\w20-2d63c84e\Run-RealPilot20.ps1`
-(local SHA-256 `4328A1DE83723B365A6BC90E517048479BDC89094A8B352C617738656199A8DD`)
+(local SHA-256 `D5B90625210B7342E0D116A589A20F8DD83ADD893043785FFC5CBA2C3E7274EF`)
 now creates `pg_ctl ... start` in a session Job Object using the pinned
 `team-settlement/windows-pilot-owned-job.cs`. Windows process creation uses
 the job-list attribute, so the child is assigned atomically before resume.
@@ -20,6 +20,10 @@ holds the process handle before resuming it. No PostgreSQL was initialized.
 exit and timeout using a disposable executable; both errors propagate and its
 job-owned descendant exits after disposal. Timeout cleanup now uses the exact
 process handle and a bounded five-second wait, instead of an unbounded wait.
+The same fixture confirms a fake stop command's wait is capped by the remaining
+session deadline. Before the fix a two-second deadline took over six seconds;
+afterward the fake command timed out within the bound. Process launch itself and
+the five-second emergency cleanup are not proven to complete before deadline.
 
 `windows-job-supervisor-crash-fixture.ps1` uses the actual extracted runner
 functions, supervisor and watchdog with a disposable fake pg_ctl and child.

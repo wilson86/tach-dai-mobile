@@ -1,4 +1,4 @@
-param([ValidateSet('nonzero','timeout')][string]$Scenario='nonzero')
+param([ValidateSet('nonzero','timeout','deadline-stop')][string]$Scenario='nonzero')
 $ErrorActionPreference='Stop'
 $runner='C:\KTS-Settlement\w20-2d63c84e\Run-RealPilot20.ps1'
 $tokens=$null;$errors=$null;$ast=[Management.Automation.Language.Parser]::ParseFile($runner,[ref]$tokens,[ref]$errors)
@@ -21,6 +21,7 @@ using System;using System.Diagnostics;using System.IO;using System.Threading;
 class FakePgCtlFailure {
   static int Main(string[] args) {
     int i=Array.IndexOf(args,"-l"); if(i<0||i+1>=args.Length)return 2;
+    if(Array.IndexOf(args,"--fixture-deadline-stop")>=0){File.WriteAllText(args[i+1],"no-child");Thread.Sleep(20000);return 0;}
     var info=new ProcessStartInfo(Environment.GetFolderPath(Environment.SpecialFolder.System)+@"\WindowsPowerShell\v1.0\powershell.exe", "-NoProfile -Command \"Start-Sleep -Seconds 30\"");
     info.UseShellExecute=false;info.CreateNoWindow=true;
     var child=Process.Start(info);File.WriteAllText(args[i+1],child.Id.ToString());
@@ -30,17 +31,27 @@ class FakePgCtlFailure {
 }
 '@
   Add-Type -TypeDefinition $fake -OutputAssembly (Join-Path $bin 'pg_ctl.exe') -OutputType ConsoleApplication
-  $extra=if($Scenario -eq 'timeout'){'--fixture-timeout'}else{'--fixture-nonzero'}
-  $caught='';try{Invoke-PgCtl @('-D',$pgdata,'-l',$marker,$extra,'-w','start') 'synthetic-failure' 1|Out-Null}catch{$caught=$_.Exception.Message}
-  $expected=if($Scenario -eq 'timeout'){'PG_CTL_TIMEOUT_synthetic-failure'}else{'PG_CTL_FAILED_synthetic-failure_17'}
+  $extra=if($Scenario -eq 'deadline-stop'){'--fixture-deadline-stop'}elseif($Scenario -eq 'timeout'){'--fixture-timeout'}else{'--fixture-nonzero'}
+  $verb=if($Scenario -eq 'deadline-stop'){'stop'}else{'start'}
+  $commandTimeout=if($Scenario -eq 'deadline-stop'){6}else{1}
+  if($Scenario -eq 'deadline-stop'){$deadline=[datetimeoffset]::UtcNow.AddSeconds(2)}
+  $started=[datetimeoffset]::UtcNow
+  $caught='';try{Invoke-PgCtl @('-D',$pgdata,'-l',$marker,$extra,'-w',$verb) 'synthetic-failure' $commandTimeout|Out-Null}catch{$caught=$_.Exception.Message}
+  $elapsed=([datetimeoffset]::UtcNow-$started).TotalSeconds
+  $expected=if($Scenario -in @('timeout','deadline-stop')){'PG_CTL_TIMEOUT_synthetic-failure'}else{'PG_CTL_FAILED_synthetic-failure_17'}
   if($caught -ne $expected){throw "FAILURE_NOT_PROPAGATED_$caught"}
+  if($Scenario -eq 'deadline-stop' -and $elapsed -gt 4){throw "DEADLINE_OVERRUN_$elapsed"}
   $receipt=Get-Content -Raw -LiteralPath (Join-Path $evidence 'pgctl-synthetic-failure.receipt.json')|ConvertFrom-Json
-  if($Scenario -eq 'timeout') {if($receipt.timed_out -ne $true -or $null -ne $receipt.exit_code){throw 'TIMEOUT_RECEIPT_INVALID'}}
+  if($Scenario -eq 'deadline-stop' -and ($null -eq $receipt.wait_milliseconds -or $receipt.wait_milliseconds -gt 2000)){throw 'DEADLINE_WAIT_RECEIPT_INVALID'}
+  if($Scenario -in @('timeout','deadline-stop')) {if($receipt.timed_out -ne $true -or $null -ne $receipt.exit_code){throw 'TIMEOUT_RECEIPT_INVALID'}}
   else {if($receipt.timed_out -ne $false -or $receipt.exit_code -ne 17){throw 'NONZERO_RECEIPT_INVALID'}}
-  $ownedChild=Get-Process -Id ([int][IO.File]::ReadAllText($marker)) -ErrorAction Stop
-  $script:ownedPgJob.Dispose();$script:ownedPgJob=$null
-  if(-not $ownedChild.WaitForExit(5000)){throw 'FAILED_START_DESCENDANT_ALIVE'}
-  "RUNNER_${Scenario}_FAIL_CLOSED=PASS;JOB_CLEANUP=PASS;POSTGRESQL=NOT_RUN"
+  if($Scenario -ne 'deadline-stop'){
+    $ownedChild=Get-Process -Id ([int][IO.File]::ReadAllText($marker)) -ErrorAction Stop
+    $script:ownedPgJob.Dispose();$script:ownedPgJob=$null
+    if(-not $ownedChild.WaitForExit(5000)){throw 'FAILED_START_DESCENDANT_ALIVE'}
+  }
+  $cleanupStatus=if($Scenario -eq 'deadline-stop'){'NOT_APPLICABLE_NO_JOB'}else{'PASS'}
+  "RUNNER_${Scenario}_FAIL_CLOSED=PASS;JOB_CLEANUP=$cleanupStatus;POSTGRESQL=NOT_RUN"
 } finally {
   if($script:ownedPgJob){$script:ownedPgJob.Dispose()}
   if($ownedChild){$ownedChild.Refresh();if(-not $ownedChild.HasExited){$ownedChild.Kill();[void]$ownedChild.WaitForExit(5000)};$ownedChild.Dispose()}
