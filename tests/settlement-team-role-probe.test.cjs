@@ -21,6 +21,9 @@ function pool(info,{failConnect=false,failQuery=false}={}){
       assert.match(sql,/has_any_column_privilege\(current_user, 'kts_team\.scopes', 'UPDATE'\)/);
       assert.match(sql,/has_any_column_privilege\(current_user, 'kts_team\.scopes', 'INSERT'\)/);
       assert.match(sql,/has_table_privilege\(current_user, 'kts_team\.scopes', 'TRUNCATE'\)/);
+      assert.match(sql,/has_any_column_privilege\(current_user, 'kts_team\.memberships', 'INSERT'\)/);
+      assert.match(sql,/has_any_column_privilege\(current_user, 'kts_team\.memberships', 'UPDATE'\)/);
+      assert.match(sql,/has_table_privilege\(current_user, 'kts_team\.memberships', 'TRUNCATE'\)/);
       if(failQuery)throw Error('SYNTHETIC_DB_DOWN');
       return {rows:[info]};
     },

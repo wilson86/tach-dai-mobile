@@ -5,7 +5,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict');
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const root='C:\\KTS-Settlement\\android-pilot-stage-a-52f860a\\tach-dai-mobile-b2-group-app';
 const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').toUpperCase();
-assert.equal(hash(path.join(root,'team-settlement','role-probe.cjs')),'E49A7EA006487DBBE46F1F55E9B52A0C8566C8B6584E447B83197115C1C4DE6D');
+assert.equal(hash(path.join(root,'team-settlement','role-probe.cjs')),'0BF7F7E9E2AB3DF6A27019C13FF365868610D1936CA90E776DF7A7320031BCEB');
 assert.equal(hash(path.join(root,'team-settlement','team-composition.cjs')),'A7955AD7450B657B2D50CF06AF45F27DC015AD0F9AD6017B965095DDE2915A55');
 const {createIsolatedTeamPrototype}=require(path.join(root,'team-settlement','team-composition.cjs'));
 const auth={role:'synthetic_auth',auth_schema:true,event_read:false,credential_read:true,session_read:true,session_insert:true,session_revoke:true,team_schema:true,membership_read:true,membership_write_denied:true,financial_write_denied:true,direct_scope_write_denied:true,draft_execute:false,superuser:false,bypass_rls:false,role_memberships_present:false};

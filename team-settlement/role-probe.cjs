@@ -11,7 +11,10 @@ const PROBE_SQL = `SELECT current_user AS role,
     'EXECUTE') AS draft_execute,
   NOT (has_table_privilege(current_user, 'kts_team.memberships', 'INSERT')
     OR has_table_privilege(current_user, 'kts_team.memberships', 'UPDATE')
-    OR has_table_privilege(current_user, 'kts_team.memberships', 'DELETE')) AS membership_write_denied,
+    OR has_table_privilege(current_user, 'kts_team.memberships', 'DELETE')
+    OR has_table_privilege(current_user, 'kts_team.memberships', 'TRUNCATE')
+    OR has_any_column_privilege(current_user, 'kts_team.memberships', 'INSERT')
+    OR has_any_column_privilege(current_user, 'kts_team.memberships', 'UPDATE')) AS membership_write_denied,
   NOT (has_table_privilege(current_user, 'kts_team.scopes', 'INSERT')
     OR has_table_privilege(current_user, 'kts_team.scopes', 'UPDATE')
     OR has_table_privilege(current_user, 'kts_team.scopes', 'DELETE')
