@@ -1,0 +1,30 @@
+diff --git a/Run-RealPilot20.ps1 b/Run-RealPilot20.ps1
+index 337938f..fefa6a4 100644
+--- a/Run-RealPilot20.ps1
++++ b/Run-RealPilot20.ps1
+@@ -432,2 +432,16 @@ function Capture-R6StageEvidence($Request,$Ready,[string]$Stage,[string]$Evidenc
+   }elseif($Stage -eq 'CROSS_WORKSPACE_RLS'){
++    if($MinimalRlsLogout -and -not $OfflineR6Lifecycle){
++      $auditRoot=Join-Path $control 'r6-integration-90db435\team-settlement'
++      $auditBridge=Join-Path $auditRoot 'windows-ledger-grant-psql.cjs';$auditModule=Join-Path $auditRoot 'ledger-scope-grant-audit.cjs'
++      Assert-True ((Get-KtsSha256 $auditBridge) -eq '08EF57104E522D946A15393263E3544CC1F77AABE9E77DF7138A2BD75F299F1B' -and (Get-KtsSha256 $auditModule) -eq 'AE95F3C601BDA99DF0234F7D38403E33586839EC705C677EEB4D9C4449CEA189') 'LEDGER_AUDIT_SOURCE_DRIFT'
++      $oldPassword=$env:PGPASSWORD;$oldDb=$env:KTS_LEDGER_AUDIT_DB;$oldRole=$env:KTS_LEDGER_AUDIT_ROLE
++      try{
++        $env:PGPASSWORD=$LedgerPassword;$env:KTS_LEDGER_AUDIT_DB=$Database;$env:KTS_LEDGER_AUDIT_ROLE=$ledger
++        $auditRows=@(& node.exe $auditBridge);Assert-True ($LASTEXITCODE -eq 0 -and $auditRows.Count -eq 1) 'LEDGER_AUDIT_PROCESS_FAILED'
++        $audit=$auditRows[0]|ConvertFrom-Json
++      }finally{$env:PGPASSWORD=$oldPassword;$env:KTS_LEDGER_AUDIT_DB=$oldDb;$env:KTS_LEDGER_AUDIT_ROLE=$oldRole}
++      AtomicJson (Join-Path $EvidenceDir 'LEDGER_SCOPE_GRANT_AUDIT.json') ([ordered]@{session_id=$run;evidence_type='REAL_POSTGRESQL';audit=$audit;created_utc=[datetimeoffset]::UtcNow.ToString('o')})
++      Assert-True ($audit.status -eq 'NO_DIRECT_SCOPE_GRANTS_OBSERVED') 'LEDGER_DIRECT_SCOPE_MUTATION_BLOCKED'
++      throw 'LEDGER_SAME_WORKSPACE_AUTHORIZATION_NOT_VERIFIED'
++    }
+     $otherQuery=Get-R6OtherWorkspaceBaselineSql -Workspace $w -Partner $p -BusinessDate $d -Region $g
+diff --git a/Invoke-KtsBlueStacksLiveAcceptance.ps1 b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+index 45582cf..053c6dd 100644
+--- a/Invoke-KtsBlueStacksLiveAcceptance.ps1
++++ b/Invoke-KtsBlueStacksLiveAcceptance.ps1
+@@ -129,3 +129,3 @@ function Assert-AndroidDriverIdentity([string]$Path){
+ function Assert-R6RunnerIdentity([string]$Path){
+-  Assert-True ((Get-Sha256 $Path) -eq 'B1FA97DF5F99C8CC3A8422B76D047861958263AD632AE83B0DF7944E6224D88F') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq '448F911AA2C50B34E5CE36C1F1683D5A54C0869941F824FF991BEF73C63144A0') 'R6_RUNNER_SOURCE_DRIFT'
+ }

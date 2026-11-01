@@ -19,3 +19,9 @@ async function auditWindowsLedgerRole({psql, database, role, password, timeoutMs
   }});
 }
 module.exports=Object.freeze({auditWindowsLedgerRole});
+if(require.main===module){
+  const password=process.env.PGPASSWORD;
+  auditWindowsLedgerRole({psql:'C:\\KTS-Settlement\\PostgreSQL\\16\\bin\\psql.exe',database:process.env.KTS_LEDGER_AUDIT_DB,role:process.env.KTS_LEDGER_AUDIT_ROLE,password})
+    .then(result=>{process.stdout.write(JSON.stringify(result)+'\n');})
+    .catch(()=>{process.stderr.write('WINDOWS_LEDGER_AUDIT_FAILED\n');process.exitCode=1;});
+}
