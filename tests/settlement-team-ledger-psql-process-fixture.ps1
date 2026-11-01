@@ -14,7 +14,7 @@ class SyntheticPsql {
     if(mode=="FAIL") { Console.Error.Write("synthetic error"); return 17; }
     if(mode=="TIMEOUT") { Thread.Sleep(3000); return 0; }
     Console.Error.Write("synthetic diagnostic");
-    Console.WriteLine("{\"role\":\"l20_led_a1\",\"superuser\":false,\"bypass_rls\":false,\"scope_insert\":true,\"scope_update\":true,\"scope_delete\":false,\"scope_truncate\":false,\"scope_any_column_insert\":true,\"scope_any_column_update\":true,\"state_update\":true,\"revision_update\":true,\"reviewed_by_update\":true,\"submitted_by_update\":true,\"locked_at_update\":true}");
+    Console.WriteLine("{\"role\":\"l20_led_a1\",\"superuser\":false,\"bypass_rls\":false,\"role_memberships_present\":false,\"scope_insert\":true,\"scope_update\":true,\"scope_delete\":false,\"scope_truncate\":false,\"scope_any_column_insert\":true,\"scope_any_column_update\":true,\"state_update\":true,\"revision_update\":true,\"reviewed_by_update\":true,\"submitted_by_update\":true,\"locked_at_update\":true}");
     return 0;
   }
 }

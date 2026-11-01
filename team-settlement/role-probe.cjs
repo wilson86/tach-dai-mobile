@@ -18,6 +18,7 @@ const PROBE_SQL = `SELECT current_user AS role,
     OR has_table_privilege(current_user, 'kts_team.scopes', 'TRUNCATE')
     OR has_any_column_privilege(current_user, 'kts_team.scopes', 'INSERT')
     OR has_any_column_privilege(current_user, 'kts_team.scopes', 'UPDATE')) AS direct_scope_write_denied,
+  EXISTS(SELECT 1 FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user)) AS role_memberships_present,
   COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname=current_user),true) AS superuser,
   COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),true) AS bypass_rls`;
 
@@ -64,8 +65,8 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
        typeof auth.role!=='string'||!auth.role ||
        typeof ledger.role!=='string'||!ledger.role ||
        auth.role===ledger.role ||
-       auth.superuser!==false || auth.bypass_rls!==false ||
-       ledger.superuser!==false || ledger.bypass_rls!==false ||
+       auth.superuser!==false || auth.bypass_rls!==false || auth.role_memberships_present!==false ||
+       ledger.superuser!==false || ledger.bypass_rls!==false || ledger.role_memberships_present!==false ||
        auth.auth_schema!==true || auth.team_schema!==true ||
        auth.credential_read!==true || auth.session_read!==true ||
        auth.session_insert!==true || auth.session_revoke!==true ||

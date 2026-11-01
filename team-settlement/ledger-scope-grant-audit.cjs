@@ -7,6 +7,7 @@ const LEDGER_SCOPE_GRANT_SQL = [
   'SELECT current_user AS role,',
   '  COALESCE((SELECT rolsuper FROM pg_roles WHERE rolname=current_user),true) AS superuser,',
   '  COALESCE((SELECT rolbypassrls FROM pg_roles WHERE rolname=current_user),true) AS bypass_rls,',
+  "  EXISTS(SELECT 1 FROM pg_auth_members WHERE member=(SELECT oid FROM pg_roles WHERE rolname=current_user)) AS role_memberships_present,",
   "  has_table_privilege(current_user,'kts_team.scopes','INSERT') AS scope_insert,",
   "  has_table_privilege(current_user,'kts_team.scopes','UPDATE') AS scope_update,",
   "  has_table_privilege(current_user,'kts_team.scopes','DELETE') AS scope_delete,",
@@ -19,7 +20,7 @@ const LEDGER_SCOPE_GRANT_SQL = [
   "  has_column_privilege(current_user,'kts_team.scopes','submitted_by','UPDATE') AS submitted_by_update,",
   "  has_column_privilege(current_user,'kts_team.scopes','locked_at','UPDATE') AS locked_at_update"
 ].join('\n');
-const BOOLEAN_FIELDS = ['superuser','bypass_rls','scope_insert','scope_update','scope_delete','scope_truncate','scope_any_column_insert','scope_any_column_update',
+const BOOLEAN_FIELDS = ['superuser','bypass_rls','role_memberships_present','scope_insert','scope_update','scope_delete','scope_truncate','scope_any_column_insert','scope_any_column_update',
   'state_update','revision_update','reviewed_by_update','submitted_by_update','locked_at_update'];
 
 async function auditLedgerScopeGrants({query,expectedRole,syntheticOnly=false}={}){
@@ -33,9 +34,10 @@ async function auditLedgerScopeGrants({query,expectedRole,syntheticOnly=false}={
       BOOLEAN_FIELDS.some(key=>typeof rows[0][key]!=='boolean'))throw Error('LEDGER_GRANT_AUDIT_EVIDENCE_INVALID');
   const r=rows[0];
   if(r.superuser||r.bypass_rls)throw Error('LEDGER_GRANT_AUDIT_ROLE_PRIVILEGED');
-  const privileged=BOOLEAN_FIELDS.slice(2).filter(key=>r[key]===true);
+  const privileged=BOOLEAN_FIELDS.slice(3).filter(key=>r[key]===true);
   return Object.freeze({role:expectedRole,
-    status:privileged.length?'BLOCKED_DIRECT_SCOPE_MUTATION':'NO_DIRECT_SCOPE_GRANTS_OBSERVED',
+    status:privileged.length?'BLOCKED_DIRECT_SCOPE_MUTATION':r.role_memberships_present?'BLOCKED_ROLE_MEMBERSHIP_UNVERIFIED':'NO_DIRECT_SCOPE_GRANTS_OBSERVED',
+    role_memberships_present:r.role_memberships_present,
     direct_mutation_grants:Object.freeze(privileged),
     same_workspace_actor_authorization:'NOT_VERIFIED',
     tenant_rls_runtime:'NOT_RUN',

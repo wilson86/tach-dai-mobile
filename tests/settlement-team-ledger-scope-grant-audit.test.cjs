@@ -2,7 +2,7 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {auditLedgerScopeGrants,LEDGER_SCOPE_GRANT_SQL}=require('../team-settlement/ledger-scope-grant-audit.cjs');
-const safe={role:'l20_ledger_synthetic',superuser:false,bypass_rls:false,
+const safe={role:'l20_ledger_synthetic',superuser:false,bypass_rls:false,role_memberships_present:false,
   scope_insert:false,scope_update:false,scope_delete:false,scope_truncate:false,scope_any_column_insert:false,scope_any_column_update:false,state_update:false,
   revision_update:false,reviewed_by_update:false,submitted_by_update:false,locked_at_update:false};
 async function run(row){return auditLedgerScopeGrants({query:async()=>({rows:[row]}),expectedRole:safe.role,syntheticOnly:true});}
@@ -42,4 +42,11 @@ test('ambiguous or privileged database role evidence is rejected',async()=>{
   await assert.rejects(auditLedgerScopeGrants({expectedRole:safe.role,query:async()=>({rows:[safe]})}),/NOT_AUTHORIZED/);
   await assert.rejects(auditLedgerScopeGrants({expectedRole:safe.role,syntheticOnly:true,query:async()=>{throw Error('DB SECRET');}}),
     e=>e.message==='LEDGER_GRANT_AUDIT_SQL_UNVERIFIED');
+});
+
+test('any role membership is conservatively blocked until SET ROLE paths are audited',async()=>{
+  const a=await run({...safe,role_memberships_present:true});
+  assert.equal(a.status,'BLOCKED_ROLE_MEMBERSHIP_UNVERIFIED');
+  await assert.rejects(run({...safe,role_memberships_present:null}),/EVIDENCE_INVALID/);
+  assert.match(LEDGER_SCOPE_GRANT_SQL,/FROM pg_auth_members WHERE member=/);
 });

@@ -8,9 +8,9 @@ const auth={role:'synthetic_auth',auth_schema:true,event_read:false,
   credential_read:true,session_read:true,session_insert:true,session_revoke:true,
   team_schema:true,membership_read:true,membership_write_denied:true,
   financial_write_denied:true,direct_scope_write_denied:true,
-  draft_execute:false,superuser:false,bypass_rls:false};
+  draft_execute:false,superuser:false,bypass_rls:false,role_memberships_present:false};
 const ledger={role:'synthetic_ledger',auth_schema:false,event_read:true,
-  draft_execute:true,membership_write_denied:true,direct_scope_write_denied:true,superuser:false,bypass_rls:false};
+  draft_execute:true,membership_write_denied:true,direct_scope_write_denied:true,superuser:false,bypass_rls:false,role_memberships_present:false};
 function pool(info,{failConnect=false,failQuery=false}={}){
   const calls={connect:0,query:0,releases:[]};
   const instance={
@@ -53,6 +53,8 @@ test('same role, overprivileged role, and cross-domain role privileges are denie
     {...ledger,auth_schema:true},
     {...ledger,superuser:true},
     {...ledger,bypass_rls:true},
+    {...ledger,role_memberships_present:true},
+    {...ledger,role_memberships_present:null},
     {...ledger,event_read:false},
     {...ledger,draft_execute:false},
     {...ledger,membership_write_denied:false},
@@ -78,6 +80,8 @@ test('auth role cannot read ledger events, execute drafts, or bypass RLS',async(
     {...auth,direct_scope_write_denied:false},
     {...auth,direct_scope_write_denied:null},
     {...auth,bypass_rls:true},
+    {...auth,role_memberships_present:true},
+    {...auth,role_memberships_present:null},
     {...auth,superuser:true}
   ]){
     const a=pool(bad),l=pool(ledger);
