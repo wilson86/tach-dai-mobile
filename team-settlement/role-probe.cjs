@@ -3,7 +3,7 @@
 // Explicit, read-only preflight for TWO supplied PostgreSQL Pool connections.
 // Never creates pools, credentials, listening sockets or database objects.
 // Synthetic candidate only; no live service admission from this result.
-const PROBE_SQL = `SELECT current_user AS role,
+const PROBE_SQL = `SELECT current_user AS role, session_user AS session_role,
   has_schema_privilege(current_user, 'kts_auth', 'USAGE') AS auth_schema,
   has_table_privilege(current_user, 'kts_team.scope_events', 'SELECT') AS event_read,
   has_function_privilege(current_user,
@@ -67,6 +67,7 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
     if(!auth||!ledger||authResult.rows.length!==1||ledgerResult.rows.length!==1 ||
        typeof auth.role!=='string'||!auth.role ||
        typeof ledger.role!=='string'||!ledger.role ||
+       auth.session_role!==auth.role || ledger.session_role!==ledger.role ||
        auth.role===ledger.role ||
        auth.superuser!==false || auth.bypass_rls!==false || auth.role_memberships_present!==false ||
        ledger.superuser!==false || ledger.bypass_rls!==false || ledger.role_memberships_present!==false ||
