@@ -13,7 +13,7 @@ const version=JSON.parse(read("version.json")).version;
 const cache=(sw.match(/const CACHE='([^']+)'/u)||[])[1];
 const source=(app.match(/<script src="\.\/unified-core\.js\?ux=([\d.]+)"><\/script>/u)||[])[1];
 const ux=(core.match(/const UX_VERSION='([^']+)'/u)||[])[1];
-assert.equal(version,"1.0.30","duplicate approval candidate must advance without downgrade");
+assert.equal(version,"1.0.31","duplicate approval candidate must advance without downgrade");
 assert.equal(source,version,"HTML URL must uniquely identify new Unified JavaScript");
 assert.equal(ux,version,"embedded UX version must match shell");
 assert.ok(cache && cache.includes("v"+version+"-"),"service-worker cache key must advance");
@@ -143,4 +143,23 @@ afterF5.callbacks["kts:working-source"]({detail:{
 assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,origTicket,"Undo may explicitly restore raw source");
 assert.equal(storage.KTS_UNIFIED_CUT_SOURCE_HOLD_V1,undefined,"Undo releases cut hold");
 assert.equal(afterF5.tach.value,origTicket,"Undo may restore sibling source");
+// A new legitimate raw ticket in another mode MUST NOT overwrite the Cut
+// ledger of a sibling. Its original source and durable Undo receipt remain
+// owned by the mode whose outputs have already been Cut.
+const newTicket="2d 12 34 dx2n";
+const ledgerOwner=createSharedController(origTicket,origTicket);
+ledgerOwner.ngang.value=ledgerTicket;
+ledgerOwner.callbacks["kts:working-source"]({detail:{
+  schema:"KTS_WORKING_SOURCE_V1",
+  token:ledgerOwner.ngangWindow.__KTS_UNIFIED_FRAME_TOKEN__,
+  value:ledgerTicket
+}});
+ledgerOwner.tach.value=newTicket;
+ledgerOwner.tach.events.input();
+assert.equal(ledgerOwner.ngang.value,ledgerTicket,
+  "new raw source in Tách Đài must not overwrite protected Ngang Cut ledger");
+assert.equal(ledgerOwner.dv.value,newTicket,
+  "normal new ticket must still share to unrelated Đá Vòng");
+assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,newTicket,
+  "new explicit input must be recorded independently of protected Cut ledger");
 console.log("UNIFIED VERSIONED UX CACHE: PASS");
