@@ -13,7 +13,7 @@ const version=JSON.parse(read("version.json")).version;
 const cache=(sw.match(/const CACHE='([^']+)'/u)||[])[1];
 const source=(app.match(/<script src="\.\/unified-core\.js\?ux=([\d.]+)"><\/script>/u)||[])[1];
 const ux=(core.match(/const UX_VERSION='([^']+)'/u)||[])[1];
-assert.equal(version,"1.0.31","duplicate approval candidate must advance without downgrade");
+assert.equal(version,"1.0.32","duplicate approval candidate must advance without downgrade");
 assert.equal(source,version,"HTML URL must uniquely identify new Unified JavaScript");
 assert.equal(ux,version,"embedded UX version must match shell");
 assert.ok(cache && cache.includes("v"+version+"-"),"service-worker cache key must advance");
@@ -158,6 +158,15 @@ ledgerOwner.tach.value=newTicket;
 ledgerOwner.tach.events.input();
 assert.equal(ledgerOwner.ngang.value,ledgerTicket,
   "new raw source in Tách Đài must not overwrite protected Ngang Cut ledger");
+assert.equal(storage.KTS_UNIFIED_FRESH_DRAFT_AFTER_CUT_V1,"1",
+  "explicit new ticket after sibling Cut must be marked independently of old ledger");
+const freshAfterF5=createSharedController(newTicket,ledgerTicket);
+assert.equal(freshAfterF5.tach.value,newTicket,
+  "F5 must preserve explicitly typed new Tách Đài draft, not silently erase it");
+assert.equal(freshAfterF5.ngang.value,ledgerTicket,
+  "F5 must preserve Ngang protected Cut ledger while new draft remains");
+assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,newTicket,
+  "F5 must keep the distinct fresh draft in the session");
 assert.equal(ledgerOwner.dv.value,newTicket,
   "normal new ticket must still share to unrelated Đá Vòng");
 assert.equal(storage.KTS_UNIFIED_SHARED_INPUT_V1,newTicket,
