@@ -165,7 +165,7 @@ async function run(root){
       const mode=${JSON.stringify(name)};
       const doc=mode==='davong'?document:document.querySelector('#'+
         (mode==='tach'?'tachFrame':'ngangFrame')).contentDocument;
-      const win=doc.defaultView,source='43 b1n\\\\n43 b1n';
+      const win=doc.defaultView,source='43 b1n\\n43 b1n';
       const input=doc.getElementById(mode==='davong'?'dvInput':'input');
       const toggle=doc.getElementById('ktsQuytCheckbox');
       const rate=doc.getElementById('ktsQuytRate');
