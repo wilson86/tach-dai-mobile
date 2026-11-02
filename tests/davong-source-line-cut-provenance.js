@@ -124,6 +124,46 @@ async function main(){
  assert.equal(failClosed.nodes.dvRemainingSource.style.display,"none");
  assert.equal(failClosed.nodes.dvInput.value,raw);
  assert.equal(failClosed.nodes.dvInput.readOnly,true);
+ // Quota failure must leave ALL wager rows and Undo state intact.
+ const failedStorage=setup();
+ await failedStorage.nodes.dvRun.click();await failedStorage.wait();
+ const selectedFirst=failedStorage.nodes.dvTapResultList.children[0].children[0].children[0];
+ selectedFirst.checked=true;selectedFirst.emit("change");
+ const beforeFail=failedStorage.nodes.dvOutput.value;
+ failedStorage.storage.set=()=>{throw Error("SYNTHETIC_STORAGE_QUOTA")};
+ await failedStorage.nodes.dvCutSelection.click();
+ assert.equal(failedStorage.nodes.dvOutput.value,beforeFail);
+ assert.equal(failedStorage.nodes.dvInput.value,raw);
+ assert.match(failedStorage.nodes.dvStatus.textContent,/KHÔNG CẮT/);
+
+ // Failed Undo after a persisted partial Cut must revert to the pre-Undo state.
+ const failedUndo=setup();
+ await failedUndo.nodes.dvRun.click();await failedUndo.wait();
+ const one=failedUndo.nodes.dvTapResultList.children[0].children[0].children[0];
+ one.checked=true;one.emit("change");
+ await failedUndo.nodes.dvCutSelection.click();
+ const beforeUndo=failedUndo.nodes.dvOutput.value;
+ failedUndo.storage.delete=()=>{throw Error("SYNTHETIC_STORAGE_DELETE_DENIED")};
+ await failedUndo.nodes.dvUndo.click();
+ assert.equal(failedUndo.nodes.dvOutput.value,beforeUndo);
+ assert.match(failedUndo.nodes.dvStatus.textContent,/HOLD.*Undo/);
+
+ // Full Cut persists zero-live rows: F5 must not resurrect them; Undo recovers.
+ const full=setup();
+ await full.nodes.dvRun.click();await full.wait();
+ await full.nodes.dvSelectAllOutput.click();
+ await full.nodes.dvCutSelection.click();
+ assert.equal(full.nodes.dvOutput.value,"");
+ assert.equal(full.nodes.dvInput.value,"");
+ const fullReceipt=JSON.parse(full.storage.get("KTS_DAVONG_WORKING_ROWS_V1"));
+ assert.equal(fullReceipt.rows.filter(r=>r.alive).length,0);
+ assert.ok(fullReceipt.undo.length>0,"full Cut must have durable Undo receipt");
+ const reloaded=setup(full.storage);
+ assert.equal(reloaded.nodes.dvOutput.value,"","F5 must not revive a fully Cut row");
+ assert.equal(reloaded.nodes.dvInput.value,"","F5 must not revive original source as a new bet");
+ await reloaded.nodes.dvUndo.click();
+ assert.equal(reloaded.nodes.dvInput.value,raw);
+ assert.equal(reloaded.nodes.dvOutput.value,expected.outputs.join("\n"));
  console.log("DAVONG SOURCE LINEAGE CUT/PARTIAL/UNDO/RELOAD/LEGACY FAIL-CLOSED: PASS");
 }
 main().catch(e=>{console.error(e.stack||e);process.exitCode=1});
