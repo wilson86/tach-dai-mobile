@@ -32,11 +32,18 @@ test("group by station+selector+number, never conflate different numbers",()=>{
  const p=run("43 34 b100n 43 b50n","43 b150n 34 b100n");
  assert.equal(p.preview,"43 b161n\n34 b107n");
 });
-test("reordered-but-equal unadjusted result keeps all per-number points",()=>{
- const p=run("43 b100n 34 b50n","34 b50n 43 b100n");
- assert.equal(p.preview,"43 b107n\n34 b54n");
- assert.throws(()=>run("43 b100n 34 b50n","34 b50n 43 b99n"),
-  /SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD/);
+test("operator requires ordered original numbers and stakes",()=>{
+ const src="43 b100n 34 b50n";
+ assert.throws(()=>run(src,"34 b50n 43 b100n"),/SOURCE_OUTPUT_ORDER_MISMATCH_HOLD/);
+ assert.equal(run(src,src,{rate:"1"}).preview,"43 b100n\n34 b50n");
+ assert.equal(run(src,src).preview,"43 b107n\n34 b54n");
+ assert.throws(()=>run(src,"43 b99n 34 b50n"),/SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD/);
+});
+test("Quyt review never moves a later same-stake number ahead of another wager",()=>{
+ const src="43 b100n 34 b50n 44 b100n";
+ const result=run(src,src);
+ assert.equal(result.preview,"43 b107n\n34 b54n\n44 b107n");
+ assert.deepEqual(result.receipts.map(x=>x.number),["43","34","44"]);
 });
 test("B and canonical LO stay DISTINCT even for same number",()=>{
  const p=run("43 b1n 43 lo1n","43 b1n 43 lo1n");
