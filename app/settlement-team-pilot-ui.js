@@ -24,9 +24,10 @@ const IDS=['team-login','team-subject','team-password','team-workspace',
  'team-logout','team-partner','team-directory','team-counterparties','team-date','team-region','team-create',
  'team-sync','team-pull','team-reconnect','team-read','team-context',
  'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
+ 'team-recovery-controls','team-reconcile','team-recovery-readonly',
  'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
  'team-review-audit','team-feed-progress'];
-function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
+function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false,syntheticRecoveryUiEnabled=false}={}){
   const d=doc||(typeof document!=='undefined'?document:null);
   const w=win||(typeof window!=='undefined'?window:null);
   const f=Sync||(typeof globalThis!=='undefined'?globalThis.KtsSettlementSyncClient:null);
@@ -44,6 +45,10 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     throw Error('TEAM_PILOT_REVIEW_CONFIG_INVALID');
   if(syntheticReviewUiEnabled && typeof sync.reviewScope!=='function')
     throw Error('TEAM_PILOT_REVIEW_CLIENT_REQUIRED');
+  if(typeof syntheticRecoveryUiEnabled!=='boolean')
+    throw Error('TEAM_RECOVERY_UI_CONFIG_INVALID');
+  if(syntheticRecoveryUiEnabled && typeof sync.inspectRecoveryReceipts!=='function')
+    throw Error('TEAM_RECOVERY_UI_CLIENT_REQUIRED');
   let busy=false,dead=false,notice='',unsubscribe,verifiedScope=null;
   let verifiedEventIds=[],verifiedAuditRows=[],historyTruncated=false,observedSessionEpoch=null;
   let feedHasMore=null,feedStale=false;
@@ -69,6 +74,9 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     clear(e['team-changes']);clear(e['team-review-audit']);
     renderFeedProgress();
   }
+  function clearRecovery(){
+    e['team-recovery-readonly'].textContent='CHƯA XÁC MINH receipt. Không tự gửi lại.';
+  }
   function clearReview(){
     verifiedScope=null;
     e['team-review-readonly'].textContent='CHƯA XÁC MINH trạng thái xét duyệt từ máy chủ.';
@@ -87,7 +95,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       observedSessionEpoch=state.session_epoch;
       identityEpoch++;selectionEpoch++;
       clearVerifiedHistory();
-      clearReview();
+      clearReview();clearRecovery();
     }
     e['team-context'].textContent=state.authenticated?
       'Đã đăng nhập: '+String(state.workspace_id||'unknown'):'Chưa đăng nhập';
@@ -115,6 +123,9 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       !state.drafts.some(x=>x.status==='PENDING');
     e['team-login'].querySelector('button[type="submit"]').disabled=busy||state.authenticated;
     e['team-review-controls'].hidden=!syntheticReviewUiEnabled;
+    e['team-recovery-controls'].hidden=!syntheticRecoveryUiEnabled;
+    e['team-reconcile'].disabled=busy||!state.authenticated||!syntheticRecoveryUiEnabled||
+      !state.drafts.some(x=>x.status==='NEEDS_RECONCILIATION');
     const hasDrafts=state.drafts.some(x=>x.status!=='SYNCED');
     const hasOtherPending=reviews.some(x=>x.status!=='SYNCED' &&
       (!verifiedScope || !sameScope(x.scope,verifiedScope) ||
@@ -229,6 +240,54 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       {synthetic:true,demo_message:'TEAM_PILOT_FAKE_DATA_ONLY'});
     tell(draft.id+' PENDING: chưa có receipt máy chủ; trạng thái lưu cục bộ: '+sync.snapshot().draft_persistence+'.');
   }));
+
+  // Synthetic-only manual receipt inspection. No send/retry/status promotion.
+  on(e['team-reconcile'],'click',()=>void action(async()=>{
+    if(!syntheticRecoveryUiEnabled)throw Error('TEAM_RECOVERY_UI_NOT_ENABLED');
+    const before=sync.snapshot(),startIdentity=identityEpoch;
+    if(!before.authenticated)throw Error('AUTH_SESSION_REQUIRED');
+    const drafts=before.drafts.filter(x=>x.status==='NEEDS_RECONCILIATION');
+    if(drafts.length<1||drafts.length>30)throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED');
+    const quarantined=drafts.map(x=>{
+      if(!x||!/^draft_[a-f0-9]{32}$/.test(x.id||'')||
+         x.dispatch_uncertain!==true||
+         !Number.isSafeInteger(x.base_revision)||x.base_revision<0||
+         !x.scope||x.scope.workspace_id!==before.workspace_id||
+         !PARTNER.test(x.scope.partner_id||'')||
+         !validBusinessDate(x.scope.business_date)||
+         !['mn','mt','mb'].includes(x.scope.region)||
+         !x.payload||x.payload.synthetic!==true)
+        throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED');
+      // All queued drafts originate as PENDING; this is NOT a server receipt.
+      return {id:x.id,status:'QUARANTINED',original_status:'PENDING',
+        auto_retry:false,scope:x.scope,payload:x.payload,base_revision:x.base_revision};
+    });
+    if(!w.confirm('Chỉ ĐỌC receipt cho '+quarantined.length+
+      ' DRAFT GIẢ chưa rõ kết quả? Không gửi lại, không xác nhận chốt tiền.'))return;
+    clearRecovery();
+    const result=await sync.inspectRecoveryReceipts(quarantined,
+      {syntheticOnly:true,explicitConsent:true});
+    if(dead||startIdentity!==identityEpoch||
+       !sync.snapshot().authenticated||
+       sync.snapshot().workspace_id!==before.workspace_id){
+      clearRecovery();tell('CHƯA XÁC MINH: phiên đã đổi trong lúc đối soát.');return;
+    }
+    if(!result||result.status!=='REVIEW_ONLY'||
+       result.auto_send_enabled!==false||!Array.isArray(result.items)||
+       result.items.length!==quarantined.length)
+      throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+    const matched=result.items.filter(x=>x.classification==='MATCHED_SERVER_RECEIPT').length;
+    if(result.items.some((x,i)=>x.id!==quarantined[i].id||
+       x.auto_retry!==false||
+       !['MATCHED_SERVER_RECEIPT','UNVERIFIED_NOT_SAFE_TO_RETRY'].includes(x.classification))||
+       result.all_receipts_verified!==(matched===quarantined.length))
+      throw Error('TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+    e['team-recovery-readonly'].textContent='REVIEW_ONLY: '+matched+
+      '/'+quarantined.length+' receipt được đối chiếu; '+
+      (quarantined.length-matched)+' chưa xác minh. KHÔNG tự gửi lại; DRAFT vẫn NEEDS_RECONCILIATION.';
+    tell('Đối soát CHỈ ĐỌC. Không có giao dịch được tự gửi hoặc tự chuyển SYNCED.');
+  }));
+
   on(e['team-sync'],'click',()=>void action(async()=>{
     const pending=sync.snapshot().drafts.filter(z=>z.status==='PENDING');
     const results=[];
@@ -417,7 +476,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     on(e[id],'change',invalidate);
   }
   on(e['team-workspace'],'change',()=>{selectionEpoch++;clearReview();render(sync.snapshot());});
-  clearReview();
+  clearReview();clearRecovery();
   on(w,'beforeunload',event=>{
     if(sync.snapshot().volatile_unsent_count>0 ||
        sync.snapshot().drafts.some(x=>x.status!=='SYNCED')){
