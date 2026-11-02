@@ -92,6 +92,16 @@ test("identity of operator-selected Quyt and input stage enforced",()=>{
   assert.throws(()=>run("43 b1n","43 b1n",o));
  }
 });
+test("nonadjacent repeated wager is HOLD until keep-all, then group before rate",()=>{
+ const source="43 b1n 44 b2n 43 b1n",output="43 b2n 44 b2n";
+ assert.throws(()=>run(source,output,{repeatDecision:"ask_operator"}),
+  /DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED/);
+ const result=run(source,output,{repeatDecision:"keep_all"});
+ assert.equal(result.preview,"43 44 b3n");
+ assert.equal(result.rawClauseCount,3);
+ assert.equal(result.duplicateBlocks.length,1);
+ assert.equal(result.forwardAuthorized,false);
+});
 test("UI feature cannot authorize real forwarding and preserves source",()=>{
  const source="43 b1n\n43 b1n",p=run(source,"43 b2n");
  assert.equal(p.original,source);
