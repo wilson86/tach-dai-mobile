@@ -89,7 +89,7 @@ function install(){
    status.textContent="HOLD: nguồn hiện là Cut ledger; không điều chỉnh lại.";return;
   }
   try{
-   const p=core.prepare(raw,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,rate:rate.value});
+   const p=core.prepare(raw,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,rate:rate.value,sourceText:original,requireSourceWitness:true});
    approved={input:original,result:raw,preview:p.preview,rate:rate.value};
    review.value=p.preview;
    status.textContent="Quýt ✓ | hệ số ×"+p.rate.replace(".",",")+" | "+p.alteredOccurrences+" khoản bao được làm tròn lên từng khoản. HOLD nếu Router đã điều chỉnh hoặc kết quả đã được gộp từ nhiều khoản.";
