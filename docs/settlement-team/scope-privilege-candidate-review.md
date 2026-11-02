@@ -63,6 +63,15 @@ The fixture does not execute the SQL idempotency implementation; retries and
 idempotency still need explicit real-database verification.
 Any candidate must demonstrate these cases with real isolated PostgreSQL.
 
+The offline `settlement-team-auth-link-loss-race.test.cjs` exercises the real
+JavaScript composition with synthetic pool clients. It models auth connection
+loss, revocation, and then a ledger commit; the API returns an error despite
+the synthetic committed mutation. This is a counterexample to treating the
+separate auth lock as atomic revocation, not evidence of PostgreSQL behavior.
+A candidate needs session verification and the protected mutation in one
+reviewed database transaction or an equally strong database-enforced boundary;
+the present role/grant and actor-GUC admission blocks remain in force.
+
 Draft replay requires an actor-bound receipt contract.
 The server digest still covers action, scope, expected revision and payload,
 but not actor. On the 2026-11-01 isolated development branch,

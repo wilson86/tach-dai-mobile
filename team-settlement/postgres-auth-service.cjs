@@ -92,8 +92,9 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
       const actor={server_verified:true,membership_active:true,
         user_id:session.user_id,workspace_id:session.workspace_id,role:members[0].team_role};
       actorFromServer(actor);
-      // Keep the session row's FOR SHARE lock until the protected work finishes.
-      // revokeSession's UPDATE then serializes with writes using this callback.
+      // This lock only survives while the auth connection and transaction survive.
+      // Ledger work uses a separate transaction, so connection loss can release
+      // the lock before ledger commit. Do not treat this as atomic revocation.
       return work(Object.freeze(actor));
     });
   }
