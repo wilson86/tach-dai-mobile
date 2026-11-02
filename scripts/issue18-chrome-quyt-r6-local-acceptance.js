@@ -1,12 +1,10 @@
 'use strict';
 // Issue18 - no installs, no Telegram, no real wagers, no production changes.
 // Must run locally on Windows with built-in Node WebSocket (Node 22+).
-const fs=require('node:fs'), path=require('node:path'),cp=require('node:child_process');
+const fs=require('node:fs'), path=require('node:path'),cp=require('node:child_process'),crypto=require('node:crypto');
 const assert=require('node:assert/strict');
 const URL='http://127.0.0.1:8772/app/', ORIGIN='http://127.0.0.1:8772';
-const PIN={KTS:'64aab5a828976d3d2d747460bc37e1b3ae0ce479',
-Mobile:'SOURCE_SHA_SET_BY_WINDOWS_STAGE',
-Ngang:'SOURCE_SHA_SET_BY_WINDOWS_STAGE'};
+const PIN={KTS:'NOT_VERIFIED',Mobile:'NOT_VERIFIED',Ngang:'NOT_VERIFIED'};
 const nap=ms=>new Promise(r=>setTimeout(r,ms));
 function checkRoot(x){
  assert.equal(process.platform,'win32','Only Windows C: acceptance is authorized');
@@ -25,11 +23,48 @@ function getChrome(){
  assert.ok(p,'Chrome executable not found on C:');
  return p;
 }
+
+function verifySourceManifest(root){
+ const manifestPath=path.join(root,'SOURCE_MANIFEST.json');
+ assert.ok(fs.existsSync(manifestPath),'SOURCE_MANIFEST missing; cannot accept exact HEAD');
+ const manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));
+ for(const k of ['KTS','Mobile','Ngang']){
+  const expected=manifest?.sources?.[k];
+  assert.match(String(expected||''),/^[0-9a-f]{40}$/i,'Invalid source SHA '+k);
+  const cwd=path.join(root,'source-'+k);
+  assert.ok(fs.existsSync(cwd),'Missing checkout '+k);
+  assert.equal(fs.realpathSync(cwd).toLowerCase(),cwd.toLowerCase(),'Junction/symlink refused '+k);
+  const git=cp.spawnSync('git',['-C',cwd,'rev-parse','HEAD'],{
+    encoding:'utf8',shell:false,windowsHide:true,timeout:5000});
+  assert.equal(git.status,0,'Failed to verify Git HEAD for '+k);
+  assert.equal(git.stdout.trim().toLowerCase(),expected.toLowerCase(),'Source drift '+k);
+  PIN[k]=expected;
+ }
+ return manifest;
+}
+const sha256=buf=>crypto.createHash('sha256').update(buf).digest('hex');
+async function verifyStageAssets(root){
+ const receipts={};
+ for(const [k,prefix] of [['Mobile',''],['Ngang','ngang/']]){
+  for(const file of ['quyt-bao-review.js','quyt-bao-review-ui.js']){
+   const source=fs.readFileSync(path.join(root,'source-'+k,file));
+   const request=await fetch(ORIGIN+'/'+prefix+file,
+      {cache:'no-store',signal:AbortSignal.timeout(5000)});
+   assert.equal(request.status,200,'Missing staged '+k+'/'+file);
+   const observed=sha256(Buffer.from(await request.arrayBuffer()));
+   assert.equal(observed,sha256(source),'Staged JS does not match Git checkout '+k+'/'+file);
+   receipts[k+'/'+file]=observed;
+  }
+ }
+ return receipts;
+}
+
 function readLedger(raw){
  const p='[[KTS_EXACT_OUTPUT_LEDGER_V1]]\n';
  return raw?.startsWith(p)?JSON.parse(raw.slice(p.length)):null;
 }
 async function run(root){
+ const sourceManifest=verifySourceManifest(root);
  const dir=fs.mkdtempSync(path.join(root,'chrome-quyt-r6-acceptance-')),profile=path.join(dir,'profile');
  fs.mkdirSync(profile);
  const result={scope:'HEADLESS_REAL_CHROME_NOT_CHROME_GUEST',source:PIN,preview:URL,
@@ -39,7 +74,9 @@ async function run(root){
  try{
   assert.equal(typeof WebSocket,'function','Node 22+ built-in WebSocket required; no new packages');
   const response=await fetch(URL,{signal:AbortSignal.timeout(5000),cache:'no-store'});
-  assert.equal(response.status,200,'Preview :8768 unavailable');
+  assert.equal(response.status,200,'Quyt-r6 preview :8772 unavailable');
+  result.source_manifest=sourceManifest;
+  result.sha_bound_js=await verifyStageAssets(root);
   assert.ok((await response.text()).includes('id="ngangFrame"'),'Wrong preview');
   const meta=await fetch(ORIGIN+'/app/version.json').then(r=>r.json());
   assert.ok(JSON.stringify(meta).includes('1.0.33'),'Expected Unified 1.0.33');
@@ -110,6 +147,7 @@ async function run(root){
   await cdp('Page.reload',{ignoreCache:false});
   await wait(frameReady,x=>x===true,'frames after SW reload');
   const sw=await js("(async()=>({controller:navigator.serviceWorker.controller?.scriptURL,cacheKeys:await caches.keys()}))()",true);
+  assert.ok(sw.cacheKeys.some(key=>key.includes('clean-r2-quyt-r6')),'Chrome stale Quyt SW cache, r6 required');
   assert.ok(sw.controller?.endsWith('/app/sw.js'),'Chrome must be controlled by Unified app SW');
   log('REAL_CHROME_SW',sw);
   await js("(()=>{const r=document.querySelector('#sharedRegion'),d=document.querySelector('#sharedDate'),t=document.querySelector('#sharedToday');t.checked=false;r.value='mb';r.dispatchEvent(new Event('change',{bubbles:true}));d.value='2026-10-29';d.dispatchEvent(new Event('change',{bubbles:true}));})()");
