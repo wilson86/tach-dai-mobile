@@ -6,7 +6,7 @@ const os=require('node:os');
 const path=require('node:path');
 const {stage}=require('../scripts/issue18-build-local-stage.js');
 const {verify,parseArgs}=require('../scripts/issue18-verify-stage.js');
-const HASH='7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
+const HASH='0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487';
 const HTML='<iframe id="tachFrame" src="../"></iframe>\n'+
   '<iframe id="ngangFrame" src="https://wilson86.github.io/tach-dai-ngang/"></iframe>';
 const SW="const N='/tach-dai-mobile/app', A='/tach-dai-mobile/app/', "+
@@ -15,12 +15,16 @@ const MOBILE=[
   'index.html','sw.js','version.json','manifest.webmanifest',
   'business_engine.generated.js','station_calendar.generated.js',
   'icon-192.png','icon-512.png','app/index.html','app/sw.js',
-  'app/version.json','app/unified-core.js','app/manifest.webmanifest'
+  'app/version.json','app/unified-core.js','app/manifest.webmanifest',
+  'clean-aggregate-review.js','clean-aggregate-ui.js',
+  'quyt-bao-review.js','quyt-bao-review-ui.js'
 ];
 const NGANG=[
   'index.html','sw.js','version.json','manifest.webmanifest',
   'business_engine.generated.js','station_calendar.generated.js',
-  'icon-192.png','icon-512.png'
+  'icon-192.png','icon-512.png',
+  'clean-aggregate-review.js','clean-aggregate-ui.js',
+  'quyt-bao-review.js','quyt-bao-review-ui.js'
 ];
 function fixture(t){
   const base=fs.mkdtempSync(path.join(os.tmpdir(),'issue18-verify-'));
@@ -37,21 +41,21 @@ function fixture(t){
   fs.writeFileSync(path.join(mobile,'app/index.html'),HTML);
   fs.writeFileSync(path.join(mobile,'app/sw.js'),SW);
   for(const [p,version]of [
-    [path.join(mobile,'version.json'),'2.0.38'],
-    [path.join(mobile,'app/version.json'),'1.0.27'],
-    [path.join(ngang,'version.json'),'1.0.37']
+    [path.join(mobile,'version.json'),'2.0.40'],
+    [path.join(mobile,'app/version.json'),'1.0.33'],
+    [path.join(ngang,'version.json'),'1.0.39']
   ])fs.writeFileSync(p,JSON.stringify({version,business_engine_sha256:HASH}));
   stage({mobile,ngang,out});
   return {mobile,ngang,out};
 }
-test('manifest binds 21 copied assets and both staged rewrites without touching source',t=>{
+test('manifest binds 29 copied assets and both staged rewrites without touching source',t=>{
   const f=fixture(t);
   const result=verify(f);
   assert.equal(result.status,'STAGE_SOURCE_BYTES_PASS');
-  assert.equal(result.checked_assets,21);
+  assert.equal(result.checked_assets,29);
   const manifest=JSON.parse(fs.readFileSync(path.join(f.out,'ISSUE18_STAGE_MANIFEST.json'),'utf8'));
-  assert.equal(Object.keys(manifest.source_files_sha256).length,21);
-  assert.equal(Object.keys(manifest.staged_files_sha256).length,21);
+  assert.equal(Object.keys(manifest.source_files_sha256).length,29);
+  assert.equal(Object.keys(manifest.staged_files_sha256).length,29);
   assert.equal(result.engine_sha256,HASH);
   assert.equal(result.release_authorized,false);
   assert.equal(result.chrome,'NOT_RUN');
