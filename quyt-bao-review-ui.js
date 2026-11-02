@@ -32,16 +32,21 @@ function install(){
  const review=document.createElement("textarea");review.readOnly=true;review.spellcheck=false;
  review.setAttribute("aria-label","Kết quả Quýt theo hệ số đã chọn để đối chiếu");
  review.style.cssText="width:100%;min-height:100px;box-sizing:border-box;color:#242020;background:white";
+ const keep=document.createElement("button");keep.type="button";
+ keep.textContent="Xác nhận khách đánh thêm — GIỮ ĐỦ các lượt";
+ keep.hidden=true;keep.style.cssText="padding:9px;border:1px solid #ae871b;background:#fff7d2;margin:6px 0";
  const copy=document.createElement("button");copy.type="button";copy.textContent="Copy kết quả Quýt đã kiểm tra";
  copy.style.cssText="padding:9px;border-radius:6px;background:#d79c2a;color:#111;border:0;margin-top:6px";
  const note=document.createElement("div");note.style.cssText="font-size:12px";
  note.textContent="Hệ số mặc định 1,067; nhập dấu phẩy hoặc dấu chấm, tối đa 3 chữ số thập phân, lớn hơn 0 và không quá 3. Chỉ nhân B/LO/BAO, DD/Đầu/Đuôi/Đá giữ nguyên. Bản thử nghiệm chưa tự gửi.";
- panel.append(title,status,review,copy,note);
+ panel.append(title,status,keep,review,copy,note);
  output.insertAdjacentElement("afterend",panel);
  let approved=null;
+ let confirmedRepeatSource=null;
  let checkedSource="";
  function reset(){
-  approved=null;review.value="";status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
+  approved=null;review.value="";keep.hidden=true;
+  status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
  }
  function enabled(){return check.checked===true}
  function applyFromOwner(){
@@ -60,12 +65,14 @@ function install(){
   try{for(const f of ownTop.document.querySelectorAll("iframe"))if(f.contentWindow)fire(f.contentWindow)}catch(_){}
  }
  check.addEventListener("change",()=>{
+  confirmedRepeatSource=null;
   ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&Boolean(input.value.trim());
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
   if(typeof ownTop.__KTS_QUYT_RATE_V1__!=="string")ownTop.__KTS_QUYT_RATE_V1__=rate.value;
   notifyAll();
  });
  rate.addEventListener("input",()=>{
+  confirmedRepeatSource=null;
   ownTop.__KTS_QUYT_RATE_V1__=rate.value;
   notifyAll(); // invalidates sibling tab previews, including when rate is incomplete
   reset();
@@ -89,13 +96,31 @@ function install(){
    status.textContent="HOLD: nguồn hiện là Cut ledger; không điều chỉnh lại.";return;
   }
   try{
-   const p=core.prepare(raw,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,rate:rate.value,sourceText:original,requireSourceWitness:true});
+   const selectedRegion=document.getElementById("region")||document.getElementById("sharedRegion");
+   const p=core.prepareGrouped(raw,{
+    customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,
+    rate:rate.value,sourceText:original,region:selectedRegion?.value,
+    cleanCore:window.KTSCleanAggregate,repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator",
+    omitRegion:true
+   });
    approved={input:original,result:raw,preview:p.preview,rate:rate.value};
    review.value=p.preview;
-   status.textContent="Quýt ✓ | hệ số ×"+p.rate.replace(".",",")+" | "+p.alteredOccurrences+" khoản bao được làm tròn lên từng khoản. HOLD nếu Router đã điều chỉnh hoặc kết quả đã được gộp từ nhiều khoản.";
+   status.textContent="Quýt ✓ | hệ số ×"+p.rate.replace(".",",")+
+    " | GỘP các lượt cùng số/cùng loại/cùng đài trước → nhân một lần → làm tròn lên. "+
+    p.aggregatedExposures+" số/loại đã đối chiếu. Chưa cho gửi tự động, Router có thể nhân thêm.";
    copy.disabled=false;
-  }catch(e){status.textContent="HOLD: "+String(e.message||e)}
+  }catch(e){
+    if(String(e.message||e).includes("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED")){
+     keep.hidden=false;
+     status.textContent="HOLD: đoạn cược giống nhau có thể là khách đánh thêm hoặc paste nhầm. Xác nhận khách đặt thêm để GIỮ ĐỦ và gộp tổng, không tự xóa.";
+    }else status.textContent="HOLD: "+String(e.message||e);
+  }
  }
+ keep.addEventListener("click",()=>{
+  if(!enabled()||!input.value.trim())return;
+  confirmedRepeatSource=input.value;
+  refresh();
+ });
  // Existing run(), Clear/Cut/Undo sometimes update textarea.value without input.
  for(const id of ["runBtn","dvRun","clearBtn","dvClear","undoBtn","cutBtn",
                   "dvCutSelection","sourceCutBtn","dvSourceCut","ledgerWorkCut"]){
@@ -103,6 +128,7 @@ function install(){
    if(button)button.addEventListener("click",()=>{reset();setTimeout(refresh,100)});
  }
  input.addEventListener("input",()=>{
+  confirmedRepeatSource=null;
   if(enabled()&&checkedSource!==input.value){
     ownTop.__KTS_QUYT_SELECTED_V1__=false;ownTop.__KTS_QUYT_SOURCE_V1__="";
     notifyAll();
@@ -110,7 +136,7 @@ function install(){
   reset();
  });
  const region=document.getElementById("region")||document.getElementById("sharedRegion");
- if(region)region.addEventListener("change",reset);
+ if(region)region.addEventListener("change",()=>{confirmedRepeatSource=null;reset()});
  async function doCopy(){
   if(!enabled()||!approved||approved.input!==input.value||approved.result!==output.value||
      approved.rate!==rate.value||approved.preview!==review.value){reset();status.textContent="HOLD: nguồn, kết quả hoặc hệ số đã thay đổi; phải kiểm tra lại.";return}
