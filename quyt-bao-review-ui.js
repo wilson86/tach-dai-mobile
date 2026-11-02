@@ -31,12 +31,16 @@ function install(){
  panel.append(title,status,review,copy,note);
  output.insertAdjacentElement("afterend",panel);
  let approved=null;
+ let checkedSource="";
  function reset(){
   approved=null;review.value="";status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
  }
  function enabled(){return check.checked===true}
  function applyFromOwner(){
-  check.checked=ownTop.__KTS_QUYT_SELECTED_V1__===true;
+  const requested=ownTop.__KTS_QUYT_SELECTED_V1__===true;
+  const source=String(ownTop.__KTS_QUYT_SOURCE_V1__||"");
+  check.checked=requested&&source.length>0&&source===input.value;
+  checkedSource=check.checked?source:"";
   panel.hidden=!enabled();reset();
  }
  function notifyAll(){
@@ -45,13 +49,19 @@ function install(){
   try{for(const f of ownTop.document.querySelectorAll("iframe"))if(f.contentWindow)fire(f.contentWindow)}catch(_){}
  }
  check.addEventListener("change",()=>{
-  ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true;
+  ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&Boolean(input.value.trim());
+  ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
   notifyAll();
  });
  window.addEventListener("kts:quyt-selection-v1",applyFromOwner);
  applyFromOwner();
  function refresh(){
   reset();if(!enabled())return;
+  if(!checkedSource||checkedSource!==input.value){
+    check.checked=false;panel.hidden=true;
+    ownTop.__KTS_QUYT_SELECTED_V1__=false;ownTop.__KTS_QUYT_SOURCE_V1__="";
+    notifyAll();return;
+  }
   const original=input.value,raw=output.value;
   if(!original.trim()||!raw.trim()){status.textContent="HOLD: không có tin hoặc kết quả để điều chỉnh.";return}
   if(original.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]")){
@@ -71,7 +81,13 @@ function install(){
    const button=document.getElementById(id);
    if(button)button.addEventListener("click",()=>{reset();setTimeout(refresh,100)});
  }
- input.addEventListener("input",reset);
+ input.addEventListener("input",()=>{
+  if(enabled()&&checkedSource!==input.value){
+    ownTop.__KTS_QUYT_SELECTED_V1__=false;ownTop.__KTS_QUYT_SOURCE_V1__="";
+    notifyAll();
+  }
+  reset();
+ });
  const region=document.getElementById("region")||document.getElementById("sharedRegion");
  if(region)region.addEventListener("change",reset);
  async function doCopy(){
