@@ -147,7 +147,7 @@ async function run(root){
   await cdp('Page.reload',{ignoreCache:false});
   await wait(frameReady,x=>x===true,'frames after SW reload');
   const sw=await js("(async()=>({controller:navigator.serviceWorker.controller?.scriptURL,cacheKeys:await caches.keys()}))()",true);
-  assert.ok(sw.cacheKeys.some(key=>key.includes('clean-r2-quyt-r6')),'Chrome stale Quyt SW cache, r6 required');
+  assert.ok(sw.cacheKeys.some(key=>key.includes('clean-r2-quyt-r7')),'Chrome stale Quyt SW cache, r6 required');
   assert.ok(sw.controller?.endsWith('/app/sw.js'),'Chrome must be controlled by Unified app SW');
   log('REAL_CHROME_SW',sw);
   await js("(()=>{const r=document.querySelector('#sharedRegion'),d=document.querySelector('#sharedDate'),t=document.querySelector('#sharedToday');t.checked=false;r.value='mb';r.dispatchEvent(new Event('change',{bubbles:true}));d.value='2026-10-29';d.dispatchEvent(new Event('change',{bubbles:true}));})()");
@@ -157,50 +157,56 @@ async function run(root){
    const params=JSON.stringify({name,raw});
    return js("(async()=>{const q="+params+";document.querySelector('.tab[data-mode=\"'+q.name+'\"]').click();await new Promise(ok=>setTimeout(ok,140));const d=q.name==='davong'?document:document.querySelector('#'+(q.name==='tach'?'tachFrame':'ngangFrame')).contentDocument;const i=d.querySelector('#'+(q.name==='davong'?'dvInput':'input'));i.value=q.raw;i.dispatchEvent(new Event('input',{bubbles:true}));d.querySelector('#'+(q.name==='davong'?'dvRun':'runBtn')).click();await new Promise(ok=>setTimeout(ok,140));return {input:i.value,output:d.querySelector('#'+(q.name==='davong'?'dvOutput':'output')).value,status:d.querySelector('#'+(q.name==='davong'?'dvStatus':'status')).textContent,rows:q.name==='davong'?d.querySelectorAll('.dv-checkbox-row').length:d.querySelectorAll('#resultGroups .result-group-row').length}})()",true);
   }
-  // New operator-selected Quýt factor checks in ACTUAL isolated Google Chrome.
-  // Uses dummy inputs only. This does NOT authorize production or real forwarding.
+  // User's corrected oracle: repeat wagers aggregate first and CEIL once.
+  // This exercises the actual installed Chrome JS and mounted Quyt control;
+  // no bets are transmitted. Separate operator Guest/Android gates still apply.
   for(const name of ['tach','ngang','davong']){
-    const inspect=await js(`(async()=>{
-      const mode=${JSON.stringify(name)},doc=mode==='davong'?document:document.querySelector('#'+
+    const inspected=await js(`(async()=>{
+      const mode=${JSON.stringify(name)};
+      const doc=mode==='davong'?document:document.querySelector('#'+
         (mode==='tach'?'tachFrame':'ngangFrame')).contentDocument;
-      const win=doc.defaultView,field=doc.getElementById(mode==='davong'?'dvInput':'input');
-      const check=doc.getElementById('ktsQuytCheckbox'),rate=doc.getElementById('ktsQuytRate');
+      const win=doc.defaultView,source='43 b1n\\\\n43 b1n';
+      const input=doc.getElementById(mode==='davong'?'dvInput':'input');
+      const toggle=doc.getElementById('ktsQuytCheckbox');
+      const rate=doc.getElementById('ktsQuytRate');
       const panel=doc.getElementById('ktsQuytPreparedPanel');
-      if(!check||!rate||!panel||!win.KTSQuytBaoReview)return {missing:true};
-      field.value='mb 43 b100n';field.dispatchEvent(new Event('input',{bubbles:true}));
-      check.checked=true;check.dispatchEvent(new Event('change',{bubbles:true}));
-      const initial={checked:check.checked,rate:rate.value,rateVisible:!rate.parentElement.hidden,
-        panelVisible:!panel.hidden};
-      rate.value='1,05';rate.dispatchEvent(new Event('input',{bubbles:true}));
-      const lowered=win.KTSQuytBaoReview.prepare('MB 43 b100n',{
-        customer:'Quýt',inputStage:'CANONICAL_UNADJUSTED_RESULT',rate:rate.value,
-        sourceText:'HN 43 b100n',requireSourceWitness:true});
-      rate.value='1,10';rate.dispatchEvent(new Event('input',{bubbles:true}));
-      const raised=win.KTSQuytBaoReview.prepare('MB 43 b100n',{
-        customer:'Quýt',inputStage:'CANONICAL_UNADJUSTED_RESULT',rate:rate.value,
-        sourceText:'HN 43 b100n',requireSourceWitness:true});
+      if(!input||!toggle||!rate||!panel||!win.KTSQuytBaoReview||!win.KTSCleanAggregate)
+        return {missing:true};
+      const opts={customer:'Quýt',inputStage:'CANONICAL_UNADJUSTED_RESULT',
+        sourceText:source,cleanCore:win.KTSCleanAggregate,region:'mb',
+        repeatDecision:'keep_all',omitRegion:true};
+      const defaultResult=win.KTSQuytBaoReview.prepareGrouped('43 b2n',{...opts,rate:'1,067'});
+      const changedResult=win.KTSQuytBaoReview.prepareGrouped('43 b2n',{...opts,rate:'1,05'});
+      const repeated100=win.KTSQuytBaoReview.prepareGrouped('43 b200n',{...opts,
+        sourceText:'43 b100n 43 b100n',rate:'1,067'});
+      let confirmHeld=false;
+      try{win.KTSQuytBaoReview.prepareGrouped('43 b2n',{...opts,
+        repeatDecision:'ask_operator'})}
+      catch(e){confirmHeld=String(e).includes('DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED')}
+      let driftHeld=false;
+      try{win.KTSQuytBaoReview.prepareGrouped('43 b3n',opts)}
+      catch(e){driftHeld=String(e).includes('SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD')}
       rate.value='4';rate.dispatchEvent(new Event('input',{bubbles:true}));
-      const error=panel.querySelector('[role=status]').textContent;
-      let lost=false;try{win.KTSQuytBaoReview.prepare('43 b2n',{
-        customer:'Quýt',inputStage:'CANONICAL_UNADJUSTED_RESULT',rate:'1,067',
-        sourceText:'43 b1n\\n43 b1n',requireSourceWitness:true})}
-      catch(e){lost=/AGGREGATED_OR_SPLIT_STAKES_HOLD/.test(String(e))}
-      field.value='mb 44 b100n';field.dispatchEvent(new Event('input',{bubbles:true}));
-      return {initial,low:lowered.preview,high:raised.preview,error,blockedMerged:lost,
-        disarmed:!check.checked,noDispatch:raised.forwardAuthorized===false};
+      const invalidStatus=panel.querySelector('[role=status]')?.textContent||'';
+      input.value='mb 43 b1n';
+      input.dispatchEvent(new Event('input',{bubbles:true}));
+      return {initialRate:'1,067',default:defaultResult.preview,
+        changed:changedResult.preview,big:repeated100.preview,
+        confirmHeld,driftHeld,invalidHOLD:invalidStatus.includes('HOLD'),
+        sourceDisarmed:!toggle.checked,noSend:defaultResult.forwardAuthorized===false,
+        stage:defaultResult.stage};
     })()`,true);
-    assert.ok(!inspect.missing,'Quyt UI missing on '+name);
-    assert.ok(inspect.initial.checked&&inspect.initial.rateVisible&&inspect.initial.panelVisible,
-      'Quyt selection hidden or not selected '+name);
-    assert.equal(inspect.initial.rate,'1,067','Quyt default factor '+name);
-    assert.equal(inspect.low,'MB 43 b105n','Quyt factor 1.05 '+name);
-    assert.equal(inspect.high,'MB 43 b110n','Quyt factor 1.10 '+name);
-    assert.ok(inspect.error.includes('HOLD'),'invalid factor must HOLD '+name);
-    assert.ok(inspect.blockedMerged,'post-aggregate money must HOLD '+name);
-    assert.ok(inspect.disarmed,'new customer input must disarm Quyt '+name);
-    assert.ok(inspect.noDispatch,'no auto-forward from preview '+name);
-    log('QUYT_EDITABLE_RATE_'+name.toUpperCase(),inspect);
-    await snap('quyt-rate-'+name);
+    assert.ok(!inspected.missing,'Quyt code/checkbox absent '+name);
+    assert.equal(inspected.default,'43 b3n','two wagers GROUP then factor 1.067 '+name);
+    assert.equal(inspected.changed,'43 b3n','two wagers GROUP then factor 1.05 '+name);
+    assert.equal(inspected.big,'43 b214n','two b100 GROUP to b200 then ×1.067 '+name);
+    assert.ok(inspected.confirmHeld,'operator confirmation required '+name);
+    assert.ok(inspected.driftHeld,'stale/altered money HOLD '+name);
+    assert.ok(inspected.invalidHOLD,'invalid factor must HOLD '+name);
+    assert.ok(inspected.sourceDisarmed,'new source disarms Quyt '+name);
+    assert.ok(inspected.noSend&&inspected.stage==='PREPARED_PREVIEW_ONLY','NO_SEND '+name);
+    log('QUYT_AGGREGATE_THEN_RATE_'+name.toUpperCase(),inspected);
+    await snap('quyt-group-first-'+name);
   }
   // Review-only smoke of the exact NEW feature, using synthetic 52-clause
   // text. Do not put a customer's original message into any public source.
