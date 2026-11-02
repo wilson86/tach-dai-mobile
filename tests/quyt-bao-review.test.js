@@ -1,104 +1,100 @@
 "use strict";
+// Operator-approved money oracle: group all placements by (station,kind,number),
+// THEN apply the coefficient and round UP only once per aggregated exposure.
 const {test}=require("node:test"),assert=require("node:assert/strict");
-const m=require("../quyt-bao-review.js");
-const ok=x=>m.prepare(x,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT"});
-test("Quyt opt-in BAO B ceiling per amount is explicit",()=>{
- assert.equal(ok("43 34 74 83 b100n").preview,"43 34 74 83 b107n");
- assert.equal(ok("43 b50n").preview,"43 b54n");
- assert.equal(ok("43 b200n").preview,"43 b214n");
- assert.equal(ok("43 b0.5n").preview,"43 b1n");
- assert.equal(ok("43 b2.50n").preview,"43 b3n");
+const quyt=require("../quyt-bao-review.js");
+const cleaner=require("../clean-aggregate-review.js");
+const run=(source,output,extra={})=>quyt.prepareGrouped(output,{
+ customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",
+ sourceText:source,cleanCore:cleaner,region:"mb",rate:"1,067",
+ repeatDecision:"keep_all",omitRegion:true,...extra
 });
-test("LO family canonical policy matches historical Router oracle",()=>{
- assert.equal(ok("43 bao50n 43 lo 100n").preview,"43 bao54n 43 lo 107n");
- assert.equal(ok("43 blo200n 43 bl 50n").preview,"43 blo214n 43 bl 54n");
- assert.equal(ok("43 lô 100n").preview,"43 lô 107n");
+test("two intentional b1n wagers aggregate to b2n then ceil 1.067 => b3n, NOT b4n",()=>{
+ const p=run("43 b1n\n43 b1n","43 b2n");
+ assert.equal(p.preview,"43 b3n");
+ assert.equal(p.rawClauseCount,2);
+ assert.equal(p.duplicateBlocks.length,1);
+ assert.equal(p.receipts[0].before,"2");
+ assert.equal(p.receipts[0].after,"3");
+ assert.equal(p.groupedBeforeFactor,true);
+ assert.equal(p.forwardAuthorized,false);
 });
-test("non-BAO stakes remain unchanged in mixed result",()=>{
- assert.equal(ok("43 b100n 44 dd20n 98 dau50n 98 duoi150n 55 dx5n").preview,
-  "43 b107n 44 dd20n 98 dau50n 98 duoi150n 55 dx5n");
+test("two b100n wagers => b200n then 214n once",()=>{
+ const p=run("43 b100n 43 b100n","43 b200n");
+ assert.equal(p.preview,"43 b214n");
+ assert.equal(p.aggregatedExposures,1);
 });
-test("Quyt on two intentional placements preserves both amounts",()=>{
- const r=ok("43 b100n\n43 b100n");
- assert.equal(r.alteredOccurrences,2);
- assert.equal(r.preview,"43 b107n\n43 b107n");
- assert.equal(r.sourceUnmodified,true);
- assert.equal(r.forwardAuthorized,false);
+test("one raw wager also follows the same grouped rule",()=>{
+ assert.equal(run("43 b100n","43 b100n").preview,"43 b107n");
+ assert.equal(run("43 b50n","43 b50n").preview,"43 b54n");
 });
-test("ROUND BEFORE AGGREGATION: 2x b1n must not silently become b3n",()=>{
- const p=ok("43 b1n\n43 b1n");
- assert.equal(p.preview,"43 b2n\n43 b2n"); // 4n total after per-original-stake CEIL
- assert.equal(ok("43 b2n").preview,"43 b3n"); // 3n if mistakenly aggregated first
- assert.equal(p.alteredOccurrences,2);
+test("group by station+selector+number, never conflate different numbers",()=>{
+ const p=run("43 34 b100n 43 b50n","43 b150n 34 b100n");
+ assert.equal(p.preview,"43 b161n\n34 b107n");
 });
-test("editable rate accepts comma/dot, defaults 1.067 and recalculates each wager",()=>{
- assert.equal(m.DEFAULT_RATE,"1.067");
- assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,05"}).preview,"43 b105n");
- assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1.10"}).preview,"43 b110n");
- assert.equal(m.prepare("43 b50n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"0,95"}).preview,"43 b48n");
- assert.equal(m.rounded("100","1"),"100");
- assert.equal(m.rounded("100","3"),"300");
- assert.equal(m.rounded("1","1,067"),"2");
+test("B and canonical LO stay DISTINCT even for same number",()=>{
+ const p=run("43 b1n 43 lo1n","43 b1n 43 lo1n");
+ assert.equal(p.preview,"43 b2n\n43 lo2n");
+ assert.equal(p.receipts.length,2);
 });
-test("editable rate rejects malformed, unsafe and excessive precision before any result",()=>{
- for(const rate of ["","0","-1","1.0001","3.001","4","NaN","1e2","1,2,3",null]){
-  assert.throws(()=>m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate}),undefined,String(rate));
+test("DD, DAU and DUOI aggregate without the Quyt multiplier",()=>{
+ const p=run("88 dd20n 88 dd20n 98 dau50n 98 duoi150n 43 b100n",
+             "88 dd40n 98 dau50n 98 duoi150n 43 b100n");
+ assert.equal(p.preview,"88 dd40n\n98 dau50n\n98 duoi150n\n43 b107n");
+});
+test("same bet across two EXPLICIT stations cannot be merged",()=>{
+ const p=run("MB 43 b1n MN 43 b1n","MB 43 b1n MN 43 b1n",
+ {region:undefined,omitRegion:false});
+ assert.equal(p.preview,"MB 43 b2n\nMN 43 b2n");
+});
+test("customer duplicate confirmation is mandatory before any review output",()=>{
+ assert.throws(()=>run("43 b1n 43 b1n","43 b2n",
+ {repeatDecision:"ask_operator"}),/DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED/);
+ assert.throws(()=>run("43 b1n 43 b1n","43 b2n",
+ {repeatDecision:"remove_copies"}),/DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED|QUYT_REPETITIONS_MUST_NOT_BE_DELETED/);
+});
+test("multiplier adjustable with commas, dots and default",()=>{
+ assert.equal(run("43 b100n","43 b100n",{rate:"1.05"}).preview,"43 b105n");
+ assert.equal(run("43 b100n","43 b100n",{rate:"1,10"}).preview,"43 b110n");
+ assert.equal(run("43 b100n","43 b100n",{rate:"1"}).preview,"43 b100n");
+});
+test("only positive valid rates at most 3 decimals",()=>{
+ for(const rate of ["","0","-1","4","3.001","1.0001","NaN","1e2",null]){
+  assert.throws(()=>run("43 b1n","43 b1n",{rate}),undefined,String(rate));
  }
 });
-test("per-atom ceiling does not erase intentionally repeated wagers on custom rate",()=>{
- const prepared=m.prepare("43 b1n\n43 b1n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,20"});
- assert.equal(prepared.alteredOccurrences,2);
- assert.equal(prepared.preview,"43 b2n\n43 b2n");
- assert.equal(prepared.rate,"1.20");
- assert.equal(prepared.forwardAuthorized,false);
-});
-test("source witness prevents multiplying already grouped or split B/LO stakes",()=>{
- for(const [original,materialized] of [
- ["43 b1n\n43 b1n","43 b2n"], // two original 1n stakes, aggregated first would lose rounding
- ["43 b100n","43 b50n"], // workflow allocation cannot be re-adjusted here
- ["43 b100n","43 lo100n"] // no silent B/LO reinterpretation
- ]){
-  assert.throws(()=>m.prepare(materialized,{customer:"Quýt",
-    inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,067",
-    sourceText:original,requireSourceWitness:true}));
+test("source output must preserve per-number original POINTS before multiplier",()=>{
+ for(const output of ["43 b1n","43 b3n","44 b2n","43 lo2n"]){
+  assert.throws(()=>run("43 b1n 43 b1n",output),/SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD/);
  }
 });
-test("exact source stake witness survives whitespace and intended duplicates",()=>{
- const original="HN 43 b100n\nHN 43 b100n";
- const materialized="MB 43 b100n\nMB 43 b100n";
- const receipt=m.prepare(materialized,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",
-   rate:"1.067",sourceText:original,requireSourceWitness:true});
- assert.equal(receipt.preview,"MB 43 b107n\nMB 43 b107n");
- assert.equal(receipt.sourceWitnessVerified,true);
- assert.equal(receipt.originalStakeCount,2);
- assert.equal(receipt.alteredOccurrences,2);
- assert.equal(receipt.forwardAuthorized,false);
+test("invalid grammar and unknown selectors atomically HOLD",()=>{
+ for(const raw of ["43 b1n garbage","43 b1.2n","43 foobar2n","43 43 b1n"]){
+  assert.throws(()=>run(raw,raw),undefined,raw);
+ }
 });
-test("full verified source witness is mandatory when requested",()=>{
- assert.throws(()=>m.prepare("43 b100n",{customer:"Quýt",
-   inputStage:"CANONICAL_UNADJUSTED_RESULT",requireSourceWitness:true}),/SOURCE_WITNESS_REQUIRED/);
+test("no guessed station and mismatched region",()=>{
+ assert.throws(()=>run("43 b1n","43 b1n",{region:undefined}),/STATION_REQUIRED_FOR_GROUPING/);
+ assert.throws(()=>run("MN 43 b1n","MN 43 b1n"),/REGION_CONFLICT/);
 });
-test("untrusted stage, missing opt-in, already transformed fail closed",()=>{
- for(const args of [
- {customer:"Other",inputStage:"CANONICAL_UNADJUSTED_RESULT"},
- {customer:"Quýt",inputStage:"ORIGINAL_SOURCE"},
- {customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:true}
- ])assert.throws(()=>m.prepare("43 b100n",args));
+test("legacy per-atom entrypoint now also uses verified grouping",()=>{
+ assert.throws(()=>quyt.prepare("43 b1n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT"}),/SOURCE_WITNESS_REQUIRED/);
+ const p=quyt.prepare("43 b2n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",
+  sourceText:"43 b1n 43 b1n",cleanCore:cleaner,region:"mb",repeatDecision:"keep_all",omitRegion:true});
+ assert.equal(p.preview,"43 b3n");
 });
-test("reject wrong amount fractions and zero",()=>{
- for(const bad of ["0.05","0.7","1.25","0","00.001"])
-  assert.throws(()=>m.rounded(bad),undefined,bad);
+test("transformed input already processed upstream cannot be multiplied twice",()=>{
+ assert.throws(()=>run("43 b100n","43 b107n"),/SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD/);
+ assert.throws(()=>run("43 b100n","43 b100n",{alreadyTransformed:true}),/DOUBLE_TRANSFORM_HOLD/);
 });
-test("cannot accept parser errors, confirmation messages or Cut ledgers",()=>{
- for(const s of [
- "PHÁT HIỆN TIN SAI: 43 b100n",
- "XÁC NHẬN SỐ TRÙNG 43 b100n",
- "[[KTS_EXACT_OUTPUT_LEDGER_V1]] 43 b100n"
- ])assert.throws(()=>ok(s),undefined,s);
+test("identity of operator-selected Quyt and input stage enforced",()=>{
+ for(const o of [{customer:"Other"},{inputStage:"ALREADY_MULTIPLIED"}]){
+  assert.throws(()=>run("43 b1n","43 b1n",o));
+ }
 });
-test("final review always lacks forwarding permission",()=>{
- const r=ok("43 b100n");assert.equal(r.stage,"PREPARED_PREVIEW_ONLY");
- assert.equal(r.forwardAuthorized,false);assert.equal(r.receipts[0].before,"100");
- assert.equal(r.receipts[0].after,"107");
- assert.equal(m.CONTRACT.round,"CEIL_PER_STAKE");
+test("UI feature cannot authorize real forwarding and preserves source",()=>{
+ const source="43 b1n\n43 b1n",p=run(source,"43 b2n");
+ assert.equal(p.original,source);
+ assert.equal(p.stage,"PREPARED_PREVIEW_ONLY");
+ assert.equal(p.forwardAuthorized,false);
 });
