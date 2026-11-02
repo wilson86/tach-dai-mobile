@@ -1,9 +1,9 @@
 /* KTS Clean & Aggregate review-only WIP; no parser, money-engine or source edits. */
 (function(root){
 "use strict";
-const ALIAS={b:"b",blo:"b",lo:"b",bao:"b",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi",duoi:"duoi","đuôi":"duoi"};
+const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi",duoi:"duoi","đuôi":"duoi"};
 const REGION={hn:"mb",mb:"mb",mn:"mn",mt:"mt"};
-const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|blo|bao|dd|lo|b)/iu;
+const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b)/iu;
 const unitRx=/^(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/iu;
 const labelRx=/^(hn|mb|mn|mt)(?![\p{L}\p{N}])/iu;
 const numberRx=/^\d{2}(?!\d)/u;
@@ -62,7 +62,7 @@ function parse(raw,options={}){
    if(!numbers.length)fail("SELECTOR_WITHOUT_NUMBERS",t.offset);
    const amount=tokens[++i];
    if(!amount||amount.type!=="amount")fail("SELECTOR_WITHOUT_AMOUNT",t.offset);
-   const half=units(amount.value),kind=ALIAS[t.value];
+   const half=units(amount.value),kind=ALIAS[t.value.replace(/\s+/gu," ")];
    if(!kind)fail("UNKNOWN_SELECTOR",t.offset);
    clauses.push({station,numbers:[...numbers],kind,half,line:t.physicalLine,offset:t.offset});
    if(clauses.length>MAX_CLAUSES)fail("CLAUSE_LIMIT");
@@ -109,7 +109,7 @@ function preview(raw,options={}){
  if(decision==="remove_copies"&&repeated.some(t=>t.nonAdjacent))fail("NON_ADJACENT_PASTE_MANUAL_SOURCE_REVIEW_REQUIRED");
  const excluded=new Set();
  if(decision==="remove_copies")for(const t of repeated)for(let j=0;j<t.length;j++)excluded.add(t.second+j-1);
- const rawTotals={b:0,dd:0,dau:0,duoi:0},totals={b:0,dd:0,dau:0,duoi:0};
+ const rawTotals={b:0,lo:0,dd:0,dau:0,duoi:0},totals={b:0,lo:0,dd:0,dau:0,duoi:0};
  const exposures=new Map();
  for(let i=0;i<clauses.length;i++){
   const c=clauses[i];
