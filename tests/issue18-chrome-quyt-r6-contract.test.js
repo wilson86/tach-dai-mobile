@@ -16,7 +16,7 @@ test("SHA-bound source manifest and delivered JS must be compared",()=>{
  assert.ok(run.includes("sha256(Buffer.from(await request.arrayBuffer()))"));
  assert.ok(run.includes("source_manifest=sourceManifest"));
  assert.ok(run.includes("sha_bound_js"));
- assert.ok(run.includes("quyt-r9"));
+ assert.ok(run.includes("quyt-r10"));
 });
 test("actual Chrome source-bound Quyt GROUP-THEN-FACTOR oracle and HOLD",()=>{
  for(const expected of ["QUYT_AGGREGATE_THEN_RATE_","'1,067'","'1,05'",
