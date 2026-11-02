@@ -7,7 +7,7 @@ const root=read("index.html"),ui=read("quyt-bao-review-ui.js"),sw=read("sw.js");
 test("Quyt checkbox is in chat input, off by default, not persisted",()=>{
  assert.ok(ui.includes('input.insertAdjacentElement("afterend",label)'));
  assert.ok(ui.includes('check.type="checkbox"'));
- assert.ok(ui.includes('check.checked=ownTop.__KTS_QUYT_SELECTED_V1__===true'));
+ assert.ok(ui.includes('const requested=ownTop.__KTS_QUYT_SELECTED_V1__===true'));
  assert.ok(!ui.includes("localStorage.setItem"));
  assert.ok(!ui.includes("sessionStorage.setItem"));
  assert.ok(ui.includes("checkedSource!==input.value"));
