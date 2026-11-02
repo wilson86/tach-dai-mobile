@@ -27,7 +27,7 @@ t("unbroken wagers and compact suffix are parsed fully",()=>{
 t("selector aliases normalize without touching original",()=>{
  const s="12 blo1n 12 lo2n 12 d-d3n 12 dau4n 12 dui5n";
  const x=call(s);assert.equal(x.originalText,s);
- assert.equal(x.totals.b,"3");assert.equal(x.totals.dd,"3");
+ assert.equal(x.totals.b,"0");assert.equal(x.totals.lo,"3");assert.equal(x.totals.dd,"3");
  assert.equal(x.totals.dau,"4");assert.equal(x.totals.duoi,"5");
 });
 t("region resolves HN to MB and rejects region mismatch",()=>{
@@ -67,6 +67,22 @@ t("clean review preserves original number order for separated equal stakes",()=>
  const p=call(raw);
  assert.equal(p.normalized,"MB 43 b100n\nMB 34 b50n\nMB 44 b100n");
  assert.equal(p.rawTotal,p.total);
+});
+t("B and LO wagers remain separate by station, number and selector",()=>{
+ const x=call("43 b100n 43 lo50n");
+ assert.equal(x.status,"REVIEW_ONLY");
+ assert.equal(x.normalized,"MB 43 b100n\nMB 43 lo50n");
+ assert.equal(x.totals.b,"100");
+ assert.equal(x.totals.lo,"50");
+ assert.equal(x.total,"150");
+ assert.equal(x.rawTotal,"150");
+});
+t("LO aliases preserve type, including multiword bao lo",()=>{
+ const x=call("43 blo1n 44 bao2n 45 bl3n 46 lô4n 47 bao lo5n");
+ assert.equal(x.normalized,"MB 43 lo1n\nMB 44 lo2n\nMB 45 lo3n\nMB 46 lo4n\nMB 47 lo5n");
+ assert.equal(x.totals.lo,"15");assert.equal(x.totals.b,"0");
+ const y=call(x.normalized);
+ assert.deepEqual(y.totals,x.totals);
 });
 t("unknown mode cannot silently delete any stake",()=>{
  assert.throws(()=>call("12 b1n 12 b1n",{repeatDecision:"auto_remove"}),/DUPLICATE_DECISION_INVALID/);
