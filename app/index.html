@@ -89,20 +89,18 @@ function ngangFrameReady(){
     checkUnifiedNgangFrame($('ngangFrame'));
 }
 function setMode(mode){
-  let persistMode=true;
   if(!['tach','ngang','davong'].includes(mode)) mode='tach';
-  // Even a SAME-ORIGIN remote iframe may be on an older published engine.
-  // Do not allow selecting it or syncing any raw source before SHA parity.
-  if(mode==='ngang'&&!ngangFrameReady()){
-    $('ngangEngineHold').hidden=false;
-    // On F5 the iframe is not ready yet. Show safe Tách Đài temporarily,
-    // but DO NOT overwrite a previously selected Ngang mode in storage.
-    persistMode=false;
-    mode='tach';
+  // A requested Ngang mode must never silently become Tách Đài on F5:
+  // show Ngang + HOLD and disable its iframe until SHA/API parity passes.
+  if(mode==='ngang'){
+    const ready=ngangFrameReady(),frame=$('ngangFrame');
+    $('ngangEngineHold').hidden=ready;
+    frame.style.pointerEvents=ready?'':'none';
+    frame.tabIndex=ready?0:-1;
   }
   modeButtons.forEach(b=>b.classList.toggle('active',b.dataset.mode===mode));
   for(const name of ['tach','ngang','davong']) $(`pane-${name}`).classList.toggle('active',name===mode);
-  if(persistMode)try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
+  try{localStorage.setItem('kts_unified_mode_v1',mode)}catch(_){}
   if(mode==='davong') updateDvSchedule();
 }
 modeButtons.forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
@@ -323,7 +321,7 @@ $('ngangFrame').addEventListener('load',()=>{
     // Restore only after engine SHA and APIs have passed the same-origin gate.
     try{if(localStorage.getItem('kts_unified_mode_v1')==='ngang')setMode('ngang')}catch(_){}
   }
-  else if($('pane-ngang').classList.contains('active'))setMode('tach');
+  // Remain on Ngang + HOLD when its iframe is stale; never switch modes silently.
 });
 loadSharedSettings();
 // The Unified app-scope SW alone cannot intercept offline navigation to ../,
@@ -350,7 +348,7 @@ async function prepareOfflineEngine(){
         }
       });
     })));
-    const cache=await caches.open('kts-tach-unified-v1.0.33-owner-singleton-dx-0a0e54-clean-r2-quyt-r11');
+    const cache=await caches.open('kts-tach-unified-v1.0.33-owner-singleton-dx-0a0e54-clean-r2-quyt-r12');
     const expected=['../','../index.html','../station_calendar.generated.js',
       '../business_engine.generated.js','../clean-aggregate-review.js','../clean-aggregate-ui.js','./index.html','./unified-core.js?ux=1.0.33'];
     for(const path of expected){
