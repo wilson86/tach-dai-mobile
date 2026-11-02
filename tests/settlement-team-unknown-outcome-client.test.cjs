@@ -124,16 +124,16 @@ test('pre-dispatch marker blocks draft replay after post-response storage failur
   assert.equal(posts,1);
 });
 
-test('unattempted local draft remains pending after reload',async()=>{
+test('unattempted v2 draft cannot auto-send after reload without atomic marker proof',async()=>{
   const saved=new Map();let posts=0;
-  const storage={get:key=>saved.get(key)||null,set:(key,value)=>saved.set(key,value)};
+  const storage={get:key=>saved.get(key)||null,set:(key,value)=>saved.set(key,value),keys:()=>[...saved.keys()]};
   const fetchImpl=async()=>{posts++;throw Error('UNEXPECTED_REQUEST');};
   const first=Sync.createSyncClient({storage,fetchImpl});
   first.setSessionToken('a'.repeat(43),'group_a',{accountId:'fake_operator'});
   const draft=first.queueDraft(scope,{synthetic:true});
   const reloaded=Sync.createSyncClient({storage,fetchImpl});
   reloaded.setSessionToken('b'.repeat(43),'group_a',{accountId:'fake_operator'});
-  assert.equal(reloaded.snapshot().drafts.find(row=>row.id===draft.id).status,'PENDING');
+  assert.equal(reloaded.snapshot().drafts.find(row=>row.id===draft.id).status,'NEEDS_RECONCILIATION');
   assert.equal(posts,0);
 });
 
