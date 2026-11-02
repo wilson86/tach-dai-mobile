@@ -53,7 +53,7 @@ function createIsolatedTeamPrototype({
   // automatically expose a port or initialize an operational database.
   return Object.freeze({auth,ledgerRepository,ledger,server,
     // Never called during construction. Pre-pilot explicit read-only check.
-    verifyPools:()=>qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly})
+    verifyPools:()=>qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly,requireReview:syntheticReviewEnabled})
   });
 }
 module.exports=Object.freeze({createIsolatedTeamPrototype});

@@ -5,10 +5,14 @@
 // Synthetic candidate only; no live service admission from this result.
 const PROBE_SQL = `SELECT current_user AS role, session_user AS session_role,
   has_schema_privilege(current_user, 'kts_auth', 'USAGE') AS auth_schema,
+  has_schema_privilege(current_user, 'kts_team', 'USAGE') AS team_schema,
   has_table_privilege(current_user, 'kts_team.scope_events', 'SELECT') AS event_read,
   has_function_privilege(current_user,
     'kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)',
     'EXECUTE') AS draft_execute,
+  to_regprocedure('kts_team.advance_review(text,text,date,text,text,bigint,text,text,text)') IS NOT NULL AS review_function_present,
+  CASE WHEN to_regprocedure('kts_team.advance_review(text,text,date,text,text,bigint,text,text,text)') IS NULL THEN false
+    ELSE has_function_privilege(current_user,to_regprocedure('kts_team.advance_review(text,text,date,text,text,bigint,text,text,text)'),'EXECUTE') END AS review_execute,
   NOT (has_table_privilege(current_user, 'kts_team.memberships', 'INSERT')
     OR has_table_privilege(current_user, 'kts_team.memberships', 'UPDATE')
     OR has_table_privilege(current_user, 'kts_team.memberships', 'DELETE')
@@ -29,7 +33,6 @@ const AUTH_PROBE_SQL = PROBE_SQL.replace(
   'COALESCE((SELECT rolsuper',
   `has_table_privilege(current_user, 'kts_auth.credentials', 'SELECT') AS credential_read,
   has_table_privilege(current_user, 'kts_auth.sessions', 'SELECT') AS session_read,
-  has_schema_privilege(current_user, 'kts_team', 'USAGE') AS team_schema,
   has_table_privilege(current_user, 'kts_team.memberships', 'SELECT') AS membership_read,
   NOT (has_table_privilege(current_user, 'kts_team.scopes', 'INSERT')
     OR has_table_privilege(current_user, 'kts_team.scopes', 'UPDATE')
@@ -48,8 +51,9 @@ function requireClient(c){
   if(!c||typeof c.query!=='function'||typeof c.release!=='function')deny();
   return c;
 }
-async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false}={}){
+async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false,requireReview=false}={}){
   if(syntheticOnly!==true)throw new Error('TEAM_RELEASE_NOT_AUTHORIZED');
+  if(typeof requireReview!=='boolean')throw new Error('TEAM_REVIEW_CONFIG_INVALID');
   if(!authPool||!ledgerPool||authPool===ledgerPool||
      typeof authPool.connect!=='function'||typeof ledgerPool.connect!=='function')
     throw new Error('TEAM_DB_ROLES_NOT_ISOLATED');
@@ -76,8 +80,12 @@ async function qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly=false
        auth.session_insert!==true || auth.session_revoke!==true ||
        auth.membership_read!==true || auth.membership_write_denied!==true || auth.direct_scope_write_denied!==true ||
        auth.financial_write_denied!==true ||
-       auth.event_read!==false || auth.draft_execute!==false ||
-       ledger.auth_schema!==false || ledger.event_read!==true ||
+       auth.event_read!==false || auth.draft_execute!==false || auth.review_execute!==false ||
+       typeof auth.review_function_present!=='boolean' || typeof ledger.review_function_present!=='boolean' ||
+       auth.review_function_present!==ledger.review_function_present || typeof ledger.review_execute!=='boolean' ||
+       (requireReview && (ledger.review_function_present!==true || ledger.review_execute!==true)) ||
+       (!ledger.review_function_present && ledger.review_execute!==false) ||
+       ledger.auth_schema!==false || ledger.team_schema!==true || ledger.event_read!==true ||
        ledger.draft_execute!==true || ledger.membership_write_denied!==true || ledger.direct_scope_write_denied!==true)deny();
     qualified=true;
     return Object.freeze({qualified:true,auth_role:auth.role,ledger_role:ledger.role});

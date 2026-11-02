@@ -7,7 +7,7 @@ nonempty session ID, and `pids` property before terminal receipts can qualify.
 SHA-256 after the local fix was
 `75DB9EF2BDAA9A8E09EF3D15AB3598BE9A219FE910EFFD8D8BFE66C571063CA9`;
 after the separately tested runner hash update it is
-`84F3EC136D3B0F6329A508A07A0937591B21568F07E5DDAA8CB672478A91CE79`.
+`A7BAABCD93D8FEFB662BE124B69404E8313793E31F3303B5B012D90740B07E30`.
 `patches/windows-cleanup-control.patch` records these local wrapper changes from
 the preserved baseline with SHA-256
 `8317883B8D3BFAC6610FB9554BE7CDAC37DC12CA80A60760AE4342E592861D56`.

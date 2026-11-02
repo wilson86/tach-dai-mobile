@@ -8,9 +8,9 @@ const auth={role:'synthetic_auth',session_role:'synthetic_auth',auth_schema:true
   credential_read:true,session_read:true,session_insert:true,session_revoke:true,
   team_schema:true,membership_read:true,membership_write_denied:true,
   financial_write_denied:true,direct_scope_write_denied:true,
-  draft_execute:false,superuser:false,bypass_rls:false,role_memberships_present:false};
-const ledger={role:'synthetic_ledger',session_role:'synthetic_ledger',auth_schema:false,event_read:true,
-  draft_execute:true,membership_write_denied:true,direct_scope_write_denied:true,superuser:false,bypass_rls:false,role_memberships_present:false};
+  draft_execute:false,review_function_present:true,review_execute:false,superuser:false,bypass_rls:false,role_memberships_present:false};
+const ledger={role:'synthetic_ledger',session_role:'synthetic_ledger',auth_schema:false,team_schema:true,event_read:true,
+  draft_execute:true,review_function_present:true,review_execute:true,membership_write_denied:true,direct_scope_write_denied:true,superuser:false,bypass_rls:false,role_memberships_present:false};
 function pool(info,{failConnect=false,failQuery=false}={}){
   const calls={connect:0,query:0,releases:[]};
   const instance={
@@ -18,6 +18,8 @@ function pool(info,{failConnect=false,failQuery=false}={}){
       calls.query++;
       assert.match(sql,/current_user/);
       assert.match(sql,/pg_roles/);
+      assert.match(sql,/to_regprocedure\('kts_team\.advance_review\(text,text,date,text,text,bigint,text,text,text\)'\)/);
+      assert.match(sql,/AS review_execute/);
       assert.match(sql,/has_any_column_privilege\(current_user, 'kts_team\.scopes', 'UPDATE'\)/);
       assert.match(sql,/has_any_column_privilege\(current_user, 'kts_team\.scopes', 'INSERT'\)/);
       assert.match(sql,/has_table_privilege\(current_user, 'kts_team\.scopes', 'TRUNCATE'\)/);
@@ -56,6 +58,7 @@ test('same role, overprivileged role, and cross-domain role privileges are denie
     {...ledger,session_role:'privileged_login'},
     {...ledger,session_role:null},
     {...ledger,auth_schema:true},
+    {...ledger,team_schema:false},
     {...ledger,superuser:true},
     {...ledger,bypass_rls:true},
     {...ledger,role_memberships_present:true},
@@ -116,6 +119,24 @@ test('missing session login identity fails closed for either pool',async()=>{
     await assert.rejects(qualifyIsolatedPoolRoles({authPool:a.pool,ledgerPool:l.pool,syntheticOnly:true}),/TEAM_DB_EFFECTIVE_ROLES_UNQUALIFIED/);
     assert.deepEqual(a.calls.releases,[true]);assert.deepEqual(l.calls.releases,[true]);
   }
+});
+
+test('review execution requires an available function and ledger privilege, but never auth privilege',async()=>{
+  for(const [aRow,lRow] of [[{...auth,review_execute:true},ledger],
+    [auth,{...ledger,review_execute:false}],
+    [{...auth,review_function_present:false},{...ledger,review_function_present:false,review_execute:false}],
+    [auth,{...ledger,review_execute:null}]]){
+    const a=pool(aRow),l=pool(lRow);
+    await assert.rejects(qualifyIsolatedPoolRoles({authPool:a.pool,ledgerPool:l.pool,syntheticOnly:true,requireReview:true}),/TEAM_DB_EFFECTIVE_ROLES_UNQUALIFIED/);
+    assert.deepEqual(a.calls.releases,[true]);assert.deepEqual(l.calls.releases,[true]);
+  }
+  const a=pool(auth),l=pool(ledger);
+  assert.equal((await qualifyIsolatedPoolRoles({authPool:a.pool,ledgerPool:l.pool,syntheticOnly:true,requireReview:true})).qualified,true);
+  const disabledAuth=pool({...auth,review_function_present:false}),disabledLedger=pool({...ledger,review_function_present:false,review_execute:false});
+  assert.equal((await qualifyIsolatedPoolRoles({authPool:disabledAuth.pool,ledgerPool:disabledLedger.pool,syntheticOnly:true})).qualified,true);
+  const composedAuth=pool(auth),composedLedger=pool({...ledger,review_execute:false});
+  const app=createIsolatedTeamPrototype({authPool:composedAuth.pool,ledgerPool:composedLedger.pool,syntheticOnly:true,syntheticReviewEnabled:true});
+  await assert.rejects(app.verifyPools(),/TEAM_DB_EFFECTIVE_ROLES_UNQUALIFIED/);
 });
 
 test('both pools and a synthetic qualification flag are required',async()=>{

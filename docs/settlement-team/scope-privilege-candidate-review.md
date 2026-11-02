@@ -8,6 +8,14 @@ repository supplies actor and workspace via caller-set transaction settings.
 Consequently, neither revoking the writes alone nor changing only the function
 security mode establishes the requested actor boundary.
 
+The role probe now also checks the exact `advance_review` signature: auth must
+not have EXECUTE, and when synthetic review is enabled the function must exist
+and ledger must have EXECUTE. Disabled review may operate without the function.
+The ledger role must also have USAGE on the team schema; function EXECUTE alone
+does not establish that the role can resolve and invoke the function.
+This is fixture-tested source behavior only; it does not establish actual
+PostgreSQL privileges, database identity, RLS, or trusted actor binding.
+
 ## Candidate to investigate
 
 Use a distinct, non-login function-owner role that is neither superuser nor
