@@ -24,7 +24,7 @@ t('cannot erase previous localhost previews or launch paid CI',()=>{
 t('scoped candidate checks all three modes, atomic mixed, Cut F5 Undo and A/B',()=>{
  for(const marker of ['VALID_HN_DUI_','DUPLICATE_PHYSICAL_LINE_',
  'MIXED_INVALID_','CUT_ALL_BEFORE_F5','CUT_ALL_AFTER_F5',
- 'UNDO_AFTER_F5','CUT_A_NEW_B_F5'])assert.ok(script.includes(marker),marker);
+ 'UNDO_AFTER_F5','CUT_A_NEW_B_F5','RUNTIME_ENGINE_AND_ALIAS'])assert.ok(script.includes(marker),marker);
  assert.match(script,/real Chrome|Chrome JS/);
  assert.match(script,/Page\.reload/);
  assert.match(script,/Input\.dispatchMouseEvent/);
