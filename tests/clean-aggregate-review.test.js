@@ -62,6 +62,12 @@ t("nonadjacent repeated wagers HOLD unless operator confirms keep-all",()=>{
  assert.throws(()=>call(raw,{repeatDecision:"remove_copies",decisionReference:"synthetic-ack"}),
   /NON_ADJACENT_PASTE_MANUAL_SOURCE_REVIEW_REQUIRED/);
 });
+t("clean review preserves original number order for separated equal stakes",()=>{
+ const raw="43 b100n 34 b50n 44 b100n";
+ const p=call(raw);
+ assert.equal(p.normalized,"MB 43 b100n\nMB 34 b50n\nMB 44 b100n");
+ assert.equal(p.rawTotal,p.total);
+});
 t("unknown mode cannot silently delete any stake",()=>{
  assert.throws(()=>call("12 b1n 12 b1n",{repeatDecision:"auto_remove"}),/DUPLICATE_DECISION_INVALID/);
 });
