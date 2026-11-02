@@ -24,8 +24,8 @@ test('E: drive is never admitted as a test workspace',()=>{
 });
 
 test('release admission includes all audited regression tests but excludes live published fetch',()=>{
-  assert.equal(MOBILE_TESTS.length,29);
-  assert.equal(NGANG_TESTS.length,15);
+  assert.equal(MOBILE_TESTS.length,33);
+  assert.equal(NGANG_TESTS.length,18);
   for(const tests of [MOBILE_TESTS,NGANG_TESTS]){
     assert.equal(new Set(tests).size,tests.length,'no duplicate execution');
     assert.ok(Object.isFrozen(tests),'audited test list cannot be changed at runtime');
@@ -38,6 +38,12 @@ test('release admission includes all audited regression tests but excludes live 
   assert.ok(MOBILE_TESTS.includes('tests/issue18-bootstrap-windows.test.js'));
   assert.ok(MOBILE_TESTS.includes('tests/issue18-chrome-profile-cleanup.test.js'));
   assert.ok(!NGANG_TESTS.includes('tests/issue18-canonical-byte-guard.test.js'));
+  for(const required of ['tests/clean-aggregate-review.test.js',
+    'tests/quyt-bao-review.test.js','tests/quyt-bao-ui-contract.test.js']){
+    assert.ok(MOBILE_TESTS.includes(required));
+    assert.ok(NGANG_TESTS.includes(required));
+  }
+  assert.ok(MOBILE_TESTS.includes('tests/issue18-chrome-quyt-r6-contract.test.js'));
   assert.ok(!NGANG_TESTS.includes('tests/issue18-run-windows.test.js'),
     'Windows admission runner belongs only to Mobile checkout');
   for(const required of ['tests/source-output-cut-conservation.js',
@@ -95,8 +101,10 @@ test('safeFile refuses missing files, symlinks and parent junction traversal',()
 test('Router and Desktop N035 tests are offline source-bound only',()=>{
   assert.deepEqual([...KTS_PYTESTS],[
     'KTSRouter/tests/test_n035_router_no_send.py',
-    'KTSRouter/tests/test_n035_desktop_oracle.py'
+    'KTSRouter/tests/test_n035_desktop_oracle.py',
+    'KTSRouter/tests/test_clean_aggregate_review.py',
+    'KTSRouter/tests/test_quyt_bao_review.py'
   ]);
   assert.ok(Object.isFrozen(KTS_PYTESTS));
-  assert.ok(KTS_PYTESTS.every(path=>/^KTSRouter\/tests\/test_n035_[a-z_]+\.py$/.test(path)));
+  assert.ok(KTS_PYTESTS.every(path=>/^KTSRouter\/tests\/test_(?:n035_[a-z_]+|clean_aggregate_review|quyt_bao_review)\.py$/.test(path)));
 });
