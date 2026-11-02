@@ -35,7 +35,7 @@ assert.equal(checkNgangFrame({contentWindow:{...valid.contentWindow,processLine:
 assert.equal(checkNgangFrame(null),false,"missing iframe cannot be selected");
 assert.equal(checkNgangFrame({get contentWindow(){throw Error("cross-origin");}}),false,"foreign-origin Ngang cannot be selected");
 assert.ok(core.includes("if(checkUnifiedNgangFrame(frame))"),"shared source must not propagate into an unqualified Ngang frame");
-assert.ok(app.includes("if(mode==='ngang'&&!ngangFrameReady())"),"Unified mode selector must block stale Ngang");
+assert.ok(app.includes("if(mode==='ngang')"),"Unified selector keeps Ngang pane visible while HOLD blocks stale iframe");
 assert.ok(app.includes("if(localStorage.getItem('kts_unified_mode_v1')==='ngang')setMode('ngang')"),"A stored Ngang mode must be restored after iframe passes engine SHA gate");
 assert.ok(app.includes("if(frameId==='ngangFrame'&&!ngangFrameReady())return"),"Unified settings must not sync into stale Ngang");
 assert.ok(app.includes('id="ngangEngineHold"'),"visible HOLD explanation required");
@@ -53,6 +53,7 @@ for(const [label,matching] of [["stale",false],["matching",true]]){
       ...valid.contentWindow,
       KTS_BUSINESS_ENGINE:{ENGINE_SHA256:matching?expectedSha:"7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea"}
     },
+    style:{},tabIndex:0,
     contentDocument:{getElementById:id=>id==="input"?{value:"2d 52 68 dx5n"}:null}
   };
   const panes=Object.fromEntries(["tach","ngang","davong"].map(mode=>["pane-"+mode,{
@@ -71,12 +72,12 @@ for(const [label,matching] of [["stale",false],["matching",true]]){
   const sources=(new Function("document","checkUnifiedNgangFrame",
     "return ("+sourcesSource+")"))(doc,checkNgangFrame);
   setMode("ngang");
-  assert.equal(state.get("tab-ngang")===true,matching,label+": wrong selected Ngang tab");
+  assert.equal(state.get("tab-ngang"),true,label+": Ngang must remain selected even when blocked");
   assert.equal(sources().some(item=>item.mode==="ngang"),matching,label+": wrong shared-source admission");
-  assert.equal(state.get("tab-tach"),!matching,label+": wrong safe fallback mode");
+  assert.equal(state.get("tab-tach"),false,label+": never silently show Tach for selected Ngang");
   assert.equal(hold.hidden,matching,label+": incorrect HOLD warning state");
-  if(matching)assert.equal(saved.at(-1)[1],"ngang",label+": must persist matching mode");
-  else assert.equal(saved.length,0,label+": must not overwrite preferred Ngang while loading");
+  assert.equal(saved.at(-1)[1],"ngang",label+": must preserve requested Ngang mode");
+  assert.equal(frame.style.pointerEvents,matching?"":"none",label+": unverified iframe must not accept input");
 }
 // Live-source regression: a successful Cut must NEVER restore the cut raw
 // wager into a sibling mode on F5. An explicit Undo may intentionally restore.
