@@ -28,6 +28,24 @@ function mount(){
  const reset=()=>{snapshot=null;output.value="";actions.style.display="none";status.textContent="Tin thay đổi: bấm kiểm tra lại trước khi gộp.";};
  input.addEventListener("input",reset);
  region.addEventListener("change",reset);
+ // Existing KTS Cut, Undo, Clear and Da Vong actions sometimes assign
+ // textarea.value programmatically without firing an input event.
+ // Invalidating is deliberately conservative: no stale copyable preview.
+ for(const id of ["clearBtn","sourceCutBtn","undoBtn","cutBtn",
+                  "dvClear","dvSourceCut","dvCutSelection"]){
+  const action=document.getElementById(id);
+  if(action)action.addEventListener("click",reset);
+ }
+ // Parent Unified sync may also update an iframe input without an input event.
+ // On focus or attempted copy, recheck the exact source/region snapshot.
+ output.addEventListener("focus",()=>{
+  if(snapshot&&(snapshot.raw!==input.value||snapshot.region!==region.value))reset();
+ });
+ output.addEventListener("copy",event=>{
+  if(!snapshot||snapshot.raw!==input.value||snapshot.region!==region.value){
+   event.preventDefault();reset();
+  }
+ });
  function blocked(){
   if(input.readOnly||input.disabled||/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u.test(input.value))return true;
   const work=document.getElementById("ledgerWork");
