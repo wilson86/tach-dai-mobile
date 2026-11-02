@@ -43,6 +43,13 @@ test("all same-origin Unified iframes get the one customer checkbox state",()=>{
  assert.ok(ui.includes("ownTop.document.querySelectorAll("));
  assert.ok(ui.includes("kts:quyt-selection-v1"));
 });
+test("Quyt preview refuses outputs whose original wager amounts were already merged or split",()=>{
+ assert.ok(ui.includes("sourceText:original,requireSourceWitness:true"));
+ const pure=read("quyt-bao-review.js");
+ assert.ok(pure.includes("AGGREGATED_OR_SPLIT_STAKES_HOLD"));
+ assert.ok(pure.includes("CHANGED_SOURCE_STAKES_HOLD"));
+ assert.ok(pure.includes("sourceWitnessVerified:hasSourceWitness"));
+});
 test("browser caching and HTML include exact review-only JS",()=>{
  for(const n of ["quyt-bao-review.js","quyt-bao-review-ui.js"]){
   assert.ok(root.includes('src="./'+n+'"'));
