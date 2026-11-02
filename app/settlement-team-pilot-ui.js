@@ -94,6 +94,8 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     const reviews=Array.isArray(state.review_attempts)?state.review_attempts:[];
     const unsent=state.drafts.filter(x=>x.status!=='SYNCED').length+
       reviews.filter(x=>x.status!=='SYNCED').length;
+    const needsReconciliation=state.drafts.filter(x=>x.status==='NEEDS_RECONCILIATION').length+
+      reviews.filter(x=>x.status==='NEEDS_RECONCILIATION').length;
     const persistence=state.draft_persistence;
     if(persistence==='STORAGE_FAILED'||persistence==='STORAGE_CORRUPT')
       e['team-warning'].textContent='CẢNH BÁO: không thể lưu an toàn DRAFT PENDING trên thiết bị ('+persistence+'). Không gửi DRAFT; sao chép bằng chứng và liên hệ người vận hành.';
@@ -104,8 +106,13 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     else e['team-warning'].textContent=unsent>0?
       'CẢNH BÁO: '+unsent+' bản nháp/yêu cầu duyệt MEMORY_ONLY CHƯA có receipt xác minh; có thể đã tới máy chủ, không được coi là đã lưu. Tải lại/đóng trang sẽ mất bản nháp cục bộ.':
       'MEMORY_ONLY — chưa có lưu ngoại tuyến bền vững; bản nháp mới có thể mất khi tải lại.';
+    if(needsReconciliation>0)
+      e['team-warning'].textContent+=' DỪNG GỬI: '+needsReconciliation+
+        ' giao dịch NEEDS_RECONCILIATION. KHÔNG thử gửi lại; phải đối soát receipt máy chủ trước.';
     for(const id of ['team-logout','team-directory','team-create','team-sync','team-pull','team-reconnect','team-read'])
       e[id].disabled=busy||!state.authenticated;
+    e['team-sync'].disabled=busy||!state.authenticated||
+      !state.drafts.some(x=>x.status==='PENDING');
     e['team-login'].querySelector('button[type="submit"]').disabled=busy||state.authenticated;
     e['team-review-controls'].hidden=!syntheticReviewUiEnabled;
     const hasDrafts=state.drafts.some(x=>x.status!=='SYNCED');
@@ -113,13 +120,13 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       (!verifiedScope || !sameScope(x.scope,verifiedScope) ||
        x.expected_revision!==Number(verifiedScope.revision)));
     const reviewButton=(action,stateName)=>{
-      const hasPending=reviews.some(x=>x.status==='PENDING'&&x.action===action &&
+      const hasExistingAttempt=reviews.some(x=>x.action===action &&
         sameScope(x.scope,verifiedScope) &&
         x.expected_revision===Number(verifiedScope&&verifiedScope.revision));
       e[action==='submit_review'?'team-submit-review':'team-approve-review'].disabled=
         busy||!state.authenticated||!syntheticReviewUiEnabled||!verifiedScope||
-        verifiedScope.state!==stateName||hasDrafts||hasOtherPending||
-        (reviews.some(x=>x.status==='PENDING'&&x.action!==action) && !hasPending);
+        verifiedScope.state!==stateName||hasDrafts||hasOtherPending||hasExistingAttempt||
+        reviews.some(x=>x.status==='PENDING'&&x.action!==action);
     };
     reviewButton('submit_review','DRAFT');
     reviewButton('approve_review','PENDING_REVIEW');
@@ -132,7 +139,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
   // Only the sync client's verified receipt may mark a draft SYNCED.
   // Do not collapse offline, conflict, and rejection into a generic success.
   function draftOutcome(items){
-    const counts={SYNCED:0,PENDING:0,CONFLICT:0,BLOCKED:0};
+    const counts={SYNCED:0,PENDING:0,CONFLICT:0,BLOCKED:0,NEEDS_RECONCILIATION:0};
     for(const item of items){
       if(Object.prototype.hasOwnProperty.call(counts,item.status))counts[item.status]++;
       else counts.BLOCKED++; // Unknown state must never be presented as saved.
@@ -142,6 +149,8 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     if(counts.PENDING)parts.push(counts.PENDING+' PENDING (chưa có receipt)');
     if(counts.CONFLICT)parts.push(counts.CONFLICT+' CONFLICT (cần người duyệt)');
     if(counts.BLOCKED)parts.push(counts.BLOCKED+' BLOCKED (chưa xác minh)');
+    if(counts.NEEDS_RECONCILIATION)
+      parts.push(counts.NEEDS_RECONCILIATION+' NEEDS_RECONCILIATION (KHÔNG gửi lại; cần đối soát receipt)');
     return parts.length?parts.join('; '):'không có bản nháp cần gửi';
   }
   async function action(fn){
@@ -198,7 +207,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
     const snap=sync.snapshot();
     const n=snap.drafts.filter(x=>x.status!=='SYNCED').length+
       (snap.review_attempts||[]).filter(x=>x.status!=='SYNCED').length;
-    if(n>0&&!w.confirm('Có '+n+' nháp chưa ghi! Đăng xuất sẽ xóa nháp. Đồng ý?'))return;
+    if(n>0&&!w.confirm('Có '+n+' giao dịch chưa xác minh. Đăng xuất sẽ ẩn dữ liệu trong phiên; bằng chứng đã lưu vẫn được giữ để đối soát. Dữ liệu MEMORY_ONLY có thể mất. Tiếp tục?'))return;
     try{
       await sync.logout({discardPending:n>0});
     }catch(err){
@@ -270,8 +279,9 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       throw Error('TEAM_REVIEW_UNSENT_DRAFTS');
     const attempt=(snapshot.review_attempts||[]).find(x=>x.action===actionName &&
       sameScope(x.scope,selected)&&x.expected_revision===Number(previous.revision));
-    if(attempt && attempt.status!=='PENDING')
-      throw Error('TEAM_REVIEW_REQUIRES_MANUAL_REFRESH');
+    if(attempt)
+      throw Error(attempt.status==='SYNCED'?'TEAM_REVIEW_REQUIRES_MANUAL_REFRESH':
+        'TEAM_REVIEW_REQUIRES_MANUAL_RECONCILIATION');
     const label=actionName==='submit_review'?'GỬI DUYỆT':'PHÊ DUYỆT';
     if(!w.confirm(label+' dữ liệu GIẢ '+selected.partner_id+' / '+selected.business_date+
       ' / '+selected.region+' / revision '+previous.revision+
@@ -294,7 +304,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       }
     }
     const outcome=await sync.reviewScope(actionName,selected,Number(previous.revision),
-      {retryOnly:Boolean(attempt)});
+      {retryOnly:false});
     if(dead||startIdentity!==identityEpoch||
        startSelection!==selectionEpoch||!sync.snapshot().authenticated){
       clearReview();
@@ -321,7 +331,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false}={}){
       tell(label+' đã ghi nhận bởi máy chủ (receipt '+String(receipt.event_id)+
         '). Hãy đọc lại scope để xem trạng thái mới. KHÔNG phải chốt tiền thật.');
     }else if(outcome.status==='PENDING'){
-      tell(label+' PENDING: chưa có receipt, có thể đã COMMIT; giữ trang mở và nhấn lại nút để thử cùng idempotency key.');
+      tell(label+' PENDING: chưa có receipt, có thể đã COMMIT. KHÔNG nhấn lại; cần đối soát thủ công.');
     }else{
       clearReview();
       tell(label+' '+String(outcome.status||'BLOCKED')+' • '+
