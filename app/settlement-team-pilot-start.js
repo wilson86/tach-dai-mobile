@@ -15,9 +15,11 @@ function start(){
      (page.hostname==='127.0.0.1'||page.hostname==='localhost'||page.hostname==='::1');
    const syntheticReviewUiEnabled=loopback&&
      page.searchParams.get('synthetic_review_ui')==='1';
+   const syntheticRecoveryUiEnabled=loopback&&
+     page.searchParams.get('synthetic_recovery_ui')==='1';
    globalThis.KtsTeamPilotUI.mount({
      doc:document,win:window,Sync:globalThis.KtsSettlementSyncClient,
-     syntheticReviewUiEnabled
+     syntheticReviewUiEnabled,syntheticRecoveryUiEnabled
    });
  }catch(_){
    if(node)node.textContent='Pilot bị khóa: yêu cầu HTTPS/localhost và backend riêng được phê duyệt.';
