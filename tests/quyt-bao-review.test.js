@@ -52,6 +52,32 @@ test("per-atom ceiling does not erase intentionally repeated wagers on custom ra
  assert.equal(prepared.rate,"1.20");
  assert.equal(prepared.forwardAuthorized,false);
 });
+test("source witness prevents multiplying already grouped or split B/LO stakes",()=>{
+ for(const [original,materialized] of [
+ ["43 b1n\n43 b1n","43 b2n"], // two original 1n stakes, aggregated first would lose rounding
+ ["43 b100n","43 b50n"], // workflow allocation cannot be re-adjusted here
+ ["43 b100n","43 lo100n"] // no silent B/LO reinterpretation
+ ]){
+  assert.throws(()=>m.prepare(materialized,{customer:"Quýt",
+    inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,067",
+    sourceText:original,requireSourceWitness:true}));
+ }
+});
+test("exact source stake witness survives whitespace and intended duplicates",()=>{
+ const original="HN 43 b100n\nHN 43 b100n";
+ const materialized="MB 43 b100n\nMB 43 b100n";
+ const receipt=m.prepare(materialized,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",
+   rate:"1.067",sourceText:original,requireSourceWitness:true});
+ assert.equal(receipt.preview,"MB 43 b107n\nMB 43 b107n");
+ assert.equal(receipt.sourceWitnessVerified,true);
+ assert.equal(receipt.originalStakeCount,2);
+ assert.equal(receipt.alteredOccurrences,2);
+ assert.equal(receipt.forwardAuthorized,false);
+});
+test("full verified source witness is mandatory when requested",()=>{
+ assert.throws(()=>m.prepare("43 b100n",{customer:"Quýt",
+   inputStage:"CANONICAL_UNADJUSTED_RESULT",requireSourceWitness:true}),/SOURCE_WITNESS_REQUIRED/);
+});
 test("untrusted stage, missing opt-in, already transformed fail closed",()=>{
  for(const args of [
  {customer:"Other",inputStage:"CANONICAL_UNADJUSTED_RESULT"},
