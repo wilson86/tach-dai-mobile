@@ -209,6 +209,10 @@
         const legacy=raw===null || raw===undefined || raw===''?[]:JSON.parse(raw);
         if (!Array.isArray(legacy)) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
         const rows=legacy.filter(row=>row && row.account_id===accountId && row.workspace_id===workspaceId);
+        // Legacy v1 rows have no verifiable pre-dispatch marker. A PENDING row
+        // may already have committed before an acknowledgement was lost.
+        // Quarantine even when a newer v2 record shares the same identity.
+        const legacyIds=new Set(rows.map(row=>row.id));
         const keys=store.keys();
         if (!Array.isArray(keys) || keys.some(key=>typeof key!=='string'))
           throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
@@ -228,7 +232,7 @@
           const previous=pending.get(row.id);
           if (previous && JSON.stringify(immutableDraft(previous))!==JSON.stringify(immutableDraft(row)))
             throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
-          const attempted=row.dispatch_uncertain===true || row.status===STATUS.BLOCKED ||
+          const attempted=legacyIds.has(row.id) || row.dispatch_uncertain===true || row.status===STATUS.BLOCKED ||
             store.get(intentKey(row.id)+':dispatched')!=null;
           pending.set(row.id,{id:row.id,scope:clone(row.scope),payload:clone(row.payload),
             base_revision:row.base_revision,status:attempted?STATUS.NEEDS_RECONCILIATION:STATUS.PENDING,
