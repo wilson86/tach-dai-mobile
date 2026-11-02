@@ -124,7 +124,12 @@ function preview(raw,options={}){
   x.numbers.join(" ")+" "+x.kind+fmt(x.half)+"n");
  if(options.omitRegion&&(missing||new Set(clauses.map(c=>c.station)).size!==1||!options.region))
   fail("BARE_OUTPUT_REQUIRES_SINGLE_EXPLICIT_REGION");
- const halfsum=obj=>Object.values(obj).reduce((a,b)=>a+b,0);
+ for(const kind of Object.keys(rawTotals)){
+  if(decision!=="remove_copies"&&rawTotals[kind]!==totals[kind])fail("POINT_CONSERVATION_FAILED");
+ }
+ const halfsum=obj=>Object.values(obj).reduce((a,b)=>{
+  if(!Number.isSafeInteger(a+b))fail("SUM_OVERFLOW");return a+b;
+ },0);
  return {status:needsReview?"HOLD_REVIEW":"REVIEW_ONLY",
   normalized:lines.join("\n"),originalText:raw,rawClauses:clauses.length,
   keptClauses:clauses.length-excluded.size,removedClauses:excluded.size,
