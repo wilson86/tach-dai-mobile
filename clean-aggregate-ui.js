@@ -54,7 +54,7 @@ function mount(){
  function display(p,reviewed){
   status.textContent=(p.status==="HOLD_REVIEW"?"HOLD: Tin có đoạn lặp, cần xác nhận trước khi hiển thị kết quả gộp.\n":"")+
    "Cụm: "+p.rawClauses+" | Giữ: "+p.keptClauses+" | Loại: "+p.removedClauses+
-   "\nB="+p.totals.b+"; DD="+p.totals.dd+"; Đầu="+p.totals.dau+"; Đuôi="+p.totals.duoi+
+   "\nB="+p.totals.b+"; LO="+p.totals.lo+"; DD="+p.totals.dd+"; Đầu="+p.totals.dau+"; Đuôi="+p.totals.duoi+
    " | Tổng điểm theo số="+p.total+
    (reviewed?"\nĐã chọn cách xử lý trùng; chưa có quyền tự gửi.":"");
   output.value=reviewed?p.normalized:"";
