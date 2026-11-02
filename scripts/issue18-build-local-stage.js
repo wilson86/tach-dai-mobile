@@ -10,12 +10,16 @@ const MOBILE_FILES = [
   'index.html', 'sw.js', 'version.json', 'manifest.webmanifest',
   'business_engine.generated.js', 'station_calendar.generated.js',
   'icon-192.png', 'icon-512.png', 'app/index.html', 'app/sw.js',
-  'app/version.json', 'app/unified-core.js', 'app/manifest.webmanifest'
+  'app/version.json', 'app/unified-core.js', 'app/manifest.webmanifest',
+  'clean-aggregate-review.js','clean-aggregate-ui.js',
+  'quyt-bao-review.js','quyt-bao-review-ui.js'
 ];
 const NGANG_FILES = [
   'index.html', 'sw.js', 'version.json', 'manifest.webmanifest',
   'business_engine.generated.js', 'station_calendar.generated.js',
-  'icon-192.png', 'icon-512.png'
+  'icon-192.png', 'icon-512.png',
+  'clean-aggregate-review.js','clean-aggregate-ui.js',
+  'quyt-bao-review.js','quyt-bao-review-ui.js'
 ];
 const NANG_IFRAME = /(<iframe\b[^>]*\bid="ngangFrame"[^>]*\bsrc=")[^"]+("[^>]*>)/g;
 function fail(message) { throw new Error('STAGING_BLOCKED: ' + message); }
@@ -81,7 +85,7 @@ function stage({mobile, ngang, out, mobileSha, ngangSha}) {
   const engine = mv.business_engine_sha256;
   if (!/^[a-f0-9]{64}$/.test(engine) || engine !== nv.business_engine_sha256 || engine !== uv.business_engine_sha256)
     fail('Mobile/Ngang/Unified engine SHA mismatch');
-  if (mv.version !== '2.0.38' || nv.version !== '1.0.37' || uv.version !== '1.0.27')
+  if (mv.version !== '2.0.40' || nv.version !== '1.0.39' || uv.version !== '1.0.33')
     fail('mixed or stale Issue18 candidate versions');
   const sourceHtml = fs.readFileSync(checkedFile(m, 'app/index.html'), 'utf8');
   const sourceSw = fs.readFileSync(checkedFile(m, 'app/sw.js'), 'utf8');
