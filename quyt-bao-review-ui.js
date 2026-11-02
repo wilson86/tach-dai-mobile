@@ -14,20 +14,28 @@ function install(){
  const label=document.createElement("label");
  label.style.cssText="display:flex;align-items:center;gap:8px;padding:8px;background:#fff3d8;border:1px solid #e2a74f;border-radius:8px;margin:7px 0;color:#242020";
  const check=document.createElement("input");check.type="checkbox";check.id="ktsQuytCheckbox";
- const caption=document.createElement("span");caption.textContent="Quýt — bao lô ×1,067 (làm tròn lên mỗi khoản)";
+ const caption=document.createElement("span");caption.textContent="Quýt — chỉnh hệ số bao lô";
  label.append(check,caption);input.insertAdjacentElement("afterend",label);
+ const rateWrap=document.createElement("label");rateWrap.style.cssText="display:flex;align-items:center;gap:8px;padding:7px;margin:4px 0;color:#182033";
+ rateWrap.textContent="Hệ số bao ×";
+ const rate=document.createElement("input");
+ rate.id="ktsQuytRate";rate.type="text";rate.inputMode="decimal";rate.autocomplete="off";
+ rate.value="1,067";rate.maxLength=6;
+ rate.style.cssText="font:inherit;width:110px;max-width:45%;padding:7px;border:1px solid #c5a15b;border-radius:6px;color:#182033;background:white";
+ rate.setAttribute("aria-label","Hệ số bao lô của Quýt, mặc định 1 phẩy 067");
+ rateWrap.append(rate);label.insertAdjacentElement("afterend",rateWrap);
  const panel=document.createElement("section");panel.id="ktsQuytPreparedPanel";
  panel.style.cssText="border:1px solid #d4ac4a;border-radius:9px;background:#fff8e8;padding:9px;margin-top:8px";
  panel.hidden=true;
  const title=document.createElement("strong");title.textContent="KẾT QUẢ QUÝT CHUẨN BỊ CHUYỂN — CHỈ XEM TRƯỚC";
  const status=document.createElement("div");status.setAttribute("role","status");status.style.cssText="white-space:pre-wrap;font-size:12px;margin:7px 0";
  const review=document.createElement("textarea");review.readOnly=true;review.spellcheck=false;
- review.setAttribute("aria-label","Kết quả Quýt 1,067 để đối chiếu");
+ review.setAttribute("aria-label","Kết quả Quýt theo hệ số đã chọn để đối chiếu");
  review.style.cssText="width:100%;min-height:100px;box-sizing:border-box;color:#242020;background:white";
  const copy=document.createElement("button");copy.type="button";copy.textContent="Copy kết quả Quýt đã kiểm tra";
  copy.style.cssText="padding:9px;border-radius:6px;background:#d79c2a;color:#111;border:0;margin-top:6px";
  const note=document.createElement("div");note.style.cssText="font-size:12px";
- note.textContent="Bản thử nghiệm: chưa tự gửi. Chỉ nhân B/LO/BAO, không nhân DD/Đầu/Đuôi/Đá. Không nhân lại đầu ra đã điều chỉnh.";
+ note.textContent="Hệ số mặc định 1,067; nhập dấu phẩy hoặc dấu chấm, tối đa 3 chữ số thập phân, lớn hơn 0 và không quá 3. Chỉ nhân B/LO/BAO, DD/Đầu/Đuôi/Đá giữ nguyên. Bản thử nghiệm chưa tự gửi.";
  panel.append(title,status,review,copy,note);
  output.insertAdjacentElement("afterend",panel);
  let approved=null;
@@ -41,6 +49,9 @@ function install(){
   const source=String(ownTop.__KTS_QUYT_SOURCE_V1__||"");
   check.checked=requested&&source.length>0&&source===input.value;
   checkedSource=check.checked?source:"";
+  const factor=ownTop.__KTS_QUYT_RATE_V1__;
+  rate.value=typeof factor==="string"?factor:"1,067";
+  rate.disabled=!enabled();rateWrap.hidden=!enabled();
   panel.hidden=!enabled();reset();
  }
  function notifyAll(){
@@ -51,7 +62,13 @@ function install(){
  check.addEventListener("change",()=>{
   ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&Boolean(input.value.trim());
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
+  if(typeof ownTop.__KTS_QUYT_RATE_V1__!=="string")ownTop.__KTS_QUYT_RATE_V1__=rate.value;
   notifyAll();
+ });
+ rate.addEventListener("input",()=>{
+  ownTop.__KTS_QUYT_RATE_V1__=rate.value;
+  notifyAll(); // invalidates sibling tab previews, including when rate is incomplete
+  reset();
  });
  window.addEventListener("kts:quyt-selection-v1",applyFromOwner);
  applyFromOwner();
@@ -68,10 +85,10 @@ function install(){
    status.textContent="HOLD: nguồn hiện là Cut ledger; không điều chỉnh lại.";return;
   }
   try{
-   const p=core.prepare(raw,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false});
-   approved={input:original,result:raw,preview:p.preview};
+   const p=core.prepare(raw,{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,rate:rate.value});
+   approved={input:original,result:raw,preview:p.preview,rate:rate.value};
    review.value=p.preview;
-   status.textContent="Quýt ✓ | "+p.alteredOccurrences+" khoản bao được làm tròn lên từng khoản. Cần xác nhận không đã xử lý ×1,067 ở Router.";
+   status.textContent="Quýt ✓ | hệ số ×"+p.rate.replace(".",",")+" | "+p.alteredOccurrences+" khoản bao được làm tròn lên từng khoản. HOLD nếu Router đã điều chỉnh hoặc kết quả đã được gộp từ nhiều khoản.";
    copy.disabled=false;
   }catch(e){status.textContent="HOLD: "+String(e.message||e)}
  }
@@ -92,7 +109,7 @@ function install(){
  if(region)region.addEventListener("change",reset);
  async function doCopy(){
   if(!enabled()||!approved||approved.input!==input.value||approved.result!==output.value||
-     approved.preview!==review.value){reset();status.textContent="HOLD: kết quả đã thay đổi, phải kiểm tra lại.";return}
+     approved.rate!==rate.value||approved.preview!==review.value){reset();status.textContent="HOLD: nguồn, kết quả hoặc hệ số đã thay đổi; phải kiểm tra lại.";return}
   if(!navigator.clipboard?.writeText){status.textContent="HOLD: Clipboard không khả dụng. Không copy tin gốc.";return}
   try{
    await navigator.clipboard.writeText(approved.preview);
