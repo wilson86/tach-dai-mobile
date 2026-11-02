@@ -8,21 +8,21 @@ const crypto = require('node:crypto');
 const sha256 = value=>crypto.createHash('sha256').update(value).digest('hex');
 const path = require('node:path');
 const {stage, isolatedUnifiedHtml, isolatedUnifiedServiceWorker, parseArgs} = require('../scripts/issue18-build-local-stage.js');
-const HASH = '7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
+const HASH = '0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487';
 const html = '<iframe id="tachFrame" src="../"></iframe>\n<iframe id="ngangFrame" src="https://wilson86.github.io/tach-dai-ngang/"></iframe>';
 const sw = `const NAV='/tach-dai-mobile/app', N='/tach-dai-mobile/app/',
 ICON_1='/tach-dai-mobile/icon-192.png', ICON_2='/tach-dai-mobile/icon-512.png';`;
 function fixture() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'issue18-stage-test-'));
   const mobile = path.join(base, 'srcMobile'), ngang = path.join(base, 'srcNgang'), out = path.join(base, 'fresh-stage');
-  const MOBILE_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js','icon-192.png','icon-512.png','app/index.html','app/sw.js','app/version.json','app/unified-core.js','app/manifest.webmanifest'];
-  const NGANG_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js','icon-192.png','icon-512.png'];
+  const MOBILE_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js','icon-192.png','icon-512.png','app/index.html','app/sw.js','app/version.json','app/unified-core.js','app/manifest.webmanifest', 'clean-aggregate-review.js','clean-aggregate-ui.js','quyt-bao-review.js','quyt-bao-review-ui.js'];
+  const NGANG_FILES = ['index.html','sw.js','version.json','manifest.webmanifest','business_engine.generated.js','station_calendar.generated.js','icon-192.png','icon-512.png','clean-aggregate-review.js','clean-aggregate-ui.js','quyt-bao-review.js','quyt-bao-review-ui.js'];
   for (const [repo,paths] of [[mobile,MOBILE_FILES],[ngang,NGANG_FILES]]) for (const f of paths) {
     const target = path.join(repo,f); fs.mkdirSync(path.dirname(target),{recursive:true}); fs.writeFileSync(target,'test asset');
   }
   fs.writeFileSync(path.join(mobile,'app/index.html'),html);
   fs.writeFileSync(path.join(mobile,'app/sw.js'),sw);
-  for (const [f,version] of [[path.join(mobile,'version.json'),'2.0.38'],[path.join(mobile,'app/version.json'),'1.0.27'],[path.join(ngang,'version.json'),'1.0.37']])
+  for (const [f,version] of [[path.join(mobile,'version.json'),'2.0.40'],[path.join(mobile,'app/version.json'),'1.0.33'],[path.join(ngang,'version.json'),'1.0.39']])
     fs.writeFileSync(f, JSON.stringify({version,business_engine_sha256:HASH}));
   return {base,mobile,ngang,out};
 }
