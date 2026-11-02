@@ -43,12 +43,17 @@ test("all same-origin Unified iframes get the one customer checkbox state",()=>{
  assert.ok(ui.includes("ownTop.document.querySelectorAll("));
  assert.ok(ui.includes("kts:quyt-selection-v1"));
 });
-test("Quyt preview refuses outputs whose original wager amounts were already merged or split",()=>{
- assert.ok(ui.includes("sourceText:original,requireSourceWitness:true"));
+test("Quyt now verifies per-number exposure then groups BEFORE factor",()=>{
  const pure=read("quyt-bao-review.js");
- assert.ok(pure.includes("AGGREGATED_OR_SPLIT_STAKES_HOLD"));
- assert.ok(pure.includes("CHANGED_SOURCE_STAKES_HOLD"));
- assert.ok(pure.includes("sourceWitnessVerified:hasSourceWitness"));
+ assert.ok(ui.includes("core.prepareGrouped(raw"));
+ assert.ok(ui.includes("sourceText:original,region:selectedRegion?.value"));
+ assert.ok(ui.includes("cleanCore:window.KTSCleanAggregate"));
+ assert.ok(pure.includes("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD"));
+ assert.ok(pure.includes("groupedBeforeFactor:true"));
+ assert.ok(pure.includes("for(const e of src.map.values())"));
+ assert.ok(ui.includes("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED"));
+ assert.ok(ui.includes("confirmedRepeatSource=input.value"));
+ assert.ok(ui.includes("Xác nhận khách đánh thêm"));
 });
 test("browser caching and HTML include exact review-only JS",()=>{
  for(const n of ["quyt-bao-review.js","quyt-bao-review-ui.js"]){
