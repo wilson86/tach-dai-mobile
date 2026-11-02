@@ -5,12 +5,14 @@ const path=require('node:path');
 const os=require('node:os');
 const cp=require('node:child_process');
 
-const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.38',ngang:'1.0.37',unified:'1.0.27'});
+const EXPECTED_VERSIONS=Object.freeze({mobile:'2.0.40',ngang:'1.0.39',unified:'1.0.33'});
 // Explicit allowlists, audited for no network, production writes or paid runner.
 // The Ngang published-artifact verifier is intentionally EXCLUDED (live fetch).
 const KTS_PYTESTS=Object.freeze([
   'KTSRouter/tests/test_n035_router_no_send.py',
-  'KTSRouter/tests/test_n035_desktop_oracle.py'
+  'KTSRouter/tests/test_n035_desktop_oracle.py',
+  'KTSRouter/tests/test_clean_aggregate_review.py',
+  'KTSRouter/tests/test_quyt_bao_review.py'
 ]);
 // Cross-surface JavaScript oracle: a Python PASS alone cannot qualify PWA
 // money, single-number DX, Cut/reload or saved ledger behavior.
@@ -22,6 +24,10 @@ const KTS_JS_TESTS=Object.freeze([
 ]);
 const KTS_LEDGER_TEST='KTSRouter/tests/test_legacy_ledger_retention.js';
 const MOBILE_TESTS=Object.freeze([
+  'tests/clean-aggregate-review.test.js',
+  'tests/quyt-bao-review.test.js',
+  'tests/quyt-bao-ui-contract.test.js',
+  'tests/issue18-chrome-quyt-r6-contract.test.js',
   'tests/davong-checkbox-ui-parity.js',
   'tests/davong-source-line-cut-provenance.js',
   'tests/duplicate-selector-tests.js',
@@ -55,6 +61,9 @@ const MOBILE_TESTS=Object.freeze([
 const NGANG_TESTS=Object.freeze([
   'tests/duplicate-selector-tests.js',
   'tests/dx-number-pair-operator-oracle.js',
+  'tests/clean-aggregate-review.test.js',
+  'tests/quyt-bao-review.test.js',
+  'tests/quyt-bao-ui-contract.test.js',
   'tests/grouped-checkbox-results.js',
   'tests/issue18-sw-cache-isolation.test.js',
   'tests/ledger-app-identity-isolation.js',
@@ -69,7 +78,7 @@ const NGANG_TESTS=Object.freeze([
   'tests/source-output-cut-conservation.js',
   'tests/source-pane-after-result-cut.js'
 ]);
-const ISSUE18_ENGINE='7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea';
+const ISSUE18_ENGINE='0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487';
 function block(code,detail){const error=new Error(String(detail||code));error.code=code;throw error;}
 function argsOf(words){
   const wanted=['--workspace','--kts-sha','--mobile-sha','--ngang-sha'];
