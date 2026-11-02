@@ -14,7 +14,10 @@ function halfSafeDecimal(token){
  if(!m)throw Error("STAKE_NOT_DECIMAL");
  const [whole,fract=""]= [m[1],m[2]||""];
  if(fract && !/^0*5?0*$/u.test(fract))throw Error("NON_HALF_UNIT_STAKE_HOLD");
- const half=BigInt(whole)*2n+(fract.includes("5")?1n:0n);
+ const den=10n**BigInt(fract.length);
+ const numerator=BigInt(whole+fract);
+ if((numerator*2n)%den!==0n)throw Error("NON_HALF_UNIT_STAKE_HOLD");
+ const half=(numerator*2n)/den;
  if(half<=0n)throw Error("ZERO_STAKE_HOLD");
  return {num:BigInt(whole+fract),den:10n**BigInt(fract.length)};
 }
