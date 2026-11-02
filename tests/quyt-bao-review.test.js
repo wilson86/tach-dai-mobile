@@ -31,6 +31,27 @@ test("ROUND BEFORE AGGREGATION: 2x b1n must not silently become b3n",()=>{
  assert.equal(ok("43 b2n").preview,"43 b3n"); // 3n if mistakenly aggregated first
  assert.equal(p.alteredOccurrences,2);
 });
+test("editable rate accepts comma/dot, defaults 1.067 and recalculates each wager",()=>{
+ assert.equal(m.DEFAULT_RATE,"1.067");
+ assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,05"}).preview,"43 b105n");
+ assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1.10"}).preview,"43 b111n");
+ assert.equal(m.prepare("43 b50n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"0,95"}).preview,"43 b48n");
+ assert.equal(m.rounded("100","1"),"100");
+ assert.equal(m.rounded("100","3"),"300");
+ assert.equal(m.rounded("1","1,067"),"2");
+});
+test("editable rate rejects malformed, unsafe and excessive precision before any result",()=>{
+ for(const rate of ["","0","-1","1.0001","3.001","4","NaN","1e2","1,2,3",null]){
+  assert.throws(()=>m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate}),undefined,String(rate));
+ }
+});
+test("per-atom ceiling does not erase intentionally repeated wagers on custom rate",()=>{
+ const prepared=m.prepare("43 b1n\n43 b1n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,20"});
+ assert.equal(prepared.alteredOccurrences,2);
+ assert.equal(prepared.preview,"43 b2n\n43 b2n");
+ assert.equal(prepared.rate,"1.20");
+ assert.equal(prepared.forwardAuthorized,false);
+});
 test("untrusted stage, missing opt-in, already transformed fail closed",()=>{
  for(const args of [
  {customer:"Other",inputStage:"CANONICAL_UNADJUSTED_RESULT"},
