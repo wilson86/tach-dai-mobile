@@ -147,7 +147,7 @@ async function run(root){
   await cdp('Page.reload',{ignoreCache:false});
   await wait(frameReady,x=>x===true,'frames after SW reload');
   const sw=await js("(async()=>({controller:navigator.serviceWorker.controller?.scriptURL,cacheKeys:await caches.keys()}))()",true);
-  assert.ok(sw.cacheKeys.some(key=>key.includes('clean-r2-quyt-r9')),'Chrome stale Quyt SW cache, r6 required');
+  assert.ok(sw.cacheKeys.some(key=>key.includes('clean-r2-quyt-r10')),'Chrome stale Quyt SW cache, r6 required');
   assert.ok(sw.controller?.endsWith('/app/sw.js'),'Chrome must be controlled by Unified app SW');
   log('REAL_CHROME_SW',sw);
   await js("(()=>{const r=document.querySelector('#sharedRegion'),d=document.querySelector('#sharedDate'),t=document.querySelector('#sharedToday');t.checked=false;r.value='mb';r.dispatchEvent(new Event('change',{bubbles:true}));d.value='2026-10-29';d.dispatchEvent(new Event('change',{bubbles:true}));})()");
