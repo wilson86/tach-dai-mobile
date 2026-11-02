@@ -527,7 +527,7 @@
             if(markerEpoch!==sessionEpoch || logoutInFlight)
               return {status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'};
             const prior=store.get(markerKey);
-            if(prior!==null && prior!=='' && prior!==undefined) {
+            if(prior!==null && prior!==undefined) {
               let identity;try{identity=JSON.parse(prior);}catch(_){}
               return {status:STATUS.NEEDS_RECONCILIATION,error:'SYNC_REVIEW_RECONCILIATION_REQUIRED',
                 ...(identity && typeof identity.idempotency_key==='string'?{idempotency_key:identity.idempotency_key}:{})};

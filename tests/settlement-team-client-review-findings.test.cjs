@@ -195,3 +195,12 @@ test('session change during dispatch-marker persistence blocks draft before POST
   assert.equal(outcome.error,'SYNC_SESSION_CHANGED');assert.equal(f.posts().length,0);
   assert.equal(outcome.payload,undefined);assert.equal(f.manager.held.size,0);
 });
+test('blank existing review marker cannot authorize a replacement intent',async()=>{
+  const first=fixture({write:async()=>response(500,{})});
+  await first.client.reviewScope('submit_review',scope,1);
+  const key=[...first.saved.data.keys()].find(k=>k.startsWith('kts-team-review-intent-v1:'));
+  assert.ok(key);first.saved.set(key,''); // Corrupted but still existing evidence.
+  const reload=fixture({storage:first.saved,locks:first.manager});
+  assert.equal((await reload.client.reviewScope('submit_review',scope,1)).status,'NEEDS_RECONCILIATION');
+  assert.equal(reload.posts().length,0);assert.equal(first.saved.get(key),'');
+});
