@@ -87,7 +87,81 @@ function prepare(raw,options={}){
     sourceUnmodified:true,stage:"PREPARED_PREVIEW_ONLY",
     forwardAuthorized:false,alreadyTransformed:false});
 }
-const api=Object.freeze({CONTRACT,prepare,rounded,parseRate,assertOriginalStakeParity,DEFAULT_RATE});
+
+// USER-APPROVED ORDER: aggregate identical (station, number, canonical wager
+// kind) stakes first, then apply CEIL(rate * aggregated stake) ONCE.
+// Strict review-only adapter: never modify existing generated KTS engine.
+const GROUP_SELECTOR=/((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b|dd|d-d|dau|duoi|dui|đầu|đuôi))[ \t]*(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/giu;
+function fmtHalf(units){
+ if(!Number.isSafeInteger(units)||units<=0)throw Error("GROUP_STAKE_INVALID");
+ return Math.floor(units/2).toString()+(units%2?".5":"");
+}
+function sourceExposures(text,cleanCore,region){
+ if(!cleanCore||typeof cleanCore.parse!=="function")throw Error("CLEAN_CORE_REQUIRED");
+ // Canonical parser validates the complete input; regex tags merely preserve
+ // the B vs LO distinction that the WIP clean display aliases both to "b".
+ const clauses=cleanCore.parse(text,{region});
+ const matches=[...text.matchAll(GROUP_SELECTOR)];
+ if(matches.length!==clauses.length)throw Error("CANONICAL_SELECTOR_PROVENANCE_HOLD");
+ const map=new Map();
+ for(let i=0;i<clauses.length;i++){
+  const c=clauses[i],tag=matches[i][1].toLowerCase().replace(/\s+/gu,"");
+  const kind=tag==="b"?"b":["bao","baolo","lô","lo","bl","blo"].includes(tag)?"lo":c.kind;
+  if(!c.station)throw Error("STATION_REQUIRED_FOR_GROUPING");
+  for(const n of c.numbers){
+   const key=JSON.stringify([c.station,kind,n]);
+   const before=map.get(key)?.half||0;
+   if(!Number.isSafeInteger(before+c.half))throw Error("GROUP_STAKE_OVERFLOW");
+   map.set(key,{station:c.station,kind,number:n,half:before+c.half});
+  }
+ }
+ return {map,clauses,repeatBlocks:cleanCore.tandem(clauses)};
+}
+function prepareGrouped(output,options={}){
+ if(options.customer!=="Quýt")throw Error("QUYT_NOT_SELECTED");
+ if(options.inputStage!=="CANONICAL_UNADJUSTED_RESULT")throw Error("UNTRUSTED_TRANSFORM_STAGE");
+ if(options.alreadyTransformed===true)throw Error("DOUBLE_TRANSFORM_HOLD");
+ if(typeof options.sourceText!=="string"||!options.sourceText.trim())
+   throw Error("SOURCE_WITNESS_REQUIRED");
+ if(typeof output!=="string"||!output.trim()||/\[\[KTS_|PHÁT HIỆN TIN SAI|không nhận ra cú pháp/iu.test(output))
+   throw Error("INVALID_CANONICAL_RESULT_HOLD");
+ const rate=parseRate(options.rate===undefined?DEFAULT_RATE:options.rate);
+ const clean=options.cleanCore;
+ const region=options.region;
+ const src=sourceExposures(options.sourceText,clean,region);
+ const dest=sourceExposures(output,clean,region);
+ // No silently split or changed money and no already-applied multiplier.
+ if(src.map.size!==dest.map.size)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
+ for(const [key,stake] of src.map){
+  const other=dest.map.get(key);
+  if(!other||other.half!==stake.half)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
+ }
+ if(src.repeatBlocks.length&&options.repeatDecision!=="keep_all")
+   throw Error("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED");
+ if(options.repeatDecision==="remove_copies")throw Error("QUYT_REPETITIONS_MUST_NOT_BE_DELETED");
+ const grouped=new Map(),receipts=[];
+ let adjusted=0;
+ for(const e of src.map.values()){
+  const amount=fmtHalf(e.half),apply=e.kind==="b"||e.kind==="lo";
+  const after=apply?rounded(amount,rate):amount;
+  if(apply)adjusted++;
+  receipts.push({station:e.station,selector:e.kind,number:e.number,before:amount,after});
+  const key=JSON.stringify([e.station,e.kind,after]);
+  if(!grouped.has(key))grouped.set(key,{...e,amount:after,numbers:[]});
+  grouped.get(key).numbers.push(e.number);
+ }
+ if(!adjusted)throw Error("NO_BAO_SELECTOR_IN_RESULT");
+ const normalized=[...grouped.values()].map(e=>(options.omitRegion?"":e.station.toUpperCase()+" ")+
+   e.numbers.join(" ")+" "+e.kind+e.amount+"n").join("\n");
+ return Object.freeze({kind:"QUYT_BAO_AGGREGATE_THEN_MULTIPLY_REVIEW_V2",
+  original:options.sourceText,source:output,preview:normalized,rate:rate.normalized,
+  sourceWitnessVerified:true,groupedBeforeFactor:true,
+  rawClauseCount:src.clauses.length,duplicateBlocks:src.repeatBlocks,
+  aggregatedExposures:src.map.size,alteredOccurrences:adjusted,receipts,
+  forwardAuthorized:false,stage:"PREPARED_PREVIEW_ONLY"});
+}
+
+const api=Object.freeze({CONTRACT,prepare,rounded,parseRate,assertOriginalStakeParity,prepareGrouped,sourceExposures,DEFAULT_RATE});
 if(typeof module==="object"&&module.exports)module.exports=api;
 if(scope)scope.KTSQuytBaoReview=api;
 })(typeof window!=="undefined"?window:undefined);
