@@ -14,7 +14,7 @@ function install(){
  const label=document.createElement("label");
  label.style.cssText="display:flex;align-items:center;gap:8px;padding:8px;background:#fff3d8;border:1px solid #e2a74f;border-radius:8px;margin:7px 0;color:#242020";
  const check=document.createElement("input");check.type="checkbox";check.id="ktsQuytCheckbox";
- const caption=document.createElement("span");caption.textContent="Quýt — chỉnh hệ số bao lô";
+ const caption=document.createElement("span");caption.textContent="Quýt (dán tin trước rồi tích chọn) — chỉnh hệ số bao lô";
  label.append(check,caption);input.insertAdjacentElement("afterend",label);
  const rateWrap=document.createElement("label");rateWrap.style.cssText="display:flex;align-items:center;gap:8px;padding:7px;margin:4px 0;color:#182033";
  rateWrap.textContent="Hệ số bao ×";
@@ -69,6 +69,10 @@ function install(){
   ownTop.__KTS_QUYT_RATE_V1__=rate.value;
   notifyAll(); // invalidates sibling tab previews, including when rate is incomplete
   reset();
+  try{
+   core.parseRate(rate.value);
+   status.textContent="Hệ số đã đổi; bấm Kiểm tra/Tách để tính lại. Không dùng kết quả cũ.";
+  }catch(e){status.textContent="HOLD: Hệ số không hợp lệ — "+String(e.message||e)}
  });
  window.addEventListener("kts:quyt-selection-v1",applyFromOwner);
  applyFromOwner();
