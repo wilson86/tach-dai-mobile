@@ -1,6 +1,6 @@
 {
-  "version": "1.0.32",
-  "updated": "2026-10-31",
+  "version": "1.0.33",
+  "updated": "2026-11-02",
   "business_engine_sha256": "0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487",
   "contract": "DX_NUMBER_PAIR_REQUIRES_TWO_DISTINCT_NUMBERS_ALL_MODES_V3",
   "modes": [
@@ -26,7 +26,8 @@
     "davong_group_select_button",
     "davong_selected_and_remaining_counts",
     "shared_input_across_modes",
-    "desktop_phone_same_davong_group_ui"
+    "desktop_phone_same_davong_group_ui",
+    "clean_aggregate_review_only_explicit_repeat_decision"
   ],
-  "notes": "Issue #18 WIP: preserve independently typed new raw wager across F5 even when another Unified mode holds an immutable Cut ledger. Keep zero-row Cut protection and no automatic re-split; engine unchanged, release NO_GO."
+  "notes": "Issue #18 WIP: preserve independently typed new raw wager across F5 even when another Unified mode holds an immutable Cut ledger. Keep zero-row Cut protection and no automatic re-split; engine unchanged, release NO_GO. WIP optional Clean & Aggregate review: preserve every intentional repetition; ask operator before duplicate removal; no auto-forward."
 }
