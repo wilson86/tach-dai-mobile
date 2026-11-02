@@ -16,12 +16,13 @@ test("SHA-bound source manifest and delivered JS must be compared",()=>{
  assert.ok(run.includes("sha256(Buffer.from(await request.arrayBuffer()))"));
  assert.ok(run.includes("source_manifest=sourceManifest"));
  assert.ok(run.includes("sha_bound_js"));
- assert.ok(run.includes("quyt-r6"));
+ assert.ok(run.includes("quyt-r7"));
 });
-test("actual Chrome Quyt factor interactions, HOLD and source witness",()=>{
- for(const expected of ["QUYT_EDITABLE_RATE_","'1,067'","'1,05'","'1,10'",
-  "'MB 43 b105n'","'MB 43 b110n'","'HOLD'","AGGREGATED_OR_SPLIT_STAKES_HOLD",
-  "requireSourceWitness:true","'davong'","'ngang'","'tach'"]){
+test("actual Chrome source-bound Quyt GROUP-THEN-FACTOR oracle and HOLD",()=>{
+ for(const expected of ["QUYT_AGGREGATE_THEN_RATE_","'1,067'","'1,05'",
+  "'43 b3n'","'43 b214n'","DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED",
+  "SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD","cleanCore:win.KTSCleanAggregate",
+  "prepareGrouped(","'davong'","'ngang'","'tach'"]){
   assert.ok(run.includes(expected),expected);
  }
 });
