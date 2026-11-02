@@ -51,6 +51,17 @@ t("compact output roundtrip conserves every per-number stake",()=>{
  assert.deepEqual(reread.totals,x.totals);
  assert.equal(reread.uniqueExposures,x.uniqueExposures);
 });
+t("nonadjacent repeated wagers HOLD unless operator confirms keep-all",()=>{
+ const raw="43 b1n 44 b2n 43 b1n";
+ const pending=call(raw),kept=call(raw,{repeatDecision:"keep_all"});
+ assert.equal(pending.status,"HOLD_REVIEW");
+ assert.deepEqual(pending.repeated,[{first:1,second:3,length:1,nonAdjacent:true}]);
+ assert.equal(pending.removedClauses,0);
+ assert.equal(kept.keptClauses,3);
+ assert.equal(kept.totals.b,"4");
+ assert.throws(()=>call(raw,{repeatDecision:"remove_copies",decisionReference:"synthetic-ack"}),
+  /NON_ADJACENT_PASTE_MANUAL_SOURCE_REVIEW_REQUIRED/);
+});
 t("unknown mode cannot silently delete any stake",()=>{
  assert.throws(()=>call("12 b1n 12 b1n",{repeatDecision:"auto_remove"}),/DUPLICATE_DECISION_INVALID/);
 });
