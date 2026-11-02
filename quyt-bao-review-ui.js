@@ -101,13 +101,27 @@ function install(){
  }
  copy.addEventListener("click",()=>{refresh();void doCopy()});
  // Prevent accidental raw result copy through the normal result button.
- const originalCopy=document.getElementById("dvCopy")||document.getElementById("copyBtn");
- if(originalCopy)originalCopy.addEventListener("click",event=>{
-  if(!enabled())return;
-  event.preventDefault();event.stopImmediatePropagation();
-  status.textContent="Đã chọn Quýt: hãy sử dụng nút Copy kết quả Quýt đã kiểm tra; không copy bản gốc.";
-  refresh();
- },true);
+ // Quýt remains a REVIEW_ONLY transform until a one-time authoritative
+ // Router/parent receipt can guarantee that the prepared amount is not
+ // re-multiplied. Block all raw RESULT copy/cut surfaces while selected.
+ const resultActions=["dvCopy","copyBtn","cutBtn","dvCutSelection",
+                       "ledgerWorkCopy","ledgerWorkCut","sourceCutBtn","dvSourceCut"];
+ for(const id of resultActions){
+  const button=document.getElementById(id);
+  if(!button)continue;
+  button.addEventListener("click",event=>{
+    if(!enabled())return;
+    event.preventDefault();event.stopImmediatePropagation();
+    status.textContent="HOLD Quýt: Cắt/Copy gốc bị khóa khi chọn Quýt. Dùng bản xem trước Quýt; chưa có quyền tự gửi hay Cắt bản đã nhân.";
+    refresh();
+  },true);
+ }
+ for(const type of ["copy","cut"]){
+  output.addEventListener(type,event=>{
+    if(!enabled())return;
+    event.preventDefault();status.textContent="HOLD Quýt: không copy/cắt kết quả gốc. Dùng nút Copy kết quả Quýt đã kiểm tra.";
+  });
+ }
  // Never keep Quýt selection between page reloads; different customers may
  // occupy the next ticket. A per-page toggle is not a verified sender identity.
 }
