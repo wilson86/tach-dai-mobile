@@ -124,17 +124,19 @@ function preview(raw,options={}){
    exposures.set(key,{station:c.station,kind:c.kind,number:n,half:before+c.half});
   }
  }
- const groups=new Map();
+ const groups=[];
  for(const e of exposures.values()){
   if(!Number.isSafeInteger(totals[e.kind]+e.half))fail("TOTAL_OVERFLOW");
   totals[e.kind]+=e.half;
-  const key=JSON.stringify([e.station,e.kind,e.half]);
-  if(!groups.has(key))groups.set(key,{station:e.station,kind:e.kind,half:e.half,numbers:[]});
-  groups.get(key).numbers.push(e.number);
+  const previous=groups[groups.length-1];
+  // Preserve first-seen wager order, never coalesce across another number.
+  if(previous && previous.station===e.station && previous.kind===e.kind && previous.half===e.half)
+   previous.numbers.push(e.number);
+  else groups.push({station:e.station,kind:e.kind,half:e.half,numbers:[e.number]});
  }
  const missing=clauses.some(c=>!c.station),needsDecision=repeated.length>0&&decision==="ask_operator";
  const needsReview=missing||needsDecision;
- const lines=[...groups.values()].map(x=>(options.omitRegion?"":(x.station?x.station.toUpperCase()+" ":""))+
+ const lines=groups.map(x=>(options.omitRegion?"":(x.station?x.station.toUpperCase()+" ":""))+
   x.numbers.join(" ")+" "+x.kind+fmt(x.half)+"n");
  if(options.omitRegion&&(missing||new Set(clauses.map(c=>c.station)).size!==1||!options.region))
   fail("BARE_OUTPUT_REQUIRES_SINGLE_EXPLICIT_REGION");
