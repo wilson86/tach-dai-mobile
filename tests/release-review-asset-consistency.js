@@ -24,6 +24,14 @@ assert.equal(unifiedVersion.version,UNIFIED);
 assert.equal(rootVersion.business_engine_sha256,SHA);
 assert.equal(unifiedVersion.business_engine_sha256,SHA);
 assert.ok(engine.includes(SHA));
+for(const filename of ['quyt-bao-review.js','quyt-bao-review-ui.js']){
+ assert.ok(read(filename).length>500,'Quyt review asset must exist');
+ assert.ok(rootSW.includes('"./'+filename+'"'),'root SW precache missing '+filename);
+ assert.ok(unifiedSW.includes("'../"+filename+"'"),'Unified precache missing '+filename);
+ assert.ok(rootHtml.includes('src="./'+filename+'"'),'Mobile HTML missing '+filename);
+ assert.ok(unifiedHtml.includes('src="../'+filename+'"'),'Unified HTML missing '+filename);
+}
+
 for(const filename of ['clean-aggregate-review.js','clean-aggregate-ui.js']){
   assert.ok(read(filename).length>300,'review-only clean asset must be present');
   assert.ok(rootSW.includes('"./'+filename+'"'),'Mobile SW must precache '+filename);
@@ -36,12 +44,12 @@ assert.ok(calendar.length>0);
 assert.ok(rootHtml.includes('const APP_VERSION = "'+MOBILE+'"'));
 assert.ok(rootHtml.includes("v"+MOBILE));
 const rootCache=(rootSW.match(/^const CACHE_NAME = "([^"]+)";$/mu)||[])[1];
-assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-clean-r2',
+assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-clean-r2-quyt-r1',
   'root SW cache must identify the approved singleton-DX candidate, not an earlier duplicate-confirmation build');
 assert.ok(rootSW.includes('JSON.stringify({version:"'+MOBILE+'"})'));
 assert.ok(unifiedHtml.includes("Unified "+UNIFIED));
 assert.ok(unifiedHtml.includes('./unified-core.js?ux='+UNIFIED));
-assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2'));
+assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2-quyt-r1'));
 assert.ok(unifiedCore.includes("const UX_VERSION='"+UNIFIED+"'"));
 assert.ok(unifiedSW.includes("kts-tach-unified-v"+UNIFIED+"-owner-singleton-dx-0a0e54"));
 assert.ok(unifiedSW.includes("'./unified-core.js?ux="+UNIFIED+"'"));
