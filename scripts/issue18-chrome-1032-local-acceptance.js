@@ -96,6 +96,15 @@ async function run(root){
   await wait(frameReady,x=>x===true,'same-origin frames');
   const versions=await js("(()=>({u:document.body.innerText.includes('1.0.32'),a:document.querySelector('#tachFrame').contentDocument.body.innerText.includes('2.0.39'),b:document.querySelector('#ngangFrame').contentDocument.body.innerText.includes('1.0.38')}))()");
   assert.ok(versions.u&&versions.a&&versions.b,'Different source versions '+JSON.stringify(versions));
+  // Check the *executed iframe code*, not only HTTP version metadata:
+  // unchanged version labels can coexist with a stale Service Worker asset.
+  const runtimeRules=await js("(()=>{const a=document.querySelector('#tachFrame').contentWindow,b=document.querySelector('#ngangFrame').contentWindow;return {mobileSha:a.KTS_BUSINESS_ENGINE?.ENGINE_SHA256,ngangSha:b.KTS_BUSINESS_ENGINE?.ENGINE_SHA256,mobileAlias:a.normalizeInput?.('hn 43 b10n 98 dui100n'),ngangAlias:b.normalizeInput?.('hn 43 b10n 98 dui100n')}})()");
+  const engine='0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487';
+  assert.equal(runtimeRules.mobileSha,engine,'Mobile iframe generated engine SHA');
+  assert.equal(runtimeRules.ngangSha,engine,'Ngang iframe generated engine SHA');
+  assert.equal(runtimeRules.mobileAlias,'mb 43 b10n 98 duoi100n','Mobile runtime alias');
+  assert.equal(runtimeRules.ngangAlias,'mb 43 b10n 98 duoi100n','Ngang runtime alias');
+  log('RUNTIME_ENGINE_AND_ALIAS',runtimeRules);
   await wait("(async()=>{const r=await navigator.serviceWorker.getRegistrations();return r.filter(x=>x.active).map(x=>new URL(x.scope).pathname)})()",
    x=>Array.isArray(x)&&['/','/app/','/ngang/'].every(t=>x.includes(t)),'3 SW scopes');
   await cdp('Page.reload',{ignoreCache:false});
