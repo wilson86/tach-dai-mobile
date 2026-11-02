@@ -11,12 +11,16 @@ const MOBILE_FILES=[
   'index.html','sw.js','version.json','manifest.webmanifest',
   'business_engine.generated.js','station_calendar.generated.js',
   'icon-192.png','icon-512.png','app/index.html','app/sw.js',
-  'app/version.json','app/unified-core.js','app/manifest.webmanifest'
+  'app/version.json','app/unified-core.js','app/manifest.webmanifest',
+  'clean-aggregate-review.js','clean-aggregate-ui.js',
+  'quyt-bao-review.js','quyt-bao-review-ui.js'
 ];
 const NGANG_FILES=[
   'index.html','sw.js','version.json','manifest.webmanifest',
   'business_engine.generated.js','station_calendar.generated.js',
-  'icon-192.png','icon-512.png'
+  'icon-192.png','icon-512.png',
+  'clean-aggregate-review.js','clean-aggregate-ui.js',
+  'quyt-bao-review.js','quyt-bao-review-ui.js'
 ];
 const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function fail(code,message){const e=new Error('STAGE_INTEGRITY_BLOCKED ['+code+']: '+message);e.code=code;throw e}
@@ -74,9 +78,9 @@ function verify({mobile,ngang,out,mobileSha,ngangSha}){
   if(manifest.schema!=='KTS_ISSUE18_LOCAL_ONLY_STAGE_V1' ||
     manifest.release_authorized!==false||manifest.source_unchanged!==true ||
     manifest.iframe_ngang!=='../../Ngang/' ||
-    manifest.mobile_version!=='2.0.38'||
-    manifest.ngang_version!=='1.0.37'||
-    manifest.unified_version!=='1.0.27')
+    manifest.mobile_version!=='2.0.40'||
+    manifest.ngang_version!=='1.0.39'||
+    manifest.unified_version!=='1.0.33')
     fail('BAD_MANIFEST','wrong schema, version, iframe or release flag');
   const mv=JSON.parse(safeRead(m,'version.json')),nv=JSON.parse(safeRead(n,'version.json')),
     uv=JSON.parse(safeRead(m,'app/version.json'));
@@ -98,8 +102,8 @@ function verify({mobile,ngang,out,mobileSha,ngangSha}){
   const rewrittenHtml=Buffer.from(isolatedUnifiedHtml(safeRead(m,'app/index.html').toString('utf8')));
   const rewrittenSw=Buffer.from(isolatedUnifiedServiceWorker(safeRead(m,'app/sw.js').toString('utf8')));
   if(!manifest.source_files_sha256||!manifest.staged_files_sha256||
-     Object.keys(manifest.source_files_sha256).length!==21||
-     Object.keys(manifest.staged_files_sha256).length!==21)
+     Object.keys(manifest.source_files_sha256).length!==29||
+     Object.keys(manifest.staged_files_sha256).length!==29)
     fail('INCOMPLETE_ASSET_HASHES','manifest must bind all 21 source and stage assets');
   let checked=0;
   for(const [prefix,source,files]of [['Mobile',m,MOBILE_FILES],['Ngang',n,NGANG_FILES]]){
