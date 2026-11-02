@@ -204,3 +204,43 @@ test('blank existing review marker cannot authorize a replacement intent',async(
   assert.equal((await reload.client.reviewScope('submit_review',scope,1)).status,'NEEDS_RECONCILIATION');
   assert.equal(reload.posts().length,0);assert.equal(first.saved.get(key),'');
 });
+
+test('legacy v1 PENDING with no dispatch marker is never automatically resent',async()=>{
+  const saved=storage();
+  const legacy={id:'draft_'+'d'.repeat(32),account_id:'fake_operator',workspace_id:'group_a',
+    scope,payload:{synthetic:true},base_revision:0,status:'PENDING',created_at:'2026-11-03T00:00:00Z'};
+  const original=JSON.stringify([legacy]);saved.set(Sync.PENDING_DRAFTS_KEY,original);
+  const f=fixture({storage:saved});
+  assert.equal(f.client.snapshot().drafts[0].status,'NEEDS_RECONCILIATION');
+  assert.equal((await f.client.syncDraft(legacy.id)).status,'NEEDS_RECONCILIATION');
+  await f.client.reconnect();
+  assert.equal(f.posts().length,0);
+  assert.equal(saved.get(Sync.PENDING_DRAFTS_KEY),original);
+});
+test('legacy v1 quarantine does not block a distinct new v2 draft',async()=>{
+  const saved=storage();
+  saved.set(Sync.PENDING_DRAFTS_KEY,JSON.stringify([{
+    id:'draft_'+'d'.repeat(32),account_id:'fake_operator',workspace_id:'group_a',
+    scope,payload:{synthetic:'legacy'},base_revision:0,status:'PENDING',
+    created_at:'2026-11-03T00:00:00Z'}]));
+  const f=fixture({storage:saved});
+  const fresh=f.client.queueDraft(scope,{synthetic:'new'});
+  const restored=fixture({storage:saved});
+  assert.equal(restored.client.snapshot().drafts.find(d=>d.id==='draft_'+'d'.repeat(32)).status,'NEEDS_RECONCILIATION');
+  assert.equal(restored.client.snapshot().drafts.find(d=>d.id===fresh.id).status,'PENDING');
+  await restored.client.reconnect();
+  assert.equal(restored.posts().length,1);
+  assert.equal(restored.client.snapshot().drafts.find(d=>d.id==='draft_'+'d'.repeat(32)).status,'NEEDS_RECONCILIATION');
+});
+test('same intent present in legacy v1 and v2 is conservatively quarantined',async()=>{
+  const saved=storage();
+  const a=fixture({storage:saved}),newDraft=a.client.queueDraft(scope,{synthetic:true});
+  const v2=[...saved.data.entries()].find(([k])=>k.startsWith('kts-team-draft-intent-v2:'));
+  assert.ok(v2);
+  const legacy=JSON.parse(v2[1]);
+  saved.set(Sync.PENDING_DRAFTS_KEY,JSON.stringify([legacy]));
+  const b=fixture({storage:saved});
+  assert.equal(b.client.snapshot().drafts.find(d=>d.id===newDraft.id).status,'NEEDS_RECONCILIATION');
+  await b.client.reconnect();
+  assert.equal(b.posts().length,0);
+});
