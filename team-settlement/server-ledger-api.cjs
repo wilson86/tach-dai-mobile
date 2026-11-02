@@ -54,20 +54,20 @@ function createServerLedgerApi({
     return trusted;
   }
 
-  async function withWriteActor(sessionToken,work) {
+  async function withSessionActor(sessionToken,work) {
     if(typeof auth.withVerifiedSession==='function'){
       return auth.withVerifiedSession(sessionToken, trusted=>{
         C.actorFromServer(trusted);
         return work(trusted);
       });
     }
-    // Legacy injected auth contracts retain their old behavior. They do not
-    // prove session-lock serialization and must not qualify a durable pilot.
+    // Legacy injected auth contracts retain their old behavior for reads and
+    // writes. They do not prove session-lock serialization for a durable pilot.
     return work(await actor(sessionToken));
   }
 
   async function appendDraft(sessionToken, input) {
-    return withWriteActor(sessionToken,async trustedActor=>{
+    return withSessionActor(sessionToken,async trustedActor=>{
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('TEAM_INTENT_INVALID');
     const scope = C.requireScope(input.scope);
     if (scope.workspace_id !== trustedActor.workspace_id) throw new Error('TEAM_WORKSPACE_DENIED');
@@ -93,7 +93,7 @@ function createServerLedgerApi({
   // Default-off internal synthetic service; NO HTTP review endpoint or UI button.
   async function advanceReview(sessionToken,input) {
     if(!syntheticReviewEnabled)throw Error('TEAM_ROUTE_NOT_ENABLED');
-    return withWriteActor(sessionToken,async trustedActor=>{
+    return withSessionActor(sessionToken,async trustedActor=>{
     if(typeof repository.advanceReview!=='function')throw Error('TEAM_ROUTE_NOT_ENABLED');
     if(!input||typeof input!=='object'||Array.isArray(input))throw Error('TEAM_INTENT_INVALID');
     if(Object.keys(input).some(k=>!['action','scope','expected_revision','idempotency_key'].includes(k)))
@@ -120,7 +120,7 @@ function createServerLedgerApi({
   }
 
   async function getScope(sessionToken, scope) {
-    const trustedActor = await actor(sessionToken);
+    return withSessionActor(sessionToken,async trustedActor=>{
     const checked = C.requireScope(scope);
     if (checked.workspace_id !== trustedActor.workspace_id)
       throw new Error('TEAM_WORKSPACE_DENIED');
@@ -134,10 +134,11 @@ function createServerLedgerApi({
         result.region !== checked.region)
       throw new Error('TEAM_SCOPE_RESPONSE_UNVERIFIED');
     return result;
+    });
   }
 
   async function listCounterparties(sessionToken,options={}){
-    const trustedActor=await actor(sessionToken);
+    return withSessionActor(sessionToken,async trustedActor=>{
     if(typeof repository.listCounterparties!=='function')throw Error('TEAM_ROUTE_NOT_ENABLED');
     const result=await repository.listCounterparties(trustedActor,options);
     if(!Array.isArray(result))throw Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
@@ -150,12 +151,14 @@ function createServerLedgerApi({
         throw Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
     }
     return Object.freeze(result.map(row=>Object.freeze({...row})));
+    });
   }
 
   async function getChanges(sessionToken, options) {
-    const trustedActor = await actor(sessionToken);
+    return withSessionActor(sessionToken,async trustedActor=>{
     if (typeof repository.getChanges !== 'function') throw new Error('TEAM_ROUTE_NOT_ENABLED');
     return repository.getChanges(trustedActor, options);
+    });
   }
 
   return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,listCounterparties });

@@ -5,7 +5,7 @@
  }
  function Assert-R6RunnerIdentity([string]$Path){
 -  Assert-True ((Get-Sha256 $Path) -eq 'A4A0EC8D02AC6C4F29C328EC8E8CBA6C11A886D0E76181AED0CDB0D3A8EB1724') 'R6_RUNNER_SOURCE_DRIFT'
-+  Assert-True ((Get-Sha256 $Path) -eq '39DE4482637E37454881017BEC5CA95C8E62F913FABCC74B1C51F46F0AC1FBB4') 'R6_RUNNER_SOURCE_DRIFT'
++  Assert-True ((Get-Sha256 $Path) -eq 'A3621EB108444A79253E1B51F43B1EFFE09613F2D025BE7700B7C88F8423856E') 'R6_RUNNER_SOURCE_DRIFT'
  }
  if($OfflineDriverIdentitySelfTest){
    $proofDir=Join-Path $ControlRoot ('evidence\android-driver-identity-'+[guid]::NewGuid().ToString('N'))

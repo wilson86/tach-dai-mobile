@@ -1,7 +1,7 @@
 # Windows synthetic pilot Job Object candidate
 
 The control runner `C:\KTS-Settlement\w20-2d63c84e\Run-RealPilot20.ps1`
-(local SHA-256 `39DE4482637E37454881017BEC5CA95C8E62F913FABCC74B1C51F46F0AC1FBB4`)
+(local SHA-256 `A3621EB108444A79253E1B51F43B1EFFE09613F2D025BE7700B7C88F8423856E`)
 now creates `pg_ctl ... start` in a session Job Object using the pinned
 `team-settlement/windows-pilot-owned-job.cs`. Windows process creation uses
 the job-list attribute, so the child is assigned atomically before resume.

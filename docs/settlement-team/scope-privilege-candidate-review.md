@@ -43,6 +43,8 @@ the bearer into the ledger transaction. The durable auth service now offers
 separate ledger transaction. The synthetic composition requires that callback
 for writes. A controlled JS lock model verifies ordering and logout replay;
 actual PostgreSQL locking, failures and concurrent revocation remain NOT_RUN.
+The same callback now surrounds scope, change-feed and counterparty reads;
+the separate recovery inspector still uses its own verification protocol.
 Legacy injected auth contracts can still use the older unlocked fallback when
 the durable-write requirement is not enabled and must not qualify a pilot.
 The ledger repository independently rechecks membership. Therefore a
