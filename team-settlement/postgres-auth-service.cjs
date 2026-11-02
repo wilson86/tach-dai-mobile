@@ -65,7 +65,8 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
     });
   }
 
-  async function verifySession(token,requestedWorkspace){
+  async function withVerifiedSession(token,work,requestedWorkspace){
+    if(typeof work!=='function')error('AUTH_SESSION_CALLBACK_INVALID');
     const hash=tokenHash(token);
     return db.transaction(async tx=>{
       const now=clock();
@@ -91,8 +92,14 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
       const actor={server_verified:true,membership_active:true,
         user_id:session.user_id,workspace_id:session.workspace_id,role:members[0].team_role};
       actorFromServer(actor);
-      return Object.freeze(actor);
+      // Keep the session row's FOR SHARE lock until the protected work finishes.
+      // revokeSession's UPDATE then serializes with writes using this callback.
+      return work(Object.freeze(actor));
     });
+  }
+
+  async function verifySession(token,requestedWorkspace){
+    return withVerifiedSession(token,actor=>actor,requestedWorkspace);
   }
 
   async function revokeSession(token){
@@ -163,7 +170,7 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
     });
   }
   function unavailable(){error('AUTH_ADMIN_UNAVAILABLE');}
-  return Object.freeze({login,verifySession,revokeSession,
+  return Object.freeze({login,verifySession,withVerifiedSession,revokeSession,
     manageMembership,setIdentityDisabled:unavailable});
 }
 module.exports=Object.freeze({createPostgresAuthService,tokenHash});

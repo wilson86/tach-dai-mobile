@@ -131,7 +131,8 @@ function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic =
   }
 
 
-  // PostgreSQL function rechecks session roles, transaction state, CAS, SoD and RLS.
+  // The SQL function rechecks membership role, transaction state, CAS, SoD and RLS.
+  // It does not authenticate the session or the caller-set actor setting.
   async function advanceReview(actor,{scope,action,expected_revision,event_id,idempotency_key,request_sha256}={}) {
     if(!['submit_review','approve_review'].includes(action))throw Error('TEAM_REVIEW_ACTION_FORBIDDEN');
     const checked=C.requireScope(scope);

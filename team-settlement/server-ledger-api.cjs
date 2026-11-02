@@ -39,11 +39,13 @@ function digest(value) {
 
 function createServerLedgerApi({
   auth, repository, eventId = () => `event_${crypto.randomBytes(12).toString('hex')}`,
-  syntheticReviewEnabled=false
+  syntheticReviewEnabled=false, requireSessionLockForWrites=false
 } = {}) {
   if (!auth || typeof auth.verifySession !== 'function' || !repository ||
       typeof repository.appendDraft !== 'function' || typeof repository.getScope !== 'function' ||
-      (typeof eventId !== 'function' || typeof syntheticReviewEnabled !== 'boolean'))
+      (typeof eventId !== 'function' || typeof syntheticReviewEnabled !== 'boolean' ||
+       typeof requireSessionLockForWrites !== 'boolean' ||
+       (requireSessionLockForWrites && typeof auth.withVerifiedSession !== 'function')))
     throw new Error('TEAM_SERVER_API_CONFIG_INVALID');
 
   async function actor(sessionToken) {
@@ -52,8 +54,20 @@ function createServerLedgerApi({
     return trusted;
   }
 
+  async function withWriteActor(sessionToken,work) {
+    if(typeof auth.withVerifiedSession==='function'){
+      return auth.withVerifiedSession(sessionToken, trusted=>{
+        C.actorFromServer(trusted);
+        return work(trusted);
+      });
+    }
+    // Legacy injected auth contracts retain their old behavior. They do not
+    // prove session-lock serialization and must not qualify a durable pilot.
+    return work(await actor(sessionToken));
+  }
+
   async function appendDraft(sessionToken, input) {
-    const trustedActor = await actor(sessionToken);
+    return withWriteActor(sessionToken,async trustedActor=>{
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('TEAM_INTENT_INVALID');
     const scope = C.requireScope(input.scope);
     if (scope.workspace_id !== trustedActor.workspace_id) throw new Error('TEAM_WORKSPACE_DENIED');
@@ -72,13 +86,14 @@ function createServerLedgerApi({
     });
     const verified = requireVerifiedDraftReceipt(result, proposedEventId, input.expected_revision);
     return Object.freeze({ ...verified, scope_key: C.scopeKey(scope), sync_status: 'SYNCED' });
+    });
   }
 
 
   // Default-off internal synthetic service; NO HTTP review endpoint or UI button.
   async function advanceReview(sessionToken,input) {
     if(!syntheticReviewEnabled)throw Error('TEAM_ROUTE_NOT_ENABLED');
-    const trustedActor=await actor(sessionToken);
+    return withWriteActor(sessionToken,async trustedActor=>{
     if(typeof repository.advanceReview!=='function')throw Error('TEAM_ROUTE_NOT_ENABLED');
     if(!input||typeof input!=='object'||Array.isArray(input))throw Error('TEAM_INTENT_INVALID');
     if(Object.keys(input).some(k=>!['action','scope','expected_revision','idempotency_key'].includes(k)))
@@ -101,6 +116,7 @@ function createServerLedgerApi({
     if(verified.state!==requiredState)throw Error('TEAM_REVIEW_RECEIPT_UNVERIFIED');
     return Object.freeze({...verified,scope_key:C.scopeKey(scope),
       sync_status:'SYNCED',review_state:requiredState});
+    });
   }
 
   async function getScope(sessionToken, scope) {

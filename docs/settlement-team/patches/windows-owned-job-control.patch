@@ -71,26 +71,37 @@
      AtomicJson $receiptPath $receipt
    }
    if($timedOut){throw "PG_CTL_TIMEOUT_$stage"}
-@@ -688,8 +708,8 @@
+@@ -687,9 +707,15 @@
+     'tests/settlement-team-sync-client.test.cjs'='4C2DC2F8300AFAA93AD88BC9343A1E6F1BA7E7DCF01A462F7DDE4D5454C2E982'
      'tests/settlement-team-windows-pilot-controller.cjs'='962B91223649D02532B071BACC15D42FF737217642C55E9CE75991D1FDD01E3C'
      'tests/settlement-auth-http-contract.test.cjs'='232A8EBCA12EBE2135693EB9AA42026A9817B20A51462AD9337173FA2BFE7206'
-     'team-settlement/postgres-ledger-repository.cjs'='7EC3FDE88DD1031E6E220611459A3885911BB9FD1C418C8DAA15B20C51BA08EF'
+-    'team-settlement/postgres-ledger-repository.cjs'='7EC3FDE88DD1031E6E220611459A3885911BB9FD1C418C8DAA15B20C51BA08EF'
 -    'team-settlement/team-composition.cjs'='A7955AD7450B657B2D50CF06AF45F27DC015AD0F9AD6017B965095DDE2915A55'
 -    'team-settlement/role-probe.cjs'='92186B25044DA8447B0C996DD3E41926934601443E542E7F05727AC338444ABD'
-+    'team-settlement/team-composition.cjs'='414F1246631E242F399D2C0F2F27F1F71865894CFC4C8427A161895378796608'
++    'team-settlement/postgres-ledger-repository.cjs'='0C7D15C3847A864AF1828FB5C5CB404AD20D5D8AF07CEB03613C6EDB41803883'
++    'team-settlement/team-composition.cjs'='2FEFF2B14779E88A2513D0A19AC26CB23D30E53E6BFFFB3B91236EAA367D2E55'
++    'team-settlement/postgres-auth-service.cjs'='3C96A9CD8CBD93C4CD6173CAC792622509CA00524E82EABC4C38500BD2D39AA6'
++    'team-settlement/server-ledger-api.cjs'='49201F02575BDF1830848AAE682DE958187F34DC3448E8C81C1564A238CACF28'
++    'team-settlement/migrations/001_team_ledger.sql'='210AF3A1B4BE8076702F70863D9D34F9085C184DA386D637D321AEEA92881672'
++    'team-settlement/migrations/002_draft_transaction.sql'='8EC4A4B95F4DBE36910BFD0110F2A6B31323F1BB54DEF425430E523833E80429'
++    'team-settlement/migrations/003_auth_session.sql'='061845D24EBD313ADA7FAD0D50ED2837AFC03944B56D97F5C0CA5C01118375D7'
++    'team-settlement/migrations/004_review_workflow.sql'='F73BF597E6364084B0A807DB94B0717D5071029AEDA4B0F574E3F22255F31FB6'
 +    'team-settlement/role-probe.cjs'='0F6F9CAAC2131FB87DE6C5259379F7B20B97BA6318599E1100FA4FAB06BE374B'
      'tests/settlement-team-role-diagnostic.test.cjs'='ACAEF77F2AC9179BAF814255D94670F6830AF7E576E374F77447991E4DE70815'
      'team-settlement/windows-pilot-controller-capabilities.cjs'='66D79F57B15148BEA87334466E3CCEDCB52F10E0CEB599FE6C5AACBFB40469E9'
      'team-settlement/live-runtime-adapters.cjs'='6A9FF0AA4497139795CA93D5BED0805B9162D39B2E3414682E4F01D92E26B183'
-@@ -710,6 +730,7 @@
+@@ -710,6 +736,10 @@
    $expectedDirty=@(' M app/settlement-team-pilot-start.js',' M app/settlement-team-pilot.css',' M app/settlement-team-pilot.html',' M team-settlement/auth-http-contract.cjs',' M team-settlement/synthetic-local-team-http.cjs',' M tests/settlement-auth-http-contract.test.cjs',' M tests/settlement-team-synthetic-local-http.test.cjs',' M tests/settlement-team-windows-pilot-controller.cjs','?? team-settlement/live-runtime-adapters.cjs','?? team-settlement/permanent-private-ca-policy.cjs','?? team-settlement/persistent-pilot-lifecycle.cjs','?? team-settlement/synthetic-private-team-https.cjs','?? team-settlement/two-phase-controller-test-seam.cjs','?? team-settlement/windows-pilot-controller-capabilities.cjs','?? tests/chrome-private-ca-trust.test.cjs','?? tests/permanent-private-ca-policy.test.cjs','?? tests/persistent-pilot-lifecycle.test.cjs','?? tests/settlement-team-pilot-start-https.test.cjs','?? tests/settlement-team-private-https-contract.test.cjs','?? tests/settlement-team-ui-routing-browser.test.cjs','?? tests/settlement-team-windows-pilot-capabilities.test.cjs')
    $expectedDirty+=@('?? team-settlement/windows-r6-rls-baseline.ps1')
    $expectedDirty+=@(' M team-settlement/role-probe.cjs')
 +  $expectedDirty+=@(' M team-settlement/team-composition.cjs')
++  $expectedDirty+=@(' M team-settlement/postgres-auth-service.cjs',' M team-settlement/server-ledger-api.cjs')
++  $expectedDirty+=@(' M team-settlement/postgres-ledger-repository.cjs')
++  $expectedDirty+=@(' M team-settlement/migrations/002_draft_transaction.sql')
    $expectedDirty+=@('?? team-settlement/windows-reviewer-session-observation.ps1')
    Assert-True (((@($dirty|Sort-Object) -join '|') -eq (@($expectedDirty|Sort-Object) -join '|'))) 'SOURCE_WORKTREE_UNEXPECTED'
    foreach($sourcePath in $approvedSource.Keys){
-@@ -736,6 +757,17 @@
+@@ -736,6 +766,17 @@
    Assert-True (Test-Path -LiteralPath $controller) 'ADMISSION_CONTROLLER_ARTIFACT_MISSING'
    Assert-True ((Get-KtsSha256 $controller) -eq $approvedSource['tests/settlement-team-windows-pilot-controller.cjs']) 'ADMISSION_CONTROLLER_ARTIFACT_HASH_MISMATCH'
    Assert-True ((Get-KtsSha256 (Join-Path $control 'android-chrome-cdp-workflow.cjs')) -eq '8C0C211F224DFE3ED7101BEF46C235D66553EECDB70971FD0E743E62B55ECD4D') 'R6_ANDROID_DRIVER_SOURCE_DRIFT'
@@ -108,7 +119,7 @@
    if($OfflineR6Lifecycle){
      Assert-True ($env:KTS_R6_ROOTLESS_TEST -eq '1' -and $env:NODE_ENV -eq 'test' -and -not $HttpsPilot -and -not $PublicQuickTunnel -and -not $GalaxyServeOnly) 'R6_ROOTLESS_MODE_INVALID'
      $fixturePath=[IO.Path]::GetFullPath($R6FixtureManifest)
-@@ -1039,6 +1071,7 @@
+@@ -1039,6 +1080,7 @@
  finally {
    if($probeOrigin){try{Stop-ExactOwnedProcess $probeOrigin 'terminal-dns-probe-origin'|Out-Null}catch{$result.dns_probe_shutdown_failure=$_.Exception.Message}}
    if($pgStarted){try{Invoke-PgCtl @('-D',$pgdata,'-m','fast','-w','stop') 'terminal-stop'}catch{$result.shutdown_failure=$_.Exception.Message}}

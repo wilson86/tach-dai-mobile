@@ -6,7 +6,7 @@ const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypt
 const root='C:\\KTS-Settlement\\android-pilot-stage-a-52f860a\\tach-dai-mobile-b2-group-app';
 const hash=p=>crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex').toUpperCase();
 assert.equal(hash(path.join(root,'team-settlement','role-probe.cjs')),'0F6F9CAAC2131FB87DE6C5259379F7B20B97BA6318599E1100FA4FAB06BE374B');
-assert.equal(hash(path.join(root,'team-settlement','team-composition.cjs')),'414F1246631E242F399D2C0F2F27F1F71865894CFC4C8427A161895378796608');
+assert.equal(hash(path.join(root,'team-settlement','team-composition.cjs')),'2FEFF2B14779E88A2513D0A19AC26CB23D30E53E6BFFFB3B91236EAA367D2E55');
 const {createIsolatedTeamPrototype}=require(path.join(root,'team-settlement','team-composition.cjs'));
 const auth={role:'synthetic_auth',session_role:'synthetic_auth',auth_schema:true,event_read:false,credential_read:true,session_read:true,session_insert:true,session_revoke:true,team_schema:true,membership_read:true,membership_write_denied:true,financial_write_denied:true,direct_scope_write_denied:true,draft_execute:false,review_function_present:true,review_execute:false,superuser:false,bypass_rls:false,role_memberships_present:false};
 const ledger={role:'synthetic_ledger',session_role:'synthetic_ledger',auth_schema:false,team_schema:true,event_read:true,draft_execute:true,review_function_present:true,review_execute:true,membership_write_denied:true,direct_scope_write_denied:true,superuser:false,bypass_rls:false,role_memberships_present:false};

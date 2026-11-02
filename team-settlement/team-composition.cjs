@@ -34,7 +34,7 @@ function createIsolatedTeamPrototype({
   const auth=createPostgresAuthService({db:authDb,clock});
   const ledgerRepository=createPostgresLedgerRepository({db:ledgerDb,
     syntheticAuthorizationDiagnostic});
-  const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled});
+  const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled,requireSessionLockForWrites:true});
   // A distinct, separately opted-in recovery inspector wires the actual
   // actor-scoped PostgreSQL READ ONLY receipt repository into the HTTP route.
   // Neither construction nor enabling the flag opens a port or database pool.

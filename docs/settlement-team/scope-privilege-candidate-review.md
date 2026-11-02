@@ -37,24 +37,26 @@ protected authority. Both options require changes outside a simple grant edit.
 No such mechanism is implemented or approved here; do not substitute an
 unchecked actor argument, client-set GUC, or a new privileged role alone.
 
-The present `server-ledger-api.cjs` verifies the session through the auth
-service, then passes an actor object to the ledger repository; it does not
-pass the session bearer into the ledger transaction. The auth service hashes
-the bearer to find an active session, while the ledger repository starts a
-separate transaction and rechecks membership. The focused session/repository
-fixture confirms this handoff but cannot prove runtime isolation. Therefore a
+The server passes an actor object to the ledger repository; it does not pass
+the bearer into the ledger transaction. The durable auth service now offers
+`withVerifiedSession`, retaining its session `FOR SHARE` lock across the
+separate ledger transaction. The synthetic composition requires that callback
+for writes. A controlled JS lock model verifies ordering and logout replay;
+actual PostgreSQL locking, failures and concurrent revocation remain NOT_RUN.
+Legacy injected auth contracts can still use the older unlocked fallback when
+the durable-write requirement is not enabled and must not qualify a pilot.
+The ledger repository independently rechecks membership. Therefore a
 database-side session-bound design needs an explicitly reviewed contract for
 proof transport and revocation races. A raw bearer or reusable session hash
 must not be added to SQL parameters or logs without a separate disclosure
 and retention analysis. The current contract supplies no such proof to SQL.
-`settlement-team-session-revocation-gap.test.cjs` executes the actual server,
-auth and ledger JavaScript with separate synthetic transaction adapters. In
-that fixture, the session is marked revoked after the auth transaction ends
-and before the ledger transaction begins; the ledger fixture still accepts
-the write while membership remains active. This confirms application-level
-ordering and a missing ledger-session recheck, not a real PostgreSQL race.
-Any candidate must define how session revocation and the ledger commit are
-serialized and demonstrate that behavior with real isolated PostgreSQL.
+The earlier fixture demonstrated a gap between the two transactions. Its
+updated version checks that the auth transaction remains open during a write;
+the Reviewer fixture additionally models a revocation waiting for release.
+These mocks cannot establish PostgreSQL transaction or row-lock behavior.
+The ledger transaction can commit before an auth transaction commit failure;
+retries and idempotency therefore need explicit real-database verification.
+Any candidate must demonstrate these cases with real isolated PostgreSQL.
 
 Draft replay requires an actor-bound receipt contract.
 The server digest still covers action, scope, expected revision and payload,
@@ -65,6 +67,9 @@ It preserves the original event and feed identity for a matching retry.
 This is **source hardening**, not proof of PostgreSQL behavior, independent
 SQL actor binding, or an authorization decision by the database. The actor GUC
 can still be forged by a direct SQL caller; role/grant redesign remains blocked.
+The fixed SQL source was mirrored into the canonical Windows checkout without
+executing it; the prior clean source was retained as a local rollback copy.
+The runner now pins all four migration files before its admission path.
 The existing focused JavaScript characterization deliberately simulates an
 unvalidated SQL replay and therefore still shows two actors receiving `SYNCED`
 when given that mocked response. That fixture does not evaluate the updated
