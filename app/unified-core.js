@@ -283,6 +283,7 @@
   const $=id=>document.getElementById(id);
   let groups=[],rows=[],origin='',ledgerActive=false;
   let sourceRegion='',sourceDate='',skipRebuild=false,originalChatText='',normalizingChat=false;
+  let programmaticSourceEvent=false;
   let pendingSourceBlocks=null,pendingSourceText='';
   const selected=new Set(),undoStack=[],selectionBindings=[];
   const live=()=>rows.filter(r=>r.alive);
@@ -368,7 +369,9 @@
   function notifyRawChanged(){
     const el=$('dvInput');
     if(!el||typeof el.dispatchEvent!=='function'||typeof Event!=='function')return;
-    el.dispatchEvent(new Event('input',{bubbles:true}));
+    programmaticSourceEvent=true;
+    try{el.dispatchEvent(new Event('input',{bubbles:true}));}
+    finally{programmaticSourceEvent=false}
   }
   function restore(){
     const previous=captureState();
@@ -756,6 +759,7 @@
     if(clear)clear.addEventListener('click',()=>{groups=[];rows=[];selected.clear();origin='';originalChatText='';ledgerActive=false;persist();render();});
     run.addEventListener('click',()=>Promise.resolve().then(rebuild));
     input.addEventListener('input',()=>{
+      if(programmaticSourceEvent)return; // Full-Cut notification must not erase its own durable Undo.
       if(!normalizingChat)originalChatText='';
       if(ledgerActive){ledgerActive=false;persist();render();}
     });
