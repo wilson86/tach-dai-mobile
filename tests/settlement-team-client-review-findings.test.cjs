@@ -80,7 +80,7 @@ test('same-account tabs append independent records without erasing each other',a
   a.client.clearSession({discardPending:true});assert.equal(saved.data.get(originalB[0]),originalB[1]);
   const reload=fixture({storage:saved,locks:manager});
   assert.deepEqual(new Set(reload.client.snapshot().drafts.map(d=>d.id)),new Set([one.id,two.id]));
-  assert.equal(reload.client.snapshot().drafts.find(d=>d.id===two.id).status,'PENDING');
+  assert.equal(reload.client.snapshot().drafts.find(d=>d.id===two.id).status,'NEEDS_RECONCILIATION');
   assert.equal(reload.client.snapshot().drafts.find(d=>d.id===one.id).status,'NEEDS_RECONCILIATION');
 });
 test('concurrent tabs dispatch the same immutable intent at most once',async()=>{
@@ -89,7 +89,7 @@ test('concurrent tabs dispatch the same immutable intent at most once',async()=>
   const d=a.client.queueDraft(scope,{synthetic:true});const b=fixture({storage:saved,locks:manager});
   const inflight=a.client.syncDraft(d.id);
   while(!finish)await new Promise(resolve=>setImmediate(resolve));
-  const competing=await b.client.syncDraft(d.id);assert.equal(competing.status,'BLOCKED');
+  const competing=await b.client.syncDraft(d.id);assert.equal(competing.status,'NEEDS_RECONCILIATION');
   finish(response(200,receipt()));assert.equal((await inflight).status,'SYNCED');
   assert.equal(a.posts().length+b.posts().length,1);assert.equal(manager.held.size,0);
 });
@@ -217,7 +217,7 @@ test('legacy v1 PENDING with no dispatch marker is never automatically resent',a
   assert.equal(f.posts().length,0);
   assert.equal(saved.get(Sync.PENDING_DRAFTS_KEY),original);
 });
-test('legacy v1 quarantine does not block a distinct new v2 draft',async()=>{
+test('legacy v1 quarantine still permits a distinct new v2 draft in its creating session',async()=>{
   const saved=storage();
   saved.set(Sync.PENDING_DRAFTS_KEY,JSON.stringify([{
     id:'draft_'+'d'.repeat(32),account_id:'fake_operator',workspace_id:'group_a',
@@ -225,11 +225,13 @@ test('legacy v1 quarantine does not block a distinct new v2 draft',async()=>{
     created_at:'2026-11-03T00:00:00Z'}]));
   const f=fixture({storage:saved});
   const fresh=f.client.queueDraft(scope,{synthetic:'new'});
+  assert.equal((await f.client.syncDraft(fresh.id)).status,'SYNCED');
+  assert.equal(f.posts().length,1);
   const restored=fixture({storage:saved});
   assert.equal(restored.client.snapshot().drafts.find(d=>d.id==='draft_'+'d'.repeat(32)).status,'NEEDS_RECONCILIATION');
-  assert.equal(restored.client.snapshot().drafts.find(d=>d.id===fresh.id).status,'PENDING');
+  assert.equal(restored.client.snapshot().drafts.find(d=>d.id===fresh.id).status,'NEEDS_RECONCILIATION');
   await restored.client.reconnect();
-  assert.equal(restored.posts().length,1);
+  assert.equal(restored.posts().length,0);
   assert.equal(restored.client.snapshot().drafts.find(d=>d.id==='draft_'+'d'.repeat(32)).status,'NEEDS_RECONCILIATION');
 });
 test('same intent present in legacy v1 and v2 is conservatively quarantined',async()=>{
@@ -243,4 +245,34 @@ test('same intent present in legacy v1 and v2 is conservatively quarantined',asy
   assert.equal(b.client.snapshot().drafts.find(d=>d.id===newDraft.id).status,'NEEDS_RECONCILIATION');
   await b.client.reconnect();
   assert.equal(b.posts().length,0);
+});
+
+test('v2 dispatch-marker eviction after lost ACK never causes a second POST',async()=>{
+  const saved=storage();
+  const first=fixture({storage:saved,write:async()=>response(503,{error:'TEAM_MUTATION_OUTCOME_UNKNOWN'})});
+  const draft=first.client.queueDraft(scope,{synthetic:true});
+  assert.equal((await first.client.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION');
+  assert.equal(first.posts().length,1);
+  const marker=[...saved.data.keys()].find(k=>k.endsWith(':dispatched'));
+  assert.ok(marker);
+  const durableKey=[...saved.data.keys()].find(k=>k.startsWith('kts-team-draft-intent-v2:')&&!k.endsWith(':dispatched'));
+  const durableBody=saved.data.get(durableKey);
+  saved.data.delete(marker); // Simulate partial browser storage eviction, not a valid no-write proof.
+  const afterReload=fixture({storage:saved});
+  assert.equal(afterReload.client.snapshot().drafts.find(row=>row.id===draft.id).status,'NEEDS_RECONCILIATION');
+  assert.equal((await afterReload.client.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION');
+  await afterReload.client.reconnect();
+  assert.equal(afterReload.posts().length,0);
+  assert.equal(saved.data.get(durableKey),durableBody);
+});
+test('unattempted v2 draft restored after reload needs reconciliation, not auto-send',async()=>{
+  const saved=storage(),first=fixture({storage:saved});
+  const draft=first.client.queueDraft(scope,{synthetic:true});
+  assert.equal(first.client.snapshot().drafts.find(row=>row.id===draft.id).status,'PENDING');
+  const restored=fixture({storage:saved});
+  assert.equal(restored.client.snapshot().drafts.find(row=>row.id===draft.id).status,'NEEDS_RECONCILIATION');
+  assert.equal((await restored.client.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION');
+  await restored.client.reconnect();
+  assert.equal(restored.posts().length,0);
+  assert.equal(first.posts().length,0);
 });
