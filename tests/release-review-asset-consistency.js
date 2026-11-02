@@ -41,7 +41,7 @@ assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-cl
 assert.ok(rootSW.includes('JSON.stringify({version:"'+MOBILE+'"})'));
 assert.ok(unifiedHtml.includes("Unified "+UNIFIED));
 assert.ok(unifiedHtml.includes('./unified-core.js?ux='+UNIFIED));
-assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54'));
+assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2'));
 assert.ok(unifiedCore.includes("const UX_VERSION='"+UNIFIED+"'"));
 assert.ok(unifiedSW.includes("kts-tach-unified-v"+UNIFIED+"-owner-singleton-dx-0a0e54"));
 assert.ok(unifiedSW.includes("'./unified-core.js?ux="+UNIFIED+"'"));
