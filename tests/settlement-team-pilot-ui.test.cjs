@@ -315,19 +315,20 @@ test('opt-in synthetic review requires fresh scope read and explicit human confi
  assert.equal(h.els['team-submit-review'].disabled,true);
  h.mounted.dispose();
 });
-test('phone lost response keeps review PENDING and retries identical in-memory request only by human confirmation',async()=>{
+test('review PENDING cannot trigger another POST even if the disabled button is forced',async()=>{
  const h=harness({syntheticReviewUiEnabled:true,reviewOutcomes:['PENDING','SYNCED']});
  h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
  h.els['team-read'].fire('click');await tick();
  h.win.confirm=()=>true;
  h.els['team-submit-review'].fire('click');await tick();
  assert.match(h.els['team-notice'].textContent,/PENDING/);
- assert.equal(h.els['team-submit-review'].disabled,false);
+ assert.equal(h.els['team-submit-review'].disabled,true);
  assert.equal(h.state.review_attempts.length,1);
  assert.equal(h.state.review_attempts[0].idempotency_key,'fake_same_key');
  h.els['team-submit-review'].fire('click');await tick();
  assert.equal(h.calls.filter(x=>x==='readScope').length,2);
- assert.equal(h.calls.filter(x=>x==='reviewScope').length,2);
+ assert.equal(h.calls.filter(x=>x==='reviewScope').length,1);
+ assert.match(h.els['team-notice'].textContent,/TEAM_REVIEW_REQUIRES_MANUAL_RECONCILIATION/);
  assert.equal(h.state.review_attempts[0].idempotency_key,'fake_same_key');
  assert.equal(h.els['team-submit-review'].disabled,true);
  h.mounted.dispose();
@@ -641,5 +642,37 @@ test('injected successful review without immutable event ID never displays verif
  h.els['team-submit-review'].fire('click');await tick();await tick();
  assert.match(h.els['team-notice'].textContent,/thiếu biên nhận/);
  assert.doesNotMatch(h.els['team-notice'].textContent,/đã ghi nhận bởi máy chủ/);
+ h.mounted.dispose();
+});
+
+test('NEEDS_RECONCILIATION displays stop-send warning and cannot be dispatched by Sync button',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.state.drafts=[{id:'draft_fake',status:'NEEDS_RECONCILIATION',error:'TEAM_MUTATION_OUTCOME_UNKNOWN'}];h.notify();
+ assert.match(h.els['team-warning'].textContent,/DỪNG GỬI/);
+ assert.match(h.els['team-warning'].textContent,/KHÔNG thử gửi lại/);
+ assert.equal(h.els['team-sync'].disabled,true);
+ h.els['team-sync'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='syncDraft').length,0);
+ h.mounted.dispose();
+});
+test('reconnect surfaces reconciliation distinctly instead of hiding it in BLOCKED',async()=>{
+ const h=harness({reconnectStatus:'SYNCED',reconnectDrafts:[{status:'NEEDS_RECONCILIATION'}]});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-reconnect'].fire('click');await tick();
+ assert.match(h.els['team-notice'].textContent,/NEEDS_RECONCILIATION/);
+ assert.match(h.els['team-notice'].textContent,/cần đối soát receipt/);
+ h.mounted.dispose();
+});
+test('logout consent never promises deleting preserved durable reconciliation evidence',async()=>{
+ const h=harness();
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.state.drafts=[{id:'draft_fake',status:'NEEDS_RECONCILIATION'}];h.notify();
+ let prompt='';h.win.confirm=message=>{prompt=message;return false;};
+ h.els['team-logout'].fire('click');await tick();
+ assert.match(prompt,/bằng chứng đã lưu vẫn được giữ/);
+ assert.match(prompt,/MEMORY_ONLY có thể mất/);
+ assert.doesNotMatch(prompt,/sẽ xóa nháp/);
+ assert.equal(h.state.authenticated,true);
  h.mounted.dispose();
 });
