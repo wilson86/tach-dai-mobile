@@ -9,6 +9,8 @@ function install(){
  const input=document.getElementById("dvInput")||document.getElementById("input");
  const output=document.getElementById("dvOutput")||document.getElementById("output");
  const core=window.KTSQuytBaoReview;
+ // This remains a review-only preview until Router supplies a once-only receipt.
+ const ROUTER_ONCE_ONLY_RECEIPT_VERIFIED=false;
  if(!input||!output||!core||document.getElementById("ktsQuytCheckbox"))return;
  const ownTop=(()=>{try{return window.top?.location.origin===location.origin?window.top:window}catch(_){return window}})();
  const label=document.createElement("label");
@@ -35,20 +37,28 @@ function install(){
  const keep=document.createElement("button");keep.type="button";
  keep.textContent="Xác nhận khách đánh thêm — GIỮ ĐỦ các lượt";
  keep.hidden=true;keep.style.cssText="padding:9px;border:1px solid #ae871b;background:#fff7d2;margin:6px 0";
- const copy=document.createElement("button");copy.type="button";copy.textContent="Copy kết quả Quýt đã kiểm tra";
+ const copy=document.createElement("button");copy.type="button";copy.textContent="Copy Quýt bị khóa — chờ xác minh Router";
+ copy.disabled=true;
  copy.style.cssText="padding:9px;border-radius:6px;background:#d79c2a;color:#111;border:0;margin-top:6px";
  const note=document.createElement("div");note.style.cssText="font-size:12px";
- note.textContent="Hệ số mặc định 1,067; nhập dấu phẩy hoặc dấu chấm, tối đa 3 chữ số thập phân, lớn hơn 0 và không quá 3. Chỉ nhân B/LO/BAO, DD/Đầu/Đuôi/Đá giữ nguyên. Bản thử nghiệm chưa tự gửi.";
+ note.textContent="Hệ số mặc định 1,067; nhập dấu phẩy hoặc dấu chấm, tối đa 3 chữ số thập phân, lớn hơn 0 và không quá 3. Chỉ nhân B/LO/BAO; DD/Đầu/Đuôi/Đá giữ nguyên. Chưa xác minh Router nhân đúng một lần: khóa Copy/Cắt và tự gửi.";
  panel.append(title,status,keep,review,copy,note);
  output.insertAdjacentElement("afterend",panel);
- let approved=null;
  let confirmedRepeatSource=null;
  let checkedSource="";
  function reset(){
-  approved=null;review.value="";keep.hidden=true;
+  review.value="";keep.hidden=true;
   status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
  }
  function enabled(){return check.checked===true}
+ function clearSelection(message){
+  confirmedRepeatSource=null;checkedSource="";
+  ownTop.__KTS_QUYT_SELECTED_V1__=false;
+  ownTop.__KTS_QUYT_SOURCE_V1__="";
+  ownTop.__KTS_QUYT_RATE_V1__="1,067";
+  notifyAll();
+  if(message)status.textContent=message;
+ }
  function applyFromOwner(){
   const requested=ownTop.__KTS_QUYT_SELECTED_V1__===true;
   const source=String(ownTop.__KTS_QUYT_SOURCE_V1__||"");
@@ -68,7 +78,8 @@ function install(){
   confirmedRepeatSource=null;
   ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&Boolean(input.value.trim());
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
-  if(typeof ownTop.__KTS_QUYT_RATE_V1__!=="string")ownTop.__KTS_QUYT_RATE_V1__=rate.value;
+  if(!ownTop.__KTS_QUYT_SELECTED_V1__||typeof ownTop.__KTS_QUYT_RATE_V1__!=="string")
+   ownTop.__KTS_QUYT_RATE_V1__="1,067";
   notifyAll();
  });
  rate.addEventListener("input",()=>{
@@ -86,9 +97,7 @@ function install(){
  function refresh(){
   reset();if(!enabled())return;
   if(!checkedSource||checkedSource!==input.value){
-    check.checked=false;panel.hidden=true;
-    ownTop.__KTS_QUYT_SELECTED_V1__=false;ownTop.__KTS_QUYT_SOURCE_V1__="";
-    notifyAll();return;
+    clearSelection("HOLD: nguồn đã đổi, Quýt và hệ số được đặt lại mặc định.");return;
   }
   const original=input.value,raw=output.value;
   if(!original.trim()||!raw.trim()){status.textContent="HOLD: không có tin hoặc kết quả để điều chỉnh.";return}
@@ -103,12 +112,11 @@ function install(){
     cleanCore:window.KTSCleanAggregate,repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator",
     omitRegion:true
    });
-   approved={input:original,result:raw,preview:p.preview,rate:rate.value};
    review.value=p.preview;
    status.textContent="Quýt ✓ | hệ số ×"+p.rate.replace(".",",")+
     " | GỘP các lượt cùng số/cùng loại/cùng đài trước → nhân một lần → làm tròn lên. "+
     p.aggregatedExposures+" số/loại đã đối chiếu. Chưa cho gửi tự động, Router có thể nhân thêm.";
-   copy.disabled=false;
+   copy.disabled=!ROUTER_ONCE_ONLY_RECEIPT_VERIFIED;
   }catch(e){
     if(String(e.message||e).includes("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED")){
      keep.hidden=false;
@@ -130,23 +138,26 @@ function install(){
  input.addEventListener("input",()=>{
   confirmedRepeatSource=null;
   if(enabled()&&checkedSource!==input.value){
-    ownTop.__KTS_QUYT_SELECTED_V1__=false;ownTop.__KTS_QUYT_SOURCE_V1__="";
-    notifyAll();
+    clearSelection("HOLD: tin đã đổi, Quýt và hệ số trở về mặc định.");return;
   }
   reset();
  });
  const region=document.getElementById("region")||document.getElementById("sharedRegion");
- if(region)region.addEventListener("change",()=>{confirmedRepeatSource=null;reset()});
- async function doCopy(){
-  if(!enabled()||!approved||approved.input!==input.value||approved.result!==output.value||
-     approved.rate!==rate.value||approved.preview!==review.value){reset();status.textContent="HOLD: nguồn, kết quả hoặc hệ số đã thay đổi; phải kiểm tra lại.";return}
-  if(!navigator.clipboard?.writeText){status.textContent="HOLD: Clipboard không khả dụng. Không copy tin gốc.";return}
-  try{
-   await navigator.clipboard.writeText(approved.preview);
-   status.textContent="Đã copy kết quả Quýt để xem xét; chưa gửi tự động. Đầu ra gốc không đổi.";
-  }catch(e){status.textContent="HOLD: Copy không thành công: "+String(e.message||e)}
+ if(region)region.addEventListener("change",()=>{
+  if(enabled())clearSelection("HOLD: miền/đài đã đổi, Quýt và hệ số trở về mặc định.");
+  else {confirmedRepeatSource=null;reset()}
+ });
+ // The prepared text must not enter the Router until transform-once authority exists.
+ copy.addEventListener("click",event=>{
+  event.preventDefault();
+  status.textContent="HOLD: chưa có bằng chứng Router chỉ nhân một lần. Không Copy Quýt.";
+ });
+ for(const type of ["copy","cut"]){
+  review.addEventListener(type,event=>{
+   event.preventDefault();
+   status.textContent="HOLD: chưa có receipt Router; không sao chép kết quả Quýt đã nhân.";
+  });
  }
- copy.addEventListener("click",()=>{refresh();void doCopy()});
  // Prevent accidental raw result copy through the normal result button.
  // Quýt remains a REVIEW_ONLY transform until a one-time authoritative
  // Router/parent receipt can guarantee that the prepared amount is not
