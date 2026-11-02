@@ -331,10 +331,12 @@
       const old=localStorage.getItem(STORAGE);
       let compatible=false;
       if(old){try{compatible=validateLedger(JSON.parse(old))}catch(_){}}
-      if(old&&!compatible&&!preserveIncompatibleLedger(old))return;
-      if(ledgerActive&&live().length)localStorage.setItem(STORAGE,JSON.stringify(serial()));
+      if(old&&!compatible&&!preserveIncompatibleLedger(old))return false;
+      // FULL Cut retains zero-live rows and Undo for a safe F5 recovery.
+      if(ledgerActive&&rows.length)localStorage.setItem(STORAGE,JSON.stringify(serial()));
       else localStorage.removeItem(STORAGE);
-    }catch(_){}
+      return true;
+    }catch(_){return false}
   }
   function preserveIncompatibleLedger(raw){
     for(let i=0;i<10000;i++){
@@ -344,10 +346,23 @@
     }
     return false;
   }
-  function snapshot(){
-    undoStack.push({origin,input:safeText($('dvInput')?.value),output:safeText($('dvOutput')?.value),
+  function captureState(){
+    return {origin,input:safeText($('dvInput')?.value),output:safeText($('dvOutput')?.value),
       rows:rows.map(r=>({...r})),groups:groups.map(g=>({...g,rowIds:g.rowIds.slice()})),
-      selected:[...selected],ledgerActive,sourceRegion,sourceDate,originalChatText});
+      selected:[...selected],ledgerActive,sourceRegion,sourceDate,originalChatText};
+  }
+  function applyState(saved){
+    origin=saved.origin;sourceRegion=saved.sourceRegion;sourceDate=saved.sourceDate;
+    originalChatText=saved.originalChatText||'';
+    rows=saved.rows.map(r=>({...r}));
+    groups=saved.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
+    selected.clear();for(const id of saved.selected)selected.add(id);
+    ledgerActive=saved.ledgerActive;
+    $('dvInput').value=saved.input;
+    $('dvOutput').value=saved.output;
+  }
+  function snapshot(){
+    undoStack.push(captureState());
     if(undoStack.length>30)undoStack.shift();
   }
   function notifyRawChanged(){
@@ -356,15 +371,17 @@
     el.dispatchEvent(new Event('input',{bubbles:true}));
   }
   function restore(){
+    const previous=captureState();
     const old=undoStack.pop();if(!old){status('Chưa có thao tác để hoàn tác.','err');return;}
-    origin=old.origin;sourceRegion=old.sourceRegion;sourceDate=old.sourceDate;
-    originalChatText=old.originalChatText||'';
-    rows=old.rows.map(r=>({...r}));
-    groups=old.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
-    selected.clear();for(const id of old.selected)selected.add(id);
-    ledgerActive=old.ledgerActive;
-    $('dvInput').value=old.input;
-    render();persist();
+    applyState(old);
+    if(!persist()){
+      applyState(previous);
+      undoStack.push(old);
+      render();
+      status('HOLD: lưu Undo thất bại. Trạng thái trước Undo được giữ nguyên.','err');
+      return;
+    }
+    render();
     if(!ledgerActive)notifyRawChanged();
     status('Đã hoàn tác · khôi phục nguồn và kết quả','ok');
   }
@@ -549,9 +566,10 @@
     if(view){view.style.display=verified?'':'none';view.value=verified?working.text:'';}
     const label=$('dvInputLabel');
     if(label)label.textContent=verified?'Nguồn còn cược — chỉ tham chiếu':'Nhập tin / nguyên đoạn chat';
-    $('dvSourceCut').disabled=protectedSource;
-    $('dvSourceCopy').disabled=protectedSource;
-    $('dvSelectAllInput').disabled=protectedSource;
+    $('dvSourceCut').disabled=ledgerActive;
+    $('dvSourceCopy').disabled=ledgerActive;
+    $('dvSelectAllInput').disabled=ledgerActive;
+    const originalCopy=$('dvCopyOriginal');if(originalCopy)originalCopy.disabled=ledgerActive;
     const sourceNote=$('dvSourceProtectedNote');
     if(sourceNote){
       sourceNote.style.display=protectedSource?'':'none';
@@ -573,14 +591,22 @@
     if(!(await copy(marked.map(r=>r.text).join('\n')))){
       status('Copy thất bại · chưa Cắt và chưa thay đổi nguồn.','err');return;
     }
+    const before=captureState(),undoBefore=undoStack.slice();
     snapshot();
     for(const row of marked)row.alive=false;
     selected.clear();ledgerActive=true;
     if(!origin)origin=safeText($('dvInput').value);
     sourceRegion=currentRegion();sourceDate=currentDate();
     const left=live().length;
-    if(!left){ledgerActive=false;$('dvInput').value='';}
-    persist();render();
+    if(!left)$('dvInput').value='';
+    if(!persist()){
+      applyState(before);
+      undoStack.splice(0,undoStack.length,...undoBefore);
+      render();
+      status('HOLD: đã Copy, nhưng lưu thất bại — KHÔNG CẮT. Chưa gửi lại khi chưa kiểm tra.','err');
+      return;
+    }
+    render();
     if(!left)notifyRawChanged();
     status('Đã cắt '+marked.length+' dòng · còn '+left+' dòng cược','ok');
   }
@@ -615,7 +641,7 @@
     origin=data.origin;sourceRegion=data.region;sourceDate=data.date;
     originalChatText=data.raw_original||'';
     rows=data.rows.map(r=>({...r}));groups=data.groups.map(g=>({...g,rowIds:g.rowIds.slice()}));
-    selected.clear();ledgerActive=true;$('dvInput').value=origin;
+    selected.clear();ledgerActive=true;$('dvInput').value=live().length?origin:'';
     recoverLegacyLineage();
     undoStack.splice(0,undoStack.length);
     if(Array.isArray(data.undo))for(const old of data.undo.slice(-30)){
@@ -699,6 +725,7 @@
       status(ok?'Đã copy '+arr.length+' dòng cược còn lại':'Không thể copy.',ok?'ok':'err');
     });
     $('dvCopyOriginal').addEventListener('click',async()=>{
+      if(ledgerActive){status('HOLD: nguồn đã Cắt, không được Copy/gửi lại tin gốc.','err');return;}
       const ok=await copy(originalChatText||origin);
       status(ok?'Đã copy tin gốc':'Không thể copy tin gốc.',ok?'ok':'err');
     });
