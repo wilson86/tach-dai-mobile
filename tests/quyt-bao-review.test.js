@@ -32,6 +32,12 @@ test("group by station+selector+number, never conflate different numbers",()=>{
  const p=run("43 34 b100n 43 b50n","43 b150n 34 b100n");
  assert.equal(p.preview,"43 b161n\n34 b107n");
 });
+test("reordered-but-equal unadjusted result keeps all per-number points",()=>{
+ const p=run("43 b100n 34 b50n","34 b50n 43 b100n");
+ assert.equal(p.preview,"43 b107n\n34 b54n");
+ assert.throws(()=>run("43 b100n 34 b50n","34 b50n 43 b99n"),
+  /SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD/);
+});
 test("B and canonical LO stay DISTINCT even for same number",()=>{
  const p=run("43 b1n 43 lo1n","43 b1n 43 lo1n");
  assert.equal(p.preview,"43 b2n\n43 lo2n");
