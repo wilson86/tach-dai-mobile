@@ -55,7 +55,10 @@ updated version checks that the auth transaction remains open during a write;
 the Reviewer fixture additionally models a revocation waiting for release.
 These mocks cannot establish PostgreSQL transaction or row-lock behavior.
 The ledger transaction can commit before an auth transaction commit failure;
-retries and idempotency therefore need explicit real-database verification.
+an offline composition fixture confirms the API returns an error, then accepts
+the same original event on retry using a simulated idempotent repository result.
+The fixture does not execute the SQL idempotency implementation; retries and
+idempotency still need explicit real-database verification.
 Any candidate must demonstrate these cases with real isolated PostgreSQL.
 
 Draft replay requires an actor-bound receipt contract.
