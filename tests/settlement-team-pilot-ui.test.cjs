@@ -26,14 +26,14 @@ function element(){
  };
 }
 function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
- syntheticReviewUiEnabled=false,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
+ syntheticReviewUiEnabled=false,syntheticRecoveryUiEnabled=false,recoveryRows=null,recoveryGate=null,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
  pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null,reviewGate=null,reviewNoReceipt=false}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
   'team-logout','team-partner','team-directory','team-counterparties','team-date','team-region','team-create',
   'team-sync','team-pull','team-reconnect','team-read','team-context',
   'team-warning','team-drafts','team-changes','team-notice','team-review-readonly',
   'team-review-controls','team-submit-review','team-approve-review','team-review-attempts',
-  'team-review-audit','team-feed-progress'];
+  'team-review-audit','team-feed-progress','team-recovery-controls','team-reconcile','team-recovery-readonly'];
  const els=Object.fromEntries(ids.map(id=>[id,element()]));
  const doc={
    getElementById:id=>els[id]||null,
@@ -67,6 +67,14 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      return {status:'SYNCED',scope:{...scope,revision:1,state:reviewState,
       ...(reviewState==='PENDING_REVIEW'?{submitted_by:'fake_operator'}:{}),
       ...(reviewState==='REVIEWED'?{submitted_by:'fake_operator',reviewed_by:'fake_checker'}:{})}};},
+   async inspectRecoveryReceipts(rows,options){
+     calls.push('inspectRecoveryReceipts');
+     assert.deepEqual(options,{syntheticOnly:true,explicitConsent:true});
+     if(recoveryGate)await recoveryGate();
+     const items=recoveryRows||rows.map(x=>({id:x.id,classification:'UNVERIFIED_NOT_SAFE_TO_RETRY',auto_retry:false}));
+     return {status:'REVIEW_ONLY',auto_send_enabled:false,
+       all_receipts_verified:items.every(x=>x.classification==='MATCHED_SERVER_RECEIPT'),items};
+   },
    async listCounterparties(){calls.push('listCounterparties');return {status:'SYNCED',items:[
      {workspace_id:state.workspace_id,partner_id:'fake_customer_1',partner_kind:'customer',display_name:'Synthetic Customer'}
    ]};},
@@ -106,7 +114,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
  Object.assign(els['team-partner'],{value:'fake_partner_1'});
  Object.assign(els['team-date'],{value:'2026-10-12'});
  Object.assign(els['team-region'],{value:'mn'});
- const mounted=UI.mount({doc,win,client,syntheticReviewUiEnabled});
+ const mounted=UI.mount({doc,win,client,syntheticReviewUiEnabled,syntheticRecoveryUiEnabled});
  return {mounted,els,win,calls,state,notify,get requests(){return requestCount;}};
 }
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
@@ -674,5 +682,69 @@ test('logout consent never promises deleting preserved durable reconciliation ev
  assert.match(prompt,/MEMORY_ONLY có thể mất/);
  assert.doesNotMatch(prompt,/sẽ xóa nháp/);
  assert.equal(h.state.authenticated,true);
+ h.mounted.dispose();
+});
+
+test('synthetic receipt inspection is disabled by default even if draft requires reconciliation',async()=>{
+ const h=harness();h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.state.drafts=[{id:'draft_'+'a'.repeat(32),status:'NEEDS_RECONCILIATION'}];h.notify();
+ assert.equal(h.els['team-recovery-controls'].hidden,true);
+ assert.equal(h.els['team-reconcile'].disabled,true);
+ h.els['team-reconcile'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='inspectRecoveryReceipts').length,0);
+ h.mounted.dispose();
+});
+test('manual receipt inspection does not modify original draft or trigger send',async()=>{
+ const h=harness({syntheticRecoveryUiEnabled:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ const id='draft_'+'a'.repeat(32);
+ h.state.drafts=[{id,status:'NEEDS_RECONCILIATION',dispatch_uncertain:true,base_revision:0,
+  scope:{workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'},
+  payload:{synthetic:true}}];h.notify();
+ assert.equal(h.els['team-reconcile'].disabled,false);
+ h.win.confirm=()=>true;
+ h.els['team-reconcile'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='inspectRecoveryReceipts').length,1);
+ assert.equal(h.state.drafts[0].status,'NEEDS_RECONCILIATION');
+ assert.match(h.els['team-recovery-readonly'].textContent,/REVIEW_ONLY: 0\/1/);
+ assert.match(h.els['team-recovery-readonly'].textContent,/KHÔNG tự gửi lại/);
+ assert.equal(h.calls.filter(x=>x==='syncDraft').length,0);
+ h.mounted.dispose();
+});
+test('receipt review rejects non-synthetic or invalid scope without network request',async()=>{
+ const h=harness({syntheticRecoveryUiEnabled:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.state.drafts=[{id:'draft_'+'b'.repeat(32),status:'NEEDS_RECONCILIATION',dispatch_uncertain:true,
+  base_revision:0,scope:{workspace_id:'group_a',partner_id:'customer_real',business_date:'2026-10-14',region:'mn'},
+  payload:{synthetic:true}}];h.notify();h.win.confirm=()=>true;
+ h.els['team-reconcile'].fire('click');await tick();
+ assert.equal(h.calls.filter(x=>x==='inspectRecoveryReceipts').length,0);
+ assert.equal(h.els['team-notice'].textContent,'TEAM_RECOVERY_QUARANTINE_REQUIRED');
+ h.mounted.dispose();
+});
+test('receipt inspection never applies response after a session change',async()=>{
+ const gate=deferredPilotResponse();
+ const h=harness({syntheticRecoveryUiEnabled:true,recoveryGate:()=>gate.promise});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.state.drafts=[{id:'draft_'+'a'.repeat(32),status:'NEEDS_RECONCILIATION',dispatch_uncertain:true,
+  base_revision:0,scope:{workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'},
+  payload:{synthetic:true}}];h.notify();h.win.confirm=()=>true;
+ h.els['team-reconcile'].fire('click');await tick();
+ h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();
+ gate.resume();await tick();await tick();
+ assert.match(h.els['team-recovery-readonly'].textContent,/CHƯA XÁC MINH/);
+ assert.doesNotMatch(h.els['team-recovery-readonly'].textContent,/REVIEW_ONLY:/);
+ h.mounted.dispose();
+});
+test('receipt review requires explicit confirmation and does not change state on cancellation',async()=>{
+ const h=harness({syntheticRecoveryUiEnabled:true});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.state.drafts=[{id:'draft_'+'a'.repeat(32),status:'NEEDS_RECONCILIATION',dispatch_uncertain:true,
+  base_revision:0,scope:{workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'},
+  payload:{synthetic:true}}];h.notify();
+ h.win.confirm=()=>false;
+ h.els['team-reconcile'].fire('click');await tick();
+ assert.equal(h.calls.includes('inspectRecoveryReceipts'),false);
+ assert.equal(h.state.drafts[0].status,'NEEDS_RECONCILIATION');
  h.mounted.dispose();
 });
