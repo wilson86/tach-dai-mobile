@@ -10,6 +10,9 @@ test("Quyt checkbox is in chat input, off by default, not persisted",()=>{
  assert.ok(ui.includes('check.checked=ownTop.__KTS_QUYT_SELECTED_V1__===true'));
  assert.ok(!ui.includes("localStorage.setItem"));
  assert.ok(!ui.includes("sessionStorage.setItem"));
+ assert.ok(ui.includes("checkedSource!==input.value"));
+ assert.ok(ui.includes("ownTop.__KTS_QUYT_SOURCE_V1__"));
+
 });
 test("source and canonical ledger are never rewritten",()=>{
  assert.ok(!/input\.value\s*=\s*|output\.value\s*=\s*/u.test(ui));
@@ -33,7 +36,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r1"));
+ assert.ok(sw.includes("clean-r2-quyt-r2"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
