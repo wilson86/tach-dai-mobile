@@ -34,7 +34,7 @@ test("ROUND BEFORE AGGREGATION: 2x b1n must not silently become b3n",()=>{
 test("editable rate accepts comma/dot, defaults 1.067 and recalculates each wager",()=>{
  assert.equal(m.DEFAULT_RATE,"1.067");
  assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1,05"}).preview,"43 b105n");
- assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1.10"}).preview,"43 b111n");
+ assert.equal(m.prepare("43 b100n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"1.10"}).preview,"43 b110n");
  assert.equal(m.prepare("43 b50n",{customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",rate:"0,95"}).preview,"43 b48n");
  assert.equal(m.rounded("100","1"),"100");
  assert.equal(m.rounded("100","3"),"300");
