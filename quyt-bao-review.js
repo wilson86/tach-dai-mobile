@@ -16,7 +16,7 @@ function parseRate(input=DEFAULT_RATE){
  return Object.freeze({numerator,denominator:den,normalized:raw});
 }
 const CONTRACT={id:"QUYT_BAO_MULTIPLIER_CEIL_REVIEW_V1",customer:"Quýt",multiplier:"1.067",
-  round:"CEIL_PER_STAKE",selectors:["b","bao","lo","lô","bl","blo"],forwardAuthorized:false};
+  round:"CEIL_PER_AGGREGATED_EXPOSURE",selectors:["b","bao","lo","lô","bl","blo"],forwardAuthorized:false};
 const ALIAS_RE=/(^|[\s,;])((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b))([ \t]*)(\d+(?:[.,]\d+)?)(n)(?=$|[\s,;.])/giu;
 function halfSafeDecimal(token){
  const m=/^(\d+)(?:[.,](\d+))?$/u.exec(token);
@@ -111,22 +111,28 @@ function prepareGrouped(output,options={}){
   const other=dest.map.get(key);
   if(!other||other.half!==stake.half)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
  }
+ // Reject changes to the original order, even when all amounts sum correctly.
+ const sourceOrder=[...src.map.keys()],outputOrder=[...dest.map.keys()];
+ for(let i=0;i<sourceOrder.length;i++)
+  if(sourceOrder[i]!==outputOrder[i])throw Error("SOURCE_OUTPUT_ORDER_MISMATCH_HOLD");
  if(src.repeatBlocks.length&&options.repeatDecision!=="keep_all")
    throw Error("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED");
  if(options.repeatDecision==="remove_copies")throw Error("QUYT_REPETITIONS_MUST_NOT_BE_DELETED");
- const grouped=new Map(),receipts=[];
+ const grouped=[],receipts=[];
  let adjusted=0;
  for(const e of src.map.values()){
   const amount=fmtHalf(e.half),apply=e.kind==="b"||e.kind==="lo";
   const after=apply?rounded(amount,rate):amount;
   if(apply)adjusted++;
   receipts.push({station:e.station,selector:e.kind,number:e.number,before:amount,after});
-  const key=JSON.stringify([e.station,e.kind,after]);
-  if(!grouped.has(key))grouped.set(key,{...e,amount:after,numbers:[]});
-  grouped.get(key).numbers.push(e.number);
+  // Only group consecutive equal exposures; no reordering across other bets.
+  const previous=grouped[grouped.length-1];
+  if(previous && previous.station===e.station && previous.kind===e.kind && previous.amount===after)
+   previous.numbers.push(e.number);
+  else grouped.push({...e,amount:after,numbers:[e.number]});
  }
  if(!adjusted)throw Error("NO_BAO_SELECTOR_IN_RESULT");
- const normalized=[...grouped.values()].map(e=>(options.omitRegion?"":e.station.toUpperCase()+" ")+
+ const normalized=grouped.map(e=>(options.omitRegion?"":e.station.toUpperCase()+" ")+
    e.numbers.join(" ")+" "+e.kind+e.amount+"n").join("\n");
  return Object.freeze({kind:"QUYT_BAO_AGGREGATE_THEN_MULTIPLY_REVIEW_V2",
   original:options.sourceText,source:output,preview:normalized,rate:rate.normalized,
