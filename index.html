@@ -129,6 +129,7 @@
       <textarea id="ledgerSourceView" readonly spellcheck="false" aria-label="Tin nguồn gốc tham chiếu, chỉ đọc"></textarea>
       <div class="actions">
         <button id="ledgerCopyOriginal" class="secondary" type="button">Copy tin gốc</button>
+        <button id="ledgerReeditOriginal" class="secondary" type="button">Sửa tin gốc (làm lại từ đầu)</button>
       </div>
       <!-- Legacy ledger controls intentionally inert. All result Copy/Cut/checkboxes stay in the RESULT pane. -->
       <div id="ledgerWorkRows" style="display:none"></div>
@@ -1177,6 +1178,7 @@ function renderLedgerWork(){
     reference.placeholder="Ledger không hợp lệ hoặc sai miền/ngày/engine; không được gửi như tin cược.";
     $("ledgerWorkOrigin").textContent="";
     $("ledgerCopyOriginal").disabled=true;
+    $("ledgerReeditOriginal").disabled=true;
     return;
   }
   // Preserve original chat timestamps, physical separators and line breaks.
@@ -1185,6 +1187,24 @@ function renderLedgerWork(){
   reference.value=ledger.origin;
   $("ledgerWorkOrigin").textContent=ledger.origin;
   $("ledgerCopyOriginal").disabled=!ledger.origin;
+  $("ledgerReeditOriginal").disabled=!ledger.origin;
+}
+function reeditOriginalAfterCut(){
+  const ledger=parseExactOutputLedger(inputEl.value);
+  if(!ledger||!ledger.origin){setStatus("Tin gốc không hợp lệ; không thể mở để sửa.","err");return;}
+  // Explicitly discard remaining split results only after user confirmation.
+  // Replaying the original after a partial Cut otherwise duplicates removed wagers.
+  const approved=window.confirm("Sửa lại tin gốc sẽ HỦY danh sách cược chưa Cắt đang hiển thị. Cược đã Copy/Cắt trước đó KHÔNG tự thu hồi. Chỉ tách lại sau khi đã đối chiếu, tránh gửi trùng. Tiếp tục?");
+  if(!approved)return;
+  snapshot();
+  inputEl.value=ledger.origin;
+  outputEl.value="";
+  resetOutputRecords();
+  persistExactOutputLedger();
+  renderOutputRecords();
+  announceWorkingSource();
+  inputEl.focus();
+  setStatus("Đã mở tin gốc để sửa; kết quả cũ đã xóa. Kiểm tra cược đã gửi trước khi tách lại.","ok");
 }
 async function copySourceView(){
   if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
@@ -1754,6 +1774,7 @@ $("selectAllInputBtn").addEventListener("click",()=>{
 });
 $("ledgerWorkSelect").addEventListener("click",()=>{toggleAllGroupedResults();renderLedgerWork();});
 $("ledgerWorkCopy").addEventListener("click",copyLedgerWork);
+$("ledgerReeditOriginal").addEventListener("click",reeditOriginalAfterCut);
 $("ledgerCopyOriginal").addEventListener("click",async()=>{
   const ledger=parseExactOutputLedger(inputEl.value);
   if(!ledger||!ledger.origin){setStatus("Không có tin gốc hợp lệ để copy.","err");return;}
