@@ -59,34 +59,9 @@ function assertOriginalStakeParity(source,output){
      throw Error("CHANGED_SOURCE_STAKES_HOLD");
  return before.length;
 }
-function prepare(raw,options={}){
- if(typeof raw!=="string"||!raw.trim())throw Error("NO_RESULT_TO_PREPARE");
- if(options.customer!=="Quýt")throw Error("QUYT_NOT_SELECTED");
- if(options.inputStage!=="CANONICAL_UNADJUSTED_RESULT")throw Error("UNTRUSTED_TRANSFORM_STAGE");
- if(options.alreadyTransformed===true)throw Error("DOUBLE_TRANSFORM_HOLD");
- const rate=parseRate(options.rate===undefined?DEFAULT_RATE:options.rate);
- const hasSourceWitness=options.sourceText!==undefined;
- const originalStakeCount=hasSourceWitness
-   ?assertOriginalStakeParity(options.sourceText,raw):0;
- if(options.requireSourceWitness===true&&!hasSourceWitness)
-   throw Error("SOURCE_WITNESS_REQUIRED");
- if(/PHÁT HIỆN TIN SAI|XÁC NHẬN SỐ TRÙNG|(\[\[KTS_)|không nhận ra cú pháp|(?:^|\n)\s*(?:Tổng|Kết quả|Nhóm)\b/iu.test(raw))
-  throw Error("NON_BET_RESULT_HOLD");
- let count=0;const evidence=[];
- const output=raw.replace(ALIAS_RE,(full,prefix,selector,space,amount,suffix,pos)=>{
-   const after=rounded(amount,rate);
-   count++;evidence.push({index:count,selector:selector.toLowerCase().replace(/\s+/gu," "),
-     before:amount,after});
-   return prefix+selector+space+after+suffix;
- });
- if(count===0)throw Error("NO_BAO_SELECTOR_IN_RESULT");
- // Do not treat transformations as approved transport.
- return Object.freeze({kind:CONTRACT.id,source:raw,preview:output,
-    alteredOccurrences:count,receipts:evidence,rate:rate.normalized,
-    sourceWitnessVerified:hasSourceWitness,originalStakeCount,
-    sourceUnmodified:true,stage:"PREPARED_PREVIEW_ONLY",
-    forwardAuthorized:false,alreadyTransformed:false});
-}
+// Legacy per-atom transformer is disabled: it violates the operator-approved
+// aggregate-before-rate money rule. All callers must supply verified grouping.
+function prepare(raw,options={}){return prepareGrouped(raw,options)}
 
 // USER-APPROVED ORDER: aggregate identical (station, number, canonical wager
 // kind) stakes first, then apply CEIL(rate * aggregated stake) ONCE.
