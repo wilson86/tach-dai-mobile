@@ -76,14 +76,27 @@ function parse(raw,options={}){
 function fingerprint(c){return JSON.stringify([c.station,c.numbers,c.kind,c.half])}
 function tandem(clauses){
  const xs=clauses.map(fingerprint),result=[];let cursor=0;
+ const coveredSecond=new Set();
  while(cursor<xs.length){
   let found=0;
   for(let len=Math.floor((xs.length-cursor)/2);len>0;len--){
    let same=true;for(let j=0;j<len;j++)if(xs[cursor+j]!==xs[cursor+len+j]){same=false;break}
    if(same){found=len;break}
   }
-  if(found){result.push({first:cursor+1,second:cursor+found+1,length:found});cursor+=2*found}
-  else cursor++;
+  if(found){
+   result.push({first:cursor+1,second:cursor+found+1,length:found});
+   for(let j=0;j<found;j++)coveredSecond.add(cursor+found+j);
+   cursor+=2*found;
+  }else cursor++;
+ }
+ // Separated identical wagers may mean a second order OR a paste copy.
+ // They must not bypass the operator-confirmation gate.
+ const firstSeen=new Map();
+ for(let i=0;i<xs.length;i++){
+  if(!firstSeen.has(xs[i])){firstSeen.set(xs[i],i);continue}
+  const first=firstSeen.get(xs[i]);
+  if(!coveredSecond.has(i)&&i>first+1)
+   result.push({first:first+1,second:i+1,length:1,nonAdjacent:true});
  }
  return result;
 }
@@ -93,6 +106,7 @@ function preview(raw,options={}){
  const clauses=parse(raw,options),repeated=tandem(clauses);
  if(decision==="remove_copies"&&(!repeated.length||typeof options.decisionReference!=="string"||!options.decisionReference.trim()))
   fail("EXPLICIT_COPY_REMOVAL_DECISION_REQUIRED");
+ if(decision==="remove_copies"&&repeated.some(t=>t.nonAdjacent))fail("NON_ADJACENT_PASTE_MANUAL_SOURCE_REVIEW_REQUIRED");
  const excluded=new Set();
  if(decision==="remove_copies")for(const t of repeated)for(let j=0;j<t.length;j++)excluded.add(t.second+j-1);
  const rawTotals={b:0,dd:0,dau:0,duoi:0},totals={b:0,dd:0,dau:0,duoi:0};
