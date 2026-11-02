@@ -25,6 +25,12 @@ test("Quyt on two intentional placements preserves both amounts",()=>{
  assert.equal(r.sourceUnmodified,true);
  assert.equal(r.forwardAuthorized,false);
 });
+test("ROUND BEFORE AGGREGATION: 2x b1n must not silently become b3n",()=>{
+ const p=ok("43 b1n\n43 b1n");
+ assert.equal(p.preview,"43 b2n\n43 b2n"); // 4n total after per-original-stake CEIL
+ assert.equal(ok("43 b2n").preview,"43 b3n"); // 3n if mistakenly aggregated first
+ assert.equal(p.alteredOccurrences,2);
+});
 test("untrusted stage, missing opt-in, already transformed fail closed",()=>{
  for(const args of [
  {customer:"Other",inputStage:"CANONICAL_UNADJUSTED_RESULT"},
