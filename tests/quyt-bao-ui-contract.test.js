@@ -12,6 +12,12 @@ test("Quyt checkbox is in chat input, off by default, not persisted",()=>{
  assert.ok(!ui.includes("sessionStorage.setItem"));
  assert.ok(ui.includes("checkedSource!==input.value"));
  assert.ok(ui.includes("ownTop.__KTS_QUYT_SOURCE_V1__"));
+ assert.ok(ui.includes('rate.id="ktsQuytRate"'));
+ assert.ok(ui.includes('rate.type="text"'));
+ assert.ok(ui.includes('rate.inputMode="decimal"'));
+ assert.ok(ui.includes('rate.value="1,067"'));
+ assert.ok(ui.includes('rate.addEventListener("input"'));
+ assert.ok(ui.includes("ownTop.__KTS_QUYT_RATE_V1__"));
 
 });
 test("source and canonical ledger are never rewritten",()=>{
@@ -28,6 +34,9 @@ test("normal copy intercepted only when Quyt selected",()=>{
  assert.ok(ui.includes('event.stopImmediatePropagation()'));
  assert.ok(ui.includes('navigator.clipboard.writeText(approved.preview)'));
  assert.ok(ui.includes('approved.input!==input.value||approved.result!==output.value'));
+ assert.ok(ui.includes('approved.rate!==rate.value'));
+ assert.ok(ui.includes('rate:rate.value'));
+ assert.ok(ui.includes('kts:quyt-selection-v1'));
 });
 test("all same-origin Unified iframes get the one customer checkbox state",()=>{
  assert.ok(ui.includes("ownTop.__KTS_QUYT_SELECTED_V1__"));
