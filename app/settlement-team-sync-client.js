@@ -213,6 +213,11 @@
         // may already have committed before an acknowledgement was lost.
         // Quarantine even when a newer v2 record shares the same identity.
         const legacyIds=new Set(rows.map(row=>row.id));
+        // Separate localStorage keys can be evicted independently. Restored v2
+        // intents cannot prove that a pre-dispatch marker survived eviction.
+        // Quarantine all restored drafts until authenticated read-only receipt
+        // reconciliation; newly queued drafts may still dispatch in this tab.
+        const restoredV2Ids=new Set();
         const keys=store.keys();
         if (!Array.isArray(keys) || keys.some(key=>typeof key!=='string'))
           throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
@@ -226,13 +231,15 @@
           const row=JSON.parse(store.get(key));
           if (!row || row.id!==identity[2] || key!==intentKey(row.id)) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
           rows.push(row);
+          restoredV2Ids.add(row.id);
         }
         for (const row of rows) {
           if (!validPersistedDraft(row,workspaceId,accountId)) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
           const previous=pending.get(row.id);
           if (previous && JSON.stringify(immutableDraft(previous))!==JSON.stringify(immutableDraft(row)))
             throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
-          const attempted=legacyIds.has(row.id) || row.dispatch_uncertain===true || row.status===STATUS.BLOCKED ||
+          const attempted=legacyIds.has(row.id) || restoredV2Ids.has(row.id) ||
+            row.dispatch_uncertain===true || row.status===STATUS.BLOCKED ||
             store.get(intentKey(row.id)+':dispatched')!=null;
           pending.set(row.id,{id:row.id,scope:clone(row.scope),payload:clone(row.payload),
             base_revision:row.base_revision,status:attempted?STATUS.NEEDS_RECONCILIATION:STATUS.PENDING,
