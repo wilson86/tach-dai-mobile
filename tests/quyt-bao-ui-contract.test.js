@@ -22,7 +22,10 @@ test("source and canonical ledger are never rewritten",()=>{
 test("normal copy intercepted only when Quyt selected",()=>{
  assert.ok(ui.includes("if(!enabled())return"));
  assert.ok(ui.includes("event.stopImmediatePropagation()"));
- assert.ok(ui.includes('originalCopy.addEventListener("click"'));
+ assert.ok(ui.includes('const resultActions=["dvCopy","copyBtn","cutBtn","dvCutSelection"'));
+ assert.ok(ui.includes('"ledgerWorkCopy","ledgerWorkCut","sourceCutBtn","dvSourceCut"]'));
+ assert.ok(ui.includes('output.addEventListener(type,event=>'));
+ assert.ok(ui.includes('event.stopImmediatePropagation()'));
  assert.ok(ui.includes('navigator.clipboard.writeText(approved.preview)'));
  assert.ok(ui.includes('approved.input!==input.value||approved.result!==output.value'));
 });
@@ -36,7 +39,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r2"));
+ assert.ok(sw.includes("clean-r2-quyt-r3"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
