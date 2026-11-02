@@ -6,6 +6,10 @@
 // SECURITY INVOKER kts_team.append_draft() function.
 
 const C = require('./core-contract.cjs');
+const {createReviewProof}=require('./candidate/atomic-review-proof.cjs');
+const {createDraftProof}=require('./candidate/atomic-draft-proof.cjs');
+const {digest}=require('./server-ledger-api.cjs');
+const {stable}=require('./ledger-api-contract.cjs');
 const HASH_RE = /^[a-f0-9]{64}$/;
 
 const MAX_FEED_SEQ = 9223372036854775807n;
@@ -131,6 +135,77 @@ function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic =
   }
 
 
+  // Candidate path only; composition denies it and SQL has no runtime grant.
+  async function appendDraftWithSessionProof(sessionToken,input) {
+    if(!input||typeof input!=='object'||Array.isArray(input)||
+       Object.keys(input).some(key=>!['scope','action','expected_revision','event_id','idempotency_key','snapshot'].includes(key)))
+      throw Error('TEAM_REQUEST_INVALID');
+    const {action,expected_revision,event_id,idempotency_key,snapshot}=input;
+    const scope=C.requireScope(input.scope);
+    if(!['create_draft','edit_draft'].includes(action)||
+       !Number.isSafeInteger(expected_revision)||expected_revision<0||!Number.isSafeInteger(expected_revision+1)||
+       !snapshot||typeof snapshot!=='object'||Array.isArray(snapshot))throw Error('TEAM_REQUEST_INVALID');
+    const payload=stable(snapshot);
+    const snapshot_text=JSON.stringify(payload);
+    const request_sha256=digest({action,scope,expected_revision,payload});
+    const proof=createDraftProof(sessionToken,{...scope,action,expected_revision,event_id,idempotency_key,request_sha256,snapshot_text},
+      {expires:Math.floor(Date.now()/1000)+30});
+    return db.transaction(async tx=>{
+      const result=await tx.query(`SELECT kts_team.atomic_draft_v1(
+        $1::text,$2::text,$3::bigint,$4::text,$5::text,$6::text,$7::date,
+        $8::text,$9::text,$10::bigint,$11::text,$12::text,$13::text,$14::text) AS result`,
+        [proof.session_id,proof.nonce,proof.expires,proof.proof,scope.workspace_id,scope.partner_id,
+          scope.business_date,scope.region,action,expected_revision,event_id,idempotency_key,request_sha256,snapshot_text]);
+      const receipt=result?.rows?.length===1?result.rows[0]?.result:null;
+      const feed=receipt?.feed_seq;
+      const validFeed=(typeof feed==='number'&&Number.isSafeInteger(feed)&&feed>0)||
+        (typeof feed==='string'&&/^[1-9][0-9]{0,18}$/.test(feed)&&BigInt(feed)<=MAX_FEED_SEQ);
+      if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||
+         typeof receipt.event_id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(receipt.event_id)||
+         typeof receipt.replayed!=='boolean'||(!receipt.replayed&&receipt.event_id!==event_id)||
+         receipt.new_revision!==expected_revision+1||!validFeed)
+        throw Error('TEAM_DRAFT_RECEIPT_UNVERIFIED');
+      return Object.freeze({...receipt});
+    });
+  }
+
+  // Candidate business-read-only lookup; SQL takes locks and requires a new
+  // active session for the original actor. UNKNOWN never authorizes retry.
+  async function reconcileDraftWithSessionProof(sessionToken,input) {
+    if(!input||typeof input!=='object'||Array.isArray(input)||
+       Object.keys(input).some(key=>!['scope','action','expected_revision','idempotency_key','snapshot'].includes(key)))
+      throw Error('TEAM_REQUEST_INVALID');
+    const {action,expected_revision,idempotency_key,snapshot}=input;
+    const scope=C.requireScope(input.scope);
+    if(!['create_draft','edit_draft'].includes(action)||
+       !Number.isSafeInteger(expected_revision)||expected_revision<0||!Number.isSafeInteger(expected_revision+1)||
+       !snapshot||typeof snapshot!=='object'||Array.isArray(snapshot))throw Error('TEAM_REQUEST_INVALID');
+    const payload=stable(snapshot),snapshot_text=JSON.stringify(payload);
+    const request_sha256=digest({action,scope,expected_revision,payload});
+    const proof=createDraftProof(sessionToken,{...scope,action,expected_revision,event_id:'lookup',idempotency_key,request_sha256,snapshot_text},
+      {expires:Math.floor(Date.now()/1000)+30,purpose:'lookup'});
+    return db.transaction(async tx=>{
+      const result=await tx.query(`SELECT kts_team.atomic_draft_reconcile_v1(
+        $1::text,$2::text,$3::bigint,$4::text,$5::text,$6::text,$7::date,
+        $8::text,$9::text,$10::bigint,$11::text,$12::text,$13::text) AS result`,
+        [proof.session_id,proof.nonce,proof.expires,proof.proof,scope.workspace_id,scope.partner_id,
+          scope.business_date,scope.region,action,expected_revision,idempotency_key,request_sha256,snapshot_text]);
+      const receipt=result?.rows?.length===1?result.rows[0]?.result:null;
+      if(receipt?.classification==='UNKNOWN'&&Object.keys(receipt).length===1)
+        return Object.freeze({classification:'UNKNOWN',auto_retry:false});
+      const feed=receipt?.feed_seq;
+      const validFeed=(typeof feed==='number'&&Number.isSafeInteger(feed)&&feed>0)||
+        (typeof feed==='string'&&/^[1-9][0-9]{0,18}$/.test(feed)&&BigInt(feed)<=MAX_FEED_SEQ);
+      if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||
+         receipt.classification!=='MATCHED_SERVER_RECEIPT'||
+         typeof receipt.event_id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(receipt.event_id)||
+         receipt.new_revision!==expected_revision+1||!validFeed)
+        throw Error('TEAM_DRAFT_RECEIPT_UNVERIFIED');
+      return Object.freeze({classification:'MATCHED_SERVER_RECEIPT',event_id:receipt.event_id,
+        feed_seq:String(feed),new_revision:receipt.new_revision,auto_retry:false});
+    });
+  }
+
   // The SQL function rechecks membership role, transaction state, CAS, SoD and RLS.
   // It does not authenticate the session or the caller-set actor setting.
   async function advanceReview(actor,{scope,action,expected_revision,event_id,idempotency_key,request_sha256}={}) {
@@ -153,6 +228,79 @@ function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic =
       if(!result||!Array.isArray(result.rows)||result.rows.length!==1)
         throw Error('TEAM_DB_RESULT_INVALID');
       return result.rows[0].result;
+    });
+  }
+
+  // Isolated candidate only: SQL function is not in migrations and receives no
+  // runtime grant. Composition blocks this method until independent review and
+  // real PostgreSQL qualification. No caller-supplied actor is accepted.
+  async function advanceReviewWithSessionProof(sessionToken,input) {
+    if(!input||typeof input!=='object'||Array.isArray(input)||
+       Object.keys(input).some(key=>!['scope','action','expected_revision','event_id','idempotency_key'].includes(key)))
+      throw Error('TEAM_REVIEW_REQUEST_INVALID');
+    const {action,expected_revision,event_id,idempotency_key}=input;
+    const scope=C.requireScope(input.scope);
+    if(!['submit_review','approve_review'].includes(action)||
+       !Number.isSafeInteger(expected_revision)||expected_revision<0||!Number.isSafeInteger(expected_revision+1))
+      throw Error('TEAM_REVIEW_REQUEST_INVALID');
+    const request_sha256=digest({action,scope,expected_revision});
+    const request={...scope,action,expected_revision,event_id,idempotency_key,request_sha256};
+    const expires=Math.floor(Date.now()/1000)+30;
+    const proof=createReviewProof(sessionToken,request,{expires});
+    return db.transaction(async tx=>{
+      const result=await tx.query(`SELECT kts_team.atomic_review_v1(
+        $1::text,$2::text,$3::bigint,$4::text,$5::text,$6::text,$7::date,
+        $8::text,$9::text,$10::bigint,$11::text,$12::text,$13::text) AS result`,
+        [proof.session_id,proof.nonce,proof.expires,proof.proof,scope.workspace_id,scope.partner_id,
+          scope.business_date,scope.region,action,expected_revision,event_id,idempotency_key,request_sha256]);
+      const receipt=result?.rows?.length===1?result.rows[0]?.result:null;
+      const feed=receipt?.feed_seq;
+      const validFeed=(typeof feed==='number'&&Number.isSafeInteger(feed)&&feed>0)||
+        (typeof feed==='string'&&/^[1-9][0-9]{0,18}$/.test(feed)&&BigInt(feed)<=MAX_FEED_SEQ);
+      if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||
+         typeof receipt.event_id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(receipt.event_id)||
+         typeof receipt.replayed!=='boolean'||(!receipt.replayed&&receipt.event_id!==event_id)||
+         receipt.new_revision!==expected_revision+1||!validFeed||
+         receipt.state!==(action==='submit_review'?'PENDING_REVIEW':'REVIEWED'))
+        throw Error('TEAM_REVIEW_RECEIPT_UNVERIFIED');
+      return Object.freeze({...receipt});
+    });
+  }
+
+  // Candidate only; a missing receipt is UNKNOWN, never permission to retry.
+  // This invokes a separate SQL lookup and never calls the mutation function.
+  async function reconcileReviewWithSessionProof(sessionToken,input) {
+    if(!input||typeof input!=='object'||Array.isArray(input)||
+       Object.keys(input).some(key=>!['scope','action','expected_revision','idempotency_key'].includes(key)))
+      throw Error('TEAM_REVIEW_REQUEST_INVALID');
+    const {action,expected_revision,idempotency_key}=input;
+    const scope=C.requireScope(input.scope);
+    if(!['submit_review','approve_review'].includes(action)||
+       !Number.isSafeInteger(expected_revision)||expected_revision<0||!Number.isSafeInteger(expected_revision+1))
+      throw Error('TEAM_REVIEW_REQUEST_INVALID');
+    const request_sha256=digest({action,scope,expected_revision});
+    const proof=createReviewProof(sessionToken,{...scope,action,expected_revision,event_id:'lookup',idempotency_key,request_sha256},
+      {expires:Math.floor(Date.now()/1000)+30,purpose:'lookup'});
+    return db.transaction(async tx=>{
+      const result=await tx.query(`SELECT kts_team.atomic_review_reconcile_v1(
+        $1::text,$2::text,$3::bigint,$4::text,$5::text,$6::text,$7::date,
+        $8::text,$9::text,$10::bigint,$11::text,$12::text) AS result`,
+        [proof.session_id,proof.nonce,proof.expires,proof.proof,scope.workspace_id,scope.partner_id,
+          scope.business_date,scope.region,action,expected_revision,idempotency_key,request_sha256]);
+      const receipt=result?.rows?.length===1?result.rows[0]?.result:null;
+      if(receipt?.classification==='UNKNOWN'&&Object.keys(receipt).length===1)
+        return Object.freeze({classification:'UNKNOWN',auto_retry:false});
+      const feed=receipt?.feed_seq;
+      const validFeed=(typeof feed==='number'&&Number.isSafeInteger(feed)&&feed>0)||
+        (typeof feed==='string'&&/^[1-9][0-9]{0,18}$/.test(feed)&&BigInt(feed)<=MAX_FEED_SEQ);
+      if(!receipt||typeof receipt!=='object'||Array.isArray(receipt)||
+         receipt.classification!=='MATCHED_SERVER_RECEIPT'||
+         typeof receipt.event_id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(receipt.event_id)||
+         receipt.new_revision!==expected_revision+1||!validFeed||
+         receipt.state!==(action==='submit_review'?'PENDING_REVIEW':'REVIEWED'))
+        throw Error('TEAM_REVIEW_RECEIPT_UNVERIFIED');
+      return Object.freeze({classification:'MATCHED_SERVER_RECEIPT',event_id:receipt.event_id,
+        feed_seq:String(feed),new_revision:receipt.new_revision,state:receipt.state,auto_retry:false});
     });
   }
 
@@ -291,7 +439,7 @@ function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic =
     }, {readOnly:true});
     return Object.freeze(result);
   }
-  return Object.freeze({ appendDraft, advanceReview, getScope, getChanges,listCounterparties,
+  return Object.freeze({ appendDraft, appendDraftWithSessionProof, reconcileDraftWithSessionProof, advanceReview, advanceReviewWithSessionProof, reconcileReviewWithSessionProof, getScope, getChanges,listCounterparties,
     lookupRecoveryReceipts });
 }
 

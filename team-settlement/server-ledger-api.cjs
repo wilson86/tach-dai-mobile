@@ -54,16 +54,31 @@ function createServerLedgerApi({
     return trusted;
   }
 
-  async function withSessionActor(sessionToken,work) {
+  async function withSessionActor(sessionToken,work,{mutation=false}={}) {
     if(typeof auth.withVerifiedSession==='function'){
-      return auth.withVerifiedSession(sessionToken, trusted=>{
-        C.actorFromServer(trusted);
-        return work(trusted);
-      });
+      let workCompleted=false;
+      try {
+        return await auth.withVerifiedSession(sessionToken, async trusted=>{
+          C.actorFromServer(trusted);
+          const result=await work(trusted);
+          workCompleted=true;
+          return result;
+        });
+      } catch (error) {
+        if(mutation && (workCompleted || error?.message==='TEAM_DB_COMMIT_OUTCOME_UNKNOWN'))
+          throw new Error('TEAM_MUTATION_OUTCOME_UNKNOWN', {cause:error});
+        throw error;
+      }
     }
     // Legacy injected auth contracts retain their old behavior for reads and
     // writes. They do not prove session-lock serialization for a durable pilot.
-    return work(await actor(sessionToken));
+    const trusted=await actor(sessionToken);
+    try { return await work(trusted); }
+    catch(error) {
+      if(mutation && error?.message==='TEAM_DB_COMMIT_OUTCOME_UNKNOWN')
+        throw new Error('TEAM_MUTATION_OUTCOME_UNKNOWN', {cause:error});
+      throw error;
+    }
   }
 
   async function appendDraft(sessionToken, input) {
@@ -86,7 +101,7 @@ function createServerLedgerApi({
     });
     const verified = requireVerifiedDraftReceipt(result, proposedEventId, input.expected_revision);
     return Object.freeze({ ...verified, scope_key: C.scopeKey(scope), sync_status: 'SYNCED' });
-    });
+    },{mutation:true});
   }
 
 
@@ -116,7 +131,7 @@ function createServerLedgerApi({
     if(verified.state!==requiredState)throw Error('TEAM_REVIEW_RECEIPT_UNVERIFIED');
     return Object.freeze({...verified,scope_key:C.scopeKey(scope),
       sync_status:'SYNCED',review_state:requiredState});
-    });
+    },{mutation:true});
   }
 
   async function getScope(sessionToken, scope) {

@@ -3,6 +3,9 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {createIsolatedTeamPrototype}=require('../team-settlement/team-composition.cjs');
+const {createServerLedgerApi}=require('../team-settlement/server-ledger-api.cjs');
+const {createPostgresLedgerRepository}=require('../team-settlement/postgres-ledger-repository.cjs');
+const {createPgTransactionAdapter}=require('../team-settlement/pg-transaction-adapter.cjs');
 
 test('auth link loss can release the modeled lock before ledger commit', {timeout:3000}, async()=>{
   const events=[];
@@ -15,7 +18,7 @@ test('auth link loss can release the modeled lock before ledger commit', {timeou
       events.push(`${kind}:${sql}`);
       if(kind==='auth'&&sql==='COMMIT'&&disconnected&&isSession)throw Error('SYNTHETIC_AUTH_CONNECTION_LOST');
       if(kind==='ledger'&&sql==='COMMIT'){assert.equal(revoked,true);writes++;}
-      return {rows:[]};
+      return {rows:[],command:sql};
     }
     if(sql.includes('FROM kts_auth.sessions')){
       assert.equal(kind,'auth');assert.match(sql,/FOR SHARE/);
@@ -33,7 +36,11 @@ test('auth link loss can release the modeled lock before ledger commit', {timeou
     }
     throw Error('UNEXPECTED_QUERY');
   },release(){events.push(`${kind}:release`);}};}};}
-  const app=createIsolatedTeamPrototype({authPool:pool('auth'),ledgerPool:pool('ledger'),syntheticOnly:true,syntheticReviewEnabled:true});
+  const authPool=pool('auth'),ledgerPool=pool('ledger');
+  const guarded=createIsolatedTeamPrototype({authPool,ledgerPool,syntheticOnly:true,syntheticReviewEnabled:true});
+  const repo=createPostgresLedgerRepository({db:createPgTransactionAdapter({pool:ledgerPool})});
+  const ledger=createServerLedgerApi({auth:guarded.auth,repository:repo,syntheticReviewEnabled:true,requireSessionLockForWrites:true});
+  const app={...guarded,ledger}; // Deliberately bypass candidate composition guard to characterize the underlying race.
   const token='T'.repeat(43);
   const request={action:'approve_review',scope:{workspace_id:'fake_group',partner_id:'fake_partner',business_date:'2026-10-26',region:'mn'},expected_revision:2,idempotency_key:'fake_review_key'};
   const pending=app.ledger.advanceReview(token,request).then(value=>({value}),error=>({error}));
@@ -43,7 +50,7 @@ test('auth link loss can release the modeled lock before ledger commit', {timeou
     await app.auth.revokeSession(token);
   } finally { continueLedger(); }
   const outcome=await pending;
-  assert.match(String(outcome.error),/SYNTHETIC_AUTH_CONNECTION_LOST/);
+  assert.match(String(outcome.error),/TEAM_MUTATION_OUTCOME_UNKNOWN/);
   assert.equal(writes,1);
   for(const [before,after] of [['auth:session_lock','ledger:review_started'],['ledger:review_started','auth:synthetic_link_loss'],['auth:synthetic_link_loss','auth:revoke'],['auth:revoke','ledger:COMMIT']])
     assert.ok(events.indexOf(before)>=0&&events.indexOf(before)<events.indexOf(after),`${before} before ${after}`);

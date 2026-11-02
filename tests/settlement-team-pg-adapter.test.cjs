@@ -11,6 +11,7 @@ function fakePool({failBegin=false,failCommit=false,failRollback=false}={}){
       if(sql==='BEGIN'&&failBegin)throw new Error('begin rejected');
       if(sql==='COMMIT'&&failCommit)throw new Error('commit rejected');
       if(sql==='ROLLBACK'&&failRollback)throw new Error('rollback rejected');
+      if(sql==='COMMIT')return {command:'COMMIT',rows:[]};
       if(sql.includes('FROM kts_team.memberships'))return {rows:[{team_role:'viewer'}]};
       if(sql.includes('FROM kts_team.scope_events'))return {rows:[
         {workspace_id:'group_a',feed_seq:'1',event_id:'e1',recorded_at:'2026-10-12T10:00:00Z'}]};
@@ -128,7 +129,7 @@ test('simulated COMMIT persisted but response was lost: deny ACK, destroy pool c
           if(pending&&!committed.has(pending.key))
             committed.set(pending.key,{event_id:pending.event_id});
           if(number===1)throw new Error('SIMULATED_LOST_COMMIT_ACK');
-          return {rows:[]};
+          return {command:'COMMIT',rows:[]};
         }
         if(sql==='ROLLBACK'){pending=null;return {rows:[]};}
         throw new Error('UNEXPECTED_SYNTHETIC_SQL');
@@ -141,7 +142,7 @@ test('simulated COMMIT persisted but response was lost: deny ACK, destroy pool c
     const result=await tx.query('SELECT synthetic_append($1)',[key]);
     return result.rows[0];
   });
-  await assert.rejects(append('fake_retry_1'),/SIMULATED_LOST_COMMIT_ACK/);
+  await assert.rejects(append('fake_retry_1'),/TEAM_DB_COMMIT_OUTCOME_UNKNOWN/);
   assert.equal(committed.size,1);
   assert.deepEqual(released,[{number:1,destroy:true}]);
   const replay=await append('fake_retry_1');

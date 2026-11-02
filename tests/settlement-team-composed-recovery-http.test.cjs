@@ -22,7 +22,7 @@ function pool(kind,records,notes,role='operator'){
    async query(sql,args){
     notes.push(kind+':'+sql.trim().split(/\s+/).slice(0,4).join(' '));
     if(['BEGIN','COMMIT','ROLLBACK','SET TRANSACTION READ ONLY'].includes(sql))
-     return {rows:[],rowCount:0};
+     return {rows:[],rowCount:0,command:sql};
     if(sql.includes("set_config"))return {rows:[]};
     if(kind==='auth'&&sql.includes('FROM kts_auth.sessions'))
      return {rows:[{user_id:'fake_operator',workspace_id:'group_a'}]};

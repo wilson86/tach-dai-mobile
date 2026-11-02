@@ -4,7 +4,7 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function (Audit) {
   'use strict';
 
-  const STATUS = Object.freeze({ PENDING: 'PENDING', SYNCED: 'SYNCED', CONFLICT: 'CONFLICT', BLOCKED: 'BLOCKED' });
+  const STATUS = Object.freeze({ PENDING: 'PENDING', SYNCED: 'SYNCED', CONFLICT: 'CONFLICT', BLOCKED: 'BLOCKED', NEEDS_RECONCILIATION: 'NEEDS_RECONCILIATION' });
   function validBusinessDate(value) {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const [year, month, day] = value.split('-').map(Number);
@@ -15,6 +15,7 @@
     const REVIEW_STATES = Object.freeze(['DRAFT','PENDING_REVIEW','REVIEWED','CLOSED','REOPEN_REQUESTED']);
   const CURSOR_KEY = 'kts-team-change-cursor-v1';
   const PENDING_DRAFTS_KEY = 'kts-team-pending-drafts-v1';
+  const DRAFT_INTENT_PREFIX = 'kts-team-draft-intent-v2:';
   const MAX_SIGNED_BIGINT = 9223372036854775807n;
   const RECENT_EVENT_ID_LIMIT = 500; // Bounded client-only replay cross-check.
   function verifiedFeedSequence(value) {
@@ -96,10 +97,12 @@
     return value.replace(/\/+$/, '');
   }
 
-  function createSyncClient({ fetchImpl, storage, baseUrl = '' } = {}) {
+  function createSyncClient({ fetchImpl, storage, baseUrl = '', reviewLockManager, mutationTimeoutMs = 15000 } = {}) {
     const fetcher = fetchImpl || (typeof fetch === 'function' ? fetch.bind(globalThis) : null);
     if (typeof fetcher !== 'function') throw new Error('SYNC_FETCH_REQUIRED');
     const endpoint = normalizeBaseUrl(baseUrl);
+    if (!Number.isSafeInteger(mutationTimeoutMs) || mutationTimeoutMs < 1 || mutationTimeoutMs > 60000)
+      throw Error('SYNC_TIMEOUT_INVALID');
     // The pilot UI does not inject storage, so explicitly adapt browser localStorage.
     // Tests may inject the small get/set/remove adapter used below. Do not pretend
     // that a missing or malformed store is durable.
@@ -108,10 +111,13 @@
       const local = typeof globalThis !== 'undefined' && globalThis.localStorage;
       if (local) browserStore = {
         get: key => local.getItem(key), set: (key, value) => local.setItem(key, value),
-        remove: key => local.removeItem(key)
+        remove: key => local.removeItem(key),
+        keys: () => Array.from({length:local.length}, (_,i)=>local.key(i)).filter(key=>typeof key==='string')
       };
     } catch (_) {}
     const store = storage || browserStore;
+    const reviewLocks = reviewLockManager ||
+      (typeof globalThis !== 'undefined' && globalThis.navigator && globalThis.navigator.locks);
     let sessionToken = null; // Deliberately memory-only. Never persist bearer credentials.
     let workspaceId = null;
     let accountId = null; // Synthetic auth subject only; bearer tokens are never persisted.
@@ -127,7 +133,7 @@
     const recentFeedEventIds = new Set();
     const pending = new Map();
     const draftFlights = new Set();
-    const reviewAttempts = new Map(); // Volatile; same-key retries within this session.
+    const reviewAttempts = new Map(); // In-memory view; durable markers prohibit uncertain resubmission.
     const reviewFlights = new Set();
     const listeners = new Set();
 
@@ -152,61 +158,87 @@
         row.account_id === account && row.workspace_id === workspace &&
         row.scope && row.scope.workspace_id === workspace &&
         typeof row.scope.partner_id === 'string' &&
-        /^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(row.scope.partner_id) &&
+        /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(row.scope.partner_id) &&
         validBusinessDate(row.scope.business_date) && ['mn','mt','mb'].includes(row.scope.region) &&
         row.payload && typeof row.payload === 'object' && !Array.isArray(row.payload) &&
         Number.isSafeInteger(row.base_revision) && row.base_revision >= 0 &&
-        row.status === STATUS.PENDING && typeof row.created_at === 'string' &&
+        (row.dispatch_uncertain === undefined || row.dispatch_uncertain === true) &&
+        (row.status === STATUS.PENDING ||
+          (row.status === STATUS.BLOCKED && row.error === 'TEAM_MUTATION_OUTCOME_UNKNOWN')) &&
+        typeof row.created_at === 'string' &&
         Number.isFinite(Date.parse(row.created_at));
     }
-    function readPersistedDrafts() {
-      if (!store || typeof store.get !== 'function' || typeof store.set !== 'function')
-        throw new Error('SYNC_DRAFT_STORAGE_UNAVAILABLE');
-      const raw = store.get(PENDING_DRAFTS_KEY);
-      if (raw === null || raw === '') return [];
-      const rows = JSON.parse(raw);
-      if (!Array.isArray(rows)) throw new Error('SYNC_DRAFT_STORAGE_CORRUPT');
-      return rows;
+    function intentKey(id) {
+      return DRAFT_INTENT_PREFIX + encodeURIComponent(JSON.stringify([accountId,workspaceId,id]));
+    }
+    function requireDraftStore() {
+      if (!store || typeof store.get!=='function' || typeof store.set!=='function' ||
+          typeof store.keys!=='function') throw Error('SYNC_DRAFT_STORAGE_UNAVAILABLE');
+    }
+    function immutableDraft(item) {
+      return {id:item.id,account_id:accountId,workspace_id:workspaceId,
+        scope:item.scope,payload:item.payload,base_revision:item.base_revision,
+        status:STATUS.PENDING,created_at:item.created_at};
     }
     function persistPendingDrafts() {
-      if (!accountId || !workspaceId) { pendingPersistence = 'MEMORY_ONLY'; return false; }
-      let saved;
-      try { saved = readPersistedDrafts(); }
-      catch (error) {
-        pendingPersistence = error && error.message === 'SYNC_DRAFT_STORAGE_UNAVAILABLE' ?
-          'STORAGE_FAILED' : 'STORAGE_CORRUPT';
+      if (!accountId || !workspaceId) { pendingPersistence='MEMORY_ONLY'; return false; }
+      if (pendingPersistence==='STORAGE_CORRUPT') return false;
+      try {
+        requireDraftStore();
+        // Each cryptographically unique intent owns one atomic localStorage key.
+        // Never replace an account-wide array or delete another tab's record.
+        for (const item of pending.values()) {
+          const key=intentKey(item.id), record=JSON.stringify(immutableDraft(item));
+          const prior=store.get(key);
+          if (prior!==null && prior!==undefined && prior!==record)
+            throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+          if (prior===null || prior===undefined) store.set(key,record);
+          if (store.get(key)!==record || !store.keys().includes(key)) throw Error('SYNC_DRAFT_STORAGE_UNVERIFIED');
+        }
+        pendingPersistence='LOCAL_STORAGE'; return true;
+      } catch (error) {
+        pendingPersistence=error.message==='SYNC_DRAFT_STORAGE_CORRUPT'?'STORAGE_CORRUPT':'STORAGE_FAILED';
         return false;
       }
-      // Keep another identity/workspace's queue intact. Replacing the shared
-      // storage key with only this session's rows would silently lose drafts.
-      const others = saved.filter(row => !(row && row.account_id === accountId && row.workspace_id === workspaceId));
-      const records = Array.from(pending.values()).filter(x => x.status === STATUS.PENDING).map(x => ({
-        id:x.id,account_id:accountId,workspace_id:workspaceId,scope:x.scope,payload:x.payload,
-        base_revision:x.base_revision,status:x.status,created_at:x.created_at
-      }));
-      try { store.set(PENDING_DRAFTS_KEY, JSON.stringify(others.concat(records))); pendingPersistence='LOCAL_STORAGE'; return true; }
-      catch (_) { pendingPersistence='STORAGE_FAILED'; return false; }
     }
     function restorePendingDrafts() {
       if (!accountId || !workspaceId) return;
-      let rows;
-      try { rows = readPersistedDrafts(); }
-      catch (error) {
-        pendingPersistence = error && error.message === 'SYNC_DRAFT_STORAGE_UNAVAILABLE' ?
-          'STORAGE_FAILED' : 'STORAGE_CORRUPT';
-        return;
-      }
-      for (const row of rows) {
-        // Records for other authenticated owners are deliberately invisible.
-        if (!row || row.account_id !== accountId || row.workspace_id !== workspaceId) continue;
-        if (!validPersistedDraft(row,workspaceId,accountId)) {
-          pending.clear();
-          pendingPersistence='STORAGE_CORRUPT';
-          return;
+      try {
+        requireDraftStore();
+        const raw=store.get(PENDING_DRAFTS_KEY);
+        const legacy=raw===null || raw===undefined || raw===''?[]:JSON.parse(raw);
+        if (!Array.isArray(legacy)) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+        const rows=legacy.filter(row=>row && row.account_id===accountId && row.workspace_id===workspaceId);
+        const keys=store.keys();
+        if (!Array.isArray(keys) || keys.some(key=>typeof key!=='string'))
+          throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+        for (const key of keys) {
+          if (!key.startsWith(DRAFT_INTENT_PREFIX) || key.endsWith(':dispatched')) continue;
+          let identity;
+          try { identity=JSON.parse(decodeURIComponent(key.slice(DRAFT_INTENT_PREFIX.length))); }
+          catch (_) { throw Error('SYNC_DRAFT_STORAGE_CORRUPT'); }
+          if (!Array.isArray(identity) || identity.length!==3) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+          if (identity[0]!==accountId || identity[1]!==workspaceId) continue;
+          const row=JSON.parse(store.get(key));
+          if (!row || row.id!==identity[2] || key!==intentKey(row.id)) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+          rows.push(row);
         }
-        pending.set(row.id,{id:row.id,scope:clone(row.scope),payload:clone(row.payload),base_revision:row.base_revision,status:STATUS.PENDING,created_at:row.created_at});
+        for (const row of rows) {
+          if (!validPersistedDraft(row,workspaceId,accountId)) throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+          const previous=pending.get(row.id);
+          if (previous && JSON.stringify(immutableDraft(previous))!==JSON.stringify(immutableDraft(row)))
+            throw Error('SYNC_DRAFT_STORAGE_CORRUPT');
+          const attempted=row.dispatch_uncertain===true || row.status===STATUS.BLOCKED ||
+            store.get(intentKey(row.id)+':dispatched')!=null;
+          pending.set(row.id,{id:row.id,scope:clone(row.scope),payload:clone(row.payload),
+            base_revision:row.base_revision,status:attempted?STATUS.NEEDS_RECONCILIATION:STATUS.PENDING,
+            created_at:row.created_at,...(attempted?{error:'TEAM_MUTATION_OUTCOME_UNKNOWN',dispatch_uncertain:true}:{})});
+        }
+        pendingPersistence='LOCAL_STORAGE';
+      } catch (error) {
+        pending.clear();
+        pendingPersistence=error.message==='SYNC_DRAFT_STORAGE_UNAVAILABLE'?'STORAGE_FAILED':'STORAGE_CORRUPT';
       }
-      pendingPersistence='LOCAL_STORAGE';
     }
 
     async function jsonResponse(response) {
@@ -219,8 +251,40 @@
       // must never accompany a new identity exchange, even on the same origin.
       if (sessionToken && path !== '/v1/login')
         headers.authorization = 'Bearer ' + sessionToken;
-      const response = await fetcher(endpoint + path, Object.assign({}, options, { headers }));
-      return { response, body: await jsonResponse(response) };
+      // Bound both fetch and body consumption. Abort cannot prove no COMMIT;
+      // callers classify every post-dispatch timeout as reconciliation-needed.
+      const controller=typeof AbortController==='function'?new AbortController():null;
+      let timer;
+      const operation=(async()=>{
+        const response=await fetcher(endpoint+path,Object.assign({},options,{headers},
+          controller?{signal:controller.signal}:{}));
+        return {response,body:await jsonResponse(response)};
+      })();
+      try {
+        return await Promise.race([operation,new Promise((_,reject)=>{
+          timer=setTimeout(()=>{if(controller)controller.abort();reject(Error('SYNC_REQUEST_TIMEOUT'));},mutationTimeoutMs);
+        })]);
+      } finally { clearTimeout(timer); }
+    }
+
+    function validActor(actor, workspace) {
+      return actor && actor.server_verified===true && actor.membership_active===true &&
+        actor.workspace_id===workspace && typeof actor.user_id==='string' &&
+        /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(actor.user_id) &&
+        ['operator','reviewer','admin','viewer'].includes(actor.role);
+    }
+    async function requireMutationActor(roles) {
+      if (!sessionToken || !workspaceId || typeof accountId!=='string' ||
+          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(accountId))
+        throw Error('SYNC_MUTATION_IDENTITY_REQUIRED');
+      const epoch=sessionEpoch,owner=accountId,workspace=workspaceId;
+      let result;
+      try { result=await request('/v1/session',{method:'GET'}); }
+      catch (_) { throw Error('SYNC_MUTATION_IDENTITY_UNVERIFIED'); }
+      if (epoch!==sessionEpoch || logoutInFlight) throw Error('SYNC_SESSION_CHANGED');
+      if (!result || !result.response || !result.response.ok || !validActor(result.body,workspace) ||
+          result.body.user_id!==owner || !roles.includes(result.body.role))
+        throw Error('SYNC_MUTATION_IDENTITY_UNVERIFIED');
     }
 
     function hasUnsyncedDrafts() {
@@ -235,6 +299,8 @@
         throw new Error('SYNC_SESSION_INVALID');
       if (workspace !== null && (typeof workspace !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workspace)))
         throw new Error('SYNC_WORKSPACE_INVALID');
+      if (owner!==null && (typeof owner!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(owner)))
+        throw Error('SYNC_ACCOUNT_INVALID');
       if (hasUnsyncedDrafts() && discardPending !== true)
         throw new Error('SYNC_UNSENT_DRAFTS_REQUIRE_DECISION');
       // Switches between people or workspaces must discard in-memory financial
@@ -274,7 +340,12 @@
         if (epoch !== sessionEpoch) throw new Error('SYNC_SESSION_CHANGED');
         if (!result.response.ok || typeof result.body.session_token !== 'string')
           throw new Error(result.body.error || 'AUTH_LOGIN_DENIED');
-        setSessionToken(result.body.session_token, workspaceId, {accountId:authSubject});
+        // Bind durable storage to the server user ID, never a caller's auth subject.
+        const verified=await request('/v1/session',{method:'GET',headers:{authorization:'Bearer '+result.body.session_token}});
+        if (epoch!==sessionEpoch) throw Error('SYNC_SESSION_CHANGED');
+        if (!verified.response.ok || !validActor(verified.body,workspaceId))
+          throw Error('SYNC_MUTATION_IDENTITY_UNVERIFIED');
+        setSessionToken(result.body.session_token, workspaceId, {accountId:verified.body.user_id});
         return Object.freeze({ expires_at: result.body.expires_at, authenticated: true });
       } finally {
         loginInFlight = false;
@@ -319,7 +390,8 @@
       cursor = null;
       lastAcceptedFeedSequence = null;
       recentFeedEventIds.clear();
-      // Prototype drafts are volatile. Do not display a previous user's data
+      // Keep durable intents and dispatch markers; clear only this session view.
+      // Do not display a previous user's data
       // after logout or let a later login submit it under another identity.
       pending.clear();
       reviewAttempts.clear();
@@ -354,66 +426,61 @@
     }
 
     async function syncDraft(id) {
-      if (logoutInFlight) return Object.freeze({id,status:STATUS.BLOCKED,
-        error:'SYNC_LOGOUT_IN_FLIGHT'});
-      const item = pending.get(id);
-      if (!item) throw new Error('SYNC_DRAFT_NOT_FOUND');
-      if (draftFlights.has(id))
-        return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_DRAFT_ALREADY_IN_FLIGHT' });
-      // SYNCED is an authoritative, verified receipt: never create a
-      // second network write by re-clicking the same previously saved draft.
-      if (item.status === STATUS.SYNCED || item.status === STATUS.CONFLICT ||
-          item.status === STATUS.BLOCKED) return Object.freeze(clone(item));
-      if (!sessionToken) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_REQUIRED');
-      if (workspaceId !== null && item.scope.workspace_id !== workspaceId)
-        return setStatus(item, STATUS.BLOCKED, 'SYNC_WORKSPACE_MISMATCH');
-      // A login-proven identity must durably retain the exact intent before a
-      // network attempt. Without that, a lost ACK could turn into silent loss.
-      if (accountId && !persistPendingDrafts())
-        return setStatus(item, STATUS.PENDING, 'SYNC_LOCAL_PERSISTENCE_REQUIRED');
-      const epoch = sessionEpoch;
+      if (logoutInFlight) return Object.freeze({id,status:STATUS.BLOCKED,error:'SYNC_LOGOUT_IN_FLIGHT'});
+      const item=pending.get(id);
+      if (!item) throw Error('SYNC_DRAFT_NOT_FOUND');
+      if (draftFlights.has(id)) return Object.freeze({id,status:STATUS.BLOCKED,error:'SYNC_DRAFT_ALREADY_IN_FLIGHT'});
+      if (item.status!==STATUS.PENDING) return Object.freeze(clone(item));
+      if (item.scope.workspace_id!==workspaceId) return setStatus(item,STATUS.BLOCKED,'SYNC_WORKSPACE_MISMATCH');
+      const epoch=sessionEpoch;
       draftFlights.add(id);
       try {
-      try {
-        const result = await request('/v1/scopes/drafts', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ scope: item.scope, expected_revision: item.base_revision,
-            idempotency_key: item.id, payload: item.payload })
+        try { await requireMutationActor(['operator','admin']); }
+        catch(error) { return setStatus(item,STATUS.BLOCKED,error.message); }
+        if (!reviewLocks || typeof reviewLocks.request!=='function' || !persistPendingDrafts())
+          return setStatus(item,STATUS.BLOCKED,'SYNC_LOCAL_PERSISTENCE_REQUIRED');
+        return await reviewLocks.request(intentKey(id),{mode:'exclusive',ifAvailable:true},async lock=>{
+          if (!lock) return Object.freeze({id,status:STATUS.BLOCKED,error:'SYNC_DRAFT_ALREADY_IN_FLIGHT'});
+          if (epoch!==sessionEpoch || logoutInFlight) return Object.freeze({id,status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
+          const key=intentKey(id)+':dispatched';
+          try {
+            if (store.get(key)!=null) return setStatus(item,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
+            // The marker is immutable and never cleared, even after a receipt.
+            // A stale/reloaded tab must reconcile, not re-dispatch this intent.
+            const marker=JSON.stringify({id,account_id:accountId,workspace_id:workspaceId});
+            store.set(key,marker);
+            if (store.get(key)!==marker) throw Error('STORE_MISMATCH');
+          } catch (_) { return setStatus(item,STATUS.BLOCKED,'SYNC_LOCAL_PERSISTENCE_REQUIRED'); }
+          item.dispatch_uncertain=true;
+          if (epoch!==sessionEpoch || logoutInFlight)
+            return Object.freeze({id,status:STATUS.NEEDS_RECONCILIATION,error:'SYNC_SESSION_CHANGED'});
+          let result;
+          try {
+            result=await request('/v1/scopes/drafts',{method:'POST',headers:{'content-type':'application/json'},
+              body:JSON.stringify({scope:item.scope,expected_revision:item.base_revision,idempotency_key:item.id,payload:item.payload})});
+          } catch (_) {
+            if (epoch!==sessionEpoch) return Object.freeze({id,status:STATUS.NEEDS_RECONCILIATION,error:'SYNC_SESSION_CHANGED'});
+            return setStatus(item,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
+          }
+          if (epoch!==sessionEpoch) return Object.freeze({id,status:STATUS.NEEDS_RECONCILIATION,error:'SYNC_SESSION_CHANGED'});
+          if (result.response.status===409) return setStatus(item,STATUS.CONFLICT,result.body.error||'TEAM_REVISION_CONFLICT');
+          if (result.response.status===401 || result.response.status===403)
+            return setStatus(item,STATUS.BLOCKED,result.body.error||'AUTH_SESSION_INVALID');
+          if (!result.response.ok) return setStatus(item,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
+          const scopeKey=[item.scope.workspace_id,item.scope.partner_id,item.scope.business_date,item.scope.region].join(':');
+          const body=result.body;
+          if (body.sync_status!==STATUS.SYNCED || body.scope_key!==scopeKey ||
+              typeof body.event_id!=='string' || !FEED_EVENT_ID.test(body.event_id) ||
+              typeof body.replayed!=='boolean' || !verifiedFeedSequence(body.feed_seq) ||
+              !Number.isSafeInteger(body.new_revision) || body.new_revision!==item.base_revision+1)
+            return setStatus(item,STATUS.NEEDS_RECONCILIATION,'SYNC_ACK_UNVERIFIED');
+          item.server_result=clone(body);item.server_revision=body.new_revision;
+          return setStatus(item,STATUS.SYNCED);
         });
-        if (epoch !== sessionEpoch) return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' });
-        if (result.response.status === 409) return setStatus(item, STATUS.CONFLICT, result.body.error || 'TEAM_REVISION_CONFLICT');
-        if (result.response.status === 401) return setStatus(item, STATUS.BLOCKED, 'AUTH_SESSION_INVALID');
-        // A 5xx can occur AFTER PostgreSQL committed but BEFORE an ACK reached the phone.
-        // Keep the same durable-on-server idempotency key for an explicit retry.
-        if (result.response.status >= 500)
-          return setStatus(item, STATUS.PENDING, 'SYNC_DRAFT_RECEIPT_UNCERTAIN');
-        // A server-side rejection is not a verified receipt. Keep the original
-        // idempotency key and payload available for an explicit, safe retry.
-        if (!result.response.ok) return setStatus(item, STATUS.PENDING, result.body.error || 'SYNC_SERVER_REJECTED');
-        // A receipt for another scope must never mark this draft as committed.
-        const scopeKey = [item.scope.workspace_id,item.scope.partner_id,
-          item.scope.business_date,item.scope.region].join(':');
-        // HTTP 200 alone does not prove a financial draft reached the ledger.
-        if (result.body.sync_status !== STATUS.SYNCED ||
-            result.body.scope_key !== scopeKey ||
-            typeof result.body.event_id !== 'string' ||
-            !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(result.body.event_id) ||
-            typeof result.body.replayed !== 'boolean' ||
-            !verifiedFeedSequence(result.body.feed_seq) ||
-            !Number.isSafeInteger(result.body.new_revision) ||
-            result.body.new_revision !== item.base_revision + 1)
-          return setStatus(item, STATUS.PENDING, 'SYNC_ACK_UNVERIFIED');
-        item.server_result = clone(result.body);
-        item.server_revision = result.body.new_revision;
-        return setStatus(item, STATUS.SYNCED);
-      } catch (error) {
-        if (epoch !== sessionEpoch) return Object.freeze({ id, status: STATUS.BLOCKED, error: 'SYNC_SESSION_CHANGED' });
-        return setStatus(item, STATUS.PENDING, errorCode(error, 'SYNC_NETWORK_UNAVAILABLE'));
-      }
-      } finally {
-        draftFlights.delete(id);
-      }
+      } catch (_) { return item.dispatch_uncertain===true?
+        setStatus(item,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN'):
+        setStatus(item,STATUS.BLOCKED,'SYNC_LOCAL_PERSISTENCE_REQUIRED'); }
+      finally { draftFlights.delete(id); }
     }
 
 
@@ -435,13 +502,49 @@
       if(!Number.isSafeInteger(expectedRevision) || expectedRevision<0 ||
           !Number.isSafeInteger(expectedRevision+1))
         throw Error('SYNC_REVISION_INVALID');
+      const qualificationEpoch=sessionEpoch;
       const target=JSON.stringify([action,workspaceId,scope.partner_id,scope.business_date,
         scope.region,expectedRevision]);
       let attempt=reviewAttempts.get(target);
+      if (attempt && attempt.status!==STATUS.PENDING) return Object.freeze(clone(attempt));
+      try { await requireMutationActor(action==='approve_review'?['reviewer','admin']:['operator','admin']); }
+      catch(error) { return Object.freeze({status:STATUS.BLOCKED,error:error.message}); }
+      if (qualificationEpoch!==sessionEpoch || logoutInFlight)
+        return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
       if(!attempt && retryOnly===true)throw Error('SYNC_REVIEW_RETRY_NOT_FOUND');
       if(!attempt){
-        attempt={action,scope:clone(scope),expected_revision:expectedRevision,
-          idempotency_key:newDraftId(),status:STATUS.PENDING};
+        // A review may commit even if its acknowledgement is lost. Keep the
+        // identity before dispatch; after reload, require manual reconciliation.
+        if(!accountId || !store || typeof store.get!=='function' || typeof store.set!=='function' ||
+           !reviewLocks || typeof reviewLocks.request!=='function')
+          return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_REVIEW_STORAGE_REQUIRED'});
+        const markerKey='kts-team-review-intent-v1:'+encodeURIComponent(JSON.stringify([accountId,target]));
+        const markerEpoch=sessionEpoch;
+        let created;
+        try {
+          created=await reviewLocks.request(markerKey,{mode:'exclusive',ifAvailable:true},async lock=>{
+            if(!lock)return {status:STATUS.BLOCKED,error:'SYNC_REVIEW_ALREADY_IN_FLIGHT'};
+            if(markerEpoch!==sessionEpoch || logoutInFlight)
+              return {status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'};
+            const prior=store.get(markerKey);
+            if(prior!==null && prior!=='' && prior!==undefined) {
+              let identity;try{identity=JSON.parse(prior);}catch(_){}
+              return {status:STATUS.NEEDS_RECONCILIATION,error:'SYNC_REVIEW_RECONCILIATION_REQUIRED',
+                ...(identity && typeof identity.idempotency_key==='string'?{idempotency_key:identity.idempotency_key}:{})};
+            }
+            const next={action,scope:clone(scope),expected_revision:expectedRevision,
+              idempotency_key:newDraftId(),status:STATUS.PENDING};
+            const marker=JSON.stringify({account_id:accountId,target,idempotency_key:next.idempotency_key});
+            store.set(markerKey,marker);
+            if(store.get(markerKey)!==marker)throw Error('STORE_MISMATCH');
+            next.marker_key=markerKey;
+            return next;
+          });
+        } catch (_) { return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_REVIEW_STORAGE_REQUIRED'}); }
+        if(!created || created.status!==STATUS.PENDING)return Object.freeze(created || {status:STATUS.BLOCKED,error:'SYNC_REVIEW_STORAGE_REQUIRED'});
+        if(markerEpoch!==sessionEpoch || logoutInFlight)
+          return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
+        attempt=created;
         reviewAttempts.set(target,attempt);
         emit();
       }
@@ -451,6 +554,11 @@
       const epoch=sessionEpoch;
       reviewFlights.add(target);
       try{
+        // A dispatch marker is already durable. Even an unexpected exception
+        // must not leave this attempt eligible for a second POST.
+        setStatus(attempt,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
+        if (epoch!==sessionEpoch || logoutInFlight)
+          return Object.freeze({status:STATUS.NEEDS_RECONCILIATION,error:'SYNC_SESSION_CHANGED'});
         let result;
         try{
           result=await request('/v1/scopes/review',{
@@ -460,12 +568,14 @@
           });
         }catch(error){
           if(epoch!==sessionEpoch)return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
-          return setStatus(attempt,STATUS.PENDING,errorCode(error,'SYNC_NETWORK_UNAVAILABLE'));
+          return setStatus(attempt,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
         }
         if(epoch!==sessionEpoch)return Object.freeze({status:STATUS.BLOCKED,error:'SYNC_SESSION_CHANGED'});
         const status=result.response.status;
         if(status===409)return setStatus(attempt,STATUS.CONFLICT,result.body.error||'TEAM_REVISION_CONFLICT');
-        if(status>=500)return setStatus(attempt,STATUS.PENDING,'SYNC_REVIEW_RECEIPT_UNCERTAIN');
+        if(status===503&&result.body.error==='TEAM_MUTATION_OUTCOME_UNKNOWN')
+          return setStatus(attempt,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
+        if(status>=500)return setStatus(attempt,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
         if(status===401||status===403||status===404||!result.response.ok)
           return setStatus(attempt,STATUS.BLOCKED,result.body.error||'SYNC_REVIEW_SERVER_REJECTED');
         const body=result.body,expectedState=action==='submit_review'?'PENDING_REVIEW':'REVIEWED';
@@ -476,9 +586,11 @@
             !verifiedFeedSequence(body.feed_seq) ||
             !Number.isSafeInteger(body.new_revision) ||
             body.new_revision!==attempt.expected_revision+1)
-          return setStatus(attempt,STATUS.BLOCKED,'SYNC_REVIEW_RECEIPT_UNVERIFIED');
+          return setStatus(attempt,STATUS.NEEDS_RECONCILIATION,'SYNC_REVIEW_RECEIPT_UNVERIFIED');
         attempt.server_result=clone(body);
         return setStatus(attempt,STATUS.SYNCED);
+      }catch(_){
+        return setStatus(attempt,STATUS.NEEDS_RECONCILIATION,'TEAM_MUTATION_OUTCOME_UNKNOWN');
       }finally{
         reviewFlights.delete(target);
       }

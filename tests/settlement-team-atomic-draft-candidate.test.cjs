@@ -1,0 +1,65 @@
+'use strict';
+// Real candidate JS path with synthetic pool; SQL source is not executed.
+const {test}=require('node:test');const assert=require('node:assert/strict');
+const crypto=require('node:crypto');const fs=require('node:fs');const path=require('node:path');
+const {createDraftProof}=require('../team-settlement/candidate/atomic-draft-proof.cjs');
+const {createPgTransactionAdapter}=require('../team-settlement/pg-transaction-adapter.cjs');
+const {createPostgresLedgerRepository}=require('../team-settlement/postgres-ledger-repository.cjs');
+const token='T'.repeat(43),scope={workspace_id:'fake_group',partner_id:'fake_partner',business_date:'2026-10-26',region:'mn'};
+const input={scope,action:'create_draft',expected_revision:0,event_id:'event_a',idempotency_key:'draft_a',snapshot:{synthetic:true,amount:7}};
+test('draft candidate binds exact snapshot bytes and rejects malformed input',()=>{
+  const request={...scope,action:input.action,expected_revision:0,event_id:input.event_id,idempotency_key:input.idempotency_key,request_sha256:'a'.repeat(64),snapshot_text:'{"synthetic":true}'};
+  const opts={nonce:'b'.repeat(32),expires:1800000000};
+  const p=createDraftProof(token,request,opts);
+  const lookupRequest={...request,event_id:'lookup'};
+  assert.notEqual(createDraftProof(token,lookupRequest,opts).proof,createDraftProof(token,lookupRequest,{...opts,purpose:'lookup'}).proof);
+  assert.throws(()=>createDraftProof(token,request,{...opts,purpose:'lookup'}),/TEAM_ATOMIC_DRAFT_PROOF_INVALID/);
+  assert.notEqual(createDraftProof(token,{...request,snapshot_text:'{"synthetic":false}'},opts).proof,p.proof);
+  assert.notEqual(createDraftProof(token,{...request,action:'edit_draft'},opts).proof,p.proof);
+  assert.throws(()=>createDraftProof(token,{...request,business_date:'2026-02-30'},opts),/TEAM_ATOMIC_DRAFT_PROOF_INVALID/);
+  assert.throws(()=>createDraftProof(token,{...request,snapshot_text:'[]'},opts),/TEAM_ATOMIC_DRAFT_PROOF_INVALID/);
+  assert.doesNotMatch(JSON.stringify(p),new RegExp(token));
+});
+test('draft reconciliation uses a separate lookup, never mutation or automatic retry',async()=>{
+  const calls=[];let answer={classification:'UNKNOWN'};
+  const pool={connect:async()=>({async query(sql,args){calls.push({sql,args});
+    if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[],command:sql};
+    if(sql.includes('kts_team.atomic_draft_reconcile_v1'))return {rows:[{result:answer}]};
+    throw Error('UNEXPECTED_SQL');},release(){}})};
+  const repo=createPostgresLedgerRepository({db:createPgTransactionAdapter({pool})});
+  const {event_id,...lookup}=input;
+  assert.deepEqual(await repo.reconcileDraftWithSessionProof(token,lookup),{classification:'UNKNOWN',auto_retry:false});
+  answer={classification:'MATCHED_SERVER_RECEIPT',event_id:'event_original',feed_seq:1,new_revision:1};
+  assert.deepEqual(await repo.reconcileDraftWithSessionProof(token,lookup),{...answer,feed_seq:'1',auto_retry:false});
+  answer={...answer,new_revision:2};
+  await assert.rejects(repo.reconcileDraftWithSessionProof(token,lookup),/TEAM_DRAFT_RECEIPT_UNVERIFIED/);
+  assert.equal(calls.some(x=>x.sql.includes('kts_team.atomic_draft_v1(')),false);
+  assert.equal(calls.at(-1).sql,'ROLLBACK');
+});
+test('draft repository calls one boundary with signed snapshot and validates receipt',async()=>{
+  const calls=[];let invalid=false;
+  const pool={connect:async()=>({async query(sql,args){calls.push({sql,args});
+    if(['BEGIN','COMMIT','ROLLBACK'].includes(sql))return {rows:[],command:sql};
+    if(sql.includes('kts_team.atomic_draft_v1'))return {rows:[{result:{event_id:invalid?'event_wrong':'event_a',replayed:false,new_revision:1,feed_seq:1}}]};
+    throw Error('UNEXPECTED_SQL');},release(){}})};
+  const repo=createPostgresLedgerRepository({db:createPgTransactionAdapter({pool})});
+  assert.equal((await repo.appendDraftWithSessionProof(token,input)).event_id,'event_a');
+  const a=calls[1].args;assert.equal(a.length,14);assert.equal(JSON.stringify(a).includes(token),false);
+  const key=crypto.createHash('sha256').update(token).digest();
+  const message=['kts-draft-v1',a[0],a[4],a[5],a[6],a[7],a[8],String(a[9]),a[10],a[11],a[12],crypto.createHash('sha256').update(a[13]).digest('hex'),a[1],String(a[2])].join('|');
+  assert.equal(a[3],crypto.createHmac('sha256',key).update(message).digest('hex'));
+  invalid=true;
+  await assert.rejects(repo.appendDraftWithSessionProof(token,input),/TEAM_DRAFT_RECEIPT_UNVERIFIED/);
+  assert.equal(calls.at(-1).sql,'ROLLBACK');
+});
+test('draft SQL source binds snapshot and retains no-runtime-grant safeguards',()=>{
+  const sql=fs.readFileSync(path.join(__dirname,'../team-settlement/candidate/atomic-review-v1.sql'),'utf8').replace(/\r\n/g,'\n');
+  const draft=sql.slice(sql.indexOf('CREATE FUNCTION kts_team.atomic_draft_v1'));
+  assert.match(draft,/kts-draft-v1/);assert.match(draft,/sha256\(pg_catalog\.convert_to\(p_snapshot_text,'UTF8'\)\)/i);
+  assert.match(draft,/FOR SHARE OF m,i/i);assert.match(draft,/e\.result_snapshot=v_snapshot/i);
+  assert.match(draft,/REVOKE ALL ON FUNCTION[\s\S]+?FROM PUBLIC/i);assert.ok(draft.includes('END;\n$draft$;'));
+  assert.doesNotMatch(draft,/\bGRANT\s/i);
+  const lookup=sql.slice(sql.indexOf('CREATE FUNCTION kts_team.atomic_draft_reconcile_v1'));
+  assert.match(lookup,/kts-draft-lookup-v1/);assert.match(lookup,/e\.result_snapshot=v_snapshot/i);
+  assert.match(lookup,/'classification','UNKNOWN'/);assert.doesNotMatch(lookup,/kts_team\.append_draft\(/i);
+});

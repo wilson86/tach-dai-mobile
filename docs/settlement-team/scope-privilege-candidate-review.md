@@ -16,6 +16,22 @@ does not establish that the role can resolve and invoke the function.
 This is fixture-tested source behavior only; it does not establish actual
 PostgreSQL privileges, database identity, RLS, or trusted actor binding.
 
+The unpromoted role-probe candidate additionally requires equal database name,
+database OID, server address, server port and postmaster start time, and rejects
+recovery servers or missing evidence. This detects obvious split endpoints but
+is not a cryptographic cluster identity: a proxy or coincident values can still
+make distinct backends look alike. It does not make transactions shared. Unix
+socket connections with no server address fail closed. Real PostgreSQL query
+compatibility and actual cluster identity remain NOT_RUN.
+
+The unpromoted role probe now also rejects table-level and column-level direct
+INSERT/UPDATE and table-level DELETE/TRUNCATE on audit events, idempotency
+receipts and workspaces for both runtime roles. Missing evidence fails closed.
+The existing SECURITY INVOKER mutation functions need some of these writes, so
+this is a blocking qualification guard, not a working mutation implementation.
+Privilege inheritance, PUBLIC grants, function ownership and effective grants
+still need real PostgreSQL catalog and adversarial tests before admission.
+
 ## Candidate to investigate
 
 Use a distinct, non-login function-owner role that is neither superuser nor
@@ -71,6 +87,91 @@ separate auth lock as atomic revocation, not evidence of PostgreSQL behavior.
 A candidate needs session verification and the protected mutation in one
 reviewed database transaction or an equally strong database-enforced boundary;
 the present role/grant and actor-GUC admission blocks remain in force.
+
+The transaction adapter also has an intrinsically ambiguous COMMIT failure:
+`settlement-team-commit-ambiguity.test.cjs` supplies the same connection error
+before and after a synthetic durable commit. In both cases it verifies client
+destruction; neither an exception nor a later ROLLBACK proves no write occurred.
+This is a fault model, not a PostgreSQL disconnect test.
+
+The candidate adapter now rejects a missing or non-COMMIT command tag and
+destroys the client; in particular, a ROLLBACK tag is never reported as a
+successful mutation. This guards an additional false-success path, but a
+lost COMMIT acknowledgement remains unknown and still needs reconciliation.
+This candidate requires real node-postgres compatibility and database tests
+before admission; synthetic fixture results are not live evidence.
+The candidate also classifies a pool release exception after an acknowledged
+COMMIT as an unknown mutation outcome rather than a definite rollback. The
+offline composition fixture demonstrates propagation, not actual pool cleanup;
+a release exception can still require operational investigation.
+
+The unpromoted candidate now labels a thrown COMMIT acknowledgement and an
+auth-transaction failure after successful ledger work as an unknown mutation
+outcome. The draft and review HTTP handlers return a sanitized 503 with manual
+review, and the client blocks repeat writes on that explicit response. Unknown
+drafts remain blocked across account-scoped storage reload. The candidate now
+requires an account-scoped storage marker before dispatching review and blocks
+the same intent after reload, including after a lost response. Markers are not
+automatically cleared, even after success: authoritative reconciliation and a
+safe clear operation remain unimplemented. The candidate uses an exclusive
+Web Lock around localStorage marker creation and rejects when unavailable. A
+synthetic lock-manager fixture exercises two competing clients, but real browser
+Web Locks, different origins, devices, and storage partitioning remain unproven;
+the database must still enforce idempotency and authorization. A network failure before the HTTP response reaches the client
+still follows existing in-session uncertain-response behavior.
+These changes do not verify a receipt or close the separate-transaction race.
+
+The candidate writes and reads back a dispatch-uncertain flag for account-scoped
+drafts before sending. A restored attempted draft becomes BLOCKED even if a
+later storage write failed; an unattempted local draft remains PENDING. This
+conservatively changes offline behavior: a draft attempted while offline and
+then reloaded needs reconciliation instead of automatic retry. Tests use a
+synthetic store, not browser durability evidence. The ownerless legacy client
+path, concurrent tabs modifying the shared draft array, storage eviction, and
+authoritative reconciliation remain unresolved; this is not a database or
+cross-device duplicate-prevention guarantee.
+
+Required design invariants before implementation or admission:
+
+1. A single database transaction must validate and lock an active session,
+   derive the actor from database-controlled identity, recheck membership,
+   perform the mutation, and persist the idempotency receipt and event.
+   Logout must update the same locked session row. A lock on another connection
+   is insufficient, and caller-selected actor GUCs are not authentication.
+2. Only the intended runtime role may invoke the reviewed transaction boundary;
+   it must not gain direct auth-table, scope, event or receipt writes, function
+   ownership, role impersonation, BYPASSRLS, or a way to select another actor.
+   A SECURITY DEFINER boundary requires a fixed safe search_path, restricted
+   EXECUTE grants, an appropriately non-login owner, and reviewed FORCE RLS
+   semantics. These are requirements, not claims about current grants.
+3. A lost COMMIT acknowledgement has an UNKNOWN outcome until an authenticated,
+   actor-and-workspace-bound lookup verifies the persisted event and receipt.
+   A retry must use the original idempotency identity and payload; neither a
+   client-generated acknowledgement nor a rollback attempt proves the outcome.
+4. Define how an already-revoked user can learn a prior mutation outcome
+   without granting new access or leaking cross-workspace data. Do not pass a
+   raw bearer or reusable session hash to logs, receipt APIs, or SQL parameters
+   until the proof transport, access control, and retention risks are reviewed.
+
+The current role-separated pools and existing recovery endpoint do not provide
+these invariants for review mutations. In particular, the recovery inspector is
+draft-specific and requires an active authenticated actor. No new SQL contract
+or privileged implementation is implied by this design note. Real PostgreSQL
+concurrency, lost-acknowledgement and RLS verification remain NOT_RUN.
+
+The isolated candidate composition makes `verifyPools()` fail closed and now
+also replaces its exposed repository mutation methods with a fail-closed guard.
+The composition's ledger API and HTTP handlers consequently cannot perform
+draft/review writes even if callers skip qualification. This temporarily makes
+business writes unavailable; it is not an atomic implementation. Importing and
+constructing the lower-level unguarded API/repository independently can still
+reproduce the split-connection race, and direct database access is not guarded
+by this JavaScript composition. The separately pinned Windows composition is
+unchanged and its fixture still returns qualified. Neither candidate nor the
+canonical runner may be treated as an atomicity fix or live admission proof.
+The existing real runtime qualification test expects the old successful
+`verifyPools()` result and must be updated after a real boundary is designed;
+it has not been run against PostgreSQL.
 
 Draft replay requires an actor-bound receipt contract.
 The server digest still covers action, scope, expected revision and payload,
@@ -148,3 +249,53 @@ This demonstrates a simple synthetic tree on this host, not PostgreSQL behavior.
 - **Gate:** `RELEASE_READINESS=BLOCKED`; `R6_LEASE=CONSUMED`; `R7=NOT_STARTED`; `GITHUB_CI=NOT_RUN`; `REAL_PG_RLS=NOT_RUN`; `REAL_REVIEWER_LOGOUT=NOT_RUN`; `MERGE=NO`; `DEPLOY=NO`; `PRODUCTION_MUTATION=NONE`; `E_ACCESS=NO`; `F_ACCESS=NO`; `COST_USD=0`.
 - **Policy / Skills:** actual five WILSON86 skills found and read at `wilson86/AI_ORCHESTRATOR` seed SHA `59630fd445c87b57598c88b0d47cc1296a8ebabd` under `.agents/skills/{zero-cost-guard,qa-evidence-gate,bug-reproduction,safe-goal-loop,github-handoff}/SKILL.md`. Proposed context-guard manually loaded from PR #11; native discovery **NOT_VERIFIED**, `MANUAL_ONLY`. Context risk `UNKNOWN` (no exact remaining percentage).
 - **Cleanup:** `CLEANUP_STATUS=NOT_RUN_WINDOWS`; `FILES_REMOVED=0`; `SPACE_RECOVERED_MB=0`; `FILES_PRESERVED=PROJECT_SOURCE_AND_ROLLBACK_UNCHANGED`; `CLEANUP_BLOCKERS=NO_WINDOWS_WORKSPACE_ACCESS`.
+
+
+## Client independent-review findings repair — 2026-11-03
+
+The following supersedes the earlier client-candidate behavior above. It does
+not qualify the SQL candidate or remove any PostgreSQL mutation guard.
+
+- Every dispatched draft or review with a 5xx, transport/body timeout, lost
+  reply or invalid acknowledgement becomes `NEEDS_RECONCILIATION`. It is not
+  automatically or explicitly resubmitted by `syncDraft`, `reviewScope` or
+  `reconnect`. Its idempotency identity is retained. A new valid receipt is
+  required to report `SYNCED`; no no-write inference is made from an exception.
+- Draft storage uses one immutable record per cryptographically random intent
+  under `kts-team-draft-intent-v2:`, including server user and workspace IDs.
+  A tab never replaces the shared account array or deletes another tab's row.
+  The old v1 array is read-only migration input. Per-key localStorage writes
+  provide indivisible record replacement, not a multi-key transaction: a crash
+  between intent and dispatch-marker writes is safe because POST occurs only
+  after both records are read back. A dispatch marker is never cleared.
+- Same-intent dispatch is serialized with the existing origin Web Locks API.
+  A stale tab sees the retained marker and must reconcile, even after another
+  tab received an ACK. Missing locks, unavailable/corrupt/enumeration-incapable
+  storage or failed read-back deny writes. These are fail-closed requirements,
+  not storage-eviction protection or cross-device duplicate prevention.
+- Public `setSessionToken` does not authenticate a caller-selected account ID.
+  Before mutation, actual `/v1/session` must confirm the same server user,
+  workspace, active membership and permitted role. Login derives the storage
+  owner from this server result, not the supplied auth subject. Missing or
+  mismatched identity cannot dispatch a financial POST. Session epoch is
+  rechecked after asynchronous authorization and immediately before dispatch,
+  including re-entrant UI callbacks and storage callbacks.
+- `mutationTimeoutMs` bounds fetch and response-body consumption (default
+  15 seconds, maximum 60). Aborting a request does not establish rollback.
+  No token is stored in intent records; logout/discard clears the view only
+  and leaves unresolved intent evidence available on the next same-user login.
+
+Changed-path QA uses actual client public entrypoints with disposable network,
+storage and lock dependencies. The raw findings suite tests missing/forged
+identity and real dispatch ordering without the positive legacy fixture helper.
+The helper supplies explicit positive identity/storage/lock dependencies to
+older tests; it is test-only and cannot change production API enforcement.
+The previous expectations allowing lost-ACK retry were replaced with negative
+assertions requiring no second POST. No PostgreSQL or Android was started.
+
+Independent reviewer findings are owner-provided input. Subsequent engineering
+review is self-review and is not a new independent sign-off. Actual browser
+localStorage/Web Locks, eviction/quota behavior, old-v1 tabs during rollout,
+authoritative reconciliation/marker clearing and production acceptance remain
+unqualified. The current UI displays the reconciliation state but has no
+qualified resolution flow. Keep the database write block and release NO_GO.

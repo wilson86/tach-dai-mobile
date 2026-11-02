@@ -22,6 +22,7 @@ function createPgTransactionAdapter({ pool } = {}) {
     let committed = false;
     let poisoned = false;
     let active = false;
+    let failed = false;
     const pending = new Set();
     try {
       await client.query('BEGIN');
@@ -52,10 +53,24 @@ function createPgTransactionAdapter({ pool } = {}) {
         throw new Error('TEAM_DB_UNAWAITED_QUERY');
       }
       commitAttempted = true;
-      await client.query('COMMIT');
+      let commitResult;
+      try {
+        commitResult = await client.query('COMMIT');
+      } catch (cause) {
+        // A lost acknowledgement does not establish whether COMMIT reached
+        // the server. Preserve the cause internally; do not claim rollback.
+        throw new Error('TEAM_DB_COMMIT_OUTCOME_UNKNOWN', { cause });
+      }
+      // PostgreSQL can answer COMMIT with the ROLLBACK command tag when the
+      // transaction was already aborted. A successful round trip alone is not
+      // evidence that the mutation committed. A missing or unexpected tag
+      // must fail closed, including for injected adapters.
+      if (!commitResult || commitResult.command !== 'COMMIT')
+        throw new Error('TEAM_DB_COMMIT_NOT_COMMITTED');
       committed = true;
       return result;
     } catch (error) {
+      failed = true;
       active = false;
       if (began && !committed) {
         try { await client.query('ROLLBACK'); }
@@ -70,7 +85,13 @@ function createPgTransactionAdapter({ pool } = {}) {
     } finally {
       // A rolled-back/failed transaction is never silently reused on
       // an uncertain connection. Release(true) destroys node-postgres client.
-      client.release(poisoned);
+      try { client.release(poisoned); }
+      catch (cause) {
+        // A cleanup exception after COMMIT must never look like a known
+        // mutation failure. Preserve the original transaction error otherwise.
+        if (committed) throw new Error('TEAM_DB_COMMIT_OUTCOME_UNKNOWN', {cause});
+        if (!failed) throw cause;
+      }
     }
   }
   return Object.freeze({ transaction });

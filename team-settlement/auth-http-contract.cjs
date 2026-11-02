@@ -243,6 +243,8 @@ function createAuthHttpServer(auth, {
           return json(res,200,await ledger.advanceReview(token,input));
         }catch(error){
           const code=error&&error.message;
+          if(code==='TEAM_MUTATION_OUTCOME_UNKNOWN')
+            return json(res,503,{error:code,sync_status:'UNKNOWN',resolution:'MANUAL_REVIEW'});
           if(code==='AUTH_SESSION_INVALID'||code==='AUTH_SESSION_REVOKED')
             return json(res,401,{error:'AUTH_SESSION_INVALID'});
           if(['TEAM_ROLE_DENIED','TEAM_WORKSPACE_DENIED','TEAM_ACTOR_UNVERIFIED',
@@ -394,6 +396,8 @@ function createAuthHttpServer(auth, {
           return json(res, 200, await ledger.appendDraft(token, input));
         } catch (error) {
           const code = error.message;
+          if (code === 'TEAM_MUTATION_OUTCOME_UNKNOWN')
+            return json(res, 503, { error: code, sync_status: 'UNKNOWN', resolution: 'MANUAL_REVIEW' });
           if (code === 'AUTH_SESSION_INVALID' || code === 'AUTH_SESSION_REVOKED') return json(res, 401, { error: 'AUTH_SESSION_INVALID' });
           if (['TEAM_ROLE_DENIED','TEAM_WORKSPACE_DENIED','TEAM_ACTOR_UNVERIFIED'].includes(code)) return json(res, 403, { error: code });
           if (['TEAM_REVISION_CONFLICT','TEAM_IDEMPOTENCY_CONFLICT'].includes(code))

@@ -32,8 +32,17 @@ function createIsolatedTeamPrototype({
   const authDb=createPgTransactionAdapter({pool:authPool});
   const ledgerDb=createPgTransactionAdapter({pool:ledgerPool});
   const auth=createPostgresAuthService({db:authDb,clock});
-  const ledgerRepository=createPostgresLedgerRepository({db:ledgerDb,
+  const unqualifiedRepository=createPostgresLedgerRepository({db:ledgerDb,
     syntheticAuthorizationDiagnostic});
+  // The current split-connection session lock cannot protect a ledger commit
+  // after auth connection loss. Deny writes even when a caller skips verifyPools.
+  // This is a temporary safety block, not a working atomic mutation boundary.
+  const denyUnqualifiedMutation=async()=>{throw Error('TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE');};
+  const ledgerRepository=Object.freeze({...unqualifiedRepository,
+    appendDraft:denyUnqualifiedMutation,appendDraftWithSessionProof:denyUnqualifiedMutation,
+    reconcileDraftWithSessionProof:denyUnqualifiedMutation,advanceReview:denyUnqualifiedMutation,
+    advanceReviewWithSessionProof:denyUnqualifiedMutation,
+    reconcileReviewWithSessionProof:denyUnqualifiedMutation});
   const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled,requireSessionLockForWrites:true});
   // A distinct, separately opted-in recovery inspector wires the actual
   // actor-scoped PostgreSQL READ ONLY receipt repository into the HTTP route.
@@ -53,7 +62,13 @@ function createIsolatedTeamPrototype({
   // automatically expose a port or initialize an operational database.
   return Object.freeze({auth,ledgerRepository,ledger,server,
     // Never called during construction. Pre-pilot explicit read-only check.
-    verifyPools:()=>qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly,requireReview:syntheticReviewEnabled})
+    verifyPools:async()=>{
+      await qualifyIsolatedPoolRoles({authPool,ledgerPool,syntheticOnly,requireReview:syntheticReviewEnabled});
+      // Role separation alone cannot qualify this composition: session locking
+      // and the ledger mutation currently use independent transactions. The
+      // lock can disappear while a ledger commit is still in flight.
+      throw new Error('TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE');
+    }
   });
 }
 module.exports=Object.freeze({createIsolatedTeamPrototype});

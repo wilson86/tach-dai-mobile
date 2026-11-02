@@ -33,17 +33,19 @@ test('synthetic diagnostic distinguishes SQL role denial from missing or mismatc
   assert.equal(missing[0].membership_state,'MISSING_OR_INACTIVE');
   assert.equal(missing[0].append_draft_role_permitted,false);
 });
-test('composition accepts the diagnostic only as an explicit synthetic callback and forwards it to the ledger',async()=>{
+test('composition forwards the diagnostic to reads while mutation remains blocked',async()=>{
   const traces=[];
   const ledgerPool={connect:async()=>({query:async sql=>{
-    if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'||sql.includes('set_config'))return {rows:[]};
+    if(sql==='BEGIN'||sql==='COMMIT'||sql==='ROLLBACK'||sql.includes('set_config'))return {rows:[],command:sql};
     if(sql.includes('FROM kts_team.memberships m'))return {rows:[{team_role:'operator'}]};
+    if(sql.includes('FROM kts_team.scopes'))return {rows:[{workspace_id:'group_a'}]};
     if(sql.includes('kts_team.append_draft'))return {rows:[{result:{event_id:'event_a',replayed:false,new_revision:1,feed_seq:1}}]};
     throw Error('UNEXPECTED_QUERY');
   },release(){}})};
   const app=createIsolatedTeamPrototype({authPool:{connect(){}},ledgerPool,syntheticOnly:true,
     syntheticAuthorizationDiagnostic:x=>traces.push(x)});
-  await app.ledgerRepository.appendDraft(actor(),input());
+  await assert.rejects(app.ledgerRepository.appendDraft(actor(),input()),/TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE/);
+  await app.ledgerRepository.getScope(actor(),input().scope);
   assert.equal(traces.length,1);
   assert.equal(traces[0].append_draft_role_permitted,true);
   assert.throws(()=>createIsolatedTeamPrototype({authPool:{connect(){}},ledgerPool:{connect(){}},

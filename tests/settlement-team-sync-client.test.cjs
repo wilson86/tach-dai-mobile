@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const Sync = require('../app/settlement-team-sync-client.js');
+const Sync = require('./fixtures/verified-sync-client.cjs');
 const A = require('../team-settlement/auth-contract.cjs');
 const { createAuthHttpServer } = require('../team-settlement/auth-http-contract.cjs');
 const { createLedgerApi } = require('../team-settlement/ledger-api-contract.cjs');
@@ -13,6 +13,8 @@ function storage() {
   const data = new Map();
   return { data, get: key => data.get(key) || null, set: (key, value) => data.set(key, value), remove: key => data.delete(key) };
 }
+function persistedRows(saved){return [...saved.data.entries()].filter(([key])=>key.startsWith('kts-team-draft-intent-v2:')&&!key.endsWith(':dispatched')).map(([,value])=>JSON.parse(value));}
+const reviewLockManager={request:async(_key,_opts,callback)=>callback({})};
 
 test('PWA rejects insecure remote team endpoints before credentials can be sent', () => {
   const options = { fetchImpl: async () => response(200, {}) };
@@ -28,7 +30,7 @@ test('PWA client keeps bearer token in memory and syncs a queued draft', async (
   const client = Sync.createSyncClient({ storage: saved, fetchImpl: async (url, options) => {
     calls.push({ url, options });
     if (url.includes('/v1/scopes/drafts')) return response(200, { event_id: 'event_1', replayed: false, new_revision: 1, feed_seq: 1, scope_key: 'group_a:counterparty_1:2026-10-12:mn', sync_status: 'SYNCED' });
-    return response(200, { items: [{event_id: 'event_feed_1'}], next_cursor: 'cursor_1', sync_status: 'SYNCED' });
+    return response(200, { items: [{event_id: 'event_feed_1',workspace_id:'group_a',feed_seq:1}], next_cursor: 'cursor_1', sync_status: 'SYNCED' });
   }});
   client.setSessionToken('x'.repeat(43));
   const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
@@ -41,23 +43,23 @@ test('PWA client keeps bearer token in memory and syncs a queued draft', async (
   assert.equal(saved.data.has(Sync.CURSOR_KEY), false); // Never reuse a prior person's cursor.
 });
 
-test('offline request stays PENDING, reconnect conflict becomes CONFLICT and is never auto-retried', async () => {
-  let online = false; let calls = 0;
-  const client = Sync.createSyncClient({ fetchImpl: async (url) => {
-    calls += 1;
-    if (!online) throw Object.assign(new Error('offline'), { code: 'NETWORK_DOWN' });
-    if (url.includes('/v1/changes')) return response(200, { items: [], next_cursor: null, sync_status: 'SYNCED' });
-    return response(409, { error: 'TEAM_REVISION_CONFLICT', sync_status: 'CONFLICT', resolution: 'MANUAL_REVIEW' });
+test('lost ACK requires reconciliation while a separate CAS conflict stays terminal', async () => {
+  let online=false,calls=0;
+  const client=Sync.createSyncClient({fetchImpl:async url=>{
+    calls++;if(!online)throw Error('OFFLINE');
+    if(url.includes('/v1/changes'))return response(200,{items:[],next_cursor:null,sync_status:'SYNCED'});
+    return response(409,{error:'TEAM_REVISION_CONFLICT'});
   }});
-  client.setSessionToken('y'.repeat(43));
-  const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
-  assert.equal((await client.syncDraft(draft.id)).status, Sync.STATUS.PENDING);
-  online = true;
-  const result = await client.reconnect();
-  assert.equal(result.drafts[0].status, Sync.STATUS.CONFLICT);
-  const after = await client.reconnect();
-  assert.equal(after.drafts.length, 0);
-  assert.equal(calls, 4); // failed draft, pull+conflict, then pull only; conflict is not retried
+  client.setSessionToken('y'.repeat(43),'group_a');
+  const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
+  const unknown=client.queueDraft(scope,{synthetic:true});
+  assert.equal((await client.syncDraft(unknown.id)).status,'NEEDS_RECONCILIATION');
+  online=true;
+  assert.deepEqual((await client.reconnect()).drafts,[]);
+  const stale=client.queueDraft(scope,{synthetic:'stale'});
+  assert.equal((await client.syncDraft(stale.id)).status,'CONFLICT');
+  assert.deepEqual((await client.reconnect()).drafts,[]);
+  assert.equal(calls,4); // lost POST, feed, separate conflicting POST, feed
 });
 
 test('401 blocks drafts and logout blocks unsent drafts without persisting credentials', async () => {
@@ -129,7 +131,7 @@ test('PWA client integrates with synthetic localhost auth, draft and change endp
     const draft = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
     // An in-memory contract is not a durable PostgreSQL receipt.
     const memoryAck=await client.syncDraft(draft.id);
-    assert.equal(memoryAck.status,Sync.STATUS.PENDING);
+    assert.equal(memoryAck.status,Sync.STATUS.NEEDS_RECONCILIATION);
     assert.equal(memoryAck.error,'SYNC_ACK_UNVERIFIED');
     const changes = await client.pullChanges();
     assert.equal(changes.status, Sync.STATUS.SYNCED);
@@ -174,11 +176,12 @@ test('late previous-session draft result cannot be marked SYNCED for the next pe
   client.setSessionToken('a'.repeat(43), 'group_a');
   const item = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { private: 'synthetic-a' });
   const delayed = client.syncDraft(item.id);
+  await new Promise(resolve=>setImmediate(resolve));
   client.clearSession({discardPending:true});
   client.setSessionToken('b'.repeat(43), 'group_b');
   finish(response(200, { event_id: 'a_done', new_revision: 1, sync_status: 'SYNCED' }));
   const result = await delayed;
-  assert.equal(result.status, Sync.STATUS.BLOCKED);
+  assert.equal(result.status, Sync.STATUS.NEEDS_RECONCILIATION);
   assert.equal(result.error, 'SYNC_SESSION_CHANGED');
   assert.equal(client.snapshot().drafts.length, 0);
   assert.equal(client.snapshot().workspace_id, 'group_b');
@@ -200,7 +203,7 @@ test('HTTP success without a verified event receipt never marks financial draft 
   client.setSessionToken('a'.repeat(43), 'group_a');
   const item = client.queueDraft({ workspace_id: 'group_a', partner_id: 'counterparty_1', business_date: '2026-10-12', region: 'mn' }, { synthetic: true });
   const outcome = await client.syncDraft(item.id);
-  assert.equal(outcome.status, Sync.STATUS.PENDING);
+  assert.equal(outcome.status, Sync.STATUS.NEEDS_RECONCILIATION);
   assert.equal(outcome.error, 'SYNC_ACK_UNVERIFIED');
 });
 
@@ -330,7 +333,7 @@ test('replayed HTTP acknowledgement without original server revision cannot mark
   const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
     business_date:'2026-10-12',region:'mn'},{synthetic:true});
   const result=await client.syncDraft(item.id);
-  assert.equal(result.status,'PENDING');
+  assert.equal(result.status,'NEEDS_RECONCILIATION');
   assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
   assert.equal(client.snapshot().drafts[0].server_revision,undefined);
 });
@@ -360,7 +363,7 @@ test('fake HTTP SYNCED without valid PostgreSQL feed receipt never syncs a draft
     const scope={workspace_id:'group_a',partner_id:'counterparty_1',business_date:'2026-10-12',region:'mn'};
     const item=client.queueDraft(scope,{synthetic:true});
     const result=await client.syncDraft(item.id);
-    assert.equal(result.status,'PENDING',JSON.stringify(receipt));
+    assert.equal(result.status,'NEEDS_RECONCILIATION',JSON.stringify(receipt));
     assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
   }
 });
@@ -404,6 +407,7 @@ test('concurrent submits of one financial draft issue only one request and prese
     business_date:'2026-10-12',region:'mn'},{synthetic:true});
   const first=client.syncDraft(item.id);
   const second=await client.syncDraft(item.id);
+  await new Promise(resolve=>setImmediate(resolve));
   assert.equal(calls.length,1);
   assert.equal(second.status,'BLOCKED');
   assert.equal(second.error,'SYNC_DRAFT_ALREADY_IN_FLIGHT');
@@ -417,7 +421,7 @@ test('concurrent submits of one financial draft issue only one request and prese
   assert.equal(client.snapshot().drafts[0].status,'SYNCED');
 });
 
-test('failed draft request releases its flight slot so a later explicit retry can proceed',async()=>{
+test('failed draft request releases flight slot but never resends an uncertain intent',async()=>{
   let calls=0;
   const client=Sync.createSyncClient({fetchImpl:async()=>{
     calls++;
@@ -428,21 +432,21 @@ test('failed draft request releases its flight slot so a later explicit retry ca
   client.setSessionToken('a'.repeat(43),'group_a');
   const item=client.queueDraft({workspace_id:'group_a',partner_id:'counterparty_1',
     business_date:'2026-10-12',region:'mn'},{synthetic:true});
-  assert.equal((await client.syncDraft(item.id)).status,'PENDING');
-  assert.equal((await client.syncDraft(item.id)).status,'SYNCED');
-  assert.equal(calls,2);
+  assert.equal((await client.syncDraft(item.id)).status,'NEEDS_RECONCILIATION');
+  assert.equal((await client.syncDraft(item.id)).status,'NEEDS_RECONCILIATION');
+  assert.equal(calls,1);
 });
 
-test('snapshot explicitly warns that pending financial drafts are volatile across reload',async()=>{
+test('missing durable storage exposes reload loss risk and prevents mutation',async()=>{
   let online=false;const saved=storage();
   const fetchImpl=async(url)=>{
     if(!online)throw Object.assign(new Error('synthetic offline'),{code:'NETWORK_DOWN'});
     return response(200,{event_id:'event_durable_1',replayed:false,
       new_revision:1,feed_seq:1,scope_key:'group_a:fake_partner:2026-10-12:mn',sync_status:'SYNCED'});
   };
-  const first=Sync.createSyncClient({storage:saved,fetchImpl});
+  const first=Sync.createSyncClient({storage:null,fetchImpl});
   first.setSessionToken('t'.repeat(43),'group_a');
-  assert.equal(first.snapshot().draft_persistence,'MEMORY_ONLY');
+  assert.equal(first.snapshot().draft_persistence,'STORAGE_FAILED');
   assert.equal(first.snapshot().volatile_unsent_count,0);
   assert.equal(first.snapshot().reload_loss_risk,false);
   const draft=first.queueDraft({
@@ -451,18 +455,18 @@ test('snapshot explicitly warns that pending financial drafts are volatile acros
   },{synthetic:true});
   assert.equal(first.snapshot().volatile_unsent_count,1);
   assert.equal(first.snapshot().reload_loss_risk,true);
-  assert.equal((await first.syncDraft(draft.id)).status,'PENDING');
+  assert.equal((await first.syncDraft(draft.id)).status,'BLOCKED');
   assert.equal(first.snapshot().reload_loss_risk,true);
   // Simulate page reload by constructing a new client with the same storage.
   // This is NOT a durability success: the offline intent is gone.
-  const afterReload=Sync.createSyncClient({storage:saved,fetchImpl});
+  const afterReload=Sync.createSyncClient({storage:null,fetchImpl});
   assert.equal(afterReload.snapshot().draft_persistence,'MEMORY_ONLY');
   assert.deepEqual(afterReload.snapshot().drafts,[]);
   assert.equal(saved.data.has('session_token'),false);
   online=true;
-  assert.equal((await first.syncDraft(draft.id)).status,'SYNCED');
-  assert.equal(first.snapshot().volatile_unsent_count,0);
-  assert.equal(first.snapshot().reload_loss_risk,false);
+  assert.equal((await first.syncDraft(draft.id)).status,'BLOCKED');
+  assert.equal(first.snapshot().volatile_unsent_count,1);
+  assert.equal(first.snapshot().reload_loss_risk,true);
 });
 
 test('browser same-origin fallback denies remote cleartext before any credential request',async()=>{
@@ -587,10 +591,10 @@ test('review requires an authenticated synthetic workspace and rejects close/fin
  await assert.rejects(()=>client.reviewScope('submit_review',scope,-1),/SYNC_REVISION_INVALID/);
  assert.equal(client.snapshot().review_attempts.length,0);
 });
-test('review retry keeps exact key and scope after lost response and accepts valid original replay receipt',async()=>{
+test('review lost response preserves its key without explicit or automatic resubmission',async()=>{
  const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
  const requests=[];let online=false;
- const client=Sync.createSyncClient({fetchImpl:async(url,options)=>{
+ const client=Sync.createSyncClient({storage:storage(),reviewLockManager,fetchImpl:async(url,options)=>{
    assert.equal(url,'/v1/scopes/review');
    const payload=JSON.parse(options.body);requests.push(payload);
    if(!online)throw Error('PHONE_OFFLINE');
@@ -598,21 +602,21 @@ test('review retry keeps exact key and scope after lost response and accepts val
      new_revision:2,scope_key:'group_a:fake_partner_1:2026-10-14:mn',
      review_state:'PENDING_REVIEW',sync_status:'SYNCED'});
  }});
- client.setSessionToken('a'.repeat(43),'group_a');
+ client.setSessionToken('a'.repeat(43),'group_a',{accountId:'fake_operator'});
  const first=await client.reviewScope('submit_review',scope,1);
- assert.equal(first.status,'PENDING');
+ assert.equal(first.status,'NEEDS_RECONCILIATION');
  assert.equal(client.snapshot().volatile_unsent_count,1);
  assert.equal(client.snapshot().reload_loss_risk,true);
  assert.match(requests[0].idempotency_key,/^draft_[0-9a-f]{32}$/);
  online=true;
  const done=await client.reviewScope('submit_review',scope,1,{retryOnly:true});
- assert.equal(done.status,'SYNCED');
- assert.equal(done.server_result.event_id,'event_review');
- assert.equal(requests.length,2);
- assert.deepEqual(requests[0],requests[1]);
- assert.equal(client.snapshot().volatile_unsent_count,0);
- assert.equal((await client.reviewScope('submit_review',scope,1)).status,'SYNCED');
- assert.equal(requests.length,2);
+ assert.equal(done.status,'NEEDS_RECONCILIATION');
+ assert.equal(done.idempotency_key,requests[0].idempotency_key);
+ assert.equal(requests.length,1);
+ assert.equal(done.server_result,undefined);
+ assert.equal(client.snapshot().volatile_unsent_count,1);
+ assert.equal((await client.reviewScope('submit_review',scope,1)).status,'NEEDS_RECONCILIATION');
+ assert.equal(requests.length,1);
 });
 test('review never reports SYNCED for uncertain or incomplete server responses',async()=>{
  const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
@@ -625,17 +629,17 @@ test('review never reports SYNCED for uncertain or incomplete server responses',
      replayed:false,feed_seq:1,new_revision:3,scope_key:'group_a:fake_partner_1:2026-10-14:mn'}),
    response(503,{error:'TEAM_BACKEND_UNAVAILABLE'})
  ]){
-   const client=Sync.createSyncClient({fetchImpl:async()=>data});
-   client.setSessionToken('a'.repeat(43),'group_a');
+   const client=Sync.createSyncClient({storage:storage(),reviewLockManager,fetchImpl:async()=>data});
+   client.setSessionToken('a'.repeat(43),'group_a',{accountId:'fake_operator'});
    const out=await client.reviewScope('submit_review',scope,1);
    assert.notEqual(out.status,'SYNCED');
-   assert.equal(out.status,data.status===503?'PENDING':'BLOCKED');
+   assert.equal(out.status,'NEEDS_RECONCILIATION');
  }
 });
 test('review lost response is blocked from account switch until explicit discard',async()=>{
  const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
- const client=Sync.createSyncClient({fetchImpl:async()=>{throw Error('NETWORK_DOWN')}});
- client.setSessionToken('a'.repeat(43),'group_a');
+ const client=Sync.createSyncClient({storage:storage(),reviewLockManager,fetchImpl:async()=>{throw Error('NETWORK_DOWN')}});
+ client.setSessionToken('a'.repeat(43),'group_a',{accountId:'fake_operator'});
  await client.reviewScope('submit_review',scope,1);
  assert.throws(()=>client.setSessionToken('b'.repeat(43),'group_b'),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
  await assert.rejects(()=>client.logout(),/SYNC_UNSENT_DRAFTS_REQUIRE_DECISION/);
@@ -753,7 +757,7 @@ test('a synthetic draft needs an exact server scope receipt, not a different eve
    client.setSessionToken('a'.repeat(43),'group_a');
    const draft=client.queueDraft(scope,{synthetic:true});
    const result=await client.syncDraft(draft.id);
-   assert.equal(result.status,'PENDING');
+   assert.equal(result.status,'NEEDS_RECONCILIATION');
    assert.equal(result.error,'SYNC_ACK_UNVERIFIED');
    assert.equal(client.snapshot().drafts[0].server_result,undefined);
  }
@@ -763,7 +767,7 @@ test('a synthetic draft needs an exact server scope receipt, not a different eve
  assert.equal((await client.syncDraft(draft.id)).status,'SYNCED');
 });
 
-test('500 after possible commit keeps draft uncertain and reuses the SAME key for deliberate retry',async()=>{
+test('500 after possible commit retains key and forbids deliberate resubmission',async()=>{
  const calls=[];
  const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-14',region:'mn'};
  let count=0;
@@ -777,15 +781,15 @@ test('500 after possible commit keeps draft uncertain and reuses the SAME key fo
  client.setSessionToken('a'.repeat(43),'group_a');
  const draft=client.queueDraft(scope,{synthetic:true});
  const first=await client.syncDraft(draft.id);
- assert.equal(first.status,'PENDING');
- assert.equal(first.error,'SYNC_DRAFT_RECEIPT_UNCERTAIN');
+ assert.equal(first.status,'NEEDS_RECONCILIATION');
+ assert.equal(first.error,'TEAM_MUTATION_OUTCOME_UNKNOWN');
  assert.equal(client.snapshot().drafts[0].server_result,undefined);
  const second=await client.syncDraft(draft.id);
- assert.equal(second.status,'SYNCED');
- assert.equal(calls.length,2);
- assert.equal(calls[0].body.idempotency_key,calls[1].body.idempotency_key);
- assert.deepEqual(calls[0].body,calls[1].body);
- assert.equal(second.server_result.replayed,true);
+ assert.equal(second.status,'NEEDS_RECONCILIATION');
+ assert.equal(calls.length,1);
+ assert.equal(calls[0].body.idempotency_key,draft.id);
+ assert.equal(calls[0].body.expected_revision,0);
+ assert.equal(second.server_result,undefined);
 });
 
 test('DRAFT state cannot display counterfeit submitter or reviewer provenance',async()=>{
@@ -962,7 +966,7 @@ test('reconnect cannot send newly queued draft from another account after suspen
  const scopeA={workspace_id:'group_a',partner_id:'fake_a',business_date:'2026-10-14',region:'mn'};
  client.queueDraft(scopeA,{synthetic:true});
  const started=client.reconnect();
- for(let i=0;i<12&&!completeFirstDraft;i++)await Promise.resolve();
+ for(let i=0;i<10&&!completeFirstDraft;i++)await new Promise(resolve=>setImmediate(resolve));
  assert.equal(typeof completeFirstDraft,'function');
  assert.equal(requests.filter(x=>x.url.includes('/v1/scopes/drafts')).length,1);
  client.setSessionToken('b'.repeat(43),'group_b',{discardPending:true});
@@ -1249,7 +1253,7 @@ test('synthetic-pilot pending draft survives reload with its exact immutable tra
   const first=Sync.createSyncClient({storage:saved,fetchImpl});
   await first.login('synthetic_operator_a','synthetic-password','group_a');
   const draft=first.queueDraft(scope,{synthetic:true,amount:7},3);
-  const persisted=JSON.parse(saved.data.get(Sync.PENDING_DRAFTS_KEY));
+  const persisted=persistedRows(saved);
   assert.equal(first.snapshot().draft_persistence,'LOCAL_STORAGE');
   assert.equal(persisted.length,1);
   assert.deepEqual(Object.keys(persisted[0]).sort(),['account_id','base_revision','created_at','id','payload','scope','status','workspace_id']);
@@ -1268,7 +1272,8 @@ test('synthetic-pilot pending draft survives reload with its exact immutable tra
   assert.equal(sent.idempotency_key,draft.id);
   assert.equal(sent.expected_revision,3);
   assert.deepEqual(sent.payload,{synthetic:true,amount:7});
-  assert.deepEqual(JSON.parse(saved.data.get(Sync.PENDING_DRAFTS_KEY)),[]);
+  assert.equal(persistedRows(saved).length,1); // Intent retained for stale-tab reconciliation.
+  assert.ok([...saved.data.keys()].some(key=>key.endsWith(':dispatched')));
 });
 
 test('pending persistence fails closed for lost acknowledgements, storage failure and corrupted rows',async()=>{
@@ -1285,15 +1290,15 @@ test('pending persistence fails closed for lost acknowledgements, storage failur
   const first=Sync.createSyncClient({storage:saved,fetchImpl});
   await first.login('synthetic_operator_a','synthetic-password','group_a');
   const draft=first.queueDraft(scope,{synthetic:true});
-  assert.equal((await first.syncDraft(draft.id)).status,'PENDING'); // lost ACK remains recoverable
+  assert.equal((await first.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION'); // lost ACK remains recoverable
   first.clearSession({discardPending:true});
   const reloaded=Sync.createSyncClient({storage:saved,fetchImpl});
   await reloaded.login('synthetic_operator_a','synthetic-password','group_a');
   mode='forged';
-  assert.equal((await reloaded.syncDraft(draft.id)).status,'PENDING');
+  assert.equal((await reloaded.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION');
   mode='reject';
-  assert.equal((await reloaded.syncDraft(draft.id)).status,'PENDING');
-  assert.equal(writes,3);
+  assert.equal((await reloaded.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION');
+  assert.equal(writes,1); // Lost ACK must be reconciled before any reload retry.
 
   let failureWrites=0;
   const failingStore={get:()=>null,set:()=>{throw Error('quota');},remove:()=>{}};
@@ -1304,7 +1309,7 @@ test('pending persistence fails closed for lost acknowledgements, storage failur
   await failed.login('synthetic_operator_b','synthetic-password','group_a');
   const volatile=failed.queueDraft(scope,{synthetic:true});
   const denied=await failed.syncDraft(volatile.id);
-  assert.equal(denied.status,'PENDING');
+  assert.equal(denied.status,'BLOCKED');
   assert.equal(denied.error,'SYNC_LOCAL_PERSISTENCE_REQUIRED');
   assert.equal(failureWrites,0);
 
@@ -1329,7 +1334,7 @@ test('pending persistence isolates account/workspace queues and does not merge f
   await b.login('synthetic_operator_b','synthetic-password','group_b');
   assert.deepEqual(b.snapshot().drafts,[]);
   const draftB=b.queueDraft(scopeB,{synthetic:true});
-  const rows=JSON.parse(saved.data.get(Sync.PENDING_DRAFTS_KEY));
+  const rows=persistedRows(saved);
   assert.deepEqual(rows.map(row=>row.id).sort(),[draftA.id,draftB.id].sort());
   b.clearSession({discardPending:true});
   const aReloaded=Sync.createSyncClient({storage:saved,fetchImpl});
