@@ -248,6 +248,15 @@ async function main(){
               process_error:lost.problem,passed:lost.ok&&lost.output.includes('SYNTHETIC_COMMIT_ACK_DROPPED_AND_RECEIPT_RECONCILED_PASS')&&
                 lost.output.includes('SYNTHETIC_COMMIT_REQUEST_DROPPED_ROLLBACK_UNKNOWN_PASS')};
             if(!receipt.lost_commit.passed)receipt.status='BLOCKED_ATOMIC_LOST_ACK';
+            if(receipt.lost_commit.passed){
+              const reviewPath=realC(path.join(root,'scripts/settlement-pg-atomic-review-probe.cjs'));
+              if(!reviewPath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(reviewPath).isFile())
+                fail('TEAM_PG_REVIEW_PROBE_SOURCE_INVALID');
+              const review=exec(process.execPath,[reviewPath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
+              receipt.atomic_review_probe={exit_code:review.exit_code,stdout_tail:review.output,stderr_tail:review.error,
+                process_error:review.problem,passed:review.ok&&review.output.includes('SYNTHETIC_ATOMIC_REVIEW_SUBMIT_APPROVE_REPLAY_RECONCILE_PASS')};
+              if(!receipt.atomic_review_probe.passed)receipt.status='BLOCKED_ATOMIC_REVIEW_PROBE';
+            }
           }
         }
       }
