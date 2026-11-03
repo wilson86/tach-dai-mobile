@@ -2,7 +2,7 @@
 // Fail-closed CLI validation; no git, browser, workflow, production or network.
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {argsOf,admission,inspectTemplateVersionAuthority,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS,safeFile}=require('../scripts/issue18-production-preflight.js');
+const {argsOf,admission,inspectBuildManifestAuthority,inspectTemplateVersionAuthority,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS,safeFile}=require('../scripts/issue18-production-preflight.js');
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
 const good=['--workspace','C:\\KTS-QA\\issue18',
   '--kts-sha',a,'--mobile-sha',b,'--ngang-sha',c];
@@ -61,6 +61,26 @@ test('canonical templates reject review-only app version increases before genera
     ['TEMPLATE_VERSION_MISMATCH','TEMPLATE_VERSION_MISMATCH']);
   assert.equal(actual.rows[0].canonical_version,'2.0.39');
   assert.equal(actual.rows[1].candidate_version,'1.0.39');
+});
+test('manifest provenance must match all 3 canonical byte pins and engine identity',()=>{
+  const pins={'engine_spec.json':'a'.repeat(64),
+    'calendar_authority.json':'b'.repeat(64),
+    'pwa_version_templates.json':'c'.repeat(64)};
+  const manifest={schema:'KTS_BUSINESS_ENGINE_BUILD_MANIFEST_V1',
+    engine_sha256:'d'.repeat(64),
+    canonical_inputs:{engine_spec:pins['engine_spec.json'],
+      calendar:pins['calendar_authority.json'],
+      pwa_version_templates:pins['pwa_version_templates.json']}};
+  const ok=inspectBuildManifestAuthority(manifest,pins,'d'.repeat(64));
+  assert.equal(ok.ok,true);
+  assert.ok(ok.rows.every(x=>x.status==='MATCH'));
+  assert.equal(inspectBuildManifestAuthority({
+    ...manifest,canonical_inputs:{...manifest.canonical_inputs,calendar:'e'.repeat(64)}
+  },pins,'d'.repeat(64)).ok,false);
+  assert.equal(inspectBuildManifestAuthority({
+    ...manifest,engine_sha256:'e'.repeat(64)
+  },pins,'d'.repeat(64)).engine_status,'MANIFEST_ENGINE_DRIFT');
+  assert.equal(inspectBuildManifestAuthority({},pins,'d'.repeat(64)).ok,false);
 });
 test('version authority only passes exact matching source versions',()=>{
   const source={mobile_3mien:{version:'2.0.40'},mobile_ngang:{version:'1.0.39'}};
