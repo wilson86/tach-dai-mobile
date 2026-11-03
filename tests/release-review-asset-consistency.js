@@ -44,12 +44,12 @@ assert.ok(calendar.length>0);
 assert.ok(rootHtml.includes('const APP_VERSION = "'+MOBILE+'"'));
 assert.ok(rootHtml.includes("v"+MOBILE));
 const rootCache=(rootSW.match(/^const CACHE_NAME = "([^"]+)";$/mu)||[])[1];
-assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-clean-r2-quyt-r19',
+assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-clean-r2-quyt-r20',
   'root SW cache must identify the approved singleton-DX candidate, not an earlier duplicate-confirmation build');
 assert.ok(rootSW.includes('JSON.stringify({version:"'+MOBILE+'"})'));
 assert.ok(unifiedHtml.includes("Unified "+UNIFIED));
 assert.ok(unifiedHtml.includes('./unified-core.js?ux='+UNIFIED));
-assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2-quyt-r19'));
+assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2-quyt-r20'));
 assert.ok(unifiedCore.includes("const UX_VERSION='"+UNIFIED+"'"));
 assert.ok(unifiedSW.includes("kts-tach-unified-v"+UNIFIED+"-owner-singleton-dx-0a0e54"));
 assert.ok(unifiedSW.includes("'./unified-core.js?ux="+UNIFIED+"'"));

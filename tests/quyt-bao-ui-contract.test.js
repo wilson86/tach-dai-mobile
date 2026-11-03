@@ -69,7 +69,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r19"));
+ assert.ok(sw.includes("clean-r2-quyt-r20"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){

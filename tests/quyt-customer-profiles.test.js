@@ -127,3 +127,9 @@ test('separate customers use their own originals and coefficients after switchin
  choose('hien');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);assert.doesNotMatch(review().value,/75n/);
  choose('quyt');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
 });
+
+test('adding original requires explicit customer and independent-order confirmation',()=>{
+ const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';m.byId.input.value='86 lo10n';
+ m.get('ktsReviewCustomer').value='hien';m.dispatch('ktsReviewCustomer','change');let prompt='';m.window.confirm=text=>{prompt=text;return false};m.dispatch('ktsReviewAddMessage','click');
+ assert.match(prompt,/Hiền/);assert.match(prompt,/MỘT LƯỢT TIN ĐỘC LẬP/);assert.equal(store.has('KTS_REVIEW_SOURCE_MESSAGES_V1'),false);assert.match(m.get('ktsReviewMessageStatus').textContent,/HOLD/);assert.equal(m.byId.input.value,'86 lo10n');
+});

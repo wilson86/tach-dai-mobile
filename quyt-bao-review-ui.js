@@ -319,6 +319,9 @@ function install(){
  addMessage.addEventListener("click",()=>{
   try{
    const scope=messageScope();if(!input.value.trim())throw Error("chưa có tin gốc");
+   if(!window.confirm("Xác nhận đây là MỘT LƯỢT TIN ĐỘC LẬP của khách "+profile().name+" cho ngày "+scope.date+", miền "+scope.market+"? Mỗi lần thêm sẽ được tính là một lượt riêng.")){
+    messageReviewActive=false;review.value="";sourceStatus.textContent="HOLD: chưa xác nhận khách và lượt tin; không lưu.";return;
+   }
    if(!window.crypto||typeof window.crypto.randomUUID!=="function")throw Error("không tạo được ID tin an toàn");
    const now=new Date().toISOString();
    scope.store.add({source_message_id:"manual-"+window.crypto.randomUUID(),customer_id:customerId,original_text:input.value,source_system:"manual",received_at:now,source_timestamp:now,market:scope.market,business_date:scope.date});
