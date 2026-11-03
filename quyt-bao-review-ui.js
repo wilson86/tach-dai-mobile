@@ -112,11 +112,11 @@ check.tabIndex=-1;bar.style.display="none";
    return true;
   }catch(e){hint.textContent=String(e.message||e).includes("CUSTOMER_STALE_HOLD")?"HOLD: cấu hình đã đổi ở cửa sổ khác; tải lại trước khi sửa. Tin gốc không bị xóa.":"HOLD: trình duyệt không lưu được; hệ số chưa được xác nhận.";return false}
  }
- function chosenName(){
+ function chosenName(allowSelectedCustomer=false){
   const v=name.value.trim().replace(/\s+/gu," ");
   if(!v)throw Error("CUSTOMER_NAME_REQUIRED");
   if(v.length>50||(/[<>]/u.test(v)||[...v].some(c=>c.charCodeAt(0)<32)))throw Error("CUSTOMER_NAME_INVALID");
-  if(profiles.some(p=>p.active&&p.id!==customerId&&p.name.toLocaleLowerCase("vi")===v.toLocaleLowerCase("vi")))
+  if(profiles.some(p=>p.active&&(!allowSelectedCustomer||p.id!==customerId)&&p.name.toLocaleLowerCase("vi")===v.toLocaleLowerCase("vi")))
    throw Error("CUSTOMER_NAME_DUPLICATE");
   return v;
  }
@@ -165,7 +165,7 @@ check.tabIndex=-1;bar.style.display="none";
   if(!optIn.checked){hint.textContent="Chưa bật Khách & tỷ lệ; không đổi tên.";return}
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
-   const v=chosenName(),old=p.name;
+   const v=chosenName(true),old=p.name;
    if(!window.confirm("Đổi tên khách "+old+" thành "+v+"?")){hint.textContent="HOLD: chưa xác nhận đổi tên.";return}
    p.name=v;
    if(!await storeCustomers()){p.name=old;return}
