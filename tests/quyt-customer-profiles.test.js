@@ -15,6 +15,7 @@ function mount(store){
    dispatchEvent(evt){for(const f of this.listeners[evt.type]??[])f(evt)},
    append(...xs){this.children.push(...xs)},
    insertAdjacentElement(){},focus(){}};
+  let text="";Object.defineProperty(n,"textContent",{get(){return text},set(v){text=String(v);n.children=[]}});
   nodes.push(n);return n;
  }
  for(const id of ["input","output","region","date"]){byId[id]=make(id);byId[id].id=id}
@@ -114,7 +115,7 @@ test("multiple manually identified messages review exact totals and persist acro
  assert.match(review.value,/68 lo 60n → 64\.02n/);assert.match(review.value,/86 lo 60n → 64\.02n/);
  m.get('ktsQuytRate').value='1,05';m.dispatch('ktsQuytRate','input');assert.match(review.value,/68 lo 60n → 63n/);
  m.get('ktsQuytRate').value='NaN';m.dispatch('ktsQuytRate','input');assert.equal(review.value,'');assert.match(m.get('ktsReviewMessageStatus').textContent,/HOLD/);
- const reload=mount(store);reload.byId.region.value='mb';reload.byId.date.value='2026-11-03';reload.byId.input.value='68 86 lo20n';reload.get('ktsReviewCustomer').value='quyt';reload.dispatch('ktsReviewCustomer','change');reload.dispatch('ktsReviewMergeMessages','click');
+ const reload=mount(store);reload.byId.region.value='mb';reload.byId.date.value='2026-11-03';reload.byId.input.value='68 86 lo20n';reload.get('ktsReviewCustomer').value='quyt';reload.dispatch('ktsReviewCustomer','change');for(const row of [...reload.get('ktsReviewMessageList').children]){const box=row.children[0];box.checked=true;box.dispatchEvent({type:'change'})}reload.dispatch('ktsReviewMergeMessages','click');
  const review2=reload.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');assert.match(review2.value,/68 lo 60n → 64\.02n/);assert.equal(reload.byId.input.value,'68 86 lo20n');
 });
 
@@ -123,7 +124,7 @@ test('separate customers use their own originals and coefficients after switchin
  const choose=id=>{m.get('ktsReviewCustomer').value=id;m.dispatch('ktsReviewCustomer','change')};
  const review=()=>m.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');
  choose('hien');m.byId.input.value='86 lo10n';m.dispatch('ktsReviewAddMessage','click');await Promise.resolve();m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);
- choose('quyt');assert.doesNotMatch(m.get('ktsReviewMessageList').textContent,/86 lo10n/);m.byId.input.value='86 lo75n';m.dispatch('ktsReviewAddMessage','click');await Promise.resolve();m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
+ choose('quyt');assert.equal(m.get('ktsReviewMessageList').children.length,0);m.byId.input.value='86 lo75n';m.dispatch('ktsReviewAddMessage','click');await Promise.resolve();m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
  choose('hien');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);assert.doesNotMatch(review().value,/75n/);
  choose('quyt');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
 });
@@ -138,4 +139,12 @@ test('missing browser lock fails closed without writing or erasing original',()=
  const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';m.byId.input.value='86 lo10n';
  m.get('ktsReviewCustomer').value='quyt';m.dispatch('ktsReviewCustomer','change');m.window.navigator={};m.dispatch('ktsReviewAddMessage','click');
  assert.equal(store.has('KTS_REVIEW_SOURCE_MESSAGES_V1'),false);assert.match(m.get('ktsReviewMessageStatus').textContent,/MESSAGE_LOCK_UNAVAILABLE_HOLD/);assert.equal(m.byId.input.value,'86 lo10n');
+});
+
+test('review merges only explicitly selected original messages and preserves all history',async()=>{
+ const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';m.byId.input.value='68 lo20n';m.get('ktsReviewCustomer').value='quyt';m.dispatch('ktsReviewCustomer','change');
+ for(let i=0;i<2;i++){m.dispatch('ktsReviewAddMessage','click');await Promise.resolve()}
+ const rows=m.get('ktsReviewMessageList').children,first=rows[0].children[0];first.checked=false;first.dispatchEvent({type:'change'});m.dispatch('ktsReviewMergeMessages','click');
+ const review=m.get('ktsQuytPreparedPanel').children.find(x=>x.tag==='textarea');assert.match(review.value,/68 lo 20n → 21\.34n/);assert.equal(JSON.parse(store.get('KTS_REVIEW_SOURCE_MESSAGES_V1')).length,2);
+ const reload=mount(store);reload.byId.region.value='mb';reload.byId.date.value='2026-11-03';reload.get('ktsReviewCustomer').value='quyt';reload.dispatch('ktsReviewCustomer','change');reload.dispatch('ktsReviewMergeMessages','click');assert.match(reload.get('ktsReviewMessageStatus').textContent,/HOLD/);
 });

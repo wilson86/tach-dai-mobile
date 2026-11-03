@@ -296,6 +296,7 @@ function install(){
  const sourceList=document.createElement("div");sourceList.id="ktsReviewMessageList";sourceList.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px";
  sourceTools.append(addMessage,mergeMessages,sourceStatus,sourceList);panel.append(sourceTools);
  let messageReviewActive=false;
+ const selectedMessageIds=new Set();
  function messageScope(){
   const market=(document.getElementById("region")||document.getElementById("sharedRegion"))?.value;
   const date=(document.getElementById("date")||document.getElementById("sharedDate"))?.value;
@@ -304,13 +305,22 @@ function install(){
   if(!window.KTSReviewSourceMessages)throw Error("HOLD: thiếu mô-đun lưu tin.");
   return {market,date,store:window.KTSReviewSourceMessages.createStore(window.localStorage)};
  }
- function chosenMessages(scope){return scope.store.read().filter(m=>m.customer_id===customerId&&m.market===scope.market&&m.business_date===scope.date)}
+ function scopedMessages(scope){return scope.store.read().filter(m=>m.customer_id===customerId&&m.market===scope.market&&m.business_date===scope.date)}
  function renderMessages(){
   review.value="";copy.disabled=true;sourceList.textContent="";
   try{
-   const scope=messageScope(),messages=chosenMessages(scope);
-   sourceList.textContent=messages.map((m,i)=>(i+1)+". ["+m.source_message_id+"]\n"+m.original_text).join("\n\n");
-   if(!messageReviewActive){sourceStatus.textContent="Có "+messages.length+" tin gốc đã lưu cho khách/ngày/miền.";return}
+   const scope=messageScope(),all=scopedMessages(scope);
+   for(const message of all){
+    const label=document.createElement("label");label.style.cssText="display:block;white-space:pre-wrap;margin:6px 0";
+    const box=document.createElement("input");box.type="checkbox";box.checked=selectedMessageIds.has(message.source_message_id);
+    box.setAttribute("aria-label","Chọn tin "+message.source_message_id);
+    box.addEventListener("change",()=>{if(box.checked)selectedMessageIds.add(message.source_message_id);else selectedMessageIds.delete(message.source_message_id);renderMessages()});
+    const text=document.createElement("span");text.textContent=" ["+message.source_message_id+"]\n"+message.original_text;
+    label.append(box,text);sourceList.append(label);
+   }
+   const messages=all.filter(m=>selectedMessageIds.has(m.source_message_id));
+   if(!messageReviewActive){sourceStatus.textContent="Đã chọn "+messages.length+" / "+all.length+" tin gốc cho khách/ngày/miền.";return}
+   if(!messages.length)throw Error("hãy chọn ít nhất một tin gốc để gộp.");
    const result=window.KTSReviewSourceMessages.aggregate(messages,{core,cleanCore:window.KTSCleanAggregate,customerId,market:scope.market,businessDate:scope.date,rate:rate.value});
    review.value=result.entries.map(e=>e.station.toUpperCase()+" "+e.number+" "+e.kind+" "+e.original+"n → "+e.exact+"n (chưa duyệt làm tròn)").join("\n");
    sourceStatus.textContent="REVIEW: "+messages.length+" tin gốc, "+result.entries.length+" số/loại; hệ số ×"+result.rate+". HOLD chuyển chủ và Copy/Cắt.";
@@ -324,8 +334,9 @@ function install(){
    }
    if(!window.crypto||typeof window.crypto.randomUUID!=="function")throw Error("không tạo được ID tin an toàn");
    const now=new Date().toISOString();
-   await scope.store.addLocked({source_message_id:"manual-"+window.crypto.randomUUID(),customer_id:customerId,original_text:input.value,source_system:"manual",received_at:now,source_timestamp:now,market:scope.market,business_date:scope.date},window.navigator?.locks);
-   messageReviewActive=false;renderMessages();sourceStatus.textContent="Đã lưu một tin gốc riêng. "+sourceStatus.textContent;
+   const id="manual-"+window.crypto.randomUUID();
+   await scope.store.addLocked({source_message_id:id,customer_id:customerId,original_text:input.value,source_system:"manual",received_at:now,source_timestamp:now,market:scope.market,business_date:scope.date},window.navigator?.locks);
+   selectedMessageIds.add(id);messageReviewActive=false;renderMessages();sourceStatus.textContent="Đã lưu một tin gốc riêng. "+sourceStatus.textContent;
   }catch(e){review.value="";sourceStatus.textContent="HOLD: "+String(e.message||e)}
  });
  mergeMessages.addEventListener("click",()=>{messageReviewActive=true;renderMessages()});
