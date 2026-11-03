@@ -17,7 +17,7 @@ function mount(store){
    insertAdjacentElement(){},focus(){}};
   nodes.push(n);return n;
  }
- for(const id of ["input","output","region"]){byId[id]=make(id);byId[id].id=id}
+ for(const id of ["input","output","region","date"]){byId[id]=make(id);byId[id].id=id}
  const document={readyState:"complete",createElement:make,
   getElementById:id=>byId[id]||nodes.find(n=>n.id===id),querySelectorAll:()=>[]};
  const localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)};
@@ -25,6 +25,7 @@ function mount(store){
   addEventListener(k,f){(handlers[k]??=[]).push(f)},
   dispatchEvent(evt){for(const f of handlers[evt.type]??[])f(evt)}};
  window.top=window;window.KTSQuytBaoReview=core;window.KTSCustomerConfig=require("../customer-config-review.js");
+ window.KTSReviewSourceMessages=require("../customer-message-review.js");window.KTSCleanAggregate=require("../clean-aggregate-review.js");let seq=0;window.crypto={randomUUID:()=>String(++seq)};
  const Event=function(type){this.type=type};
  vm.runInNewContext(source,{window,document,location:window.location,Event,
   setTimeout:fn=>fn()},{filename:"quyt-bao-review-ui.js",timeout:1000});
@@ -102,4 +103,17 @@ test("customer creation and rate changes require explicit confirmation",()=>{
  m.window.prompt=()=>"1,05";m.window.confirm=()=>false;m.dispatch("ktsReviewAddCustomer","click");assert.equal(store.size,0);
  m.window.confirm=()=>true;m.dispatch("ktsReviewAddCustomer","click");let data=JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1"));const p=data.customers.find(x=>x.name==="Khách mới");assert.equal(p.rate,"1,05");assert.equal(p.history[0].version,1);
  m.get("ktsQuytRate").value="1,10";m.window.confirm=()=>false;m.dispatch("ktsReviewSaveRate","click");data=JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1"));assert.equal(data.customers.find(x=>x.id===p.id).rate,"1,05");
+});
+
+test("multiple manually identified messages review exact totals and persist across reload",()=>{
+ const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';
+ m.byId.input.value='68 86 lo20n';m.get('ktsReviewCustomer').value='quyt';m.dispatch('ktsReviewCustomer','change');
+ for(let i=0;i<3;i++)m.dispatch('ktsReviewAddMessage','click');
+ m.dispatch('ktsReviewMergeMessages','click');
+ const panel=m.get('ktsQuytPreparedPanel'),review=panel.children.find(n=>n.tag==='textarea');
+ assert.match(review.value,/68 lo 60n → 64\.02n/);assert.match(review.value,/86 lo 60n → 64\.02n/);
+ m.get('ktsQuytRate').value='1,05';m.dispatch('ktsQuytRate','input');assert.match(review.value,/68 lo 60n → 63n/);
+ m.get('ktsQuytRate').value='NaN';m.dispatch('ktsQuytRate','input');assert.equal(review.value,'');assert.match(m.get('ktsReviewMessageStatus').textContent,/HOLD/);
+ const reload=mount(store);reload.byId.region.value='mb';reload.byId.date.value='2026-11-03';reload.byId.input.value='68 86 lo20n';reload.get('ktsReviewCustomer').value='quyt';reload.dispatch('ktsReviewCustomer','change');reload.dispatch('ktsReviewMergeMessages','click');
+ const review2=reload.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');assert.match(review2.value,/68 lo 60n → 64\.02n/);assert.equal(reload.byId.input.value,'68 86 lo20n');
 });

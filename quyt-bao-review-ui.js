@@ -286,6 +286,50 @@ function install(){
   directMode=true;
   refresh();
  });
+
+ // Independent manually entered messages retain their own persistent identity.
+ // This path remains review-only and never writes to the normal wager ledger.
+ const sourceTools=document.createElement("div");sourceTools.style.cssText="padding:8px;border:1px solid #bbb;margin:6px 0";
+ const addMessage=document.createElement("button");addMessage.type="button";addMessage.id="ktsReviewAddMessage";addMessage.textContent="THÊM TIN GỐC";
+ const mergeMessages=document.createElement("button");mergeMessages.type="button";mergeMessages.id="ktsReviewMergeMessages";mergeMessages.textContent="GỘP CÁC TIN ĐÃ THÊM — CHỈ XEM";
+ const sourceStatus=document.createElement("div");sourceStatus.id="ktsReviewMessageStatus";sourceStatus.setAttribute("role","status");
+ const sourceList=document.createElement("div");sourceList.id="ktsReviewMessageList";sourceList.style.cssText="white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px";
+ sourceTools.append(addMessage,mergeMessages,sourceStatus,sourceList);panel.append(sourceTools);
+ let messageReviewActive=false;
+ function messageScope(){
+  const market=(document.getElementById("region")||document.getElementById("sharedRegion"))?.value;
+  const date=(document.getElementById("date")||document.getElementById("sharedDate"))?.value;
+  if(customerId!=="quyt")throw Error("HOLD: chỉ Quýt được duyệt xem thử luồng này.");
+  if(!market||!date)throw Error("HOLD: cần chọn miền và ngày trước khi thêm/gộp tin.");
+  if(!window.KTSReviewSourceMessages)throw Error("HOLD: thiếu mô-đun lưu tin.");
+  return {market,date,store:window.KTSReviewSourceMessages.createStore(window.localStorage)};
+ }
+ function chosenMessages(scope){return scope.store.read().filter(m=>m.customer_id===customerId&&m.market===scope.market&&m.business_date===scope.date)}
+ function renderMessages(){
+  review.value="";copy.disabled=true;
+  try{
+   const scope=messageScope(),messages=chosenMessages(scope);
+   sourceList.textContent=messages.map((m,i)=>(i+1)+". ["+m.source_message_id+"]\n"+m.original_text).join("\n\n");
+   if(!messageReviewActive){sourceStatus.textContent="Có "+messages.length+" tin gốc đã lưu cho khách/ngày/miền.";return}
+   const result=window.KTSReviewSourceMessages.aggregate(messages,{core,cleanCore:window.KTSCleanAggregate,customerId,market:scope.market,businessDate:scope.date,rate:rate.value});
+   review.value=result.entries.map(e=>e.station.toUpperCase()+" "+e.number+" "+e.kind+" "+e.original+"n → "+e.exact+"n (chưa duyệt làm tròn)").join("\n");
+   sourceStatus.textContent="REVIEW: "+messages.length+" tin gốc, "+result.entries.length+" số/loại; hệ số ×"+result.rate+". HOLD chuyển chủ và Copy/Cắt.";
+  }catch(e){sourceStatus.textContent="HOLD: "+String(e.message||e);status.textContent=sourceStatus.textContent}
+ }
+ addMessage.addEventListener("click",()=>{
+  try{
+   const scope=messageScope();if(!input.value.trim())throw Error("chưa có tin gốc");
+   if(!window.crypto||typeof window.crypto.randomUUID!=="function")throw Error("không tạo được ID tin an toàn");
+   const now=new Date().toISOString();
+   scope.store.add({source_message_id:"manual-"+window.crypto.randomUUID(),customer_id:customerId,original_text:input.value,source_system:"manual",received_at:now,source_timestamp:now,market:scope.market,business_date:scope.date});
+   messageReviewActive=false;renderMessages();sourceStatus.textContent="Đã lưu một tin gốc riêng. "+sourceStatus.textContent;
+  }catch(e){review.value="";sourceStatus.textContent="HOLD: "+String(e.message||e)}
+ });
+ mergeMessages.addEventListener("click",()=>{messageReviewActive=true;renderMessages()});
+ selector.addEventListener("change",()=>{messageReviewActive=false;renderMessages()});
+ rate.addEventListener("input",()=>{if(messageReviewActive)renderMessages()});
+ for(const id of ["region","sharedRegion","date","sharedDate"]){const node=document.getElementById(id);if(node)node.addEventListener("change",()=>{messageReviewActive=false;renderMessages()})}
+
  // Existing run(), Clear/Cut/Undo sometimes update textarea.value without input.
  for(const id of ["runBtn","dvRun","clearBtn","dvClear","undoBtn","cutBtn",
                   "dvCutSelection","sourceCutBtn","dvSourceCut","ledgerWorkCut"]){
