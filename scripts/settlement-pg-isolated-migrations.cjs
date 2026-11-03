@@ -227,7 +227,8 @@ async function main(){
           stderr_tail:probe.error,process_error:probe.problem,
           passed:probe.ok&&probe.output.includes('SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS')&&
             probe.output.includes('SYNTHETIC_NONCE_REPLAY_AND_RECEIPT_LOOKUP_PASS')&&
-            probe.output.includes('SYNTHETIC_CAS_IDEMPOTENCY_REVOKED_AND_UNKNOWN_PASS')};
+            probe.output.includes('SYNTHETIC_CAS_IDEMPOTENCY_REVOKED_AND_UNKNOWN_PASS')&&
+            probe.output.includes('SYNTHETIC_CALLER_RAW_WRITE_AND_OWNER_DENIAL_PASS')};
         if(!receipt.atomic_runtime_probe.passed)receipt.status='BLOCKED_ATOMIC_RUNTIME_PROBE';
         if(receipt.atomic_runtime_probe.passed){
           const racePath=realC(path.join(root,'scripts/settlement-pg-atomic-logout-race.cjs'));
