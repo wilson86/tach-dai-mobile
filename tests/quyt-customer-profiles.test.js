@@ -24,7 +24,7 @@ function mount(store){
  const window={document,localStorage,confirm:()=>true,prompt:()=>"1,000",location:{origin:"http://localhost"},
   addEventListener(k,f){(handlers[k]??=[]).push(f)},
   dispatchEvent(evt){for(const f of handlers[evt.type]??[])f(evt)}};
- window.top=window;window.KTSQuytBaoReview=core;
+ window.top=window;window.KTSQuytBaoReview=core;window.KTSCustomerConfig=require("../customer-config-review.js");
  const Event=function(type){this.type=type};
  vm.runInNewContext(source,{window,document,location:window.location,Event,
   setTimeout:fn=>fn()},{filename:"quyt-bao-review-ui.js",timeout:1000});

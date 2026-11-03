@@ -9,7 +9,7 @@ test("Quyt identity off by default; versioned customer preferences persist separ
  assert.ok(ui.includes('check.type="checkbox"'));
  assert.ok(ui.includes('const requested=customerId==="quyt"&&ownTop.__KTS_QUYT_SELECTED_V1__===true'));
  assert.ok(ui.includes("KTS_REVIEW_CUSTOMERS_V1"));
- assert.ok(ui.includes("window.localStorage.setItem"));
+ assert.ok(read("customer-config-review.js").includes("storage.setItem"));
  assert.ok(!ui.includes("sessionStorage.setItem"));
  assert.ok(ui.includes("checkedSource!==input.value"));
  assert.ok(ui.includes("ownTop.__KTS_QUYT_SOURCE_V1__"));
@@ -69,7 +69,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r15"));
+ assert.ok(sw.includes("clean-r2-quyt-r16"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
@@ -97,7 +97,7 @@ test("synthetic DOM: switching source or region clears Quyt and resets default r
  const window={document,localStorage:{getItem:()=>null,setItem:()=>{}},location:{origin:"http://127.0.0.1"},
   addEventListener(type,fn){(handlers[type]??=[]).push(fn)},
   dispatchEvent(evt){for(const fn of handlers[evt.type]??[])fn(evt)}};
- window.top=window;
+ window.top=window;window.KTSCustomerConfig=require("../customer-config-review.js");
  window.KTSQuytBaoReview={parseRate:()=>{},
   prepareGrouped:()=>({preview:"43 b107n",rate:"1.067",aggregatedExposures:1})};
  const dispatch=(node,type)=>{
@@ -148,7 +148,7 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  const window={document,localStorage:{getItem:()=>null,setItem:()=>{}},location:{origin:"http://127.0.0.1"},
   addEventListener(type,fn){(handlers[type]??=[]).push(fn)},
   dispatchEvent(evt){for(const fn of handlers[evt.type]??[])fn(evt)}};
- window.top=window;
+ window.top=window;window.KTSCustomerConfig=require("../customer-config-review.js");
  window.KTSCleanAggregate=require("../clean-aggregate-review.js");
  window.KTSQuytBaoReview=require("../quyt-bao-review.js");
  const dispatch=(node,type)=>{
@@ -201,11 +201,11 @@ test("review customer dropdown has stable IDs and versioned save-only configurat
  "ktsReviewRenameCustomer","ktsReviewRetireCustomer","ktsReviewSaveRate","ktsReviewRateHistory"])
   assert.ok(s.includes(id),id);
  assert.ok(s.includes("KTS_REVIEW_CUSTOMERS_V1"));
- assert.ok(s.includes('id:"hien",name:"Hiền",rate:"1,000"'));
- assert.ok(s.includes('id:"quyt",name:"Quýt",rate:"1,067"'));
+ assert.ok(read("customer-config-review.js").includes("id:'hien',name:'Hiền',rate:'1,000'"));
+ assert.ok(read("customer-config-review.js").includes("id:'quyt',name:'Quýt',rate:'1,067'"));
  assert.ok(s.includes("customerId==="+"\"quyt\""));
  assert.ok(s.includes("core.parseRate(rate.value)"));
- assert.ok(s.includes("window.localStorage.setItem"));
+ assert.ok(read("customer-config-review.js").includes("storage.setItem"));
  assert.ok(s.includes("p.history.push"));
  assert.ok(s.includes("customer_id không thay đổi"));
  assert.ok(s.includes("Chỉ Quýt được xem trước tiền"));

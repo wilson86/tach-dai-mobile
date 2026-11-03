@@ -54,29 +54,11 @@ function install(){
 
  // Customer profile metadata only: no wager, message ID or ledger is persisted.
  const CUSTOMER_STORAGE_KEY="KTS_REVIEW_CUSTOMERS_V1";
- let customerStorageInvalid=false;
- const defaults=()=>[{id:"hien",name:"Hiền",rate:"1,000",active:true,history:[]},
-                    {id:"quyt",name:"Quýt",rate:"1,067",active:true,history:[]}];
+ let customerStorageInvalid=false,customerStore=null;
  function loadCustomers(){
   try{
-   if(!window.localStorage)throw Error("STORAGE_UNAVAILABLE");
-   const raw=window.localStorage.getItem(CUSTOMER_STORAGE_KEY);
-   if(raw===null)return defaults();
-   const data=JSON.parse(raw);
-   if(data?.version!==1||!Array.isArray(data.customers)||data.customers.length>40)throw Error("STORAGE_INVALID");
-   const list=[],ids=new Set();
-   for(const p of data.customers.slice(0,40)){
-    if(typeof p?.id!=="string"||!/^(hien|quyt|customer-[a-z0-9-]+)$/u.test(p.id)||
-       ids.has(p.id)||typeof p.name!=="string"||!p.name.trim()||p.name.length>50||
-       typeof p.rate!=="string")throw Error("STORAGE_INVALID");
-    try{core.parseRate(p.rate)}catch(_){throw Error("STORAGE_INVALID")}
-    if(!Array.isArray(p.history)||p.history.some(h=>!h||typeof h.rate!=="string"||typeof h.at!=="string"))throw Error("STORAGE_INVALID");
-    for(const h of p.history){try{core.parseRate(h.rate)}catch(_){throw Error("STORAGE_INVALID")}}
-    ids.add(p.id);
-    list.push({...p,id:p.id,name:p.name,rate:p.rate,active:p.active!==false,history:p.history.map(h=>({...h}))});
-   }
-   if(!ids.has("hien")||!ids.has("quyt"))throw Error("STORAGE_INVALID");
-   return list;
+   if(!customerStore)customerStore=window.KTSCustomerConfig.createStore(window.localStorage,core.parseRate);
+   return customerStore.read();
   }catch(_){customerStorageInvalid=true;return []}
  }
  let profiles=loadCustomers(),customerId="";
@@ -110,8 +92,8 @@ function install(){
  function storeCustomers(){
   if(customerStorageInvalid){hint.textContent="HOLD: dữ liệu khách không đọc được; không ghi đè.";return false}
   try{
-   if(!window.localStorage)throw Error("STORAGE_UNAVAILABLE");
-   window.localStorage.setItem(CUSTOMER_STORAGE_KEY,JSON.stringify({version:1,customers:profiles}));
+   if(!customerStore||window.KTSCustomerConfig.KEY!==CUSTOMER_STORAGE_KEY)throw Error("STORAGE_UNAVAILABLE");
+   customerStore.write(profiles);
    return true;
   }catch(_){hint.textContent="HOLD: trình duyệt không lưu được; hệ số chưa được xác nhận.";return false}
  }

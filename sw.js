@@ -1,6 +1,6 @@
 // Bump for every business-rule or shell release. Navigations are network-first
 // and cached by exact request URL so /app/ can never poison the root offline page.
-const CACHE_NAME = "tach-dai-mobile-v2.0.40-owner-singleton-dx-reject-clean-r2-quyt-r15";
+const CACHE_NAME = "tach-dai-mobile-v2.0.40-owner-singleton-dx-reject-clean-r2-quyt-r16";
 const CORE_ASSETS = [
   "./",
   "./index.html",
@@ -10,6 +10,7 @@ const CORE_ASSETS = [
   "./clean-aggregate-ui.js",
   "./quyt-bao-review.js",
   "./quyt-bao-review-ui.js",
+  "./customer-config-review.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png"
