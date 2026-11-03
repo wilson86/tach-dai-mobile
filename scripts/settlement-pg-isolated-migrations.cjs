@@ -72,7 +72,12 @@ async function main(){
    fail('TEAM_PG_BIN_NOT_APPROVED');
  const binaries=Object.fromEntries(['initdb','pg_ctl','psql','pg_config']
   .map(name=>[name,realC(path.join(pgDir,name+'.exe'))]));
- if(!verifiedCommand(binaries.pg_config,['--version'],root).includes('PostgreSQL'))
+ const expectedBin=realC(path.join('C:\\Program Files\\PostgreSQL',String(p.pg_major),'bin'));
+ if(expectedBin.toLowerCase()!==pgDir.toLowerCase())
+   fail('TEAM_PG_BIN_DIR_VERSION_MISMATCH');
+ const version=verifiedCommand(binaries.pg_config,['--version'],root);
+ const observed=/PostgreSQL\\s+(\\d+)(?:\\.\\d+)?/.exec(version);
+ if(!observed||Number(observed[1])!==p.pg_major)
    fail('TEAM_PG_BIN_VERSION_INVALID');
  const runDir=path.join(projectRoot,'PG_SYNTHETIC_'+expected.slice(0,10)+'_'+
    Date.now()+'_'+crypto.randomBytes(4).toString('hex'));
@@ -93,7 +98,7 @@ async function main(){
  const password=crypto.randomBytes(36).toString('base64url');
  const tempSecret=path.join(resolved,'initdb-secret.tmp');
  const env={PGPASSWORD:password,PGHOST:'127.0.0.1',PGUSER:ID,PGDATABASE:'postgres',
-  PGSSLMODE:'disable',PGCONNECT_TIMEOUT:'5'};
+  PGSSLMODE:'disable',PGCONNECT_TIMEOUT:'5',PGOPTIONS:''};
  const psql=(extra,port,timeout=35000)=>exec(binaries.psql,
    ['-X','-w','-v','ON_ERROR_STOP=1','-A','-t','-h','127.0.0.1',
     '-p',String(port),'-U',ID,'-d','postgres',...extra],
