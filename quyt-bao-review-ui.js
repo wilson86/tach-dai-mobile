@@ -54,26 +54,30 @@ function install(){
 
  // Customer profile metadata only: no wager, message ID or ledger is persisted.
  const CUSTOMER_STORAGE_KEY="KTS_REVIEW_CUSTOMERS_V1";
+ let customerStorageInvalid=false;
  const defaults=()=>[{id:"hien",name:"Hiền",rate:"1,000",active:true,history:[]},
                     {id:"quyt",name:"Quýt",rate:"1,067",active:true,history:[]}];
  function loadCustomers(){
   try{
-   const data=JSON.parse(window.localStorage?.getItem(CUSTOMER_STORAGE_KEY)||"null");
-   if(data?.version!==1||!Array.isArray(data.customers))return defaults();
+   if(!window.localStorage)throw Error("STORAGE_UNAVAILABLE");
+   const raw=window.localStorage.getItem(CUSTOMER_STORAGE_KEY);
+   if(raw===null)return defaults();
+   const data=JSON.parse(raw);
+   if(data?.version!==1||!Array.isArray(data.customers)||data.customers.length>40)throw Error("STORAGE_INVALID");
    const list=[],ids=new Set();
    for(const p of data.customers.slice(0,40)){
     if(typeof p?.id!=="string"||!/^(hien|quyt|customer-[a-z0-9-]+)$/u.test(p.id)||
        ids.has(p.id)||typeof p.name!=="string"||!p.name.trim()||p.name.length>50||
-       typeof p.rate!=="string")continue;
-    try{core.parseRate(p.rate)}catch(_){continue}
+       typeof p.rate!=="string")throw Error("STORAGE_INVALID");
+    try{core.parseRate(p.rate)}catch(_){throw Error("STORAGE_INVALID")}
     ids.add(p.id);
     list.push({id:p.id,name:p.name,rate:p.rate,active:p.active!==false,
       history:Array.isArray(p.history)?p.history.filter(h=>h&&typeof h.rate==="string"&&
       typeof h.at==="string").slice(-20):[]});
    }
-   for(const p of defaults())if(!ids.has(p.id))list.push(p);
+   if(!ids.has("hien")||!ids.has("quyt"))throw Error("STORAGE_INVALID");
    return list;
-  }catch(_){return defaults()}
+  }catch(_){customerStorageInvalid=true;return []}
  }
  let profiles=loadCustomers(),customerId="";
  const profile=()=>profiles.find(p=>p.id===customerId&&p.active);
@@ -104,6 +108,7 @@ function install(){
     (p.history.length?p.history.map(h=>h.at+" "+h.rate).join("; "):"chưa thay đổi"):"";
  }
  function storeCustomers(){
+  if(customerStorageInvalid){hint.textContent="HOLD: dữ liệu khách không đọc được; không ghi đè.";return false}
   try{
    if(!window.localStorage)throw Error("STORAGE_UNAVAILABLE");
    window.localStorage.setItem(CUSTOMER_STORAGE_KEY,JSON.stringify({version:1,customers:profiles}));
@@ -125,7 +130,7 @@ function install(){
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
   ownTop.__KTS_QUYT_RATE_V1__=profile()?.rate||"1,067";
   drawCustomers();notifyAll();
-  hint.textContent=profile()?"Đã chọn "+profile().name+". Chỉ Quýt được xem trước tiền; khách khác HOLD cho đến khi duyệt authority.":"Chưa chọn khách.";
+  hint.textContent=customerStorageInvalid?"HOLD: dữ liệu khách không đọc được; không ghi đè.":profile()?"Đã chọn "+profile().name+". Chỉ Quýt được xem trước tiền; khách khác HOLD cho đến khi duyệt authority.":"Chưa chọn khách.";
  }
  selector.addEventListener("change",()=>{
   if(selector.value==="__add__"){name.focus?.();hint.textContent="Nhập tên và bấm Thêm khách.";selector.value=customerId;return}

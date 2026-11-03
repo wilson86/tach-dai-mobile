@@ -69,7 +69,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r12"));
+ assert.ok(sw.includes("clean-r2-quyt-r13"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
@@ -94,7 +94,7 @@ test("synthetic DOM: switching source or region clears Quyt and resets default r
  const document={readyState:"complete",createElement:create,
   getElementById:id=>byId[id]||elements.find(e=>e.id===id),
   querySelectorAll:()=>[]};
- const window={document,location:{origin:"http://127.0.0.1"},
+ const window={document,localStorage:{getItem:()=>null,setItem:()=>{}},location:{origin:"http://127.0.0.1"},
   addEventListener(type,fn){(handlers[type]??=[]).push(fn)},
   dispatchEvent(evt){for(const fn of handlers[evt.type]??[])fn(evt)}};
  window.top=window;
@@ -145,7 +145,7 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  const document={readyState:"complete",createElement:create,
   getElementById:id=>byId[id]||nodes.find(x=>x.id===id),
   querySelectorAll:()=>[]};
- const window={document,location:{origin:"http://127.0.0.1"},
+ const window={document,localStorage:{getItem:()=>null,setItem:()=>{}},location:{origin:"http://127.0.0.1"},
   addEventListener(type,fn){(handlers[type]??=[]).push(fn)},
   dispatchEvent(evt){for(const fn of handlers[evt.type]??[])fn(evt)}};
  window.top=window;

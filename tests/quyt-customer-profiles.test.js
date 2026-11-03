@@ -79,3 +79,10 @@ test("invalid draft cannot replace saved coefficient, raw content unchanged",()=
  assert.match(m.get("ktsReviewCustomerStatus").textContent,/HOLD/);
  assert.equal(m.byId.input.value,"");
 });
+
+test("corrupt customer storage holds and is never overwritten",()=>{
+ const store=new Map([["KTS_REVIEW_CUSTOMERS_V1","{broken"]]),m=mount(store);
+ m.byId.input.value="43 b100n";m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ assert.equal(m.get("ktsQuytCheckbox").checked,false);assert.match(m.get("ktsReviewCustomerStatus").textContent,/HOLD/);
+ m.get("ktsReviewCustomerName").value="A";m.dispatch("ktsReviewAddCustomer","click");assert.equal(store.get("KTS_REVIEW_CUSTOMERS_V1"),"{broken");
+});
