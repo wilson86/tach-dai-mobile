@@ -23,8 +23,21 @@ SELECT encode(kts_crypto.hmac(convert_to(concat_ws('|','kts-draft-lookup-v1',:'s
 CREATE TEMP TABLE atomic_probe_result(result jsonb);
 CREATE TEMP TABLE atomic_probe_args(sid text,expires bigint,proof text,lookup_proof text);
 INSERT INTO atomic_probe_args VALUES (:'sid',:'expires',:'proof',:'lookup_proof');
+CREATE TEMP TABLE atomic_probe_cases AS
+ SELECT v.label,v.nonce,v.event_id,v.key_id,v.digest,
+   encode(kts_crypto.hmac(convert_to(concat_ws('|',v.domain,:'sid','group_a','customer_1',
+    '2026-10-12','mn','edit_draft','1',v.event_id,v.key_id,v.digest,
+    encode(sha256(convert_to('{"synthetic":true}','UTF8')),'hex'),v.nonce,:'expires'),'UTF8'),
+    decode(repeat('a',64),'hex'),'sha256'),'hex') AS proof
+ FROM (VALUES
+  ('idempotent',repeat('3',32),'probe_event','probe_key',repeat('c',64),'kts-draft-v1'),
+  ('stale_cas',repeat('4',32),'stale_event','stale_key',repeat('d',64),'kts-draft-v1'),
+  ('missing_receipt',repeat('5',32),'lookup','missing_key',repeat('c',64),'kts-draft-lookup-v1'),
+  ('mismatch_receipt',repeat('6',32),'lookup','probe_key',repeat('d',64),'kts-draft-lookup-v1')
+ ) v(label,nonce,event_id,key_id,digest,domain);
 GRANT ALL ON atomic_probe_result TO synthetic_atomic_caller;
 GRANT SELECT ON atomic_probe_args TO synthetic_atomic_caller;
+GRANT SELECT ON atomic_probe_cases TO synthetic_atomic_caller;
 SET ROLE synthetic_atomic_caller;
 SELECT set_config('kts.workspace_id','group_b',false);
 SELECT set_config('kts.actor_user_id','user_2',false);
@@ -39,10 +52,36 @@ DO $$ DECLARE a record; denied boolean:=false; result jsonb; BEGIN
  result:=kts_team.atomic_draft_reconcile_v1(a.sid,repeat('2',32),a.expires,a.lookup_proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,'probe_key',repeat('c',64),'{"synthetic":true}');
  IF result->>'classification'<>'MATCHED_SERVER_RECEIPT' OR result->>'event_id'<>'probe_event' THEN RAISE EXCEPTION 'PROBE_RECONCILIATION'; END IF;
 END $$;
+DO $$ DECLARE a record; c record; result jsonb; denied boolean:=false; BEGIN
+ SELECT * INTO a FROM atomic_probe_args;
+ SELECT * INTO c FROM atomic_probe_cases WHERE label='idempotent';
+ result:=kts_team.atomic_draft_v1(a.sid,c.nonce,a.expires,c.proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,c.event_id,c.key_id,c.digest,'{"synthetic":true}');
+ IF result->>'replayed'<>'true' OR result->>'event_id'<>'probe_event' THEN RAISE EXCEPTION 'PROBE_IDEMPOTENCY'; END IF;
+ SELECT * INTO c FROM atomic_probe_cases WHERE label='stale_cas';
+ BEGIN
+  PERFORM kts_team.atomic_draft_v1(a.sid,c.nonce,a.expires,c.proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,c.event_id,c.key_id,c.digest,'{"synthetic":true}');
+ EXCEPTION WHEN raise_exception THEN IF SQLERRM='TEAM_REVISION_CONFLICT' THEN denied:=true; ELSE RAISE; END IF; END;
+ IF NOT denied THEN RAISE EXCEPTION 'PROBE_STALE_CAS_ACCEPTED'; END IF;
+ FOR c IN SELECT * FROM atomic_probe_cases WHERE label IN ('missing_receipt','mismatch_receipt') LOOP
+  result:=kts_team.atomic_draft_reconcile_v1(a.sid,c.nonce,a.expires,c.proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,c.key_id,c.digest,'{"synthetic":true}');
+  IF result->>'classification'<>'UNKNOWN' THEN RAISE EXCEPTION 'PROBE_FALSE_RECEIPT_MATCH'; END IF;
+ END LOOP;
+END $$;
 RESET ROLE;
 DO $$ BEGIN
  IF NOT EXISTS (SELECT 1 FROM kts_team.scope_events WHERE workspace_id='group_a' AND event_id='probe_event' AND actor_user_id='user_1') THEN RAISE EXCEPTION 'PROBE_ACTOR_OR_WORKSPACE'; END IF;
  IF (SELECT count(*) FROM kts_team.idempotency_receipts WHERE workspace_id='group_a' AND idempotency_key='probe_key')<>1 THEN RAISE EXCEPTION 'PROBE_RECEIPT_COUNT'; END IF;
 END $$;
+UPDATE kts_auth.sessions SET revoked_at=clock_timestamp() WHERE session_hash=repeat('a',64);
+SET ROLE synthetic_atomic_caller;
+DO $$ DECLARE a record; denied boolean:=false; BEGIN
+ SELECT * INTO a FROM atomic_probe_args;
+ BEGIN
+  PERFORM kts_team.atomic_draft_reconcile_v1(a.sid,repeat('2',32),a.expires,a.lookup_proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,'probe_key',repeat('c',64),'{"synthetic":true}');
+ EXCEPTION WHEN raise_exception THEN IF SQLERRM='TEAM_ATOMIC_SESSION_INVALID' THEN denied:=true; ELSE RAISE; END IF; END;
+ IF NOT denied THEN RAISE EXCEPTION 'PROBE_REVOKED_SESSION_ACCEPTED'; END IF;
+END $$;
+RESET ROLE;
 \echo SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS
 \echo SYNTHETIC_NONCE_REPLAY_AND_RECEIPT_LOOKUP_PASS
+\echo SYNTHETIC_CAS_IDEMPOTENCY_REVOKED_AND_UNKNOWN_PASS
