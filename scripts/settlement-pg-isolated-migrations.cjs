@@ -4,6 +4,7 @@
 // Requires successful SHA-bound C: preflight from sibling script.
 const fs=require('node:fs'),path=require('node:path');
 const crypto=require('node:crypto'),cp=require('node:child_process'),net=require('node:net');
+const {startWithFileCapture}=require('./settlement-pg-start-capture.cjs');
 const SQL=[
  'team-settlement/migrations/001_team_ledger.sql',
  'team-settlement/migrations/002_draft_transaction.sql',
@@ -121,8 +122,9 @@ async function main(){
   fs.writeFileSync(path.join(data,'pg_hba.conf'),
    'host all all 127.0.0.1/32 scram-sha-256\n'+
    'host all all ::1/128 reject\n');
-  const up=exec(binaries.pg_ctl,['-D',data,'-l',serverLog,'-w','-t','30','start'],
-    resolved,{},45000);
+  const up=startWithFileCapture(binaries.pg_ctl,['-D',data,'-l',serverLog,'-w','-t','30','start'],
+    {cwd:resolved,env:process.env,timeout:45000,logPath:path.join(resolved,'pgctl-start.log')});
+  receipt.pg_ctl_start={exit_code:up.exit_code,problem:up.problem,signal:up.signal};
   if(!up.ok)fail('TEAM_PG_START_FAILED');
   started=true;receipt.postgres_started=true;
   for(const f of SQL){
