@@ -183,3 +183,62 @@ test("unchecked customer & rate keeps original KTS UI unchanged; opt-in is rever
  const reload=mount(store,{optIn:false});
  assert.equal(reload.get("ktsCustomerRateToggle").checked,false);
 });
+
+
+test("select Quýt on empty source then paste complete wager binds only once",()=>{
+ const store=new Map(),m=mount(store),toggle=m.get("ktsCustomerRateToggle");
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false);
+ m.byId.input.value="86 lo75";m.dispatch("input","input");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false,"incomplete wager must not bind");
+ m.byId.input.value="86 lo75n";m.dispatch("input","input");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,true,"first complete paste binds");
+ assert.equal(m.get("ktsQuytCheckbox").checked,true);
+ assert.equal(m.window.__KTS_QUYT_SOURCE_V1__,"86 lo75n");
+ assert.equal(m.byId.input.value,"86 lo75n");
+ m.byId.output.value="original result";
+ m.byId.input.value="86 lo75n 42 lo10n";m.dispatch("input","input");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false,"source edit invalidates old review");
+ assert.equal(m.get("ktsQuytCheckbox").checked,false);
+ assert.equal(m.byId.output.value,"original result","canonical result never rewritten");
+ m.byId.input.value="86 lo80n";m.dispatch("input","input");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false,"must reselect customer after mutation");
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ assert.equal(m.get("ktsQuytCheckbox").checked,true,"explicit re-selection rebinds");
+ toggle.checked=false;m.dispatch("ktsCustomerRateToggle","change");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false);
+});
+test("no automatic Quýt binding for bad grammar or immutable cut ledger",()=>{
+ const store=new Map(),m=mount(store);
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ for(const raw of ["86 lo75","86 lo75n unknown","[[KTS_EXACT_OUTPUT_LEDGER_V1]]86 lo75n"]){
+  m.byId.input.value=raw;m.dispatch("input","input");
+  assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false,raw);
+ }
+ m.byId.input.value="86 lo75n";m.dispatch("input","input");
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,true);
+});
+test("customer-name input mistakes show actionable hint, no money HOLD and no writes",()=>{
+ const store=new Map(),m=mount(store);
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ m.dispatch("ktsReviewRenameCustomer","click");
+ assert.match(m.get("ktsReviewCustomerStatus").textContent,/Nhập tên khách/i);
+ assert.doesNotMatch(m.get("ktsReviewCustomerStatus").textContent,/CUSTOMER_NAME_INVALID|^HOLD:/);
+ assert.equal(store.has("KTS_REVIEW_CUSTOMERS_V1"),false);
+ m.dispatch("ktsReviewAddCustomer","click");
+ assert.match(m.get("ktsReviewCustomerStatus").textContent,/Nhập tên khách/i);
+ assert.equal(store.size,0);
+ m.get("ktsReviewCustomerName").value="Quýt";m.dispatch("ktsReviewAddCustomer","click");
+ assert.match(m.get("ktsReviewCustomerStatus").textContent,/đã tồn tại/);
+ assert.equal(store.size,0);
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ assert.match(m.get("ktsReviewCustomerStatus").textContent,/Đã chọn Quýt/);
+});
+test("hidden customer edit actions fail closed while opt-in is OFF",()=>{
+ const store=new Map(),m=mount(store,{optIn:false});
+ m.get("ktsReviewCustomerName").value="Unknown";
+ for(const id of ["ktsReviewAddCustomer","ktsReviewRenameCustomer","ktsReviewRetireCustomer","ktsReviewSaveRate"])m.dispatch(id,"click");
+ assert.equal(store.size,0);
+ assert.equal(m.window.__KTS_QUYT_CUSTOMER_ID_V1__,undefined);
+ assert.equal(m.byId.input.value,"");
+});
