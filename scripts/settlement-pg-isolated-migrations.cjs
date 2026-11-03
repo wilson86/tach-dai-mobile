@@ -238,6 +238,15 @@ async function main(){
             process_error:race.problem,passed:race.ok&&race.output.includes('SYNTHETIC_CONCURRENT_LOGOUT_BLOCKED_THEN_COMMITTED_PASS')&&
               race.output.includes('SYNTHETIC_CONCURRENT_LOGOUT_FIRST_DENIES_WRITE_PASS')};
           if(!receipt.concurrent_logout.passed)receipt.status='BLOCKED_ATOMIC_LOGOUT_RACE';
+          if(receipt.concurrent_logout.passed){
+            const lostPath=realC(path.join(root,'scripts/settlement-pg-lost-commit-probe.cjs'));
+            if(!lostPath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(lostPath).isFile())
+              fail('TEAM_PG_LOST_ACK_SOURCE_INVALID');
+            const lost=exec(process.execPath,[lostPath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
+            receipt.lost_commit={exit_code:lost.exit_code,stdout_tail:lost.output,stderr_tail:lost.error,
+              process_error:lost.problem,passed:lost.ok&&lost.output.includes('SYNTHETIC_COMMIT_ACK_DROPPED_AND_RECEIPT_RECONCILED_PASS')};
+            if(!receipt.lost_commit.passed)receipt.status='BLOCKED_ATOMIC_LOST_ACK';
+          }
         }
       }
     }
