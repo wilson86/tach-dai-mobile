@@ -13,9 +13,12 @@ function execute(exe,args,cwd){
   return String(r.stdout||'').trim();
 }
 function fullC(p){
-  if(!path.isAbsolute(p)||!/^C:\\/.test(p)||p.startsWith('\\\\'))reject('TEAM_PG_C_DRIVE_REQUIRED');
-  const resolved=fs.realpathSync(p);
-  if(!/^C:\\/.test(resolved)||resolved.startsWith('\\\\'))reject('TEAM_PG_REPARSE_LEAVES_C');
+  if(typeof p!=='string'||!path.win32.isAbsolute(p)||!/^C:[\\/]/i.test(p)||
+     p.startsWith('\\\\'))reject('TEAM_PG_C_DRIVE_REQUIRED');
+  const normalized=path.win32.normalize(p);
+  const resolved=path.win32.normalize(fs.realpathSync(normalized));
+  if(!/^C:\\/i.test(resolved)||resolved.startsWith('\\\\'))
+    reject('TEAM_PG_REPARSE_LEAVES_C');
   return resolved;
 }
 function locateBinaries(){
