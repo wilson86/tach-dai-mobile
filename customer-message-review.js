@@ -46,7 +46,7 @@ function aggregate(messages,options){
   if(/(^|\n)\s*\|[^\n]*\d|\.\./u.test(message.original_text))throw Error("MALFORMED_PREFIX_HOLD");
   const parsed=core.sourceExposures(message.original_text,cleanCore,options.market);
   if(parsed.repeatBlocks.length)throw Error("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED");
-  const tags=[...message.original_text.matchAll(/((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b|dd|d-d|dau|duoi|dui|đầu|đuôi))[ \t]*(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/giu)];
+  const tags=[...message.original_text.matchAll(/((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b|dd|d-d|dau|duoi|dui|đui|đầu|đuôi))[ \t]*(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/giu)];
   if(tags.length!==parsed.clauses.length)throw Error("SOURCE_PROVENANCE_HOLD");
   for(let i=0;i<parsed.clauses.length;i++){
    const c=parsed.clauses[i],tag=tags[i][1].toLowerCase().replace(/\s+/gu,"");
