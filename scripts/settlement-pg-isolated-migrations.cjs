@@ -225,7 +225,8 @@ async function main(){
         const probe=psql(['-f',probePath],port,50000);
         receipt.atomic_runtime_probe={exit_code:probe.exit_code,stdout_tail:probe.output,
           stderr_tail:probe.error,process_error:probe.problem,
-          passed:probe.ok&&probe.output.includes('SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS')};
+          passed:probe.ok&&probe.output.includes('SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS')&&
+            probe.output.includes('SYNTHETIC_NONCE_REPLAY_AND_RECEIPT_LOOKUP_PASS')};
         if(!receipt.atomic_runtime_probe.passed)receipt.status='BLOCKED_ATOMIC_RUNTIME_PROBE';
       }
     }

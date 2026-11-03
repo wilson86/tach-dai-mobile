@@ -19,16 +19,30 @@ INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expire
 SELECT encode(sha256(convert_to(repeat('a',64),'UTF8')),'hex') AS sid,
        floor(extract(epoch from clock_timestamp()))::bigint+55 AS expires \gset
 SELECT encode(kts_crypto.hmac(convert_to(concat_ws('|','kts-draft-v1',:'sid','group_a','customer_1','2026-10-12','mn','edit_draft','1','probe_event','probe_key',repeat('c',64),encode(sha256(convert_to('{"synthetic":true}','UTF8')),'hex'),repeat('1',32),:'expires'),'UTF8'),decode(repeat('a',64),'hex'),'sha256'),'hex') AS proof \gset
+SELECT encode(kts_crypto.hmac(convert_to(concat_ws('|','kts-draft-lookup-v1',:'sid','group_a','customer_1','2026-10-12','mn','edit_draft','1','lookup','probe_key',repeat('c',64),encode(sha256(convert_to('{"synthetic":true}','UTF8')),'hex'),repeat('2',32),:'expires'),'UTF8'),decode(repeat('a',64),'hex'),'sha256'),'hex') AS lookup_proof \gset
 CREATE TEMP TABLE atomic_probe_result(result jsonb);
+CREATE TEMP TABLE atomic_probe_args(sid text,expires bigint,proof text,lookup_proof text);
+INSERT INTO atomic_probe_args VALUES (:'sid',:'expires',:'proof',:'lookup_proof');
 GRANT ALL ON atomic_probe_result TO synthetic_atomic_caller;
+GRANT SELECT ON atomic_probe_args TO synthetic_atomic_caller;
 SET ROLE synthetic_atomic_caller;
 SELECT set_config('kts.workspace_id','group_b',false);
 SELECT set_config('kts.actor_user_id','user_2',false);
 INSERT INTO atomic_probe_result SELECT kts_team.atomic_draft_v1(:'sid',repeat('1',32),:'expires'::bigint,:'proof','group_a','customer_1','2026-10-12','mn','edit_draft',1,'probe_event','probe_key',repeat('c',64),'{"synthetic":true}');
 DO $$ BEGIN IF (SELECT result->>'new_revision' FROM atomic_probe_result)<>'2' THEN RAISE EXCEPTION 'PROBE_REVISION'; END IF; END $$;
+DO $$ DECLARE a record; denied boolean:=false; result jsonb; BEGIN
+ SELECT * INTO a FROM atomic_probe_args;
+ BEGIN
+  PERFORM kts_team.atomic_draft_v1(a.sid,repeat('1',32),a.expires,a.proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,'probe_event','probe_key',repeat('c',64),'{"synthetic":true}');
+ EXCEPTION WHEN unique_violation THEN denied:=true; END;
+ IF NOT denied THEN RAISE EXCEPTION 'PROBE_NONCE_REPLAY_ACCEPTED'; END IF;
+ result:=kts_team.atomic_draft_reconcile_v1(a.sid,repeat('2',32),a.expires,a.lookup_proof,'group_a','customer_1','2026-10-12','mn','edit_draft',1,'probe_key',repeat('c',64),'{"synthetic":true}');
+ IF result->>'classification'<>'MATCHED_SERVER_RECEIPT' OR result->>'event_id'<>'probe_event' THEN RAISE EXCEPTION 'PROBE_RECONCILIATION'; END IF;
+END $$;
 RESET ROLE;
 DO $$ BEGIN
  IF NOT EXISTS (SELECT 1 FROM kts_team.scope_events WHERE workspace_id='group_a' AND event_id='probe_event' AND actor_user_id='user_1') THEN RAISE EXCEPTION 'PROBE_ACTOR_OR_WORKSPACE'; END IF;
  IF (SELECT count(*) FROM kts_team.idempotency_receipts WHERE workspace_id='group_a' AND idempotency_key='probe_key')<>1 THEN RAISE EXCEPTION 'PROBE_RECEIPT_COUNT'; END IF;
 END $$;
 \echo SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS
+\echo SYNTHETIC_NONCE_REPLAY_AND_RECEIPT_LOOKUP_PASS
