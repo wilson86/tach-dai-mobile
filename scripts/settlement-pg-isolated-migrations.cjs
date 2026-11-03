@@ -257,6 +257,15 @@ async function main(){
               receipt.atomic_review_probe={exit_code:review.exit_code,stdout_tail:review.output,stderr_tail:review.error,
                 process_error:review.problem,passed:review.ok&&review.output.includes('SYNTHETIC_ATOMIC_REVIEW_SUBMIT_APPROVE_REPLAY_RECONCILE_PASS')};
               if(!receipt.atomic_review_probe.passed)receipt.status='BLOCKED_ATOMIC_REVIEW_PROBE';
+              if(receipt.atomic_review_probe.passed){
+                const logPath=realC(path.join(root,'scripts/settlement-pg-parameter-log-probe.cjs'));
+                if(!logPath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(logPath).isFile())
+                  fail('TEAM_PG_LOG_PROBE_SOURCE_INVALID');
+                const logProbe=exec(process.execPath,[logPath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
+                receipt.parameter_log_probe={exit_code:logProbe.exit_code,stdout_tail:logProbe.output,stderr_tail:logProbe.error,
+                  process_error:logProbe.problem,passed:logProbe.ok&&logProbe.output.includes('SYNTHETIC_EXTENDED_PROTOCOL_ERROR_LOG_OBSERVATION_PASS')};
+                if(!receipt.parameter_log_probe.passed)receipt.status='BLOCKED_PARAMETER_LOG_PROBE';
+              }
             }
           }
         }
