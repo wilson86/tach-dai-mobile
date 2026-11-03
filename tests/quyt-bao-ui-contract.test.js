@@ -4,10 +4,10 @@ const {test}=require("node:test"),assert=require("node:assert/strict");
 const fs=require("node:fs"),path=require("node:path");
 const read=name=>fs.readFileSync(path.join(__dirname,"..",name),"utf8");
 const root=read("index.html"),ui=read("quyt-bao-review-ui.js"),sw=read("sw.js");
-test("Quyt checkbox is in chat input, off by default, not persisted",()=>{
+test("Quyt identity off by default; versioned customer preferences persist separately",()=>{
  assert.ok(ui.includes('input.insertAdjacentElement("afterend",label)'));
  assert.ok(ui.includes('check.type="checkbox"'));
- assert.ok(ui.includes('const requested=ownTop.__KTS_QUYT_SELECTED_V1__===true'));
+ assert.ok(ui.includes('const requested=customerId==="quyt"&&ownTop.__KTS_QUYT_SELECTED_V1__===true'));
  assert.ok(ui.includes("KTS_REVIEW_CUSTOMERS_V1"));
  assert.ok(ui.includes("window.localStorage.setItem"));
  assert.ok(!ui.includes("sessionStorage.setItem"));
