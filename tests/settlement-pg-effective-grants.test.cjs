@@ -37,7 +37,7 @@ test('rejects guessed role, missing projections, and missing legitimate atomic d
 });
 test('read-only audit is integrated only after authenticated caller rollback is proven',()=>{
  const sql=audit.buildSql();
- assert.match(sql,/BEGIN/===null?/never/:/SELECT row_to_json/);
+ assert.match(sql,/SELECT row_to_json/);
  assert.match(sql,/has_any_column_privilege/);
  assert.match(sql,/pg_has_role/);
  assert.doesNotMatch(sql,/GRANT |REVOKE |UPDATE kts_|INSERT INTO kts_/);
