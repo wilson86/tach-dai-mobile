@@ -18,6 +18,13 @@ function install(){
  const check=document.createElement("input");check.type="checkbox";check.id="ktsQuytCheckbox";
  const caption=document.createElement("span");caption.textContent="Quýt (dán tin trước rồi tích chọn) — chỉnh hệ số bao lô";
  label.append(check,caption);input.insertAdjacentElement("afterend",label);
+ // Explicit opt-in: the ordinary KTS Tách/Cắt/Undo UI remains untouched when OFF.
+ const optInLabel=document.createElement("label");
+ optInLabel.style.cssText="display:flex;align-items:center;gap:8px;padding:8px;background:#fff3d8;border:1px solid #e2a74f;border-radius:8px;margin:7px 0;color:#242020";
+ const optIn=document.createElement("input");optIn.type="checkbox";optIn.id="ktsCustomerRateToggle";
+ optIn.setAttribute("aria-label","Bật chế độ khách và tỷ lệ");
+ const optInText=document.createElement("span");optInText.textContent="Khách & tỷ lệ (tích để mở phần điều chỉnh)";
+ optInLabel.append(optIn,optInText);input.insertAdjacentElement("afterend",optInLabel);
  const rateWrap=document.createElement("label");rateWrap.style.cssText="display:flex;align-items:center;gap:8px;padding:7px;margin:4px 0;color:#182033";
  rateWrap.textContent="Hệ số bao ×";
  const rate=document.createElement("input");
@@ -76,7 +83,7 @@ function install(){
  const hint=document.createElement("div");hint.id="ktsReviewCustomerStatus";hint.style.cssText="width:100%;font-size:12px";
  const history=document.createElement("div");history.id="ktsReviewRateHistory";history.style.cssText="width:100%;font-size:12px";
  bar.append(selector,name,add,rename,retire,save,hint,history);
- label.insertAdjacentElement("afterend",bar);label.hidden=true;
+ label.insertAdjacentElement("afterend",bar);label.hidden=true;bar.style.display="none";
  function drawCustomers(){
   selector.innerHTML="";
   const blank=document.createElement("option");blank.value="";blank.textContent="KHÁCH: — chọn —";selector.append(blank);
@@ -105,6 +112,7 @@ function install(){
   return v;
  }
  function chooseCustomer(id){
+  if(!optIn.checked){hint.textContent="HOLD: tích Khách & tỷ lệ trước khi chọn khách.";return}
   customerId=profiles.some(p=>p.id===id&&p.active)?id:"";
   confirmedRepeatSource=null;directMode=false;
   ownTop.__KTS_QUYT_CUSTOMER_ID_V1__=customerId;
@@ -115,6 +123,7 @@ function install(){
   hint.textContent=customerStorageInvalid?"HOLD: dữ liệu khách không đọc được; không ghi đè.":profile()?"Đã chọn "+profile().name+". Gộp tin gốc chỉ để đối chiếu; chưa được chuyển chủ.":"Chưa chọn khách.";
  }
  selector.addEventListener("change",()=>{
+  if(!optIn.checked)return;
   if(selector.value==="__add__"){name.focus?.();hint.textContent="Nhập tên và bấm Thêm khách.";selector.value=customerId;return}
   chooseCustomer(selector.value);
  });
@@ -171,7 +180,7 @@ function install(){
   review.value="";keep.hidden=true;
   status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
  }
- function enabled(){return check.checked===true}
+ function enabled(){return optIn.checked===true&&check.checked===true}
  function clearSelection(message){
   confirmedRepeatSource=null;checkedSource="";directMode=false;
   ownTop.__KTS_QUYT_SELECTED_V1__=false;
@@ -182,17 +191,26 @@ function install(){
  }
  function applyFromOwner(){
   profiles=loadCustomers();
-  customerId=profiles.some(p=>p.id===ownTop.__KTS_QUYT_CUSTOMER_ID_V1__&&p.active)?
+  const opted=ownTop.__KTS_CUSTOMER_RATE_OPT_IN_V1__===true;
+  optIn.checked=opted;
+  customerId=opted&&profiles.some(p=>p.id===ownTop.__KTS_QUYT_CUSTOMER_ID_V1__&&p.active)?
     ownTop.__KTS_QUYT_CUSTOMER_ID_V1__:"";
   drawCustomers();
   const requested=customerId==="quyt"&&ownTop.__KTS_QUYT_SELECTED_V1__===true;
   const source=String(ownTop.__KTS_QUYT_SOURCE_V1__||"");
-  check.checked=requested&&source.length>0&&source===input.value;
+  check.checked=opted&&requested&&source.length>0&&source===input.value;
   checkedSource=check.checked?source:"";
   const factor=ownTop.__KTS_QUYT_RATE_V1__;
   rate.value=typeof factor==="string"&&customerId?factor:(profile()?.rate||"1,067");
-  rate.disabled=!customerId;rateWrap.hidden=!customerId;
-  panel.hidden=!customerId;reset();
+  rate.disabled=!opted||!customerId;
+  bar.style.display=opted?"flex":"none";
+  rateWrap.hidden=!opted||!customerId;
+  rateWrap.style.display=opted&&customerId?"flex":"none";
+  panel.hidden=!opted||!customerId;
+  panel.style.display=opted&&customerId?"block":"none";
+  const cleanPanel=document.getElementById("ktsCleanReviewPanel");
+  if(cleanPanel)cleanPanel.style.display=opted?"block":"none";
+  reset();
   if(customerId!=="quyt"&&customerId)status.textContent="Dùng THÊM TIN GỐC và GỘP CÁC TIN để xem thử hệ số của khách này; chưa được chuyển chủ.";
  }
  function notifyAll(){
@@ -200,7 +218,21 @@ function install(){
   fire(ownTop);
   try{for(const f of ownTop.document.querySelectorAll("iframe"))if(f.contentWindow)fire(f.contentWindow)}catch(_){}
  }
+ optIn.addEventListener("change",()=>{
+  ownTop.__KTS_CUSTOMER_RATE_OPT_IN_V1__=optIn.checked===true;
+  if(!optIn.checked){
+   ownTop.__KTS_QUYT_CUSTOMER_ID_V1__="";
+   ownTop.__KTS_QUYT_SELECTED_V1__=false;
+   ownTop.__KTS_QUYT_SOURCE_V1__="";
+   ownTop.__KTS_QUYT_RATE_V1__="1,067";
+   confirmedRepeatSource=null;directMode=false;
+   selectedMessageIds.clear();messageReviewActive=false;
+   review.value="";copy.disabled=true;
+  }
+  notifyAll();
+ });
  check.addEventListener("change",()=>{
+  if(!optIn.checked){check.checked=false;return}
   confirmedRepeatSource=null;directMode=false;
   if(check.checked&&!customerId){customerId="quyt";ownTop.__KTS_QUYT_CUSTOMER_ID_V1__="quyt"}
   ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&customerId==="quyt"&&Boolean(input.value.trim());
@@ -278,7 +310,7 @@ function install(){
   refresh();
  });
  direct.addEventListener("click",()=>{
-  if(!enabled()&&customerId==="quyt"&&input.value.trim()){
+  if(optIn.checked&&!enabled()&&customerId==="quyt"&&input.value.trim()){
    ownTop.__KTS_QUYT_SELECTED_V1__=true;
    ownTop.__KTS_QUYT_SOURCE_V1__=input.value;notifyAll();
   }
@@ -300,7 +332,7 @@ function install(){
  function messageScope(){
   const market=(document.getElementById("region")||document.getElementById("sharedRegion"))?.value;
   const date=(document.getElementById("date")||document.getElementById("sharedDate"))?.value;
-  if(customerStorageInvalid||!profile())throw Error("cần chọn khách hợp lệ; không tự suy đoán khách.");
+  if(!optIn.checked||customerStorageInvalid||!profile())throw Error("cần tích Khách & tỷ lệ và chọn khách hợp lệ; không tự suy đoán khách.");
   if(!market||!date)throw Error("HOLD: cần chọn miền và ngày trước khi thêm/gộp tin.");
   if(!window.KTSReviewSourceMessages)throw Error("HOLD: thiếu mô-đun lưu tin.");
   return {market,date,store:window.KTSReviewSourceMessages.createStore(window.localStorage)};
