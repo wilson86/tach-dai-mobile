@@ -2,7 +2,7 @@
 // Fail-closed CLI validation; no git, browser, workflow, production or network.
 const test=require('node:test');
 const assert=require('node:assert/strict');
-const {argsOf,admission,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS,safeFile}=require('../scripts/issue18-production-preflight.js');
+const {argsOf,admission,inspectTemplateVersionAuthority,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS,safeFile}=require('../scripts/issue18-production-preflight.js');
 const a='a'.repeat(40),b='b'.repeat(40),c='c'.repeat(40);
 const good=['--workspace','C:\\KTS-QA\\issue18',
   '--kts-sha',a,'--mobile-sha',b,'--ngang-sha',c];
@@ -53,6 +53,22 @@ test('release admission includes all audited regression tests but excludes live 
   }
 });
 
+test('canonical templates reject review-only app version increases before generator',()=>{
+  const source={mobile_3mien:{version:'2.0.39'},mobile_ngang:{version:'1.0.38'}};
+  const actual=inspectTemplateVersionAuthority(source,{version:'2.0.40'},{version:'1.0.39'});
+  assert.equal(actual.ok,false);
+  assert.deepEqual(actual.rows.map(r=>r.status),
+    ['TEMPLATE_VERSION_MISMATCH','TEMPLATE_VERSION_MISMATCH']);
+  assert.equal(actual.rows[0].canonical_version,'2.0.39');
+  assert.equal(actual.rows[1].candidate_version,'1.0.39');
+});
+test('version authority only passes exact matching source versions',()=>{
+  const source={mobile_3mien:{version:'2.0.40'},mobile_ngang:{version:'1.0.39'}};
+  const good=inspectTemplateVersionAuthority(source,{version:'2.0.40'},{version:'1.0.39'});
+  assert.equal(good.ok,true);
+  assert.ok(good.rows.every(x=>x.status==='MATCH'));
+  assert.equal(inspectTemplateVersionAuthority({}, {version:'2.0.40'}, {version:'1.0.39'}).ok,false);
+});
 test('cross-surface JS admission is mandatory for N035 money and Cut/Undo ledger',()=>{
   assert.deepEqual([...KTS_JS_TESTS],[
     'KTSRouter/tests/test_n035_mode_specific_oracle.js',
