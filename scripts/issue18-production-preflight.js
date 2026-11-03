@@ -163,6 +163,27 @@ function inspectTemplateVersionAuthority(templates,mobile,ngang){
   return {schema:'KTS_ISSUE18_TEMPLATE_VERSION_AUTHORITY_V1',
     ok:rows.every(row=>row.status==='MATCH'),rows};
 }
+// Manifest must attest the SAME three immutable source-byte hashes as this
+// candidate guard, even when its generated output files are still under review.
+function inspectBuildManifestAuthority(manifest,expected,engine){
+  const canonical=manifest?.canonical_inputs;
+  const rows=[
+    ['engine_spec.json','engine_spec'],
+    ['calendar_authority.json','calendar'],
+    ['pwa_version_templates.json','pwa_version_templates']
+  ].map(([name,field])=>({
+    name,expected_sha256:expected[name]||null,
+    manifest_sha256:canonical?.[field]||null,
+    status:typeof expected[name]==='string'&&canonical?.[field]===expected[name]
+      ?'MATCH':'MANIFEST_SOURCE_DRIFT'
+  }));
+  const engineStatus=manifest?.engine_sha256===engine&&
+    manifest?.schema==='KTS_BUSINESS_ENGINE_BUILD_MANIFEST_V1'
+      ?'MATCH':'MANIFEST_ENGINE_DRIFT';
+  return {schema:'KTS_ISSUE18_MANIFEST_SOURCE_AUTHORITY_V1',
+    ok:engineStatus==='MATCH'&&rows.every(row=>row.status==='MATCH'),
+    engine_status:engineStatus,rows};
+}
 function admission(options,runCommand=processReadOnly){
   const root=verifyWindowsWorkspace(options['--workspace']);
   // Fixture scripts may create disposable files under os.tmpdir(). Do not
@@ -191,10 +212,17 @@ function admission(options,runCommand=processReadOnly){
   // Git can report a checkout as clean while autocrlf changed JSON bytes.
   // The strict generator hashes raw canonical inputs and then checks the
   // exact manifest text; classify the drift before invoking Python.
-  const {inspectCanonicalBytes}=require('./issue18-canonical-byte-guard.js');
+  const {EXPECTED:SOURCE_BYTE_PINS,inspectCanonicalBytes}=require('./issue18-canonical-byte-guard.js');
   const raw=inspectCanonicalBytes(dirs.kts,safeFile);
   result.checks.push({name:'CANONICAL_INPUT_RAW_BYTE_PINS',...raw});
   if(!raw.ok){result.status='BLOCKED_CANONICAL_INPUT_BYTES';return result;}
+  const manifestAuthority=inspectBuildManifestAuthority(
+    jsonAt(dirs.kts,'SharedBusinessEngine/BUILD_MANIFEST.json'),
+    SOURCE_BYTE_PINS,ISSUE18_ENGINE);
+  result.checks.push({name:'CANONICAL_MANIFEST_SOURCE_PROVENANCE',...manifestAuthority});
+  if(!manifestAuthority.ok){
+    result.status='BLOCKED_CANONICAL_MANIFEST_AUTHORITY';return result;
+  }
   const versionAuthority=inspectTemplateVersionAuthority(
     jsonAt(dirs.kts,'SharedBusinessEngine/pwa_version_templates.json'),m,n);
   result.checks.push({name:'CANONICAL_TEMPLATE_VERSUS_PWA_VERSIONS',...versionAuthority});
@@ -279,4 +307,4 @@ if(require.main===module){
     process.exitCode=2;
   }
 }
-module.exports={argsOf,admission,safeFile,inspectTemplateVersionAuthority,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
+module.exports={argsOf,admission,safeFile,inspectBuildManifestAuthority,inspectTemplateVersionAuthority,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
