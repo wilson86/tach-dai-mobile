@@ -51,6 +51,125 @@ function install(){
  let confirmedRepeatSource=null;
  let checkedSource="";
  let directMode=false;
+
+ // Customer profile metadata only: no wager, message ID or ledger is persisted.
+ const CUSTOMER_STORAGE_KEY="KTS_REVIEW_CUSTOMERS_V1";
+ const defaults=()=>[{id:"hien",name:"Hiền",rate:"1,000",active:true,history:[]},
+                    {id:"quyt",name:"Quýt",rate:"1,067",active:true,history:[]}];
+ function loadCustomers(){
+  try{
+   const data=JSON.parse(window.localStorage?.getItem(CUSTOMER_STORAGE_KEY)||"null");
+   if(data?.version!==1||!Array.isArray(data.customers))return defaults();
+   const list=[],ids=new Set();
+   for(const p of data.customers.slice(0,40)){
+    if(typeof p?.id!=="string"||!/^(hien|quyt|customer-[a-z0-9-]+)$/u.test(p.id)||
+       ids.has(p.id)||typeof p.name!=="string"||!p.name.trim()||p.name.length>50||
+       typeof p.rate!=="string")continue;
+    try{core.parseRate(p.rate)}catch(_){continue}
+    ids.add(p.id);
+    list.push({id:p.id,name:p.name,rate:p.rate,active:p.active!==false,
+      history:Array.isArray(p.history)?p.history.filter(h=>h&&typeof h.rate==="string"&&
+      typeof h.at==="string").slice(-20):[]});
+   }
+   for(const p of defaults())if(!ids.has(p.id))list.push(p);
+   return list;
+  }catch(_){return defaults()}
+ }
+ let profiles=loadCustomers(),customerId="";
+ const profile=()=>profiles.find(p=>p.id===customerId&&p.active);
+ const bar=document.createElement("div");bar.id="ktsReviewCustomerControls";
+ bar.style.cssText="padding:8px;border:1px solid #9bb2c9;border-radius:8px;margin:8px 0;display:flex;flex-wrap:wrap;gap:6px";
+ const selector=document.createElement("select");selector.id="ktsReviewCustomer";
+ selector.setAttribute("aria-label","Chọn khách");
+ const name=document.createElement("input");name.id="ktsReviewCustomerName";
+ name.type="text";name.maxLength=50;name.placeholder="Tên khách mới / tên đổi";
+ const add=document.createElement("button");add.type="button";add.id="ktsReviewAddCustomer";add.textContent="Thêm khách";
+ const rename=document.createElement("button");rename.type="button";rename.id="ktsReviewRenameCustomer";rename.textContent="Đổi tên";
+ const retire=document.createElement("button");retire.type="button";retire.id="ktsReviewRetireCustomer";retire.textContent="Ngừng sử dụng";
+ const save=document.createElement("button");save.type="button";save.id="ktsReviewSaveRate";save.textContent="Lưu hệ số";
+ const hint=document.createElement("div");hint.id="ktsReviewCustomerStatus";hint.style.cssText="width:100%;font-size:12px";
+ const history=document.createElement("div");history.id="ktsReviewRateHistory";history.style.cssText="width:100%;font-size:12px";
+ bar.append(selector,name,add,rename,retire,save,hint,history);
+ label.insertAdjacentElement("afterend",bar);label.hidden=true;
+ function drawCustomers(){
+  selector.innerHTML="";
+  const blank=document.createElement("option");blank.value="";blank.textContent="KHÁCH: — chọn —";selector.append(blank);
+  for(const p of profiles.filter(p=>p.active)){
+   const o=document.createElement("option");o.value=p.id;o.textContent=p.name;selector.append(o);
+  }
+  const more=document.createElement("option");more.value="__add__";more.textContent="+ Thêm khách mới…";selector.append(more);
+  selector.value=profile()?customerId:"";
+  const p=profile();
+  history.textContent=p?"Đã lưu ×"+p.rate+" | Lịch sử hệ số: "+
+    (p.history.length?p.history.map(h=>h.at+" "+h.rate).join("; "):"chưa thay đổi"):"";
+ }
+ function storeCustomers(){
+  try{
+   if(!window.localStorage)throw Error("STORAGE_UNAVAILABLE");
+   window.localStorage.setItem(CUSTOMER_STORAGE_KEY,JSON.stringify({version:1,customers:profiles}));
+   return true;
+  }catch(_){hint.textContent="HOLD: trình duyệt không lưu được; hệ số chưa được xác nhận.";return false}
+ }
+ function chosenName(){
+  const v=name.value.trim().replace(/\\s+/gu," ");
+  if(!v||v.length>50||/[<>\\x00-\\x1f]/u.test(v))throw Error("CUSTOMER_NAME_INVALID");
+  if(profiles.some(p=>p.active&&p.id!==customerId&&p.name.toLocaleLowerCase("vi")===v.toLocaleLowerCase("vi")))
+   throw Error("CUSTOMER_NAME_DUPLICATE");
+  return v;
+ }
+ function chooseCustomer(id){
+  customerId=profiles.some(p=>p.id===id&&p.active)?id:"";
+  confirmedRepeatSource=null;directMode=false;
+  ownTop.__KTS_QUYT_CUSTOMER_ID_V1__=customerId;
+  ownTop.__KTS_QUYT_SELECTED_V1__=customerId==="quyt"&&Boolean(input.value.trim());
+  ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
+  ownTop.__KTS_QUYT_RATE_V1__=profile()?.rate||"1,067";
+  drawCustomers();notifyAll();
+  hint.textContent=profile()?"Đã chọn "+profile().name+". Chỉ Quýt được xem trước tiền; khách khác HOLD cho đến khi duyệt authority.":"Chưa chọn khách.";
+ }
+ selector.addEventListener("change",()=>{
+  if(selector.value==="__add__"){name.focus?.();hint.textContent="Nhập tên và bấm Thêm khách.";selector.value=customerId;return}
+  chooseCustomer(selector.value);
+ });
+ add.addEventListener("click",()=>{
+  try{
+   const v=chosenName();
+   if(profiles.length>=40)throw Error("CUSTOMER_LIMIT");
+   const id="customer-"+Date.now().toString(36)+"-"+Math.floor(Math.random()*1e9).toString(36);
+   profiles.push({id,name:v,rate:"1,000",active:true,history:[]});
+   if(!storeCustomers()){profiles.pop();return}
+   name.value="";chooseCustomer(id);
+  }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
+ });
+ rename.addEventListener("click",()=>{
+  const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
+  try{
+   const v=chosenName(),old=p.name;p.name=v;
+   if(!storeCustomers()){p.name=old;return}
+   name.value="";drawCustomers();notifyAll();hint.textContent="Đã đổi tên; customer_id không thay đổi.";
+  }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
+ });
+ retire.addEventListener("click",()=>{
+  const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
+  if(p.id==="quyt"||p.id==="hien"){hint.textContent="HOLD: không tắt khách mặc định ở bản review.";return}
+  p.active=false;if(!storeCustomers()){p.active=true;return}
+  chooseCustomer("");hint.textContent="Đã ngừng sử dụng; không xóa lịch sử hệ số.";
+ });
+ save.addEventListener("click",()=>{
+  const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
+  try{
+   core.parseRate(rate.value);
+   const old=p.rate,oldHist=p.history.slice();
+   if(old!==rate.value){
+    p.rate=rate.value;p.history.push({at:new Date().toISOString(),rate:rate.value});
+    p.history=p.history.slice(-20);
+   }
+   if(!storeCustomers()){p.rate=old;p.history=oldHist;return}
+   drawCustomers();hint.textContent="Đã lưu hệ số riêng; giao dịch lịch sử không được sửa.";
+   notifyAll();
+  }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
+ });
+ drawCustomers();
  function reset(){
   review.value="";keep.hidden=true;
   status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
@@ -60,19 +179,24 @@ function install(){
   confirmedRepeatSource=null;checkedSource="";directMode=false;
   ownTop.__KTS_QUYT_SELECTED_V1__=false;
   ownTop.__KTS_QUYT_SOURCE_V1__="";
-  ownTop.__KTS_QUYT_RATE_V1__="1,067";
+  ownTop.__KTS_QUYT_RATE_V1__=profile()?.rate||"1,067";
   notifyAll();
   if(message)status.textContent=message;
  }
  function applyFromOwner(){
-  const requested=ownTop.__KTS_QUYT_SELECTED_V1__===true;
+  profiles=loadCustomers();
+  customerId=profiles.some(p=>p.id===ownTop.__KTS_QUYT_CUSTOMER_ID_V1__&&p.active)?
+    ownTop.__KTS_QUYT_CUSTOMER_ID_V1__:"";
+  drawCustomers();
+  const requested=customerId==="quyt"&&ownTop.__KTS_QUYT_SELECTED_V1__===true;
   const source=String(ownTop.__KTS_QUYT_SOURCE_V1__||"");
   check.checked=requested&&source.length>0&&source===input.value;
   checkedSource=check.checked?source:"";
   const factor=ownTop.__KTS_QUYT_RATE_V1__;
-  rate.value=typeof factor==="string"?factor:"1,067";
-  rate.disabled=!enabled();rateWrap.hidden=!enabled();
-  panel.hidden=!enabled();reset();
+  rate.value=typeof factor==="string"&&customerId?factor:(profile()?.rate||"1,067");
+  rate.disabled=!customerId;rateWrap.hidden=!customerId;
+  panel.hidden=!customerId;reset();
+  if(customerId!=="quyt"&&customerId)status.textContent="HOLD: chưa duyệt công thức tiền cho khách này.";
  }
  function notifyAll(){
   const fire=w=>{try{w.dispatchEvent(new Event("kts:quyt-selection-v1"))}catch(_){}};
@@ -81,10 +205,11 @@ function install(){
  }
  check.addEventListener("change",()=>{
   confirmedRepeatSource=null;directMode=false;
-  ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&Boolean(input.value.trim());
+  if(check.checked&&!customerId){customerId="quyt";ownTop.__KTS_QUYT_CUSTOMER_ID_V1__="quyt"}
+  ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&customerId==="quyt"&&Boolean(input.value.trim());
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
   if(!ownTop.__KTS_QUYT_SELECTED_V1__||typeof ownTop.__KTS_QUYT_RATE_V1__!=="string")
-   ownTop.__KTS_QUYT_RATE_V1__="1,067";
+   ownTop.__KTS_QUYT_RATE_V1__=profile()?.rate||"1,067";
   notifyAll();
  });
  rate.addEventListener("input",()=>{
@@ -94,6 +219,7 @@ function install(){
   reset();
   try{
    core.parseRate(rate.value);
+   if(customerId!=="quyt"){status.textContent="Hệ số nháp; chỉ lưu cấu hình, chưa tính tiền cho khách này.";return}
    status.textContent="Hệ số đã đổi; bấm Kiểm tra/Tách để tính lại. Không dùng kết quả cũ.";
   }catch(e){status.textContent="HOLD: Hệ số không hợp lệ — "+String(e.message||e)}
  });
@@ -155,7 +281,11 @@ function install(){
   refresh();
  });
  direct.addEventListener("click",()=>{
-  if(!enabled()){status.textContent="HOLD: hãy chọn Quýt trước.";return;}
+  if(!enabled()&&customerId==="quyt"&&input.value.trim()){
+   ownTop.__KTS_QUYT_SELECTED_V1__=true;
+   ownTop.__KTS_QUYT_SOURCE_V1__=input.value;notifyAll();
+  }
+  if(!enabled()){status.textContent="HOLD: chỉ Quýt được xem trước tiền; hãy chọn Quýt và dán tin.";return;}
   directMode=true;
   refresh();
  });
@@ -168,7 +298,7 @@ function install(){
  input.addEventListener("input",()=>{
   confirmedRepeatSource=null;
   if(enabled()&&checkedSource!==input.value){
-    clearSelection("HOLD: tin đã đổi, Quýt và hệ số trở về mặc định.");return;
+    clearSelection("HOLD: nguồn thay đổi; kết quả cũ vô hiệu, hệ số nháp trả về hệ số đã lưu.");return;
   }
   reset();
  });
