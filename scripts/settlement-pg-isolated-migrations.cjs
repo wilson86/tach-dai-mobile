@@ -241,6 +241,19 @@ async function main(){
           const callerRollback=psql(['-c',"SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='authenticated_event')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='authenticated_key')::text"],port);
           receipt.authenticated_caller_probe.rollback_verified=callerRollback.ok&&callerRollback.output.trim()==='0:0';
           if(!receipt.authenticated_caller_probe.rollback_verified)fail('TEAM_PG_CALLER_ROLLBACK_FAILED');
+          // Independent effective privilege read under a real synthetic LOGIN,
+          // after prior rollback. Never confuse this with production grants.
+          const grantsPath=realC(path.join(root,'scripts/settlement-pg-authenticated-privilege-audit.cjs'));
+          if(!grantsPath.toLowerCase().startsWith((root+'\\').toLowerCase())||
+             !fs.statSync(grantsPath).isFile())fail('TEAM_PG_AUDIT_SOURCE_INVALID');
+          const grants=exec(process.execPath,[grantsPath,binaries.psql,String(port),resolved],resolved,
+            {...env,PGPORT:String(port)},30000);
+          receipt.authenticated_effective_grants={exit_code:grants.exit_code,
+            stdout_tail:grants.output,stderr_tail:grants.error,
+            process_error:grants.problem,synthetic_only:true,
+            production_grants_qualified:false,
+            passed:grants.ok&&grants.output.includes('SYNTHETIC_AUTHENTICATED_EFFECTIVE_GRANTS_PASS')};
+          if(!receipt.authenticated_effective_grants.passed)fail('AUDIT_PROBE_FAILED');
           const racePath=realC(path.join(root,'scripts/settlement-pg-atomic-logout-race.cjs'));
           if(!racePath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(racePath).isFile())
             fail('TEAM_PG_RACE_SOURCE_INVALID');
