@@ -69,7 +69,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r18"));
+ assert.ok(sw.includes("clean-r2-quyt-r19"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
@@ -209,6 +209,7 @@ test("review customer dropdown has stable IDs and versioned save-only configurat
  assert.ok(read("customer-config-review.js").includes("storage.setItem"));
  assert.ok(s.includes("p.history.push"));
  assert.ok(s.includes("customer_id không thay đổi"));
- assert.ok(s.includes("Chỉ Quýt được xem trước tiền"));
+ assert.ok(s.includes("chưa được chuyển chủ"));
+ assert.ok(s.includes("customerStorageInvalid||!profile()"));
  assert.ok(!s.includes("fetch('/api/"));
 });

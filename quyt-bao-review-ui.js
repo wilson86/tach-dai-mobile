@@ -29,7 +29,7 @@ function install(){
  const panel=document.createElement("section");panel.id="ktsQuytPreparedPanel";
  panel.style.cssText="border:1px solid #d4ac4a;border-radius:9px;background:#fff8e8;padding:9px;margin-top:8px";
  panel.hidden=true;
- const title=document.createElement("strong");title.textContent="KẾT QUẢ QUÝT CHUẨN BỊ CHUYỂN — CHỈ XEM TRƯỚC";
+ const title=document.createElement("strong");title.textContent="GỘP TIN KHÁCH — CHỈ XEM TRƯỚC";
  const status=document.createElement("div");status.setAttribute("role","status");status.style.cssText="white-space:pre-wrap;font-size:12px;margin:7px 0";
  const review=document.createElement("textarea");review.readOnly=true;review.spellcheck=false;
  review.setAttribute("aria-label","Kết quả Quýt theo hệ số đã chọn để đối chiếu");
@@ -112,7 +112,7 @@ function install(){
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
   ownTop.__KTS_QUYT_RATE_V1__=profile()?.rate||"1,067";
   drawCustomers();notifyAll();
-  hint.textContent=customerStorageInvalid?"HOLD: dữ liệu khách không đọc được; không ghi đè.":profile()?"Đã chọn "+profile().name+". Chỉ Quýt được xem trước tiền; khách khác HOLD cho đến khi duyệt authority.":"Chưa chọn khách.";
+  hint.textContent=customerStorageInvalid?"HOLD: dữ liệu khách không đọc được; không ghi đè.":profile()?"Đã chọn "+profile().name+". Gộp tin gốc chỉ để đối chiếu; chưa được chuyển chủ.":"Chưa chọn khách.";
  }
  selector.addEventListener("change",()=>{
   if(selector.value==="__add__"){name.focus?.();hint.textContent="Nhập tên và bấm Thêm khách.";selector.value=customerId;return}
@@ -193,7 +193,7 @@ function install(){
   rate.value=typeof factor==="string"&&customerId?factor:(profile()?.rate||"1,067");
   rate.disabled=!customerId;rateWrap.hidden=!customerId;
   panel.hidden=!customerId;reset();
-  if(customerId!=="quyt"&&customerId)status.textContent="HOLD: chưa duyệt công thức tiền cho khách này.";
+  if(customerId!=="quyt"&&customerId)status.textContent="Dùng THÊM TIN GỐC và GỘP CÁC TIN để xem thử hệ số của khách này; chưa được chuyển chủ.";
  }
  function notifyAll(){
   const fire=w=>{try{w.dispatchEvent(new Event("kts:quyt-selection-v1"))}catch(_){}};
@@ -216,7 +216,7 @@ function install(){
   reset();
   try{
    core.parseRate(rate.value);
-   if(customerId!=="quyt"){status.textContent="Hệ số nháp; chỉ lưu cấu hình, chưa tính tiền cho khách này.";return}
+   if(customerId!=="quyt"){status.textContent="Hệ số nháp; bản gộp xem thử tính lại từ tin gốc; chưa được chuyển chủ.";return}
    status.textContent="Hệ số đã đổi; bấm Kiểm tra/Tách để tính lại. Không dùng kết quả cũ.";
   }catch(e){status.textContent="HOLD: Hệ số không hợp lệ — "+String(e.message||e)}
  });
@@ -299,14 +299,14 @@ function install(){
  function messageScope(){
   const market=(document.getElementById("region")||document.getElementById("sharedRegion"))?.value;
   const date=(document.getElementById("date")||document.getElementById("sharedDate"))?.value;
-  if(customerId!=="quyt")throw Error("HOLD: chỉ Quýt được duyệt xem thử luồng này.");
+  if(customerStorageInvalid||!profile())throw Error("cần chọn khách hợp lệ; không tự suy đoán khách.");
   if(!market||!date)throw Error("HOLD: cần chọn miền và ngày trước khi thêm/gộp tin.");
   if(!window.KTSReviewSourceMessages)throw Error("HOLD: thiếu mô-đun lưu tin.");
   return {market,date,store:window.KTSReviewSourceMessages.createStore(window.localStorage)};
  }
  function chosenMessages(scope){return scope.store.read().filter(m=>m.customer_id===customerId&&m.market===scope.market&&m.business_date===scope.date)}
  function renderMessages(){
-  review.value="";copy.disabled=true;
+  review.value="";copy.disabled=true;sourceList.textContent="";
   try{
    const scope=messageScope(),messages=chosenMessages(scope);
    sourceList.textContent=messages.map((m,i)=>(i+1)+". ["+m.source_message_id+"]\n"+m.original_text).join("\n\n");

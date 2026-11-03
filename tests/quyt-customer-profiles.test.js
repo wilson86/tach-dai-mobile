@@ -45,7 +45,7 @@ test("customer dropdown changes only review state, not source or real routing",(
  assert.equal(m.get("ktsQuytCheckbox").checked,false);
  assert.equal(m.get("ktsQuytRate").value,"1,000");
  m.dispatch("ktsQuytDirectMerge","click");
- assert.match(m.get("ktsQuytPreparedPanel").textContent||m.get("ktsReviewCustomerStatus").textContent,/khách|HOLD/i);
+ assert.match(m.get("ktsQuytPreparedPanel").textContent||m.get("ktsReviewCustomerStatus").textContent,/đối chiếu|HOLD/i);
  assert.equal(m.byId.input.value,"43 b100n");assert.equal(m.byId.output.value,"");
 });
 test("named customer has stable customer_id, independent rate and version history after reload",()=>{
@@ -116,4 +116,14 @@ test("multiple manually identified messages review exact totals and persist acro
  m.get('ktsQuytRate').value='NaN';m.dispatch('ktsQuytRate','input');assert.equal(review.value,'');assert.match(m.get('ktsReviewMessageStatus').textContent,/HOLD/);
  const reload=mount(store);reload.byId.region.value='mb';reload.byId.date.value='2026-11-03';reload.byId.input.value='68 86 lo20n';reload.get('ktsReviewCustomer').value='quyt';reload.dispatch('ktsReviewCustomer','change');reload.dispatch('ktsReviewMergeMessages','click');
  const review2=reload.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');assert.match(review2.value,/68 lo 60n → 64\.02n/);assert.equal(reload.byId.input.value,'68 86 lo20n');
+});
+
+test('separate customers use their own originals and coefficients after switching',()=>{
+ const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';
+ const choose=id=>{m.get('ktsReviewCustomer').value=id;m.dispatch('ktsReviewCustomer','change')};
+ const review=()=>m.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');
+ choose('hien');m.byId.input.value='86 lo10n';m.dispatch('ktsReviewAddMessage','click');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);
+ choose('quyt');assert.doesNotMatch(m.get('ktsReviewMessageList').textContent,/86 lo10n/);m.byId.input.value='86 lo75n';m.dispatch('ktsReviewAddMessage','click');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
+ choose('hien');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);assert.doesNotMatch(review().value,/75n/);
+ choose('quyt');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
 });
