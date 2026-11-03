@@ -171,6 +171,55 @@ async function main(){
   receipt.status=receipt.checks.force_rls_six&&receipt.checks.raw_mutation_not_public?
    (receipt.checks.restricted_role_rls_smoke&&receipt.checks.restricted_role_cross_workspace_write_denied?
     'MIGRATIONS_AND_LIMITED_CATALOG_PASS':'BLOCKED_RLS_BEHAVIOR'):'BLOCKED_CATALOG_INVARIANT';
+  // Review-only DDL admission: never execute candidate functions or grant access.
+  // The database is synthetic and freshly initialized by THIS runner.
+  receipt.atomic_ddl={status:'NOT_RUN',stages:[],catalog_owner_public_guard:false,
+    execution_tests:'NOT_RUN',effective_grants:'NOT_RUN',concurrent_logout:'NOT_RUN',
+    lost_commit:'NOT_RUN',receipt_reconciliation:'NOT_RUN'};
+  if(receipt.status==='MIGRATIONS_AND_LIMITED_CATALOG_PASS'){
+    for(const f of [
+      'team-settlement/candidate/atomic-compile-bootstrap.sql',
+      'team-settlement/candidate/atomic-review-v1.sql'
+    ]){
+      const sourcePath=realC(path.join(root,f));
+      if(!sourcePath.toLowerCase().startsWith((root+'\\').toLowerCase())||
+         !fs.statSync(sourcePath).isFile())fail('TEAM_PG_ATOMIC_SOURCE_INVALID');
+      const result=psql(['-f',sourcePath],port,70000);
+      receipt.atomic_ddl.stages.push({file:f,exit_code:result.exit_code,
+        stdout_tail:result.output,stderr_tail:result.error,
+        process_error:result.problem,passed:result.ok});
+      if(!result.ok){
+        receipt.atomic_ddl.status='BLOCKED_SQL_DDL';
+        receipt.status='BLOCKED_ATOMIC_CANDIDATE_DDL';
+        break;
+      }
+    }
+    if(receipt.atomic_ddl.stages.length===2&&
+       receipt.atomic_ddl.stages.every(s=>s.passed)){
+      const catalog=psql(['-c',`SELECT count(*) FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_roles r ON r.oid=p.proowner
+    WHERE p.oid IN (
+        pg_catalog.to_regprocedure('kts_team.atomic_review_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text)'),
+        pg_catalog.to_regprocedure('kts_team.atomic_review_reconcile_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text)'),
+        pg_catalog.to_regprocedure('kts_team.atomic_draft_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text,text)'),
+        pg_catalog.to_regprocedure('kts_team.atomic_draft_reconcile_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text)'))
+      AND r.rolname='kts_atomic_owner'
+      AND p.prosecdef
+      AND p.proconfig=ARRAY['search_path=pg_catalog']::text[]
+      AND NOT EXISTS (
+        SELECT 1 FROM pg_catalog.aclexplode(
+          COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl
+        WHERE acl.grantee=0 AND acl.privilege_type='EXECUTE'
+      )`],port,35000);
+      receipt.atomic_ddl.catalog_owner_public_guard=catalog.ok&&catalog.output.trim()==='4';
+      receipt.atomic_ddl.catalog_exit_code=catalog.exit_code;
+      receipt.atomic_ddl.catalog_stderr_tail=catalog.error;
+      receipt.atomic_ddl.status=receipt.atomic_ddl.catalog_owner_public_guard?
+        'DDL_ADMITTED_REVIEW_ONLY':'BLOCKED_OWNER_OR_PUBLIC_PRIVILEGE';
+      receipt.status=receipt.atomic_ddl.catalog_owner_public_guard?
+        'ATOMIC_DDL_REVIEW_ONLY_PASS':'BLOCKED_ATOMIC_CATALOG';
+    }
+  }
  }catch(e){receipt.status='BLOCKED_'+String(e.message||'UNKNOWN').replace(/[^A-Z0-9_]/g,'').slice(0,70);}
  finally{
   // The only pg_ctl stop target is the newly initialized unique PGDATA.
@@ -186,7 +235,7 @@ async function main(){
   fs.writeFileSync(receiptPath,JSON.stringify(receipt,null,2)+'\n',{flag:'wx'});
   process.stdout.write('PG_ISOLATED='+receipt.status+' SQL='+receipt.migration_results.length+
    '/4 STOPPED='+receipt.postgres_stopped+' RECEIPT='+receiptPath+'\n');
-  if(receipt.status!=='MIGRATIONS_AND_LIMITED_CATALOG_PASS')process.exitCode=1;
+  if(receipt.status!=='ATOMIC_DDL_REVIEW_ONLY_PASS')process.exitCode=1;
  }
 }
 main().catch(e=>{process.stderr.write('PG_ISOLATED_PRECHECK_BLOCKED '+e.message+'\n');process.exitCode=2});
