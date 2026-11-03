@@ -49,6 +49,11 @@ test("all same-origin Unified iframes get the one customer checkbox state",()=>{
 test("Quyt now verifies per-number exposure then groups BEFORE factor",()=>{
  const pure=read("quyt-bao-review.js");
  assert.ok(ui.includes("core.prepareGrouped(raw"));
+ assert.ok(ui.includes('direct.id="ktsQuytDirectMerge"'));
+ assert.ok(ui.includes("cleaner.preview(original"));
+ assert.ok(ui.includes("directMode=true;"));
+ assert.ok(ui.includes("merged.status!==\"REVIEW_ONLY\""));
+
  assert.ok(ui.includes("sourceText:original,region:selectedRegion?.value"));
  assert.ok(ui.includes("cleanCore:window.KTSCleanAggregate"));
  assert.ok(pure.includes("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD"));
@@ -122,4 +127,68 @@ test("synthetic DOM: switching source or region clears Quyt and resets default r
  dispatch(run,"click");assert.equal(copy.disabled,true);
  const evt=dispatch(review,"copy");
  assert.equal(evt.prevented,true);assert.match(status.textContent,/HOLD/);
+});
+
+test("Quyt direct review groups pasted source without Tách output and never authorizes sending",()=>{
+ const vm=require("node:vm");
+ const nodes=[],byId={},handlers={};
+ function create(tag){
+  const node={tag,style:{},listeners:{},attrs:{},value:"",hidden:false,disabled:false,
+   checked:false,textContent:"",
+   addEventListener(type,fn){(this.listeners[type]??=[]).push(fn)},
+   dispatchEvent(evt){for(const fn of this.listeners[evt.type]??[])fn(evt)},
+   insertAdjacentElement(){},append(){},setAttribute(k,v){this.attrs[k]=v}};
+  nodes.push(node);return node;
+ }
+ for(const id of ["input","output","region"]){byId[id]=create(id);byId[id].id=id}
+ const document={readyState:"complete",createElement:create,
+  getElementById:id=>byId[id]||nodes.find(x=>x.id===id),
+  querySelectorAll:()=>[]};
+ const window={document,location:{origin:"http://127.0.0.1"},
+  addEventListener(type,fn){(handlers[type]??=[]).push(fn)},
+  dispatchEvent(evt){for(const fn of handlers[evt.type]??[])fn(evt)}};
+ window.top=window;
+ window.KTSCleanAggregate=require("../clean-aggregate-review.js");
+ window.KTSQuytBaoReview=require("../quyt-bao-review.js");
+ const dispatch=(node,type)=>{
+  const event={type,preventDefault(){this.prevented=true},
+   stopImmediatePropagation(){this.stopped=true}};
+  node.dispatchEvent(event);return event;
+ };
+ vm.runInNewContext(ui,{window,document,location:window.location,
+  Event:function Event(type){this.type=type},
+  setTimeout:fn=>fn(),navigator:{clipboard:{writeText(){throw Error("SEND_FORBIDDEN")}}}},
+  {filename:"quyt-bao-review-ui.js",timeout:1000});
+ const input=byId.input,output=byId.output,region=byId.region,
+  check=document.getElementById("ktsQuytCheckbox"),
+  direct=document.getElementById("ktsQuytDirectMerge"),
+  review=nodes.find(x=>x.tag==="textarea"&&x.readOnly),
+  keep=nodes.find(x=>x.tag==="button"&&x.textContent?.includes("GIỮ ĐỦ")),
+  copy=nodes.find(x=>x.tag==="button"&&x.textContent?.includes("Copy Quýt")),
+  status=nodes.find(x=>x.attrs.role==="status");
+ assert.ok(direct);
+ input.value="43 b100n 43 b50n 34 lo2n";
+ region.value="mb";output.value="";
+ check.checked=true;dispatch(check,"change");dispatch(direct,"click");
+ assert.equal(review.value,"43 b161n\n34 lo3n");
+ assert.equal(input.value,"43 b100n 43 b50n 34 lo2n");
+ assert.equal(output.value,"");
+ assert.equal(copy.disabled,true);
+ assert.match(status.textContent,/GỘP TỪ TIN GỐC/);
+ // Source edits reset customer identity and hold the old preview.
+ input.value="43 b1n 43 b1n";dispatch(input,"input");
+ assert.equal(check.checked,false);
+ check.checked=true;dispatch(check,"change");dispatch(direct,"click");
+ assert.equal(review.value,"");
+ assert.equal(keep.hidden,false);
+ assert.match(status.textContent,/HOLD/);
+ dispatch(keep,"click");
+ assert.equal(review.value,"43 b3n");
+ assert.equal(copy.disabled,true);
+ const copyEvt=dispatch(review,"copy");
+ assert.equal(copyEvt.prevented,true);
+ input.value="43 b1n unknown";dispatch(input,"input");
+ check.checked=true;dispatch(check,"change");dispatch(direct,"click");
+ assert.equal(review.value,"");
+ assert.match(status.textContent,/HOLD/);
 });
