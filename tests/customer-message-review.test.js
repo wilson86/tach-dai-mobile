@@ -39,3 +39,12 @@ test('concurrent UI writers serialize their complete storage transaction',async(
  assert.deepEqual(a.read().map(x=>x.source_message_id),['1','2']);
  assert.throws(()=>a.addLocked(msg('3'),null),/LOCK_UNAVAILABLE_HOLD/);assert.equal(a.read().length,2);
 });
+
+test('golden raw 75 stays original when review coefficient changes',()=>{
+ const core=require('../quyt-bao-review.js'),cleanCore=require('../clean-aggregate-review.js'),store=createStore(storage());store.add(msg('source','86 lo75n'));
+ const messages=store.read(),opts={core,cleanCore,customerId:'quyt',market:'mb',businessDate:'2026-11-03'};
+ for(const [rate,expected] of [['1,067','80.025'],['1,05','78.75'],['1,10','82.5']]){
+  const result=require('../customer-message-review.js').aggregate(messages,{...opts,rate});assert.equal(result.entries.length,1);assert.equal(result.entries[0].original,'75');assert.equal(result.entries[0].exact,expected);assert.equal(result.entries[0].rounded,null);assert.equal(result.forwardAuthorized,false);
+ }
+ assert.equal(store.read()[0].original_text,'86 lo75n');
+});
