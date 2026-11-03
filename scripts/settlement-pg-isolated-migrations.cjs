@@ -149,8 +149,18 @@ async function main(){
         COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) a
         WHERE a.grantee=0 AND a.privilege_type='EXECUTE')`],port);
   receipt.checks.raw_mutation_not_public=raw.ok&&raw.output.trim()==='2';
+  // Execute existing restricted-role tenant reads against this fresh cluster.
+  const smokePath=realC(path.join(root,'team-settlement/tests/postgres-smoke.sql'));
+  if(!smokePath.toLowerCase().startsWith((root+'\\').toLowerCase()))fail('TEAM_PG_SQL_SOURCE_INVALID');
+  const smoke=psql(['-f',smokePath],port,50000);
+  receipt.checks.restricted_role_rls_smoke=smoke.ok&&smoke.output.includes('POSTGRES_TEAM_M0_SYNTHETIC_RLS_AND_IMMUTABILITY_PASS');
+  const writePath=realC(path.join(root,'team-settlement/tests/postgres-rls-denied-write.sql'));
+  if(!writePath.toLowerCase().startsWith((root+'\\').toLowerCase()))fail('TEAM_PG_SQL_SOURCE_INVALID');
+  const write=psql(['-f',writePath],port,50000);
+  receipt.checks.restricted_role_cross_workspace_write_denied=write.ok&&write.output.includes('SYNTHETIC_CROSS_WORKSPACE_WRITE_DENIED');
   receipt.status=receipt.checks.force_rls_six&&receipt.checks.raw_mutation_not_public?
-   'MIGRATIONS_AND_LIMITED_CATALOG_PASS':'BLOCKED_CATALOG_INVARIANT';
+   (receipt.checks.restricted_role_rls_smoke&&receipt.checks.restricted_role_cross_workspace_write_denied?
+    'MIGRATIONS_AND_LIMITED_CATALOG_PASS':'BLOCKED_RLS_BEHAVIOR'):'BLOCKED_CATALOG_INVARIANT';
  }catch(e){receipt.status='BLOCKED_'+String(e.message||'UNKNOWN').replace(/[^A-Z0-9_]/g,'').slice(0,70);}
  finally{
   // The only pg_ctl stop target is the newly initialized unique PGDATA.
