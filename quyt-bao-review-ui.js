@@ -89,13 +89,13 @@ function install(){
   history.textContent=p?"Đã lưu ×"+p.rate+" | Lịch sử hệ số: "+
     (p.history.length?p.history.map(h=>h.at+" "+h.rate).join("; "):"chưa thay đổi"):"";
  }
- function storeCustomers(){
+ async function storeCustomers(){
   if(customerStorageInvalid){hint.textContent="HOLD: dữ liệu khách không đọc được; không ghi đè.";return false}
   try{
    if(!customerStore||window.KTSCustomerConfig.KEY!==CUSTOMER_STORAGE_KEY)throw Error("STORAGE_UNAVAILABLE");
-   customerStore.write(profiles);
+   await customerStore.writeLocked(profiles,window.navigator?.locks);
    return true;
-  }catch(_){hint.textContent="HOLD: trình duyệt không lưu được; hệ số chưa được xác nhận.";return false}
+  }catch(e){hint.textContent=String(e.message||e).includes("CUSTOMER_STALE_HOLD")?"HOLD: cấu hình đã đổi ở cửa sổ khác; tải lại trước khi sửa. Tin gốc không bị xóa.":"HOLD: trình duyệt không lưu được; hệ số chưa được xác nhận.";return false}
  }
  function chosenName(){
   const v=name.value.trim().replace(/\s+/gu," ");
@@ -118,7 +118,7 @@ function install(){
   if(selector.value==="__add__"){name.focus?.();hint.textContent="Nhập tên và bấm Thêm khách.";selector.value=customerId;return}
   chooseCustomer(selector.value);
  });
- add.addEventListener("click",()=>{
+ add.addEventListener("click",async()=>{
   try{
    const v=chosenName();
    if(profiles.length>=40)throw Error("CUSTOMER_LIMIT");
@@ -130,28 +130,28 @@ function install(){
    if(profiles.some(p=>p.id===id))throw Error("CUSTOMER_ID_COLLISION");
    const at=new Date().toISOString();
    profiles.push({id,name:v,rate:selectedRate,active:true,created_at:at,updated_at:at,history:[{version:1,at,rate:selectedRate}]});
-   if(!storeCustomers()){profiles.pop();return}
+   if(!await storeCustomers()){profiles.pop();return}
    name.value="";chooseCustomer(id);
   }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
  });
- rename.addEventListener("click",()=>{
+ rename.addEventListener("click",async()=>{
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
    const v=chosenName(),old=p.name;
    if(!window.confirm("Đổi tên khách "+old+" thành "+v+"?")){hint.textContent="HOLD: chưa xác nhận đổi tên.";return}
    p.name=v;
-   if(!storeCustomers()){p.name=old;return}
+   if(!await storeCustomers()){p.name=old;return}
    name.value="";drawCustomers();notifyAll();hint.textContent="Đã đổi tên; customer_id không thay đổi.";
   }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
  });
- retire.addEventListener("click",()=>{
+ retire.addEventListener("click",async()=>{
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   if(p.id==="quyt"||p.id==="hien"){hint.textContent="HOLD: không tắt khách mặc định ở bản review.";return}
   if(!window.confirm("Ngừng sử dụng khách "+p.name+"?")){hint.textContent="HOLD: chưa xác nhận.";return}
-  p.active=false;if(!storeCustomers()){p.active=true;return}
+  p.active=false;if(!await storeCustomers()){p.active=true;return}
   chooseCustomer("");hint.textContent="Đã ngừng sử dụng; không xóa lịch sử hệ số.";
  });
- save.addEventListener("click",()=>{
+ save.addEventListener("click",async()=>{
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
    core.parseRate(rate.value);
@@ -161,7 +161,7 @@ function install(){
     p.rate=rate.value;p.history.push({version:p.history.length+1,at:new Date().toISOString(),rate:rate.value});
     // Preserve all prior coefficient history; never discard old revisions.
    }
-   if(!storeCustomers()){p.rate=old;p.history=oldHist;return}
+   if(!await storeCustomers()){p.rate=old;p.history=oldHist;return}
    drawCustomers();hint.textContent="Đã lưu hệ số riêng; giao dịch lịch sử không được sửa.";
    notifyAll();
   }catch(e){hint.textContent="HOLD: "+String(e.message||e)}

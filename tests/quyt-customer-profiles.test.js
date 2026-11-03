@@ -48,25 +48,25 @@ test("customer dropdown changes only review state, not source or real routing",(
  assert.match(m.get("ktsQuytPreparedPanel").textContent||m.get("ktsReviewCustomerStatus").textContent,/đối chiếu|HOLD/i);
  assert.equal(m.byId.input.value,"43 b100n");assert.equal(m.byId.output.value,"");
 });
-test("named customer has stable customer_id, independent rate and version history after reload",()=>{
+test("named customer has stable customer_id, independent rate and version history after reload",async()=>{
  const store=new Map(),m=mount(store);
  m.get("ktsReviewCustomerName").value="Khách A";
- m.dispatch("ktsReviewAddCustomer","click");
+ m.dispatch("ktsReviewAddCustomer","click");await Promise.resolve();await Promise.resolve();
  const saved=()=>JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1"));
  const id=saved().customers.find(p=>p.name==="Khách A").id;
  assert.match(id,/^customer-[a-z0-9-]+$/);
  m.get("ktsQuytRate").value="1,05";m.dispatch("ktsQuytRate","input");
- m.dispatch("ktsReviewSaveRate","click");
+ m.dispatch("ktsReviewSaveRate","click");await Promise.resolve();await Promise.resolve();
  assert.equal(saved().customers.find(p=>p.id===id).rate,"1,05");
  assert.equal(saved().customers.find(p=>p.id===id).history.length,2);
- m.get("ktsReviewCustomerName").value="Khách B";m.dispatch("ktsReviewRenameCustomer","click");
+ m.get("ktsReviewCustomerName").value="Khách B";m.dispatch("ktsReviewRenameCustomer","click");await Promise.resolve();await Promise.resolve();
  assert.equal(saved().customers.find(p=>p.id===id).name,"Khách B");
  const reload=mount(store);
  assert.equal(reload.get("ktsReviewCustomer").value,""); // no implied sender on F5
  reload.get("ktsReviewCustomer").value=id;reload.dispatch("ktsReviewCustomer","change");
  assert.equal(reload.get("ktsQuytRate").value,"1,05");
  assert.equal(reload.get("ktsQuytCheckbox").checked,false); // no authority to forward
- reload.dispatch("ktsReviewRetireCustomer","click");
+ reload.dispatch("ktsReviewRetireCustomer","click");await Promise.resolve();await Promise.resolve();
  assert.equal(saved().customers.find(p=>p.id===id).active,false);
  assert.equal(saved().customers.find(p=>p.id===id).history.length,2);
 });

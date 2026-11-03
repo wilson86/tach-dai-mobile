@@ -16,6 +16,19 @@ function validate(items,parseRate){
 }
 function createStore(storage,parseRate){
  if(!storage||typeof storage.getItem!=='function'||typeof storage.setItem!=='function'||typeof parseRate!=='function')throw Error('STORAGE_UNAVAILABLE');
- return {read(){let raw;try{raw=storage.getItem(KEY)}catch(_){throw Error('STORAGE_UNAVAILABLE')}if(raw===null)return defaults();let data;try{data=JSON.parse(raw)}catch(_){throw Error('STORAGE_INVALID')}if(data?.version!==1)throw Error('STORAGE_INVALID');return validate(data.customers,parseRate)},write(items){const safe=validate(items,parseRate);try{storage.setItem(KEY,JSON.stringify({version:1,customers:safe}))}catch(_){throw Error('STORAGE_WRITE_FAILED')}}};
+ let lastRead,hasRead=false;
+ function readRaw(){try{return storage.getItem(KEY)}catch(_){throw Error('STORAGE_UNAVAILABLE')}}
+ function read(){const raw=readRaw();let items;if(raw===null)items=defaults();else{let data;try{data=JSON.parse(raw)}catch(_){throw Error('STORAGE_INVALID')}if(data?.version!==1)throw Error('STORAGE_INVALID');items=validate(data.customers,parseRate)}lastRead=raw;hasRead=true;return items}
+ function writeLocked(items,locks){
+  if(!hasRead)throw Error('STORAGE_READ_REQUIRED');
+  if(!locks||typeof locks.request!=='function')throw Error('CUSTOMER_LOCK_UNAVAILABLE');
+  const safe=validate(items,parseRate),expected=lastRead;
+  return locks.request('KTS_REVIEW_CUSTOMERS_V1_WRITE',{mode:'exclusive'},()=>{
+   if(readRaw()!==expected)throw Error('CUSTOMER_STALE_HOLD');
+   const raw=JSON.stringify({version:1,customers:safe});try{storage.setItem(KEY,raw)}catch(_){throw Error('STORAGE_WRITE_FAILED')}
+   lastRead=raw;
+  });
+ }
+ return {read,writeLocked};
 }
 return {KEY,createStore};});
