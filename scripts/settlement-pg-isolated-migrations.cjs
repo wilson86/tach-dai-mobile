@@ -244,7 +244,8 @@ async function main(){
               fail('TEAM_PG_LOST_ACK_SOURCE_INVALID');
             const lost=exec(process.execPath,[lostPath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
             receipt.lost_commit={exit_code:lost.exit_code,stdout_tail:lost.output,stderr_tail:lost.error,
-              process_error:lost.problem,passed:lost.ok&&lost.output.includes('SYNTHETIC_COMMIT_ACK_DROPPED_AND_RECEIPT_RECONCILED_PASS')};
+              process_error:lost.problem,passed:lost.ok&&lost.output.includes('SYNTHETIC_COMMIT_ACK_DROPPED_AND_RECEIPT_RECONCILED_PASS')&&
+                lost.output.includes('SYNTHETIC_COMMIT_REQUEST_DROPPED_ROLLBACK_UNKNOWN_PASS')};
             if(!receipt.lost_commit.passed)receipt.status='BLOCKED_ATOMIC_LOST_ACK';
           }
         }
