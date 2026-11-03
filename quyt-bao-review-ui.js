@@ -253,7 +253,7 @@ function install(){
     raw=merged.normalized;
    }
    if(!original.trim()||!raw.trim())throw Error("MISSING_SOURCE_OR_RESULT");
-   const p=core.prepareGrouped(raw,{
+   const p=core.prepareExactGrouped(raw,{
     customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,
     rate:rate.value,sourceText:original,region:selectedRegion?.value,
     cleanCore:window.KTSCleanAggregate,repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator",
@@ -262,7 +262,7 @@ function install(){
    review.value=p.preview;
    status.textContent=(directMode?"GỘP TỪ TIN GỐC ✓":"Quýt ✓")+
     " | hệ số ×"+p.rate.replace(".",",")+
-    " | GỘP các lượt cùng số/cùng loại/cùng đài trước → nhân một lần → làm tròn lên. "+
+    " | GỘP từ tiền gốc → nhân một lần → hiển thị chính xác; HOLD chuyển chủ vì chưa duyệt làm tròn. "+
     p.aggregatedExposures+" số/loại đã đối chiếu. Chưa cho gửi tự động, Router có thể nhân thêm.";
    copy.disabled=!ROUTER_ONCE_ONLY_RECEIPT_VERIFIED;
   }catch(e){

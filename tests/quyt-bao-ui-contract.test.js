@@ -49,7 +49,7 @@ test("all same-origin Unified iframes get the one customer checkbox state",()=>{
 });
 test("Quyt now verifies per-number exposure then groups BEFORE factor",()=>{
  const pure=read("quyt-bao-review.js");
- assert.ok(ui.includes("core.prepareGrouped(raw"));
+ assert.ok(ui.includes("core.prepareExactGrouped(raw"));
  assert.ok(ui.includes('direct.id="ktsQuytDirectMerge"'));
  assert.ok(ui.includes("cleaner.preview(original"));
  assert.ok(ui.includes("directMode=true;"));
@@ -69,7 +69,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r16"));
+ assert.ok(sw.includes("clean-r2-quyt-r17"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
@@ -99,7 +99,7 @@ test("synthetic DOM: switching source or region clears Quyt and resets default r
   dispatchEvent(evt){for(const fn of handlers[evt.type]??[])fn(evt)}};
  window.top=window;window.KTSCustomerConfig=require("../customer-config-review.js");
  window.KTSQuytBaoReview={parseRate:()=>{},
-  prepareGrouped:()=>({preview:"43 b107n",rate:"1.067",aggregatedExposures:1})};
+  prepareExactGrouped:()=>({preview:"43 b107n",rate:"1.067",aggregatedExposures:1})};
  const dispatch=(node,type)=>{
   const evt={type,preventDefault(){this.prevented=true},
    stopImmediatePropagation(){this.stopped=true}};
@@ -171,7 +171,8 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  input.value="43 b100n 43 b50n 34 lo2n";
  region.value="mb";output.value="";
  check.checked=true;dispatch(check,"change");dispatch(direct,"click");
- assert.equal(review.value,"43 b161n\n34 lo3n");
+ assert.match(review.value,/43 b 150n → 160\.05n/);
+ assert.match(review.value,/34 lo 2n → 2\.134n/);
  assert.equal(input.value,"43 b100n 43 b50n 34 lo2n");
  assert.equal(output.value,"");
  assert.equal(copy.disabled,true);
@@ -184,7 +185,7 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  assert.equal(keep.hidden,false);
  assert.match(status.textContent,/HOLD/);
  dispatch(keep,"click");
- assert.equal(review.value,"43 b3n");
+ assert.match(review.value,/43 b 2n → 2\.134n/);
  assert.equal(copy.disabled,true);
  const copyEvt=dispatch(review,"copy");
  assert.equal(copyEvt.prevented,true);

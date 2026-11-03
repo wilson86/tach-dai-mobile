@@ -122,7 +122,7 @@ function prepareGrouped(output,options={}){
  let adjusted=0;
  for(const e of src.map.values()){
   const amount=fmtHalf(e.half),apply=e.kind==="b"||e.kind==="lo";
-  const after=apply?rounded(amount,rate):amount;
+  const after=apply&&!options.exactOnly?rounded(amount,rate):amount;
   if(apply)adjusted++;
   receipts.push({station:e.station,selector:e.kind,number:e.number,before:amount,after});
   // Only group consecutive equal exposures; no reordering across other bets.
@@ -142,7 +142,23 @@ function prepareGrouped(output,options={}){
   forwardAuthorized:false,stage:"PREPARED_PREVIEW_ONLY"});
 }
 
-const api=Object.freeze({CONTRACT,prepare,rounded,parseRate,assertOriginalStakeParity,prepareGrouped,sourceExposures,DEFAULT_RATE});
+
+// Review values retain exact fixed-point arithmetic; they are not transferable wagers.
+function prepareExactGrouped(output,options={}){
+ const checked=prepareGrouped(output,{...options,exactOnly:true}),factor=parseRate(options.rate===undefined?DEFAULT_RATE:options.rate);
+ function exact(amount,apply){
+  const stake=halfSafeDecimal(amount);let n=stake.num*(apply?factor.numerator:1n),d=stake.den*(apply?factor.denominator:1n);
+  const whole=n/d;let rem=n%d,frac='';
+  while(rem&&frac.length<8){rem*=10n;frac+=(rem/d).toString();rem%=d}
+  if(rem)throw Error('EXACT_DECIMAL_UNREPRESENTABLE_HOLD');
+  return whole.toString()+(frac?'.'+frac:'');
+ }
+ const receipts=checked.receipts.map(e=>({...e,exact:exact(e.before,e.selector==='b'||e.selector==='lo'),rounded:null,roundingPolicy:'HOLD_UNAPPROVED',transferAuthorized:false}));
+ const preview=receipts.map(e=>(options.omitRegion?'':e.station.toUpperCase()+' ')+e.number+' '+e.selector+' '+e.before+'n → '+e.exact+'n (chính xác; chưa duyệt làm tròn)').join('\n');
+ return Object.freeze({...checked,kind:'CUSTOMER_EXACT_REVIEW_V1',preview,receipts,roundedAmount:null,roundingPolicy:'HOLD_UNAPPROVED',forwardAuthorized:false});
+}
+
+const api=Object.freeze({CONTRACT,prepare,rounded,parseRate,assertOriginalStakeParity,prepareGrouped,prepareExactGrouped,sourceExposures,DEFAULT_RATE});
 if(typeof module==="object"&&module.exports)module.exports=api;
 if(scope)scope.KTSQuytBaoReview=api;
 })(typeof window!=="undefined"?window:undefined);
