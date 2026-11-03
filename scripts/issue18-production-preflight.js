@@ -148,6 +148,21 @@ function safeFile(root,relative,sourceFs=fs){
   return file;
 }
 function jsonAt(folder,filename){return JSON.parse(fs.readFileSync(safeFile(folder,filename),'utf8'));}
+// Source-authority gate: never infer that a review-only PWA version bump
+// supersedes the immutable generator template at the pinned KTS SHA.
+function inspectTemplateVersionAuthority(templates,mobile,ngang){
+  const candidates=[
+    ['mobile_3mien',templates?.mobile_3mien?.version,mobile?.version],
+    ['mobile_ngang',templates?.mobile_ngang?.version,ngang?.version]
+  ];
+  const rows=candidates.map(([name,canonicalVersion,candidateVersion])=>({
+    name,canonical_version:canonicalVersion||null,candidate_version:candidateVersion||null,
+    status:typeof canonicalVersion==='string'&&canonicalVersion===candidateVersion
+      ?'MATCH':'TEMPLATE_VERSION_MISMATCH'
+  }));
+  return {schema:'KTS_ISSUE18_TEMPLATE_VERSION_AUTHORITY_V1',
+    ok:rows.every(row=>row.status==='MATCH'),rows};
+}
 function admission(options,runCommand=processReadOnly){
   const root=verifyWindowsWorkspace(options['--workspace']);
   // Fixture scripts may create disposable files under os.tmpdir(). Do not
@@ -180,6 +195,13 @@ function admission(options,runCommand=processReadOnly){
   const raw=inspectCanonicalBytes(dirs.kts,safeFile);
   result.checks.push({name:'CANONICAL_INPUT_RAW_BYTE_PINS',...raw});
   if(!raw.ok){result.status='BLOCKED_CANONICAL_INPUT_BYTES';return result;}
+  const versionAuthority=inspectTemplateVersionAuthority(
+    jsonAt(dirs.kts,'SharedBusinessEngine/pwa_version_templates.json'),m,n);
+  result.checks.push({name:'CANONICAL_TEMPLATE_VERSUS_PWA_VERSIONS',...versionAuthority});
+  if(!versionAuthority.ok){
+    result.status='BLOCKED_TEMPLATE_VERSION_AUTHORITY';
+    return result;
+  }
   const py=runCommand('python',['-B','KTSRouter/scripts/build_shared_business_engine.py','--check',
     '--workspace-root',root],dirs.kts,180000);
   result.checks.push({name:'CANONICAL_GENERATOR_CHECK',...py});
@@ -257,4 +279,4 @@ if(require.main===module){
     process.exitCode=2;
   }
 }
-module.exports={argsOf,admission,safeFile,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
+module.exports={argsOf,admission,safeFile,inspectTemplateVersionAuthority,KTS_PYTESTS,KTS_JS_TESTS,KTS_LEDGER_TEST,MOBILE_TESTS,NGANG_TESTS};
