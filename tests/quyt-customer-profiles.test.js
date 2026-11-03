@@ -5,7 +5,7 @@ const assert=require("node:assert/strict");
 const fs=require("node:fs"),path=require("node:path"),vm=require("node:vm");
 const source=fs.readFileSync(path.join(__dirname,"..","quyt-bao-review-ui.js"),"utf8");
 const core=require("../quyt-bao-review.js");
-function mount(store){
+function mount(store,options={}){
  const nodes=[],byId={},handlers={};
  function make(tag){
   const n={tag,style:{},value:"",textContent:"",hidden:false,disabled:false,
@@ -30,10 +30,16 @@ function mount(store){
  const Event=function(type){this.type=type};
  vm.runInNewContext(source,{window,document,location:window.location,Event,
   setTimeout:fn=>fn()},{filename:"quyt-bao-review-ui.js",timeout:1000});
- return {get:id=>document.getElementById(id),byId,window,
+ const m={get:id=>document.getElementById(id),byId,window,
   dispatch(id,type){document.getElementById(id).dispatchEvent({
    type,preventDefault(){this.prevented=true},
    stopImmediatePropagation(){this.stopped=true}})}};
+ // Existing customer-specific tests explicitly enable the new optional mode.
+ if(options.optIn!==false){
+  const toggle=m.get("ktsCustomerRateToggle");toggle.checked=true;
+  m.dispatch("ktsCustomerRateToggle","change");
+ }
+ return m;
 }
 test("customer dropdown changes only review state, not source or real routing",()=>{
  const store=new Map(),m=mount(store);
@@ -147,4 +153,33 @@ test('review merges only explicitly selected original messages and preserves all
  const rows=m.get('ktsReviewMessageList').children,first=rows[0].children[0];first.checked=false;first.dispatchEvent({type:'change'});m.dispatch('ktsReviewMergeMessages','click');
  const review=m.get('ktsQuytPreparedPanel').children.find(x=>x.tag==='textarea');assert.match(review.value,/68 lo 20n → 21\.34n/);assert.equal(JSON.parse(store.get('KTS_REVIEW_SOURCE_MESSAGES_V1')).length,2);
  const reload=mount(store);reload.byId.region.value='mb';reload.byId.date.value='2026-11-03';reload.get('ktsReviewCustomer').value='quyt';reload.dispatch('ktsReviewCustomer','change');reload.dispatch('ktsReviewMergeMessages','click');assert.match(reload.get('ktsReviewMessageStatus').textContent,/HOLD/);
+});
+
+test("unchecked customer & rate keeps original KTS UI unchanged; opt-in is reversible",()=>{
+ const store=new Map(),m=mount(store,{optIn:false});
+ const toggle=m.get("ktsCustomerRateToggle");
+ assert.equal(toggle.checked,false);
+ assert.equal(m.get("ktsReviewCustomerControls").style.display,"none");
+ assert.equal(m.get("ktsQuytRate").disabled,true);
+ assert.equal(m.get("ktsQuytPreparedPanel").style.display,"none");
+ assert.equal(m.byId.input.value,"");assert.equal(m.byId.output.value,"");
+ m.byId.input.value="86 lo75n";m.byId.output.value="OLD_TACH_RESULT";
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ assert.equal(m.get("ktsReviewCustomer").value,"quyt"); // hidden UI has no authority
+ assert.equal(m.window.__KTS_QUYT_CUSTOMER_ID_V1__,undefined);
+ toggle.checked=true;m.dispatch("ktsCustomerRateToggle","change");
+ assert.equal(m.get("ktsReviewCustomerControls").style.display,"flex");
+ assert.equal(m.get("ktsQuytPreparedPanel").style.display,"none"); // until a customer selected
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");
+ assert.equal(m.get("ktsQuytPreparedPanel").style.display,"block");
+ assert.equal(m.get("ktsQuytRate").disabled,false);
+ toggle.checked=false;m.dispatch("ktsCustomerRateToggle","change");
+ assert.equal(m.get("ktsReviewCustomerControls").style.display,"none");
+ assert.equal(m.get("ktsQuytPreparedPanel").style.display,"none");
+ assert.equal(m.get("ktsQuytCheckbox").checked,false);
+ assert.equal(m.window.__KTS_QUYT_SELECTED_V1__,false);
+ assert.equal(m.byId.input.value,"86 lo75n");
+ assert.equal(m.byId.output.value,"OLD_TACH_RESULT");
+ const reload=mount(store,{optIn:false});
+ assert.equal(reload.get("ktsCustomerRateToggle").checked,false);
 });

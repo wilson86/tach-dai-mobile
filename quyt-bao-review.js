@@ -66,7 +66,7 @@ function prepare(raw,options={}){return prepareGrouped(raw,options)}
 // USER-APPROVED ORDER: aggregate identical (station, number, canonical wager
 // kind) stakes first, then apply CEIL(rate * aggregated stake) ONCE.
 // Strict review-only adapter: never modify existing generated KTS engine.
-const GROUP_SELECTOR=/((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b|dd|d-d|dau|duoi|dui|đầu|đuôi))[ \t]*(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/giu;
+const GROUP_SELECTOR=/((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b|dd|d-d|dau|duoi|dui|đui|đầu|đuôi))[ \t]*(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/giu;
 function fmtHalf(units){
  if(!Number.isSafeInteger(units)||units<=0)throw Error("GROUP_STAKE_INVALID");
  return Math.floor(units/2).toString()+(units%2?".5":"");

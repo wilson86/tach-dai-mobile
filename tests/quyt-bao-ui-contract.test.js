@@ -69,7 +69,7 @@ test("browser caching and HTML include exact review-only JS",()=>{
   assert.ok(root.includes('src="./'+n+'"'));
   assert.ok(sw.includes('"./'+n+'"'));
  }
- assert.ok(sw.includes("clean-r2-quyt-r24b"));
+ assert.ok(sw.includes("clean-r2-quyt-r24c"));
 });
 test("no auto dispatch, no paid CI, and no modified production source",()=>{
  for(const name of ["telegram.send","sendMessage(","fetch('/api/send","npm install","gh workflow run"]){
@@ -109,6 +109,9 @@ test("synthetic DOM: switching source or region clears Quyt and resets default r
   Event:function Event(type){this.type=type},
   setTimeout:fn=>fn(),navigator:{clipboard:{writeText:()=>{throw Error("UNSAFE_COPY")}}}},
   {filename:"quyt-bao-review-ui.js",timeout:1000});
+ const toggle=document.getElementById("ktsCustomerRateToggle");
+ toggle.checked=true;dispatch(toggle,"change");
+ const choose=document.getElementById("ktsReviewCustomer");choose.value="quyt";dispatch(choose,"change");
  const input=byId.input,output=byId.output,region=byId.region,
   run=byId.runBtn,check=document.getElementById("ktsQuytCheckbox"),
   rate=document.getElementById("ktsQuytRate"),
@@ -160,6 +163,9 @@ test("Quyt direct review groups pasted source without Tách output and never aut
   Event:function Event(type){this.type=type},
   setTimeout:fn=>fn(),navigator:{clipboard:{writeText(){throw Error("SEND_FORBIDDEN")}}}},
   {filename:"quyt-bao-review-ui.js",timeout:1000});
+ const toggle=document.getElementById("ktsCustomerRateToggle");
+ toggle.checked=true;dispatch(toggle,"change");
+ const choose=document.getElementById("ktsReviewCustomer");choose.value="quyt";dispatch(choose,"change");
  const input=byId.input,output=byId.output,region=byId.region,
   check=document.getElementById("ktsQuytCheckbox"),
   direct=document.getElementById("ktsQuytDirectMerge"),
@@ -212,4 +218,14 @@ test("review customer dropdown has stable IDs and versioned save-only configurat
  assert.ok(s.includes("chưa được chuyển chủ"));
  assert.ok(s.includes("customerStorageInvalid||!profile()"));
  assert.ok(!s.includes("fetch('/api/"));
+});
+
+test("opt-in UI and canonical alias are explicit and reversible",()=>{
+ assert.ok(ui.includes('optIn.id="ktsCustomerRateToggle"'));
+ assert.ok(ui.includes('ownTop.__KTS_CUSTOMER_RATE_OPT_IN_V1__'));
+ assert.ok(ui.includes('bar.style.display=opted?"flex":"none"'));
+ assert.ok(ui.includes('panel.style.display=opted&&customerId?"block":"none"'));
+ assert.ok(ui.includes('cleanPanel.style.display=opted?"block":"none"'));
+ assert.ok(root.includes('(?:dui|đui)'));
+ assert.ok(ui.includes('if(!enabled())return'));
 });

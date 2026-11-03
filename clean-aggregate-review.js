@@ -1,9 +1,9 @@
 /* KTS Clean & Aggregate review-only WIP; no parser, money-engine or source edits. */
 (function(root){
 "use strict";
-const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi",duoi:"duoi","đuôi":"duoi",da:"da","đá":"da",dat:"da",dathang:"da",xc:"xc",x:"xc"};
+const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi","đui":"duoi",duoi:"duoi","đuôi":"duoi",da:"da","đá":"da",dat:"da",dathang:"da",xc:"xc",x:"xc"};
 const REGION={hn:"mb",mb:"mb",mn:"mn",mt:"mt"};
-const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|dathang|dat|đá|da|xc|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b|x)/iu;
+const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|đui|dathang|dat|đá|da|xc|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b|x)/iu;
 const unitRx=/^(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/iu;
 const labelRx=/^(hn|mb|mn|mt)(?![\p{L}\p{N}])/iu;
 const numberRx=/^\d{2,4}(?!\d)/u;
