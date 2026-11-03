@@ -1,0 +1,34 @@
+\set ON_ERROR_STOP on
+-- Synthetic ephemeral cluster only. These fixture grants are not deployment grants.
+GRANT USAGE ON SCHEMA kts_auth,kts_team,kts_crypto TO kts_atomic_owner;
+GRANT SELECT,UPDATE ON kts_auth.sessions TO kts_atomic_owner;
+GRANT SELECT,UPDATE ON kts_team.memberships,kts_team.identities TO kts_atomic_owner;
+GRANT SELECT,UPDATE ON kts_team.workspaces TO kts_atomic_owner;
+GRANT SELECT ON kts_team.counterparties,kts_team.scope_events,kts_team.idempotency_receipts TO kts_atomic_owner;
+GRANT SELECT,INSERT,UPDATE ON kts_team.scopes TO kts_atomic_owner;
+GRANT INSERT ON kts_team.scope_events,kts_team.idempotency_receipts TO kts_atomic_owner;
+GRANT EXECUTE ON FUNCTION kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb) TO kts_atomic_owner;
+GRANT EXECUTE ON FUNCTION kts_team.advance_review(text,text,date,text,text,bigint,text,text,text) TO kts_atomic_owner;
+CREATE ROLE synthetic_atomic_caller NOLOGIN NOSUPERUSER NOBYPASSRLS;
+GRANT USAGE ON SCHEMA kts_team TO synthetic_atomic_caller;
+GRANT EXECUTE ON FUNCTION kts_team.atomic_draft_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text,text) TO synthetic_atomic_caller;
+GRANT EXECUTE ON FUNCTION kts_team.atomic_draft_reconcile_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text) TO synthetic_atomic_caller;
+INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expires_at)
+ VALUES(repeat('a',64),'user_1','group_a',clock_timestamp(),clock_timestamp()+interval '10 minutes');
+-- Fixed material is deliberately synthetic. Generate a request-bound proof using the same SQL contract.
+SELECT encode(sha256(convert_to(repeat('a',64),'UTF8')),'hex') AS sid,
+       floor(extract(epoch from clock_timestamp()))::bigint+55 AS expires \gset
+SELECT encode(kts_crypto.hmac(convert_to(concat_ws('|','kts-draft-v1',:'sid','group_a','customer_1','2026-10-12','mn','edit_draft','1','probe_event','probe_key',repeat('c',64),encode(sha256(convert_to('{"synthetic":true}','UTF8')),'hex'),repeat('1',32),:'expires'),'UTF8'),decode(repeat('a',64),'hex'),'sha256'),'hex') AS proof \gset
+CREATE TEMP TABLE atomic_probe_result(result jsonb);
+GRANT ALL ON atomic_probe_result TO synthetic_atomic_caller;
+SET ROLE synthetic_atomic_caller;
+SELECT set_config('kts.workspace_id','group_b',false);
+SELECT set_config('kts.actor_user_id','user_2',false);
+INSERT INTO atomic_probe_result SELECT kts_team.atomic_draft_v1(:'sid',repeat('1',32),:'expires'::bigint,:'proof','group_a','customer_1','2026-10-12','mn','edit_draft',1,'probe_event','probe_key',repeat('c',64),'{"synthetic":true}');
+DO $$ BEGIN IF (SELECT result->>'new_revision' FROM atomic_probe_result)<>'2' THEN RAISE EXCEPTION 'PROBE_REVISION'; END IF; END $$;
+RESET ROLE;
+DO $$ BEGIN
+ IF NOT EXISTS (SELECT 1 FROM kts_team.scope_events WHERE workspace_id='group_a' AND event_id='probe_event' AND actor_user_id='user_1') THEN RAISE EXCEPTION 'PROBE_ACTOR_OR_WORKSPACE'; END IF;
+ IF (SELECT count(*) FROM kts_team.idempotency_receipts WHERE workspace_id='group_a' AND idempotency_key='probe_key')<>1 THEN RAISE EXCEPTION 'PROBE_RECEIPT_COUNT'; END IF;
+END $$;
+\echo SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS

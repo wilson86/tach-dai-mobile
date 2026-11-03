@@ -218,6 +218,16 @@ async function main(){
         'DDL_ADMITTED_REVIEW_ONLY':'BLOCKED_OWNER_OR_PUBLIC_PRIVILEGE';
       receipt.status=receipt.atomic_ddl.catalog_owner_public_guard?
         'ATOMIC_DDL_REVIEW_ONLY_PASS':'BLOCKED_ATOMIC_CATALOG';
+      if(receipt.atomic_ddl.catalog_owner_public_guard){
+        const probePath=realC(path.join(root,'team-settlement/tests/postgres-atomic-runtime-probe.sql'));
+        if(!probePath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(probePath).isFile())
+          fail('TEAM_PG_ATOMIC_PROBE_SOURCE_INVALID');
+        const probe=psql(['-f',probePath],port,50000);
+        receipt.atomic_runtime_probe={exit_code:probe.exit_code,stdout_tail:probe.output,
+          stderr_tail:probe.error,process_error:probe.problem,
+          passed:probe.ok&&probe.output.includes('SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS')};
+        if(!receipt.atomic_runtime_probe.passed)receipt.status='BLOCKED_ATOMIC_RUNTIME_PROBE';
+      }
     }
   }
  }catch(e){receipt.status='BLOCKED_'+String(e.message||'UNKNOWN').replace(/[^A-Z0-9_]/g,'').slice(0,70);}
