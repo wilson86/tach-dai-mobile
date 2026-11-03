@@ -1,9 +1,9 @@
 /* KTS Clean & Aggregate review-only WIP; no parser, money-engine or source edits. */
 (function(root){
 "use strict";
-const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi",duoi:"duoi","đuôi":"duoi"};
+const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi","đui":"duoi",duoi:"duoi","đuôi":"duoi"};
 const REGION={hn:"mb",mb:"mb",mn:"mn",mt:"mt"};
-const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b)/iu;
+const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|đui|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b)/iu;
 const unitRx=/^(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/iu;
 const labelRx=/^(hn|mb|mn|mt)(?![\p{L}\p{N}])/iu;
 const numberRx=/^\d{2}(?!\d)/u;
