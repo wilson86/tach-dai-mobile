@@ -8,7 +8,8 @@ test("Quyt checkbox is in chat input, off by default, not persisted",()=>{
  assert.ok(ui.includes('input.insertAdjacentElement("afterend",label)'));
  assert.ok(ui.includes('check.type="checkbox"'));
  assert.ok(ui.includes('const requested=ownTop.__KTS_QUYT_SELECTED_V1__===true'));
- assert.ok(!ui.includes("localStorage.setItem"));
+ assert.ok(ui.includes("KTS_REVIEW_CUSTOMERS_V1"));
+ assert.ok(ui.includes("window.localStorage.setItem"));
  assert.ok(!ui.includes("sessionStorage.setItem"));
  assert.ok(ui.includes("checkedSource!==input.value"));
  assert.ok(ui.includes("ownTop.__KTS_QUYT_SOURCE_V1__"));
@@ -35,7 +36,7 @@ test("normal copy intercepted only when Quyt selected",()=>{
  assert.ok(ui.includes('const ROUTER_ONCE_ONLY_RECEIPT_VERIFIED=false'));
  assert.ok(ui.includes('copy.disabled=!ROUTER_ONCE_ONLY_RECEIPT_VERIFIED'));
  assert.ok(ui.includes('review.addEventListener(type,event=>'));
- assert.ok(ui.includes('ownTop.__KTS_QUYT_RATE_V1__="1,067";'));
+ assert.ok(ui.includes('ownTop.__KTS_QUYT_RATE_V1__=profile()?.rate||"1,067";'));
  assert.ok(ui.includes('clearSelection("HOLD: miền/đài đã đổi'));
  assert.ok(!ui.includes('navigator.clipboard.writeText'));
  assert.ok(ui.includes('rate:rate.value'));
@@ -191,4 +192,22 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  check.checked=true;dispatch(check,"change");dispatch(direct,"click");
  assert.equal(review.value,"");
  assert.match(status.textContent,/HOLD/);
+});
+
+
+test("review customer dropdown has stable IDs and versioned save-only configuration",()=>{
+ const s=read("quyt-bao-review-ui.js");
+ for(const id of ["ktsReviewCustomer","ktsReviewCustomerName","ktsReviewAddCustomer",
+ "ktsReviewRenameCustomer","ktsReviewRetireCustomer","ktsReviewSaveRate","ktsReviewRateHistory"])
+  assert.ok(s.includes(id),id);
+ assert.ok(s.includes("KTS_REVIEW_CUSTOMERS_V1"));
+ assert.ok(s.includes('id:"hien",name:"Hiền",rate:"1,000"'));
+ assert.ok(s.includes('id:"quyt",name:"Quýt",rate:"1,067"'));
+ assert.ok(s.includes("customerId==="+"\"quyt\""));
+ assert.ok(s.includes("core.parseRate(rate.value)"));
+ assert.ok(s.includes("window.localStorage.setItem"));
+ assert.ok(s.includes("p.history.push"));
+ assert.ok(s.includes("customer_id không thay đổi"));
+ assert.ok(s.includes("Chỉ Quýt được xem trước tiền"));
+ assert.ok(!s.includes("fetch('/api/"));
 });
