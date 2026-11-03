@@ -238,6 +238,9 @@ async function main(){
           receipt.authenticated_caller_probe={exit_code:caller.exit_code,stdout_tail:caller.output,stderr_tail:caller.error,
             process_error:caller.problem,passed:caller.ok&&caller.output.includes('SYNTHETIC_AUTHENTICATED_CALLER_OWNER_DIRECT_RAW_DENIED_PASS')};
           if(!receipt.authenticated_caller_probe.passed)fail('TEAM_PG_CALLER_PROBE_FAILED');
+          const callerRollback=psql(['-c',"SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='authenticated_event')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='authenticated_key')::text"],port);
+          receipt.authenticated_caller_probe.rollback_verified=callerRollback.ok&&callerRollback.output.trim()==='0:0';
+          if(!receipt.authenticated_caller_probe.rollback_verified)fail('TEAM_PG_CALLER_ROLLBACK_FAILED');
           const racePath=realC(path.join(root,'scripts/settlement-pg-atomic-logout-race.cjs'));
           if(!racePath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(racePath).isFile())
             fail('TEAM_PG_RACE_SOURCE_INVALID');

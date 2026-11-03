@@ -38,6 +38,9 @@ RESET ROLE;
 \echo SYNTHETIC_SET_ROLE_RAW_WRITE_DENIAL_PASS
 INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expires_at)
  VALUES(repeat('a',64),'user_1','group_a',clock_timestamp(),clock_timestamp()+interval '10 minutes');
+INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expires_at)
+ VALUES(encode(sha256(convert_to('synthetic_auth_user_'||repeat('z',32),'UTF8')),'hex'),
+ 'user_1','group_a',clock_timestamp(),clock_timestamp()+interval '10 minutes');
 -- Fixed material is deliberately synthetic. Generate a request-bound proof using the same SQL contract.
 SELECT encode(sha256(convert_to(repeat('a',64),'UTF8')),'hex') AS sid,
        floor(extract(epoch from clock_timestamp()))::bigint+55 AS expires \gset
