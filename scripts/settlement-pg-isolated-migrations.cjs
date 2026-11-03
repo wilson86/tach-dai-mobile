@@ -76,7 +76,7 @@ async function main(){
  if(expectedBin.toLowerCase()!==pgDir.toLowerCase())
    fail('TEAM_PG_BIN_DIR_VERSION_MISMATCH');
  const version=verifiedCommand(binaries.pg_config,['--version'],root);
- const observed=/PostgreSQL\\s+(\\d+)(?:\\.\\d+)?/.exec(version);
+ const observed=/PostgreSQL\s+(\d+)(?:\.\d+)?/.exec(version);
  if(!observed||Number(observed[1])!==p.pg_major)
    fail('TEAM_PG_BIN_VERSION_INVALID');
  const runDir=path.join(projectRoot,'PG_SYNTHETIC_'+expected.slice(0,10)+'_'+
