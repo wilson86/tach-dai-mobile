@@ -31,3 +31,11 @@ test('B/LO same exposure and malformed prefixes fail closed',()=>{
   const s=createStore(storage());s.add(msg('1',raw));assert.throws(()=>require('../customer-message-review.js').aggregate(s.read(),options),/HOLD/);
  }
 });
+
+test('concurrent UI writers serialize their complete storage transaction',async()=>{
+ const shared=storage(),a=createStore(shared),b=createStore(shared);let pending=Promise.resolve();
+ const locks={request(name,opts,fn){assert.equal(name,'KTS_REVIEW_SOURCE_MESSAGES_V1_WRITE');assert.equal(opts.mode,'exclusive');const run=pending.then(fn);pending=run.catch(()=>{});return run}};
+ await Promise.all([a.addLocked(msg('1'),locks),b.addLocked(msg('2'),locks)]);
+ assert.deepEqual(a.read().map(x=>x.source_message_id),['1','2']);
+ assert.throws(()=>a.addLocked(msg('3'),null),/LOCK_UNAVAILABLE_HOLD/);assert.equal(a.read().length,2);
+});

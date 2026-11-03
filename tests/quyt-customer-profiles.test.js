@@ -25,7 +25,7 @@ function mount(store){
   addEventListener(k,f){(handlers[k]??=[]).push(f)},
   dispatchEvent(evt){for(const f of handlers[evt.type]??[])f(evt)}};
  window.top=window;window.KTSQuytBaoReview=core;window.KTSCustomerConfig=require("../customer-config-review.js");
- window.KTSReviewSourceMessages=require("../customer-message-review.js");window.KTSCleanAggregate=require("../clean-aggregate-review.js");let seq=0;window.crypto={randomUUID:()=>String(++seq)};
+ window.KTSReviewSourceMessages=require("../customer-message-review.js");window.KTSCleanAggregate=require("../clean-aggregate-review.js");let seq=0;window.crypto={randomUUID:()=>String(++seq)};window.navigator={locks:{request:(name,opts,cb)=>cb()}};
  const Event=function(type){this.type=type};
  vm.runInNewContext(source,{window,document,location:window.location,Event,
   setTimeout:fn=>fn()},{filename:"quyt-bao-review-ui.js",timeout:1000});
@@ -105,10 +105,10 @@ test("customer creation and rate changes require explicit confirmation",()=>{
  m.get("ktsQuytRate").value="1,10";m.window.confirm=()=>false;m.dispatch("ktsReviewSaveRate","click");data=JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1"));assert.equal(data.customers.find(x=>x.id===p.id).rate,"1,05");
 });
 
-test("multiple manually identified messages review exact totals and persist across reload",()=>{
+test("multiple manually identified messages review exact totals and persist across reload",async()=>{
  const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';
  m.byId.input.value='68 86 lo20n';m.get('ktsReviewCustomer').value='quyt';m.dispatch('ktsReviewCustomer','change');
- for(let i=0;i<3;i++)m.dispatch('ktsReviewAddMessage','click');
+ for(let i=0;i<3;i++){m.dispatch('ktsReviewAddMessage','click');await Promise.resolve()}
  m.dispatch('ktsReviewMergeMessages','click');
  const panel=m.get('ktsQuytPreparedPanel'),review=panel.children.find(n=>n.tag==='textarea');
  assert.match(review.value,/68 lo 60n → 64\.02n/);assert.match(review.value,/86 lo 60n → 64\.02n/);
@@ -118,12 +118,12 @@ test("multiple manually identified messages review exact totals and persist acro
  const review2=reload.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');assert.match(review2.value,/68 lo 60n → 64\.02n/);assert.equal(reload.byId.input.value,'68 86 lo20n');
 });
 
-test('separate customers use their own originals and coefficients after switching',()=>{
+test('separate customers use their own originals and coefficients after switching',async()=>{
  const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';
  const choose=id=>{m.get('ktsReviewCustomer').value=id;m.dispatch('ktsReviewCustomer','change')};
  const review=()=>m.get('ktsQuytPreparedPanel').children.find(n=>n.tag==='textarea');
- choose('hien');m.byId.input.value='86 lo10n';m.dispatch('ktsReviewAddMessage','click');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);
- choose('quyt');assert.doesNotMatch(m.get('ktsReviewMessageList').textContent,/86 lo10n/);m.byId.input.value='86 lo75n';m.dispatch('ktsReviewAddMessage','click');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
+ choose('hien');m.byId.input.value='86 lo10n';m.dispatch('ktsReviewAddMessage','click');await Promise.resolve();m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);
+ choose('quyt');assert.doesNotMatch(m.get('ktsReviewMessageList').textContent,/86 lo10n/);m.byId.input.value='86 lo75n';m.dispatch('ktsReviewAddMessage','click');await Promise.resolve();m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
  choose('hien');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 10n → 10n/);assert.doesNotMatch(review().value,/75n/);
  choose('quyt');m.dispatch('ktsReviewMergeMessages','click');assert.match(review().value,/86 lo 75n → 80\.025n/);
 });
@@ -132,4 +132,10 @@ test('adding original requires explicit customer and independent-order confirmat
  const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';m.byId.input.value='86 lo10n';
  m.get('ktsReviewCustomer').value='hien';m.dispatch('ktsReviewCustomer','change');let prompt='';m.window.confirm=text=>{prompt=text;return false};m.dispatch('ktsReviewAddMessage','click');
  assert.match(prompt,/Hiền/);assert.match(prompt,/MỘT LƯỢT TIN ĐỘC LẬP/);assert.equal(store.has('KTS_REVIEW_SOURCE_MESSAGES_V1'),false);assert.match(m.get('ktsReviewMessageStatus').textContent,/HOLD/);assert.equal(m.byId.input.value,'86 lo10n');
+});
+
+test('missing browser lock fails closed without writing or erasing original',()=>{
+ const store=new Map(),m=mount(store);m.byId.region.value='mb';m.byId.date.value='2026-11-03';m.byId.input.value='86 lo10n';
+ m.get('ktsReviewCustomer').value='quyt';m.dispatch('ktsReviewCustomer','change');m.window.navigator={};m.dispatch('ktsReviewAddMessage','click');
+ assert.equal(store.has('KTS_REVIEW_SOURCE_MESSAGES_V1'),false);assert.match(m.get('ktsReviewMessageStatus').textContent,/MESSAGE_LOCK_UNAVAILABLE_HOLD/);assert.equal(m.byId.input.value,'86 lo10n');
 });

@@ -316,7 +316,7 @@ function install(){
    sourceStatus.textContent="REVIEW: "+messages.length+" tin gốc, "+result.entries.length+" số/loại; hệ số ×"+result.rate+". HOLD chuyển chủ và Copy/Cắt.";
   }catch(e){sourceStatus.textContent="HOLD: "+String(e.message||e);status.textContent=sourceStatus.textContent}
  }
- addMessage.addEventListener("click",()=>{
+ addMessage.addEventListener("click",async()=>{
   try{
    const scope=messageScope();if(!input.value.trim())throw Error("chưa có tin gốc");
    if(!window.confirm("Xác nhận đây là MỘT LƯỢT TIN ĐỘC LẬP của khách "+profile().name+" cho ngày "+scope.date+", miền "+scope.market+"? Mỗi lần thêm sẽ được tính là một lượt riêng.")){
@@ -324,7 +324,7 @@ function install(){
    }
    if(!window.crypto||typeof window.crypto.randomUUID!=="function")throw Error("không tạo được ID tin an toàn");
    const now=new Date().toISOString();
-   scope.store.add({source_message_id:"manual-"+window.crypto.randomUUID(),customer_id:customerId,original_text:input.value,source_system:"manual",received_at:now,source_timestamp:now,market:scope.market,business_date:scope.date});
+   await scope.store.addLocked({source_message_id:"manual-"+window.crypto.randomUUID(),customer_id:customerId,original_text:input.value,source_system:"manual",received_at:now,source_timestamp:now,market:scope.market,business_date:scope.date},window.navigator?.locks);
    messageReviewActive=false;renderMessages();sourceStatus.textContent="Đã lưu một tin gốc riêng. "+sourceStatus.textContent;
   }catch(e){review.value="";sourceStatus.textContent="HOLD: "+String(e.message||e)}
  });

@@ -26,7 +26,12 @@ function createStore(storage){
   try{storage.setItem(KEY,JSON.stringify([...current,entry]))}catch(_){throw Error("MESSAGE_STORAGE_WRITE_HOLD")}
   return {status:"ADDED",message:entry};
  }
- return Object.freeze({read,add});
+ // All UI writers on this origin must serialize the full read/modify/write.
+ function addLocked(item,locks){
+  if(!locks||typeof locks.request!=="function")throw Error("MESSAGE_LOCK_UNAVAILABLE_HOLD");
+  return locks.request("KTS_REVIEW_SOURCE_MESSAGES_V1_WRITE",{mode:"exclusive"},()=>add(item));
+ }
+ return Object.freeze({read,add,addLocked});
 }
 
 // Aggregate independently identified original messages. This is a review-only
