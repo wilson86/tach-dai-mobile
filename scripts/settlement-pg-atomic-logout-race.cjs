@@ -35,5 +35,29 @@ async function main(){let a,b;try{
  const reverse=query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='reverse_event')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='reverse_key')::text||':'||(SELECT (revoked_at IS NOT NULL)::text FROM kts_auth.sessions WHERE session_hash=repeat('a',64))");
  if(reverse!=='0:0:true')throw Error('REVERSE_FINAL_STATE_'+reverse);
  console.log('SYNTHETIC_CONCURRENT_LOGOUT_FIRST_DENIES_WRITE_PASS blocker_observed=true final='+reverse);
+ query("UPDATE kts_auth.sessions SET revoked_at=NULL WHERE session_hash=repeat('a',64)");
+ a=worker('kts_member_write_first');b=worker('kts_member_revoke_wait');
+ a.p.stdin.write(`BEGIN; SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_v1(${proof('member_event','member_key','a'.repeat(32),3)});\n\\echo MEMBER_WRITE_LOCKED\n`);
+ await waitFor(()=>a.out.includes('MEMBER_WRITE_LOCKED')||a.done,'MEMBER_WRITE');if(a.done)throw Error('MEMBER_WRITE_EXIT '+a.err.slice(-500));
+ b.p.stdin.write("UPDATE kts_team.memberships SET revoked_at=clock_timestamp() WHERE workspace_id='group_a' AND user_id='user_1';\n\\echo MEMBER_REVOKED\n");
+ blocked=false;for(let i=0;i<60;i++){const n=query("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE application_name='kts_member_revoke_wait' AND cardinality(pg_catalog.pg_blocking_pids(pid))>0");if(n==='1'){blocked=true;break}if(b.done||b.out.includes('MEMBER_REVOKED'))break;await delay(50)}
+ if(!blocked)throw Error('MEMBER_REVOKE_NOT_BLOCKED');
+ a.p.stdin.end('COMMIT;\n\\q\n');await waitFor(()=>a.done,'MEMBER_COMMIT');if(a.code!==0)throw Error('MEMBER_COMMIT_FAILED');
+ await waitFor(()=>b.out.includes('MEMBER_REVOKED')||b.done,'MEMBER_REVOKE');if(b.done&&!b.out.includes('MEMBER_REVOKED'))throw Error('MEMBER_REVOKE_FAILED');b.p.stdin.end('\\q\n');await waitFor(()=>b.done,'MEMBER_REVOKE_EXIT');if(b.code!==0)throw Error('MEMBER_REVOKE_EXIT');
+ const member=query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='member_event' AND actor_user_id='user_1')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='member_key')::text||':'||(SELECT (revoked_at IS NOT NULL)::text FROM kts_team.memberships WHERE workspace_id='group_a' AND user_id='user_1')");
+ if(member!=='1:1:true')throw Error('MEMBER_FINAL_STATE_'+member);
+ query("UPDATE kts_team.memberships SET revoked_at=NULL WHERE workspace_id='group_a' AND user_id='user_1'");
+ a=worker('kts_member_write_wait');b=worker('kts_member_revoke_first');
+ b.p.stdin.write("BEGIN; UPDATE kts_team.memberships SET revoked_at=clock_timestamp() WHERE workspace_id='group_a' AND user_id='user_1';\n\\echo MEMBER_REVOKE_LOCKED\n");
+ await waitFor(()=>b.out.includes('MEMBER_REVOKE_LOCKED')||b.done,'MEMBER_LOCK');if(b.done)throw Error('MEMBER_LOCK_EXIT');
+ a.p.stdin.write(`BEGIN; SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_v1(${proof('member_denied','member_denied_key','b'.repeat(32),4)});\n\\echo UNEXPECTED_MEMBER_WRITE\n`);
+ blocked=false;for(let i=0;i<60;i++){const n=query("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE application_name='kts_member_write_wait' AND cardinality(pg_catalog.pg_blocking_pids(pid))>0");if(n==='1'){blocked=true;break}if(a.done||a.out.includes('UNEXPECTED_MEMBER_WRITE'))break;await delay(50)}
+ if(!blocked)throw Error('MEMBER_WRITE_NOT_BLOCKED');
+ b.p.stdin.end('COMMIT;\n\\q\n');await waitFor(()=>b.done,'MEMBER_REVOKE_COMMIT');if(b.code!==0)throw Error('MEMBER_REVOKE_COMMIT_FAILED');
+ await waitFor(()=>a.done,'MEMBER_DENIAL');if(a.code===0||!a.err.includes('TEAM_ATOMIC_SESSION_INVALID')||a.out.includes('UNEXPECTED_MEMBER_WRITE'))throw Error('MEMBER_NOT_DENIED '+a.err.slice(-500));
+ const denied=query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='member_denied')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='member_denied_key')::text||':'||(SELECT (revoked_at IS NOT NULL)::text FROM kts_team.memberships WHERE workspace_id='group_a' AND user_id='user_1')");
+ if(denied!=='0:0:true')throw Error('MEMBER_DENIED_STATE_'+denied);
+ query("UPDATE kts_team.memberships SET revoked_at=NULL WHERE workspace_id='group_a' AND user_id='user_1'");
+ console.log('SYNTHETIC_MEMBERSHIP_REVOCATION_BOTH_ORDERINGS_PASS blocked=true first='+member+' second='+denied);
  }finally{for(const w of [a,b])if(w&&!w.done){w.p.stdin.end();w.p.kill()}}}
 main().catch(e=>{console.error(e.message);process.exitCode=1});
