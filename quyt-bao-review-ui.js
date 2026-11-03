@@ -70,10 +70,10 @@ function install(){
        ids.has(p.id)||typeof p.name!=="string"||!p.name.trim()||p.name.length>50||
        typeof p.rate!=="string")throw Error("STORAGE_INVALID");
     try{core.parseRate(p.rate)}catch(_){throw Error("STORAGE_INVALID")}
+    if(!Array.isArray(p.history)||p.history.some(h=>!h||typeof h.rate!=="string"||typeof h.at!=="string"))throw Error("STORAGE_INVALID");
+    for(const h of p.history){try{core.parseRate(h.rate)}catch(_){throw Error("STORAGE_INVALID")}}
     ids.add(p.id);
-    list.push({id:p.id,name:p.name,rate:p.rate,active:p.active!==false,
-      history:Array.isArray(p.history)?p.history.filter(h=>h&&typeof h.rate==="string"&&
-      typeof h.at==="string").slice(-20):[]});
+    list.push({...p,id:p.id,name:p.name,rate:p.rate,active:p.active!==false,history:p.history.map(h=>({...h}))});
    }
    if(!ids.has("hien")||!ids.has("quyt"))throw Error("STORAGE_INVALID");
    return list;
@@ -167,7 +167,7 @@ function install(){
    const old=p.rate,oldHist=p.history.slice();
    if(old!==rate.value){
     p.rate=rate.value;p.history.push({at:new Date().toISOString(),rate:rate.value});
-    p.history=p.history.slice(-20);
+    // Preserve all prior coefficient history; never discard old revisions.
    }
    if(!storeCustomers()){p.rate=old;p.history=oldHist;return}
    drawCustomers();hint.textContent="Đã lưu hệ số riêng; giao dịch lịch sử không được sửa.";

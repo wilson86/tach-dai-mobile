@@ -86,3 +86,13 @@ test("corrupt customer storage holds and is never overwritten",()=>{
  assert.equal(m.get("ktsQuytCheckbox").checked,false);assert.match(m.get("ktsReviewCustomerStatus").textContent,/HOLD/);
  m.get("ktsReviewCustomerName").value="A";m.dispatch("ktsReviewAddCustomer","click");assert.equal(store.get("KTS_REVIEW_CUSTOMERS_V1"),"{broken");
 });
+
+test("all historical coefficient entries survive load and invalid history holds",()=>{
+ const entries=Array.from({length:25},(_,i)=>({at:String(i),rate:"1,067"}));
+ const profiles=[{id:"hien",name:"Hiền",rate:"1,000",active:true,history:[]},{id:"quyt",name:"Quýt",rate:"1,067",active:true,history:entries}];
+ const store=new Map([["KTS_REVIEW_CUSTOMERS_V1",JSON.stringify({version:1,customers:profiles})]]),m=mount(store);
+ m.get("ktsReviewCustomer").value="quyt";m.dispatch("ktsReviewCustomer","change");m.get("ktsQuytRate").value="1,05";m.dispatch("ktsReviewSaveRate","click");
+ assert.equal(JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1")).customers[1].history.length,26);
+ profiles[1].history[1]={at:"x",rate:"bad"};const bad=JSON.stringify({version:1,customers:profiles}),badStore=new Map([["KTS_REVIEW_CUSTOMERS_V1",bad]]),b=mount(badStore);
+ b.get("ktsReviewCustomer").value="quyt";b.dispatch("ktsReviewCustomer","change");assert.match(b.get("ktsReviewCustomerStatus").textContent,/HOLD/);assert.equal(badStore.get("KTS_REVIEW_CUSTOMERS_V1"),bad);
+});
