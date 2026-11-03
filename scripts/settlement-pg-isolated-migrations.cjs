@@ -14,8 +14,10 @@ const ROOT='C:\\KTS-Settlement';
 const ID='qa_admin';
 function fail(code){throw Error(code)}
 function realC(p){
- if(!path.isAbsolute(p)||!/^C:\\/i.test(p))fail('TEAM_PG_C_ONLY');
- const out=fs.realpathSync(p);
+ if(typeof p!=='string'||!path.win32.isAbsolute(p)||!/^C:[\\/]/i.test(p)||
+    p.startsWith('\\\\'))fail('TEAM_PG_C_ONLY');
+ const normalized=path.win32.normalize(p);
+ const out=path.win32.normalize(fs.realpathSync(normalized));
  if(!/^C:\\/i.test(out)||out.startsWith('\\\\'))fail('TEAM_PG_C_REPARSE');
  return out;
 }
