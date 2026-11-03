@@ -228,9 +228,16 @@ async function main(){
           passed:probe.ok&&probe.output.includes('SYNTHETIC_ATOMIC_DRAFT_SESSION_AND_GUC_PASS')&&
             probe.output.includes('SYNTHETIC_NONCE_REPLAY_AND_RECEIPT_LOOKUP_PASS')&&
             probe.output.includes('SYNTHETIC_CAS_IDEMPOTENCY_REVOKED_AND_UNKNOWN_PASS')&&
-            probe.output.includes('SYNTHETIC_CALLER_RAW_WRITE_AND_OWNER_DENIAL_PASS')};
+            probe.output.includes('SYNTHETIC_SET_ROLE_RAW_WRITE_DENIAL_PASS')};
         if(!receipt.atomic_runtime_probe.passed)receipt.status='BLOCKED_ATOMIC_RUNTIME_PROBE';
         if(receipt.atomic_runtime_probe.passed){
+          const callerPath=realC(path.join(root,'scripts/settlement-pg-authenticated-caller-probe.cjs'));
+          if(!callerPath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(callerPath).isFile())
+            fail('TEAM_PG_CALLER_SOURCE_INVALID');
+          const caller=exec(process.execPath,[callerPath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
+          receipt.authenticated_caller_probe={exit_code:caller.exit_code,stdout_tail:caller.output,stderr_tail:caller.error,
+            process_error:caller.problem,passed:caller.ok&&caller.output.includes('SYNTHETIC_AUTHENTICATED_CALLER_OWNER_DIRECT_RAW_DENIED_PASS')};
+          if(!receipt.authenticated_caller_probe.passed)fail('TEAM_PG_CALLER_PROBE_FAILED');
           const racePath=realC(path.join(root,'scripts/settlement-pg-atomic-logout-race.cjs'));
           if(!racePath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(racePath).isFile())
             fail('TEAM_PG_RACE_SOURCE_INVALID');

@@ -9,7 +9,7 @@ GRANT SELECT,INSERT,UPDATE ON kts_team.scopes TO kts_atomic_owner;
 GRANT INSERT ON kts_team.scope_events,kts_team.idempotency_receipts TO kts_atomic_owner;
 GRANT EXECUTE ON FUNCTION kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb) TO kts_atomic_owner;
 GRANT EXECUTE ON FUNCTION kts_team.advance_review(text,text,date,text,text,bigint,text,text,text) TO kts_atomic_owner;
-CREATE ROLE synthetic_atomic_caller NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE synthetic_atomic_caller LOGIN PASSWORD 'synthetic_fixture_only_password_7291' NOSUPERUSER NOBYPASSRLS;
 GRANT USAGE ON SCHEMA kts_team TO synthetic_atomic_caller;
 GRANT EXECUTE ON FUNCTION kts_team.atomic_draft_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text,text) TO synthetic_atomic_caller;
 GRANT EXECUTE ON FUNCTION kts_team.atomic_draft_reconcile_v1(text,text,bigint,text,text,text,date,text,text,bigint,text,text,text) TO synthetic_atomic_caller;
@@ -17,7 +17,7 @@ GRANT EXECUTE ON FUNCTION kts_team.atomic_draft_reconcile_v1(text,text,bigint,te
 SET ROLE synthetic_atomic_caller;
 SELECT set_config('kts.workspace_id','group_b',false);
 SELECT set_config('kts.actor_user_id','user_2',false);
-DO $$ DECLARE raw_denied boolean:=false; direct_denied boolean:=false; owner_denied boolean:=false; BEGIN
+DO $$ DECLARE raw_denied boolean:=false; direct_denied boolean:=false; BEGIN
  IF pg_has_role(current_user,'kts_atomic_owner','MEMBER') OR
     has_schema_privilege(current_user,'kts_team','CREATE') OR
     has_function_privilege(current_user,'kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)','EXECUTE') OR
@@ -30,15 +30,12 @@ DO $$ DECLARE raw_denied boolean:=false; direct_denied boolean:=false; owner_den
  BEGIN
   UPDATE kts_team.scopes SET revision=99 WHERE workspace_id='group_b';
  EXCEPTION WHEN insufficient_privilege THEN direct_denied:=true; END;
- BEGIN
-  EXECUTE 'SET ROLE kts_atomic_owner';
- EXCEPTION WHEN insufficient_privilege THEN owner_denied:=true; END;
- IF NOT raw_denied OR NOT direct_denied OR NOT owner_denied THEN
-  RAISE EXCEPTION 'PROBE_CALLER_ACCESS_NOT_DENIED raw=% direct=% owner=%',raw_denied,direct_denied,owner_denied;
+ IF NOT raw_denied OR NOT direct_denied THEN
+  RAISE EXCEPTION 'PROBE_CALLER_ACCESS_NOT_DENIED raw=% direct=%',raw_denied,direct_denied;
  END IF;
 END $$;
 RESET ROLE;
-\echo SYNTHETIC_CALLER_RAW_WRITE_AND_OWNER_DENIAL_PASS
+\echo SYNTHETIC_SET_ROLE_RAW_WRITE_DENIAL_PASS
 INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expires_at)
  VALUES(repeat('a',64),'user_1','group_a',clock_timestamp(),clock_timestamp()+interval '10 minutes');
 -- Fixed material is deliberately synthetic. Generate a request-bound proof using the same SQL contract.
