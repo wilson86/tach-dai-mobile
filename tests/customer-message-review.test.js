@@ -48,3 +48,16 @@ test('golden raw 75 stays original when review coefficient changes',()=>{
  }
  assert.equal(store.read()[0].original_text,'86 lo75n');
 });
+
+test("independent duoi, dui, đui source messages sum original and never receive Bao factor",()=>{
+ const store=createStore(storage());
+ const raw=["98 duoi15n","98 dui20n","98 đui25n"];
+ for(let i=0;i<raw.length;i++)store.add(msg("alias-"+i,raw[i]));
+ const core=require("../quyt-bao-review.js"),cleanCore=require("../clean-aggregate-review.js");
+ const result=require("../customer-message-review.js").aggregate(store.read(),{
+  core,cleanCore,customerId:"quyt",market:"mb",businessDate:"2026-11-03",rate:"1,067"
+ });
+ assert.deepEqual(result.entries.map(e=>[e.number,e.kind,e.original,e.exact]),[["98","duoi","60","60"]]);
+ assert.deepEqual(store.read().map(m=>m.original_text),raw);
+ assert.equal(result.forwardAuthorized,false);
+});
