@@ -33,7 +33,9 @@ DO $$ DECLARE raw_denied boolean:=false; direct_denied boolean:=false; owner_den
  BEGIN
   EXECUTE 'SET ROLE kts_atomic_owner';
  EXCEPTION WHEN insufficient_privilege THEN owner_denied:=true; END;
- IF NOT raw_denied OR NOT direct_denied OR NOT owner_denied THEN RAISE EXCEPTION 'PROBE_CALLER_ACCESS_NOT_DENIED'; END IF;
+ IF NOT raw_denied OR NOT direct_denied OR NOT owner_denied THEN
+  RAISE EXCEPTION 'PROBE_CALLER_ACCESS_NOT_DENIED raw=% direct=% owner=%',raw_denied,direct_denied,owner_denied;
+ END IF;
 END $$;
 RESET ROLE;
 \echo SYNTHETIC_CALLER_RAW_WRITE_AND_OWNER_DENIAL_PASS
