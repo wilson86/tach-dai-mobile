@@ -1,0 +1,5 @@
+# Issue #18 — official Python generator emits LF for the SHA-bound artifacts.
+# Preserve checkout bytes, including on Windows with core.autocrlf=true.
+/business_engine.generated.js text eol=lf
+/station_calendar.generated.js text eol=lf
+/version.json text eol=lf
