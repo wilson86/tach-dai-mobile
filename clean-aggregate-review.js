@@ -1,12 +1,12 @@
 /* KTS Clean & Aggregate review-only WIP; no parser, money-engine or source edits. */
 (function(root){
 "use strict";
-const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi",duoi:"duoi","đuôi":"duoi"};
+const ALIAS={b:"b",blo:"lo",lo:"lo",bao:"lo","bao lo":"lo",bl:"lo","lô":"lo",dd:"dd","d-d":"dd",dau:"dau","đầu":"dau",dui:"duoi",duoi:"duoi","đuôi":"duoi",da:"da","đá":"da",dat:"da",dathang:"da",xc:"xc",x:"xc"};
 const REGION={hn:"mb",mb:"mb",mn:"mn",mt:"mt"};
-const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b)/iu;
+const kindRx=/^(?:d-d|đầu|đuôi|duoi|dau|dui|dathang|dat|đá|da|xc|bao[ \t]+lo|blo|bao|lô|bl|dd|lo|b|x)/iu;
 const unitRx=/^(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/iu;
 const labelRx=/^(hn|mb|mn|mt)(?![\p{L}\p{N}])/iu;
-const numberRx=/^\d{2}(?!\d)/u;
+const numberRx=/^\d{2,4}(?!\d)/u;
 const MAX_CLAUSES=500;
 function fail(code,at,line,selector){throw Error(code+(at===undefined?"":" @"+at)+(line===undefined?"":" line="+line)+(selector?" selector="+selector:""))}
 function units(token){
@@ -27,14 +27,6 @@ function lex(raw){
    if(text[i]==="\n")ln++;i++;continue;
   }
   const suffix=text.slice(i);
-  // These selectors are recognized but their review money/topology is not approved.
-  // Never reinterpret them as LO or manufacture a missing unit.
-  const unsupported=/^(dathang|dat|da|đá|xc)(?=\s|\d)/iu.exec(suffix);
-  if(unsupported){
-   const tail=suffix.slice(unsupported[0].length);
-   if(/^\s*\d+(?:[.,]\d+)?(?![\p{L}\p{N}.,])/u.test(tail))fail("MISSING_UNIT_HOLD",i,ln,unsupported[0]);
-   fail("UNSUPPORTED_SELECTOR_HOLD",i,ln,unsupported[0]);
-  }
   let m=unitRx.exec(suffix),type="amount";
   if(!m){m=labelRx.exec(suffix);type="station"}
   if(!m){m=kindRx.exec(suffix);type="selector"}
@@ -74,6 +66,9 @@ function parse(raw,options={}){
    if(!amount||amount.type!=="amount")fail("SELECTOR_WITHOUT_AMOUNT",t.offset,t.physicalLine,t.value);
    const half=units(amount.value),kind=ALIAS[t.value.replace(/\s+/gu," ")];
    if(!kind)fail("UNKNOWN_SELECTOR",t.offset);
+   // Longer XC numbers may be recognized for diagnosis only; do not extend
+   // the approved two-digit grouping rules to other selectors.
+   if(kind!=="xc"&&numbers.some(value=>value.length!==2))fail("NUMBER_WIDTH_AUTHORITY_HOLD",t.offset,t.physicalLine,kind);
    clauses.push({station,numbers:[...numbers],kind,half,line:t.physicalLine,offset:t.offset});
    if(clauses.length>MAX_CLAUSES)fail("CLAUSE_LIMIT");
    previous=[...numbers];group=[];waiting=true;continue;
@@ -114,6 +109,8 @@ function preview(raw,options={}){
  const decision=options.repeatDecision||"ask_operator";
  if(!["ask_operator","keep_all","remove_copies"].includes(decision))fail("DUPLICATE_DECISION_INVALID");
  const clauses=parse(raw,options),repeated=tandem(clauses);
+ const unsupported=clauses.find(c=>c.kind==="da"||c.kind==="xc");
+ if(unsupported)fail("MONEY_AUTHORITY_HOLD",unsupported.offset,unsupported.line,unsupported.kind);
  if(decision==="remove_copies"&&(!repeated.length||typeof options.decisionReference!=="string"||!options.decisionReference.trim()))
   fail("EXPLICIT_COPY_REMOVAL_DECISION_REQUIRED");
  if(decision==="remove_copies"&&repeated.some(t=>t.nonAdjacent))fail("NON_ADJACENT_PASTE_MANUAL_SOURCE_REVIEW_REQUIRED");

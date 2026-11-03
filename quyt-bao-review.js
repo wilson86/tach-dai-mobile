@@ -76,6 +76,8 @@ function sourceExposures(text,cleanCore,region){
  // Canonical parser validates the complete input; regex tags merely preserve
  // the B vs LO distinction that the WIP clean display aliases both to "b".
  const clauses=cleanCore.parse(text,{region});
+ const unsupported=clauses.find(c=>c.kind==="da"||c.kind==="xc");
+ if(unsupported)throw Error("MONEY_AUTHORITY_HOLD @"+unsupported.offset+" line="+unsupported.line+" selector="+unsupported.kind);
  const matches=[...text.matchAll(GROUP_SELECTOR)];
  if(matches.length!==clauses.length)throw Error("CANONICAL_SELECTOR_PROVENANCE_HOLD");
  const map=new Map();
