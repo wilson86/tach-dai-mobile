@@ -154,10 +154,20 @@ async function main(){
   if(!smokePath.toLowerCase().startsWith((root+'\\').toLowerCase()))fail('TEAM_PG_SQL_SOURCE_INVALID');
   const smoke=psql(['-f',smokePath],port,50000);
   receipt.checks.restricted_role_rls_smoke=smoke.ok&&smoke.output.includes('POSTGRES_TEAM_M0_SYNTHETIC_RLS_AND_IMMUTABILITY_PASS');
+  // Save only bounded synthetic SQL evidence; never assert PASS from exit alone.
+  // Individual stderr carries PostgreSQL NOTICE/SQLSTATE for the negative probe.
+  receipt.synthetic_psql_evidence={
+    tenant_read:{exit_code:smoke.exit_code,stdout_tail:smoke.output,
+      stderr_tail:smoke.error,process_error:smoke.problem},
+  };
   const writePath=realC(path.join(root,'team-settlement/tests/postgres-rls-denied-write.sql'));
   if(!writePath.toLowerCase().startsWith((root+'\\').toLowerCase()))fail('TEAM_PG_SQL_SOURCE_INVALID');
   const write=psql(['-f',writePath],port,50000);
-  receipt.checks.restricted_role_cross_workspace_write_denied=write.ok&&write.output.includes('SYNTHETIC_CROSS_WORKSPACE_WRITE_DENIED');
+  receipt.checks.restricted_role_cross_workspace_write_denied=write.ok&&
+    write.output.includes('SYNTHETIC_CROSS_WORKSPACE_WRITE_DENIED')&&
+    write.error.includes('SYNTHETIC_RLS_WRITE_DENIAL_SQLSTATE=42501');
+  receipt.synthetic_psql_evidence.tenant_write={exit_code:write.exit_code,
+    stdout_tail:write.output,stderr_tail:write.error,process_error:write.problem};
   receipt.status=receipt.checks.force_rls_six&&receipt.checks.raw_mutation_not_public?
    (receipt.checks.restricted_role_rls_smoke&&receipt.checks.restricted_role_cross_workspace_write_denied?
     'MIGRATIONS_AND_LIMITED_CATALOG_PASS':'BLOCKED_RLS_BEHAVIOR'):'BLOCKED_CATALOG_INVARIANT';
