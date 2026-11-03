@@ -1,13 +1,16 @@
 'use strict';
 // Read-only raw-byte check for the three immutable Issue #18 KTS canonical JSON inputs.
-// Do not normalize or rewrite a user's checkout: explain CRLF, block stale source.
+// Match raw CRLF hashes recorded in KTS SharedBusinessEngine/BUILD_MANIFEST.json
+// at exact KTS SHA b08cfafaabfd1b4e5a6cdab26a7938b4f13a1e51.
+// Classification is diagnostic only: non-identical source bytes are BLOCKED.
+// Do not rewrite checkout content, normalize bytes or skip the gate.
 const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
 const EXPECTED=Object.freeze({
-  'engine_spec.json':'07e1eddd7e92d311e0c6a9319fc4bf7c7f4cc8d8768e0b604ecf37ced02cef1e',
-  'calendar_authority.json':'edb384eadc4bb1bf9109727247776109fcc7d23835d7e8114076ff207bd5296d',
-  'pwa_version_templates.json':'cb019c3b2d0e1662aab6be66919f2c3b0023376e2d55ff2c825b12599843466a'
+  'engine_spec.json':'333109382f81164bd0d6a6ecd13eb329ecdb1794b924ae34784fb19ef09e1a51',
+  'calendar_authority.json':'d2945b65f5ec90712c26c2700c9221ff93a006f1fcd0a17e877a23688b73851d',
+  'pwa_version_templates.json':'8ecdc609c2c6a62d7ad4c4690d857ed54d5e85416487ed7258ce1cfb21115083'
 });
 const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 function classifyRawBytes(bytes,expectedSha){
@@ -15,8 +18,11 @@ function classifyRawBytes(bytes,expectedSha){
   const observed=sha256(bytes);
   if(observed===expectedSha)return {status:'MATCH',sha256:observed};
   const normalized=Buffer.from(bytes.toString('utf8').replace(/\r\n/g,'\n'),'utf8');
-  return {status:bytes.includes(Buffer.from('\r\n'))&&sha256(normalized)===expectedSha
-      ?'CRLF_CHECKOUT':'SOURCE_BYTES_DRIFT',sha256:observed};
+  const expanded=Buffer.from(bytes.toString('utf8').replace(/\r?\n/g,'\r\n'),'utf8');
+  const onlyLineEnding=sha256(normalized)===expectedSha||
+    sha256(expanded)===expectedSha;
+  return {status:onlyLineEnding?'LINE_ENDING_DRIFT':'SOURCE_BYTES_DRIFT',
+    sha256:observed};
 }
 function inspectCanonicalBytes(ktsRoot,safeFile,reader=fs.readFileSync,pins=EXPECTED){
   if(typeof safeFile!=='function'||typeof reader!=='function')throw Error('INVALID_BYTE_GUARD');
