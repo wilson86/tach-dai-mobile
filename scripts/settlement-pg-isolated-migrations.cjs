@@ -235,7 +235,8 @@ async function main(){
             fail('TEAM_PG_RACE_SOURCE_INVALID');
           const race=exec(process.execPath,[racePath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
           receipt.concurrent_logout={exit_code:race.exit_code,stdout_tail:race.output,stderr_tail:race.error,
-            process_error:race.problem,passed:race.ok&&race.output.includes('SYNTHETIC_CONCURRENT_LOGOUT_BLOCKED_THEN_COMMITTED_PASS')};
+            process_error:race.problem,passed:race.ok&&race.output.includes('SYNTHETIC_CONCURRENT_LOGOUT_BLOCKED_THEN_COMMITTED_PASS')&&
+              race.output.includes('SYNTHETIC_CONCURRENT_LOGOUT_FIRST_DENIES_WRITE_PASS')};
           if(!receipt.concurrent_logout.passed)receipt.status='BLOCKED_ATOMIC_LOGOUT_RACE';
         }
       }
