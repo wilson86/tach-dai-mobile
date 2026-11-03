@@ -111,8 +111,8 @@ function install(){
   }catch(_){hint.textContent="HOLD: trình duyệt không lưu được; hệ số chưa được xác nhận.";return false}
  }
  function chosenName(){
-  const v=name.value.trim().replace(/\\s+/gu," ");
-  if(!v||v.length>50||/[<>\\x00-\\x1f]/u.test(v))throw Error("CUSTOMER_NAME_INVALID");
+  const v=name.value.trim().replace(/\s+/gu," ");
+  if(!v||v.length>50||(/[<>]/u.test(v)||[...v].some(c=>c.charCodeAt(0)<32)))throw Error("CUSTOMER_NAME_INVALID");
   if(profiles.some(p=>p.active&&p.id!==customerId&&p.name.toLocaleLowerCase("vi")===v.toLocaleLowerCase("vi")))
    throw Error("CUSTOMER_NAME_DUPLICATE");
   return v;
