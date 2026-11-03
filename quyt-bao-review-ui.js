@@ -58,6 +58,9 @@ function install(){
  let confirmedRepeatSource=null;
  let checkedSource="";
  let directMode=false;
+ // Allow one initial complete pasted ticket when Quýt was selected on an empty form.
+ // Never silently re-arm after source edits, Cut/Undo, or a rejected fragment.
+ let initialSourceBindAllowed=false;
 
  // Customer profile metadata only: no wager, message ID or ledger is persisted.
  const CUSTOMER_STORAGE_KEY="KTS_REVIEW_CUSTOMERS_V1";
@@ -111,14 +114,23 @@ check.tabIndex=-1;bar.style.display="none";
  }
  function chosenName(){
   const v=name.value.trim().replace(/\s+/gu," ");
-  if(!v||v.length>50||(/[<>]/u.test(v)||[...v].some(c=>c.charCodeAt(0)<32)))throw Error("CUSTOMER_NAME_INVALID");
+  if(!v)throw Error("CUSTOMER_NAME_REQUIRED");
+  if(v.length>50||(/[<>]/u.test(v)||[...v].some(c=>c.charCodeAt(0)<32)))throw Error("CUSTOMER_NAME_INVALID");
   if(profiles.some(p=>p.active&&p.id!==customerId&&p.name.toLocaleLowerCase("vi")===v.toLocaleLowerCase("vi")))
    throw Error("CUSTOMER_NAME_DUPLICATE");
   return v;
  }
+ function customerNameFeedback(error){
+  const code=String(error?.message||error);
+  if(code==="CUSTOMER_NAME_REQUIRED")return "Nhập tên khách trước khi bấm Thêm khách hoặc Đổi tên. Khách đang chọn không thay đổi.";
+  if(code==="CUSTOMER_NAME_INVALID")return "Tên khách không hợp lệ. Không dùng ký tự điều khiển hoặc dấu < >.";
+  if(code==="CUSTOMER_NAME_DUPLICATE")return "Tên khách đã tồn tại. Hãy chọn khách trong danh sách hoặc nhập tên khác.";
+  return "HOLD: "+code;
+ }
  function chooseCustomer(id){
   if(!optIn.checked){hint.textContent="HOLD: tích Khách & tỷ lệ trước khi chọn khách.";return}
   customerId=profiles.some(p=>p.id===id&&p.active)?id:"";
+  initialSourceBindAllowed=customerId==="quyt"&&!input.value.trim();
   confirmedRepeatSource=null;directMode=false;
   ownTop.__KTS_QUYT_CUSTOMER_ID_V1__=customerId;
   ownTop.__KTS_QUYT_SELECTED_V1__=customerId==="quyt"&&Boolean(input.value.trim());
@@ -133,6 +145,7 @@ check.tabIndex=-1;bar.style.display="none";
   chooseCustomer(selector.value);
  });
  add.addEventListener("click",async()=>{
+  if(!optIn.checked){hint.textContent="Chưa bật Khách & tỷ lệ; không thay đổi khách.";return}
   try{
    const v=chosenName();
    if(profiles.length>=40)throw Error("CUSTOMER_LIMIT");
@@ -146,9 +159,10 @@ check.tabIndex=-1;bar.style.display="none";
    profiles.push({id,name:v,rate:selectedRate,active:true,created_at:at,updated_at:at,history:[{version:1,at,rate:selectedRate}]});
    if(!await storeCustomers()){profiles.pop();return}
    name.value="";chooseCustomer(id);
-  }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
+  }catch(e){hint.textContent=customerNameFeedback(e)}
  });
  rename.addEventListener("click",async()=>{
+  if(!optIn.checked){hint.textContent="Chưa bật Khách & tỷ lệ; không đổi tên.";return}
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
    const v=chosenName(),old=p.name;
@@ -156,9 +170,10 @@ check.tabIndex=-1;bar.style.display="none";
    p.name=v;
    if(!await storeCustomers()){p.name=old;return}
    name.value="";drawCustomers();notifyAll();hint.textContent="Đã đổi tên; customer_id không thay đổi.";
-  }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
+  }catch(e){hint.textContent=customerNameFeedback(e)}
  });
  retire.addEventListener("click",async()=>{
+  if(!optIn.checked){hint.textContent="Chưa bật Khách & tỷ lệ; không ngừng khách.";return}
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   if(p.id==="quyt"||p.id==="hien"){hint.textContent="HOLD: không tắt khách mặc định ở bản review.";return}
   if(!window.confirm("Ngừng sử dụng khách "+p.name+"?")){hint.textContent="HOLD: chưa xác nhận.";return}
@@ -166,6 +181,7 @@ check.tabIndex=-1;bar.style.display="none";
   chooseCustomer("");hint.textContent="Đã ngừng sử dụng; không xóa lịch sử hệ số.";
  });
  save.addEventListener("click",async()=>{
+  if(!optIn.checked){hint.textContent="Chưa bật Khách & tỷ lệ; không lưu hệ số.";return}
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
    core.parseRate(rate.value);
@@ -187,6 +203,7 @@ check.tabIndex=-1;bar.style.display="none";
  }
  function enabled(){return optIn.checked===true&&check.checked===true}
  function clearSelection(message){
+  initialSourceBindAllowed=false;
   confirmedRepeatSource=null;checkedSource="";directMode=false;
   ownTop.__KTS_QUYT_SELECTED_V1__=false;
   ownTop.__KTS_QUYT_SOURCE_V1__="";
@@ -230,7 +247,7 @@ check.tabIndex=-1;bar.style.display="none";
    ownTop.__KTS_QUYT_SELECTED_V1__=false;
    ownTop.__KTS_QUYT_SOURCE_V1__="";
    ownTop.__KTS_QUYT_RATE_V1__="1,067";
-   confirmedRepeatSource=null;directMode=false;
+   confirmedRepeatSource=null;directMode=false;initialSourceBindAllowed=false;
    selectedMessageIds.clear();messageReviewActive=false;
    review.value="";copy.disabled=true;
   }
@@ -389,6 +406,25 @@ check.tabIndex=-1;bar.style.display="none";
  }
  input.addEventListener("input",()=>{
   confirmedRepeatSource=null;
+  if(initialSourceBindAllowed && optIn.checked && customerId==="quyt" &&
+     !checkedSource && input.value.trim() &&
+     !input.value.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]")){
+   // Only bind a fully parsed initial source, never partial typing. Do not
+   // compute/copy/dispatch any amount or change the immutable source itself.
+   try{
+    const selectedRegion=document.getElementById("region")||document.getElementById("sharedRegion");
+    const cleaner=window.KTSCleanAggregate;
+    if(!cleaner||typeof cleaner.parse!=="function")throw Error("CLEAN_CORE_REQUIRED");
+    cleaner.parse(input.value,{region:selectedRegion?.value});
+    core.parseRate(rate.value);
+    initialSourceBindAllowed=false;
+    ownTop.__KTS_QUYT_SELECTED_V1__=true;
+    ownTop.__KTS_QUYT_SOURCE_V1__=input.value;
+    notifyAll();
+    reset();
+    return;
+   }catch(_){reset();return}
+  }
   if(enabled()&&checkedSource!==input.value){
     clearSelection("HOLD: nguồn thay đổi; kết quả cũ vô hiệu, hệ số nháp trả về hệ số đã lưu.");return;
   }
