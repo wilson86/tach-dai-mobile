@@ -37,22 +37,27 @@ function install(){
  const keep=document.createElement("button");keep.type="button";
  keep.textContent="Xác nhận khách đánh thêm — GIỮ ĐỦ các lượt";
  keep.hidden=true;keep.style.cssText="padding:9px;border:1px solid #ae871b;background:#fff7d2;margin:6px 0";
+ const direct=document.createElement("button");direct.type="button";
+ direct.id="ktsQuytDirectMerge";
+ direct.textContent="GỘP TIN QUÝT TỪ NGUỒN — XEM TRƯỚC";
+ direct.style.cssText="display:block;padding:9px;border-radius:6px;background:#f7d88a;border:1px solid #a6751e;margin:6px 0;color:#211b11";
  const copy=document.createElement("button");copy.type="button";copy.textContent="Copy Quýt bị khóa — chờ xác minh Router";
  copy.disabled=true;
  copy.style.cssText="padding:9px;border-radius:6px;background:#d79c2a;color:#111;border:0;margin-top:6px";
  const note=document.createElement("div");note.style.cssText="font-size:12px";
  note.textContent="Hệ số mặc định 1,067; nhập dấu phẩy hoặc dấu chấm, tối đa 3 chữ số thập phân, lớn hơn 0 và không quá 3. Chỉ nhân B/LO/BAO; DD/Đầu/Đuôi/Đá giữ nguyên. Chưa xác minh Router nhân đúng một lần: khóa Copy/Cắt và tự gửi.";
- panel.append(title,status,keep,review,copy,note);
+ panel.append(title,status,keep,direct,review,copy,note);
  output.insertAdjacentElement("afterend",panel);
  let confirmedRepeatSource=null;
  let checkedSource="";
+ let directMode=false;
  function reset(){
   review.value="";keep.hidden=true;
   status.textContent="Bấm Kiểm tra/Tách rồi xem kết quả Quýt.";copy.disabled=true;
  }
  function enabled(){return check.checked===true}
  function clearSelection(message){
-  confirmedRepeatSource=null;checkedSource="";
+  confirmedRepeatSource=null;checkedSource="";directMode=false;
   ownTop.__KTS_QUYT_SELECTED_V1__=false;
   ownTop.__KTS_QUYT_SOURCE_V1__="";
   ownTop.__KTS_QUYT_RATE_V1__="1,067";
@@ -75,7 +80,7 @@ function install(){
   try{for(const f of ownTop.document.querySelectorAll("iframe"))if(f.contentWindow)fire(f.contentWindow)}catch(_){}
  }
  check.addEventListener("change",()=>{
-  confirmedRepeatSource=null;
+  confirmedRepeatSource=null;directMode=false;
   ownTop.__KTS_QUYT_SELECTED_V1__=check.checked===true&&Boolean(input.value.trim());
   ownTop.__KTS_QUYT_SOURCE_V1__=ownTop.__KTS_QUYT_SELECTED_V1__?input.value:"";
   if(!ownTop.__KTS_QUYT_SELECTED_V1__||typeof ownTop.__KTS_QUYT_RATE_V1__!=="string")
@@ -99,13 +104,32 @@ function install(){
   if(!checkedSource||checkedSource!==input.value){
     clearSelection("HOLD: nguồn đã đổi, Quýt và hệ số được đặt lại mặc định.");return;
   }
-  const original=input.value,raw=output.value;
-  if(!original.trim()||!raw.trim()){status.textContent="HOLD: không có tin hoặc kết quả để điều chỉnh.";return}
+  const original=input.value;
   if(original.startsWith("[[KTS_EXACT_OUTPUT_LEDGER_V1]]")){
    status.textContent="HOLD: nguồn hiện là Cut ledger; không điều chỉnh lại.";return;
   }
   try{
    const selectedRegion=document.getElementById("region")||document.getElementById("sharedRegion");
+   // Direct review is independent of Tách output. Validate the COMPLETE raw
+   // source through the existing parser; never infer, drop or rewrite a wager.
+   let raw=output.value;
+   if(directMode){
+    const cleaner=window.KTSCleanAggregate;
+    if(!cleaner||typeof cleaner.preview!=="function")throw Error("CLEAN_CORE_REQUIRED");
+    const merged=cleaner.preview(original,{
+     region:selectedRegion?.value,omitRegion:true,
+     repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator"
+    });
+    if(merged.status!=="REVIEW_ONLY"){
+     if(merged.requiresConfirmation){
+      keep.hidden=false;
+      status.textContent="HOLD: có lượt lặp. Xác nhận GIỮ TẤT CẢ trước khi xem gộp; không tự xóa tin.";
+     }else status.textContent="HOLD: nguồn chưa đủ điều kiện xem gộp.";
+     return;
+    }
+    raw=merged.normalized;
+   }
+   if(!original.trim()||!raw.trim())throw Error("MISSING_SOURCE_OR_RESULT");
    const p=core.prepareGrouped(raw,{
     customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,
     rate:rate.value,sourceText:original,region:selectedRegion?.value,
@@ -113,7 +137,8 @@ function install(){
     omitRegion:true
    });
    review.value=p.preview;
-   status.textContent="Quýt ✓ | hệ số ×"+p.rate.replace(".",",")+
+   status.textContent=(directMode?"GỘP TỪ TIN GỐC ✓":"Quýt ✓")+
+    " | hệ số ×"+p.rate.replace(".",",")+
     " | GỘP các lượt cùng số/cùng loại/cùng đài trước → nhân một lần → làm tròn lên. "+
     p.aggregatedExposures+" số/loại đã đối chiếu. Chưa cho gửi tự động, Router có thể nhân thêm.";
    copy.disabled=!ROUTER_ONCE_ONLY_RECEIPT_VERIFIED;
@@ -127,6 +152,11 @@ function install(){
  keep.addEventListener("click",()=>{
   if(!enabled()||!input.value.trim())return;
   confirmedRepeatSource=input.value;
+  refresh();
+ });
+ direct.addEventListener("click",()=>{
+  if(!enabled()){status.textContent="HOLD: hãy chọn Quýt trước.";return;}
+  directMode=true;
   refresh();
  });
  // Existing run(), Clear/Cut/Undo sometimes update textarea.value without input.
