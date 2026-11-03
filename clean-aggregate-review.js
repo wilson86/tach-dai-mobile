@@ -8,7 +8,7 @@ const unitRx=/^(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/iu;
 const labelRx=/^(hn|mb|mn|mt)(?![\p{L}\p{N}])/iu;
 const numberRx=/^\d{2}(?!\d)/u;
 const MAX_CLAUSES=500;
-function fail(code,at){throw Error(code+(at===undefined?"":" @"+at))}
+function fail(code,at,line,selector){throw Error(code+(at===undefined?"":" @"+at)+(line===undefined?"":" line="+line)+(selector?" selector="+selector:""))}
 function units(token){
  const match=unitRx.exec(token);if(!match||match[0].length!==token.length)fail("STAKE_INVALID");
  const n=match[1].replace(",",".");const [whole,fraction=""]=n.split(".");
@@ -27,13 +27,23 @@ function lex(raw){
    if(text[i]==="\n")ln++;i++;continue;
   }
   const suffix=text.slice(i);
+  // These selectors are recognized but their review money/topology is not approved.
+  // Never reinterpret them as LO or manufacture a missing unit.
+  const unsupported=/^(dathang|dat|da|đá|xc)(?=\s|\d)/iu.exec(suffix);
+  if(unsupported){
+   const tail=suffix.slice(unsupported[0].length);
+   if(/^\s*\d+(?:[.,]\d+)?(?![\p{L}\p{N}.,])/u.test(tail))fail("MISSING_UNIT_HOLD",i,ln,unsupported[0]);
+   fail("UNSUPPORTED_SELECTOR_HOLD",i,ln,unsupported[0]);
+  }
   let m=unitRx.exec(suffix),type="amount";
   if(!m){m=labelRx.exec(suffix);type="station"}
   if(!m){m=kindRx.exec(suffix);type="selector"}
   if(!m){m=numberRx.exec(suffix);type="number"}
-  if(!m)fail("UNRECOGNIZED_FRAGMENT",i);
+  if(!m)fail("UNRECOGNIZED_FRAGMENT",i,ln);
   // Prevent swallowing a selector prefix in an unknown word (e.g. duix).
-  if(type==="selector"&&/[\p{L}]/u.test(suffix[m[0].length]||""))fail("UNKNOWN_SELECTOR",i);
+  if(type==="selector"&&/[\p{L}]/u.test(suffix[m[0].length]||""))fail("UNKNOWN_SELECTOR",i,ln);
+  if(type==="selector"&&/^\s*\d+(?:[.,]\d+)?(?![\p{L}\p{N}.,])/u.test(suffix.slice(m[0].length)))
+   fail("MISSING_UNIT_HOLD",i,ln,m[0]);
   out.push({type,value:m[0],offset:i,physicalLine:ln});
   i+=m[0].length;
   if(out.length>20000)fail("TOKEN_LIMIT");
@@ -61,7 +71,7 @@ function parse(raw,options={}){
    const numbers=group.length?group:previous;
    if(!numbers.length)fail("SELECTOR_WITHOUT_NUMBERS",t.offset);
    const amount=tokens[++i];
-   if(!amount||amount.type!=="amount")fail("SELECTOR_WITHOUT_AMOUNT",t.offset);
+   if(!amount||amount.type!=="amount")fail("SELECTOR_WITHOUT_AMOUNT",t.offset,t.physicalLine,t.value);
    const half=units(amount.value),kind=ALIAS[t.value.replace(/\s+/gu," ")];
    if(!kind)fail("UNKNOWN_SELECTOR",t.offset);
    clauses.push({station,numbers:[...numbers],kind,half,line:t.physicalLine,offset:t.offset});
