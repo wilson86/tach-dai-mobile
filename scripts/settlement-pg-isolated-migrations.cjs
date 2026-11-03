@@ -229,6 +229,15 @@ async function main(){
             probe.output.includes('SYNTHETIC_NONCE_REPLAY_AND_RECEIPT_LOOKUP_PASS')&&
             probe.output.includes('SYNTHETIC_CAS_IDEMPOTENCY_REVOKED_AND_UNKNOWN_PASS')};
         if(!receipt.atomic_runtime_probe.passed)receipt.status='BLOCKED_ATOMIC_RUNTIME_PROBE';
+        if(receipt.atomic_runtime_probe.passed){
+          const racePath=realC(path.join(root,'scripts/settlement-pg-atomic-logout-race.cjs'));
+          if(!racePath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(racePath).isFile())
+            fail('TEAM_PG_RACE_SOURCE_INVALID');
+          const race=exec(process.execPath,[racePath,binaries.psql,String(port),resolved],resolved,{...env,PGPORT:String(port)},30000);
+          receipt.concurrent_logout={exit_code:race.exit_code,stdout_tail:race.output,stderr_tail:race.error,
+            process_error:race.problem,passed:race.ok&&race.output.includes('SYNTHETIC_CONCURRENT_LOGOUT_BLOCKED_THEN_COMMITTED_PASS')};
+          if(!receipt.concurrent_logout.passed)receipt.status='BLOCKED_ATOMIC_LOGOUT_RACE';
+        }
       }
     }
   }
