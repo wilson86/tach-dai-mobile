@@ -83,7 +83,12 @@ function install(){
  const hint=document.createElement("div");hint.id="ktsReviewCustomerStatus";hint.style.cssText="width:100%;font-size:12px";
  const history=document.createElement("div");history.id="ktsReviewRateHistory";history.style.cssText="width:100%;font-size:12px";
  bar.append(selector,name,add,rename,retire,save,hint,history);
- label.insertAdjacentElement("afterend",bar);label.hidden=true;bar.style.display="none";
+ label.insertAdjacentElement("afterend",bar);
+// The customer/rate opt-in is the ONE visible checkbox. Keep the old Quýt
+// checkbox as a private compatibility state for source-binding/QA only.
+// "hidden" alone loses to the author inline display:flex in real Chrome.
+label.hidden=true;label.style.display="none";label.setAttribute("aria-hidden","true");
+check.tabIndex=-1;bar.style.display="none";
  function drawCustomers(){
   selector.innerHTML="";
   const blank=document.createElement("option");blank.value="";blank.textContent="KHÁCH: — chọn —";selector.append(blank);
