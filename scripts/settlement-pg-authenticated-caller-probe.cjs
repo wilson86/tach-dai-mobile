@@ -15,4 +15,6 @@ const call=`'${p.session_id}','${p.nonce}',${expires},'${p.proof}','group_a','cu
 const positive=run(`BEGIN; SELECT kts_team.atomic_draft_v1(${call}); ROLLBACK`);
 if(positive.status!==0)throw Error('CALLER_POSITIVE_FAILED '+positive.stderr.slice(-300));
 const result=JSON.parse(positive.stdout.trim());if(result.event_id!=='authenticated_event'||String(result.new_revision)!=='3')throw Error('CALLER_POSITIVE_MISMATCH');
-console.log('SYNTHETIC_AUTHENTICATED_CALLER_OWNER_DIRECT_RAW_DENIED_PASS role_non_superuser=true sqlstate=42501 cases=3 positive_draft=PASS rollback_requested=true');
+const replay=run(`BEGIN; SELECT kts_team.atomic_draft_v1(${call}); SELECT kts_team.atomic_draft_v1(${call}); COMMIT`);
+if(replay.status===0||!replay.stderr.includes('23505'))throw Error('CALLER_NONCE_REPLAY_NOT_DENIED '+replay.stderr.slice(-300));
+console.log('SYNTHETIC_AUTHENTICATED_CALLER_OWNER_DIRECT_RAW_DENIED_PASS role_non_superuser=true sqlstate=42501 cases=3 positive_draft=PASS nonce_replay_sqlstate=23505 rollback_requested=true');
