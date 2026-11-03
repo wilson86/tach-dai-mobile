@@ -59,5 +59,17 @@ async function main(){let a,b;try{
  if(denied!=='0:0:true')throw Error('MEMBER_DENIED_STATE_'+denied);
  query("UPDATE kts_team.memberships SET revoked_at=NULL WHERE workspace_id='group_a' AND user_id='user_1'");
  console.log('SYNTHETIC_MEMBERSHIP_REVOCATION_BOTH_ORDERINGS_PASS blocked=true first='+member+' second='+denied);
+ a=worker('kts_role_write_wait');b=worker('kts_role_downgrade_first');
+ b.p.stdin.write("BEGIN; UPDATE kts_team.memberships SET team_role='viewer' WHERE workspace_id='group_a' AND user_id='user_1';\n\\echo ROLE_DOWNGRADE_LOCKED\n");
+ await waitFor(()=>b.out.includes('ROLE_DOWNGRADE_LOCKED')||b.done,'ROLE_LOCK');if(b.done)throw Error('ROLE_LOCK_EXIT');
+ a.p.stdin.write(`BEGIN; SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_v1(${proof('role_denied','role_denied_key','c'.repeat(32),4)});\n\\echo UNEXPECTED_ROLE_WRITE\n`);
+ blocked=false;for(let i=0;i<60;i++){const n=query("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE application_name='kts_role_write_wait' AND cardinality(pg_catalog.pg_blocking_pids(pid))>0");if(n==='1'){blocked=true;break}if(a.done||a.out.includes('UNEXPECTED_ROLE_WRITE'))break;await delay(50)}
+ if(!blocked)throw Error('ROLE_WRITE_NOT_BLOCKED');
+ b.p.stdin.end('COMMIT;\n\\q\n');await waitFor(()=>b.done,'ROLE_COMMIT');if(b.code!==0)throw Error('ROLE_COMMIT_FAILED');
+ await waitFor(()=>a.done,'ROLE_DENIAL');if(a.code===0||!a.err.includes('TEAM_ATOMIC_SESSION_INVALID')||a.out.includes('UNEXPECTED_ROLE_WRITE'))throw Error('ROLE_NOT_DENIED '+a.err.slice(-500));
+ const role=query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='role_denied')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='role_denied_key')::text||':'||(SELECT team_role FROM kts_team.memberships WHERE workspace_id='group_a' AND user_id='user_1')");
+ if(role!=='0:0:viewer')throw Error('ROLE_DENIED_STATE_'+role);
+ query("UPDATE kts_team.memberships SET team_role='operator' WHERE workspace_id='group_a' AND user_id='user_1'");
+ console.log('SYNTHETIC_ROLE_DOWNGRADE_FIRST_DENIES_WRITE_PASS blocked=true final='+role);
  }finally{for(const w of [a,b])if(w&&!w.done){w.p.stdin.end();w.p.kill()}}}
 main().catch(e=>{console.error(e.message);process.exitCode=1});
