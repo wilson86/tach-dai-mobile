@@ -140,8 +140,14 @@ function install(){
   try{
    const v=chosenName();
    if(profiles.length>=40)throw Error("CUSTOMER_LIMIT");
+   const selectedRate=window.prompt("Nhập hệ số đã xác nhận cho khách mới:","1,000");
+   if(selectedRate===null){hint.textContent="HOLD: chưa xác nhận hệ số.";return}
+   core.parseRate(selectedRate);
+   if(!window.confirm("Tạo khách "+v+" với hệ số "+selectedRate+"?")){hint.textContent="HOLD: chưa xác nhận tạo khách.";return}
    const id="customer-"+Date.now().toString(36)+"-"+Math.floor(Math.random()*1e9).toString(36);
-   profiles.push({id,name:v,rate:"1,000",active:true,history:[]});
+   if(profiles.some(p=>p.id===id))throw Error("CUSTOMER_ID_COLLISION");
+   const at=new Date().toISOString();
+   profiles.push({id,name:v,rate:selectedRate,active:true,created_at:at,updated_at:at,history:[{version:1,at,rate:selectedRate}]});
    if(!storeCustomers()){profiles.pop();return}
    name.value="";chooseCustomer(id);
   }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
@@ -149,7 +155,9 @@ function install(){
  rename.addEventListener("click",()=>{
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
-   const v=chosenName(),old=p.name;p.name=v;
+   const v=chosenName(),old=p.name;
+   if(!window.confirm("Đổi tên khách "+old+" thành "+v+"?")){hint.textContent="HOLD: chưa xác nhận đổi tên.";return}
+   p.name=v;
    if(!storeCustomers()){p.name=old;return}
    name.value="";drawCustomers();notifyAll();hint.textContent="Đã đổi tên; customer_id không thay đổi.";
   }catch(e){hint.textContent="HOLD: "+String(e.message||e)}
@@ -157,6 +165,7 @@ function install(){
  retire.addEventListener("click",()=>{
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   if(p.id==="quyt"||p.id==="hien"){hint.textContent="HOLD: không tắt khách mặc định ở bản review.";return}
+  if(!window.confirm("Ngừng sử dụng khách "+p.name+"?")){hint.textContent="HOLD: chưa xác nhận.";return}
   p.active=false;if(!storeCustomers()){p.active=true;return}
   chooseCustomer("");hint.textContent="Đã ngừng sử dụng; không xóa lịch sử hệ số.";
  });
@@ -164,9 +173,10 @@ function install(){
   const p=profile();if(!p){hint.textContent="HOLD: chọn khách.";return}
   try{
    core.parseRate(rate.value);
+   if(!window.confirm("Lưu hệ số "+rate.value+" cho "+p.name+"?")){hint.textContent="HOLD: chưa xác nhận hệ số.";return}
    const old=p.rate,oldHist=p.history.slice();
    if(old!==rate.value){
-    p.rate=rate.value;p.history.push({at:new Date().toISOString(),rate:rate.value});
+    p.rate=rate.value;p.history.push({version:p.history.length+1,at:new Date().toISOString(),rate:rate.value});
     // Preserve all prior coefficient history; never discard old revisions.
    }
    if(!storeCustomers()){p.rate=old;p.history=oldHist;return}

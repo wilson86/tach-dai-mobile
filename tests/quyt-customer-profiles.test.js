@@ -21,7 +21,7 @@ function mount(store){
  const document={readyState:"complete",createElement:make,
   getElementById:id=>byId[id]||nodes.find(n=>n.id===id),querySelectorAll:()=>[]};
  const localStorage={getItem:k=>store.get(k)||null,setItem:(k,v)=>store.set(k,v)};
- const window={document,localStorage,location:{origin:"http://localhost"},
+ const window={document,localStorage,confirm:()=>true,prompt:()=>"1,000",location:{origin:"http://localhost"},
   addEventListener(k,f){(handlers[k]??=[]).push(f)},
   dispatchEvent(evt){for(const f of handlers[evt.type]??[])f(evt)}};
  window.top=window;window.KTSQuytBaoReview=core;
@@ -57,7 +57,7 @@ test("named customer has stable customer_id, independent rate and version histor
  m.get("ktsQuytRate").value="1,05";m.dispatch("ktsQuytRate","input");
  m.dispatch("ktsReviewSaveRate","click");
  assert.equal(saved().customers.find(p=>p.id===id).rate,"1,05");
- assert.equal(saved().customers.find(p=>p.id===id).history.length,1);
+ assert.equal(saved().customers.find(p=>p.id===id).history.length,2);
  m.get("ktsReviewCustomerName").value="Khách B";m.dispatch("ktsReviewRenameCustomer","click");
  assert.equal(saved().customers.find(p=>p.id===id).name,"Khách B");
  const reload=mount(store);
@@ -67,7 +67,7 @@ test("named customer has stable customer_id, independent rate and version histor
  assert.equal(reload.get("ktsQuytCheckbox").checked,false); // no authority to forward
  reload.dispatch("ktsReviewRetireCustomer","click");
  assert.equal(saved().customers.find(p=>p.id===id).active,false);
- assert.equal(saved().customers.find(p=>p.id===id).history.length,1);
+ assert.equal(saved().customers.find(p=>p.id===id).history.length,2);
 });
 test("invalid draft cannot replace saved coefficient, raw content unchanged",()=>{
  const store=new Map(),m=mount(store);
@@ -95,4 +95,11 @@ test("all historical coefficient entries survive load and invalid history holds"
  assert.equal(JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1")).customers[1].history.length,26);
  profiles[1].history[1]={at:"x",rate:"bad"};const bad=JSON.stringify({version:1,customers:profiles}),badStore=new Map([["KTS_REVIEW_CUSTOMERS_V1",bad]]),b=mount(badStore);
  b.get("ktsReviewCustomer").value="quyt";b.dispatch("ktsReviewCustomer","change");assert.match(b.get("ktsReviewCustomerStatus").textContent,/HOLD/);assert.equal(badStore.get("KTS_REVIEW_CUSTOMERS_V1"),bad);
+});
+
+test("customer creation and rate changes require explicit confirmation",()=>{
+ const store=new Map(),m=mount(store);m.get("ktsReviewCustomerName").value="Khách mới";m.window.prompt=()=>null;m.dispatch("ktsReviewAddCustomer","click");assert.equal(store.size,0);
+ m.window.prompt=()=>"1,05";m.window.confirm=()=>false;m.dispatch("ktsReviewAddCustomer","click");assert.equal(store.size,0);
+ m.window.confirm=()=>true;m.dispatch("ktsReviewAddCustomer","click");let data=JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1"));const p=data.customers.find(x=>x.name==="Khách mới");assert.equal(p.rate,"1,05");assert.equal(p.history[0].version,1);
+ m.get("ktsQuytRate").value="1,10";m.window.confirm=()=>false;m.dispatch("ktsReviewSaveRate","click");data=JSON.parse(store.get("KTS_REVIEW_CUSTOMERS_V1"));assert.equal(data.customers.find(x=>x.id===p.id).rate,"1,05");
 });
