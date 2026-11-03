@@ -71,6 +71,7 @@ AS $fn$
 DECLARE
   v_hash text; v_user text; v_workspace text; v_message text; v_session_expires timestamptz;
   v_result jsonb;
+  v_expected_state text; v_expected_event_kind text;
   v_now bigint := pg_catalog.floor(EXTRACT(epoch FROM pg_catalog.clock_timestamp()))::bigint;
 BEGIN
   IF p_session_id IS NULL OR p_session_id !~ '^[a-f0-9]{64}$'
@@ -86,6 +87,15 @@ BEGIN
     OR p_expected_revision IS NULL OR p_expected_revision<0 OR p_expected_revision>=9007199254740991
     OR p_request_sha256 IS NULL OR p_request_sha256 !~ '^[a-f0-9]{64}$' THEN
     RAISE EXCEPTION 'TEAM_ATOMIC_PROOF_INVALID';
+  END IF;
+  -- Action has already been validated: preserve exact event/state mapping.
+  -- Avoid CASE expressions embedded in the receipt IF rejected by PG16 DDL.
+  IF p_action='submit_review' THEN
+    v_expected_state:='PENDING_REVIEW';
+    v_expected_event_kind:='SUBMITTED';
+  ELSE
+    v_expected_state:='REVIEWED';
+    v_expected_event_kind:='REVIEWED';
   END IF;
   BEGIN
     SELECT s.session_hash,s.user_id,s.workspace_id,s.expires_at INTO STRICT v_hash,v_user,v_workspace,v_session_expires
@@ -124,8 +134,7 @@ BEGIN
   IF pg_catalog.jsonb_typeof(v_result) IS DISTINCT FROM 'object'
      OR pg_catalog.jsonb_typeof(v_result->'replayed') IS DISTINCT FROM 'boolean'
      OR ((v_result->>'replayed')='false' AND v_result->>'event_id' IS DISTINCT FROM p_event_id)
-     OR v_result->>'state' IS DISTINCT FROM
-       CASE p_action WHEN 'submit_review' THEN 'PENDING_REVIEW' ELSE 'REVIEWED' END
+     OR v_result->>'state' IS DISTINCT FROM v_expected_state
      OR NOT EXISTS (
        SELECT 1 FROM kts_team.idempotency_receipts r JOIN kts_team.scope_events e
          ON e.workspace_id=r.workspace_id AND e.event_id=r.event_id
@@ -133,7 +142,7 @@ BEGIN
          AND r.request_sha256=p_request_sha256 AND e.payload_sha256=p_request_sha256
          AND e.actor_user_id=v_user AND e.partner_id=p_partner_id
          AND e.business_date=p_business_date AND e.region=p_region
-         AND e.event_kind=CASE p_action WHEN 'submit_review' THEN 'SUBMITTED' ELSE 'REVIEWED' END
+         AND e.event_kind=v_expected_event_kind
          AND e.scope_revision=p_expected_revision+1
          AND e.event_id=v_result->>'event_id' AND e.feed_seq::text=v_result->>'feed_seq'
          AND e.scope_revision::text=v_result->>'new_revision'
