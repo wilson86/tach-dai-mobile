@@ -87,3 +87,11 @@ t("LO aliases preserve type, including multiword bao lo",()=>{
 t("unknown mode cannot silently delete any stake",()=>{
  assert.throws(()=>call("12 b1n 12 b1n",{repeatDecision:"auto_remove"}),/DUPLICATE_DECISION_INVALID/);
 });
+
+t("duoi = dui = đui for a complete amount; never infer a missing unit",()=>{
+ const raw="mb 98 duoi15n 98 dui20n 98 đui25n";
+ const x=A.preview(raw,{region:"mb",repeatDecision:"keep_all"});
+ assert.equal(x.normalized,"MB 98 duoi60n");assert.equal(x.totals.duoi,"60");
+ assert.equal(x.originalText,raw);
+ assert.throws(()=>A.preview("mb 98 đui25",{region:"mb"}),/SELECTOR_WITHOUT_AMOUNT/);
+});
