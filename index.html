@@ -547,7 +547,7 @@ function normalizeInput(s){
   s=s.replace(/^hn(?=\s+\d{1,4}(?:\s|$))/u,"mb");
   // Operator's amount-bound "dui" is the ĐUÔI selector spelling, not a
   // general text correction. Reject malformed/unsuffixed lookalikes.
-  s=s.replace(/(^|\s)dui(?=\s*\d+(?:[.,]\d+)?[ndđ](?=\s|$))/giu,"$1duoi");
+  s=s.replace(/(^|\s)(?:dui|đui)(?=\s*\d+(?:[.,]\d+)?[ndđ](?=\s|$))/giu,"$1duoi");
   // Approved MB wager shorthand: 'đau' before a stake is a spelling of 'đầu'.
   // Scope this to a complete money atom; do not rewrite chat prose or raw
   // Telegram evidence. Duplicate number groups remain fail-closed.
