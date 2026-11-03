@@ -229,3 +229,16 @@ test("opt-in UI and canonical alias are explicit and reversible",()=>{
  assert.ok(root.includes('(?:dui|đui)'));
  assert.ok(ui.includes('if(!enabled())return'));
 });
+
+test("only Khách & tỷ lệ is visible; legacy Quýt checkbox stays private and inaccessible",()=>{
+ assert.ok(ui.includes('optIn.id="ktsCustomerRateToggle"'));
+ assert.ok(ui.includes('optInLabel.append(optIn,optInText)'));
+ assert.ok(ui.includes('label.hidden=true;label.style.display="none"'));
+ assert.ok(ui.includes('label.setAttribute("aria-hidden","true")'));
+ assert.ok(ui.includes('check.tabIndex=-1'));
+ // The Quýt checkbox remains internal source-binding state, not a second user toggle.
+ assert.ok(ui.includes('customerId==="quyt"&&Boolean(input.value.trim())'));
+ assert.ok(ui.includes('if(!enabled())return'));
+ assert.ok(ui.includes('bar.style.display=opted?"flex":"none"'));
+ assert.ok(ui.includes('panel.style.display=opted&&customerId?"block":"none"'));
+});
