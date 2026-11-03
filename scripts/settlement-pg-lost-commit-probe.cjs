@@ -5,8 +5,8 @@ const {createDraftProof}=require('../team-settlement/candidate/atomic-draft-proo
 const [psql,port,cwd]=process.argv.slice(2);
 if(!/^C:\\Program Files\\PostgreSQL\\16\\bin\\psql\.exe$/i.test(psql)||!/^\d{2,5}$/.test(port)||!/^C:\\KTS-Settlement\\PG_SYNTHETIC_/i.test(cwd)||process.env.PGHOST!=='127.0.0.1'||process.env.PGSSLMODE!=='disable')throw Error('LOST_ACK_SCOPE_DENIED');
 const base=['-X','-w','-q','-A','-t','-v','ON_ERROR_STOP=1','-h','127.0.0.1'];
-const auth=['-U','qa_admin','-d','postgres'];
-function query(sql){const r=cp.spawnSync(psql,[...base,'-p',port,...auth,'-c',sql],{cwd,env:process.env,encoding:'utf8',timeout:5000,windowsHide:true});if(r.error||r.status!==0)throw Error('LOST_ACK_QUERY_FAILED '+String(r.stderr||'').slice(-500));return String(r.stdout).trim()}
+const auth=['-U','qa_admin','-d','postgres']; const callerAuth=['-U','synthetic_atomic_caller','-d','postgres']; const callerEnv={...process.env,PGPASSWORD:'synthetic_fixture_only_password_7291',PGAPPNAME:'kts_lost_after_commit'};
+function query(sql,restricted=false){const r=cp.spawnSync(psql,[...base,'-p',port,...(restricted?callerAuth:auth),'-c',sql],{cwd,env:restricted?callerEnv:process.env,encoding:'utf8',timeout:5000,windowsHide:true});if(r.error||r.status!==0)throw Error('LOST_ACK_QUERY_FAILED '+String(r.stderr||'').slice(-500));return String(r.stdout).trim()}
 const delay=ms=>new Promise(r=>setTimeout(r,ms));
 async function waitFor(fn,label){const end=Date.now()+7000;while(Date.now()<end){if(fn())return;await delay(30)}throw Error('LOST_ACK_TIMEOUT_'+label)}
 async function main(){let client,proxy,preProxy;const sockets=[];let armed=false,dropped=false;try{
@@ -18,15 +18,16 @@ async function main(){let client,proxy,preProxy;const sockets=[];let armed=false
  const args=`'${write.session_id}','${write.nonce}',${expires},'${write.proof}','group_a','customer_1','2026-10-12','mn','edit_draft',4,'lost_event','lost_key','${req.request_sha256}','${req.snapshot_text}'`;
  proxy=net.createServer(down=>{const up=net.connect(Number(port),'127.0.0.1');sockets.push(down,up);down.on('error',()=>{});up.on('error',()=>{});down.pipe(up);let buf=Buffer.alloc(0);up.on('data',chunk=>{if(!armed){down.write(chunk);return}buf=Buffer.concat([buf,chunk]);while(buf.length>=5){const len=buf.readUInt32BE(1),size=1+len;if(len<4||size>1024*1024)throw Error('LOST_ACK_PROTOCOL_INVALID');if(buf.length<size)break;const frame=buf.subarray(0,size);buf=buf.subarray(size);if(frame[0]===67&&frame.subarray(5).toString('utf8')==='COMMIT\0'){dropped=true;down.destroy();up.destroy();return}down.write(frame)}})});
  await new Promise((resolve,reject)=>{proxy.once('error',reject);proxy.listen(0,'127.0.0.1',resolve)});
- const proxyPort=String(proxy.address().port);client=cp.spawn(psql,[...base,'-p',proxyPort,...auth],{cwd,env:process.env,windowsHide:true});let out='',err='',done=false,exit=null;client.stdout.on('data',x=>out+=x);client.stderr.on('data',x=>err+=x);client.on('exit',x=>{done=true;exit=x});
- client.stdin.write(`BEGIN; SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_v1(${args});\n\\echo MUTATION_PENDING_COMMIT\n`);
+ const proxyPort=String(proxy.address().port);client=cp.spawn(psql,[...base,'-p',proxyPort,...callerAuth],{cwd,env:callerEnv,windowsHide:true});let out='',err='',done=false,exit=null;client.stdout.on('data',x=>out+=x);client.stderr.on('data',x=>err+=x);client.on('exit',x=>{done=true;exit=x});
+ client.stdin.write(`BEGIN; SELECT kts_team.atomic_draft_v1(${args});\n\\echo MUTATION_PENDING_COMMIT\n`);
  await waitFor(()=>out.includes('MUTATION_PENDING_COMMIT')||done,'MUTATION');if(done)throw Error('LOST_ACK_MUTATION_FAILED '+err.slice(-500));
+ if(query("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE application_name='kts_lost_after_commit' AND usename='synthetic_atomic_caller'")!=='1')throw Error('LOST_ACK_CALLER_IDENTITY');
  armed=true;client.stdin.end('COMMIT;\n\\q\n');await waitFor(()=>done,'CLIENT_EXIT');
  if(!dropped||exit===0)throw Error('LOST_ACK_NOT_OBSERVED');
  const evidence=query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE workspace_id='group_a' AND event_id='lost_event' AND actor_user_id='user_1')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE workspace_id='group_a' AND idempotency_key='lost_key')::text");
  if(evidence!=='1:1')throw Error('LOST_ACK_FINAL_STATE_'+evidence);
  const look=`'${lookup.session_id}','${lookup.nonce}',${expires},'${lookup.proof}','group_a','customer_1','2026-10-12','mn','edit_draft',4,'lost_key','${req.request_sha256}','${req.snapshot_text}'`;
- const result=JSON.parse(query(`SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_reconcile_v1(${look})`));
+ const result=JSON.parse(query(`SELECT kts_team.atomic_draft_reconcile_v1(${look})`,true));
  if(result.classification!=='MATCHED_SERVER_RECEIPT'||result.event_id!=='lost_event'||String(result.new_revision)!=='5')throw Error('LOST_ACK_RECONCILIATION_FAILED');
  console.log('SYNTHETIC_COMMIT_ACK_DROPPED_AND_RECEIPT_RECONCILED_PASS client_exit='+exit+' event_receipt='+evidence+' revision=5 node_sql_hmac=PASS');
  // A second connection loses the COMMIT request before the server receives it.
@@ -37,10 +38,11 @@ async function main(){let client,proxy,preProxy;const sockets=[];let armed=false
  const beforeWrite=createDraftProof(token,beforeReq,{nonce:'c'.repeat(32),expires});
  const beforeLookup=createDraftProof(token,{...beforeReq,event_id:'lookup'},{nonce:'d'.repeat(32),expires,purpose:'lookup'});
  const beforeArgs=`'${beforeWrite.session_id}','${beforeWrite.nonce}',${expires},'${beforeWrite.proof}','group_a','customer_1','2026-10-12','mn','edit_draft',5,'before_event','before_key','${beforeReq.request_sha256}','${req.snapshot_text}'`;
- client=cp.spawn(psql,[...base,'-p',String(preProxy.address().port),...auth],{cwd,env:{...process.env,PGAPPNAME:'kts_lost_before_commit'},windowsHide:true});out='';err='';done=false;exit=null;
+ client=cp.spawn(psql,[...base,'-p',String(preProxy.address().port),...callerAuth],{cwd,env:{...callerEnv,PGAPPNAME:'kts_lost_before_commit'},windowsHide:true});out='';err='';done=false;exit=null;
  client.stdout.on('data',x=>out+=x);client.stderr.on('data',x=>err+=x);client.on('exit',x=>{done=true;exit=x});
- client.stdin.write(`BEGIN; SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_v1(${beforeArgs});\n\\echo BEFORE_COMMIT_PENDING\n`);
+ client.stdin.write(`BEGIN; SELECT kts_team.atomic_draft_v1(${beforeArgs});\n\\echo BEFORE_COMMIT_PENDING\n`);
  await waitFor(()=>out.includes('BEFORE_COMMIT_PENDING')||done,'BEFORE_MUTATION');if(done)throw Error('BEFORE_COMMIT_MUTATION_FAILED '+err.slice(-500));
+ if(query("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE application_name='kts_lost_before_commit' AND usename='synthetic_atomic_caller'")!=='1')throw Error('BEFORE_COMMIT_CALLER_IDENTITY');
  beforeArmed=true;client.stdin.end('COMMIT;\n\\q\n');await waitFor(()=>done,'BEFORE_CLIENT_EXIT');
  if(!beforeDropped||exit===0)throw Error('BEFORE_COMMIT_DROP_NOT_OBSERVED');
  let gone=false;for(let i=0;i<60;i++){if(query("SELECT count(*) FROM pg_catalog.pg_stat_activity WHERE application_name='kts_lost_before_commit'")==='0'){gone=true;break}await delay(50)}
@@ -48,7 +50,7 @@ async function main(){let client,proxy,preProxy;const sockets=[];let armed=false
  const beforeState=query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='before_event')::text||':'||(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key='before_key')::text");
  if(beforeState!=='0:0')throw Error('BEFORE_COMMIT_PARTIAL_WRITE_'+beforeState);
  const beforeLook=`'${beforeLookup.session_id}','${beforeLookup.nonce}',${expires},'${beforeLookup.proof}','group_a','customer_1','2026-10-12','mn','edit_draft',5,'before_key','${beforeReq.request_sha256}','${req.snapshot_text}'`;
- const beforeResult=JSON.parse(query(`SET ROLE synthetic_atomic_caller; SELECT kts_team.atomic_draft_reconcile_v1(${beforeLook})`));
+ const beforeResult=JSON.parse(query(`SELECT kts_team.atomic_draft_reconcile_v1(${beforeLook})`,true));
  if(beforeResult.classification!=='UNKNOWN')throw Error('BEFORE_COMMIT_FALSE_RECEIPT');
  console.log('SYNTHETIC_COMMIT_REQUEST_DROPPED_ROLLBACK_UNKNOWN_PASS client_exit='+exit+' event_receipt='+beforeState);
  }finally{if(client&&client.exitCode===null){client.stdin.end();client.kill()}for(const s of sockets)s.destroy();for(const server of [proxy,preProxy])if(server)await new Promise(r=>server.close(r))}}
