@@ -50,3 +50,9 @@ This is a **product workflow preview only**, valuable for identifying UX misunde
 - Browser automation did **not** verify OS-specific `file://` opening. A Linux Chrome policy blocked direct file URL in this sandbox. Standalone file mode on Windows/Android remains `NOT_RUN` until user or hardware verifies.
 
 **Qualification boundary:** No remaining failures were detected in the **specific 8 native Node and 40 Chromium assertions run on this fake-only demo**. This is **NOT** proof of absence of all bugs or real-money safety. The actual KTS Settlement backend, PostgreSQL16 tenant isolation and HIOSKT 65-case money oracle remain unqualified: `WRITE_BLOCK=ENABLED; RELEASE=NO_GO; COST_USD=0`.
+
+**Extended QA (same application/test source SHA; no additional source changes):**
+- Native Node deterministic, independent 10,000-action state-machine model walk: **PASS**; 262 accepted transitions, 9,646 denied transitions, 92 resets and 19,816 post-action state comparisons. Includes cross-tenant actors, role failures, invalid transitions, stale revisions and source-scope isolation. PRNG uses high bits (the initial low-bit generator covered no approved transitions and was replaced before treating fuzz evidence as meaningful).
+- Chromium 144 additionally checked a 320 × 640 viewport: Group B create→submit→independent approve **PASS**, no horizontal overflow and no JS error.
+- Existing qualified mobile/desktop screenshots are local QA evidence; `file://` navigation was blocked by the **test sandbox policy**, so standalone opening on physical Windows/Android is still **NOT_RUN**.
+- No known defect remained **within these specified fake-only automated checks** after the Group B reviewer fix. This is not a claim of zero product bugs or full production acceptance.
