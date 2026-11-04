@@ -53,7 +53,7 @@ function install(){
  function sources(s){
   const raw=input.value;
   if(!raw.trim()||raw.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]'))throw Error('NO_OR_LEDGER_SOURCE_HOLD');
-  const lines=raw.split(/\r?\n/u).map(x=>x.trim()).filter(Boolean);
+  const lines=raw.split(/\n/u).filter(x=>x.trim());
   if(lines.length>100)throw Error('MESSAGE_LIMIT_HOLD');
   if(lines.length>1&&!lines.every(x=>/^hn\s/iu.test(x)))throw Error('MULTILINE_SOURCE_IDS_REQUIRED_HOLD');
   // Local paste line IDs represent explicit one-line messages, never invented Telegram IDs.
