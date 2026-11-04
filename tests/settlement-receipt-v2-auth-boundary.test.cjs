@@ -7,14 +7,14 @@ const token='synthetic_'+'x'.repeat(40);
 const workspace='synthetic_group_a', user='synthetic_user_a';
 const session={session_handle:'b'.repeat(32),workspace_id:workspace,user_id:user};
 const NOW=1793789000000;
-function fixture({sessions=[session],role='operator',scoped=workspace,err=null}={}) {
+function fixture({sessions=[session],freshSessions=sessions,role='operator',scoped=workspace,err=null}={}) {
   const sql=[];
   const db={transaction:async fn=>{
     sql.push('BEGIN');
     try {const x=await fn({query:async(text,params)=>{
       sql.push({text,params});
       if(err)throw Error(err);
-      if(text.includes('FROM kts_auth.sessions'))return {rows:sessions};
+      if(text.includes('FROM kts_auth.sessions'))return {rows:text.includes('clock_timestamp()')?freshSessions:sessions};
       if(text.includes("set_config('kts.workspace_id'"))return {rows:[{workspace_id:scoped}]};
       if(text.includes('FROM kts_team.memberships'))return {rows:role===null?[]:[{team_role:role}]};
       throw Error('UNEXPECTED_SQL');
@@ -27,6 +27,14 @@ test('default off forbids any session or secret access',async()=>{
   await assert.rejects(b.authorizeReceiptRead(token,()=>true),/NOT_ENABLED/);
   assert.deepEqual(x.sql,[]);
 });
+test('missing or changed session on DB-time recheck never reaches callback',async()=>{
+ for(const freshSessions of [[],[{...session,session_handle:'d'.repeat(32)}],
+   [{...session,user_id:'synthetic_other'}],[{...session,workspace_id:'synthetic_group_b'}]]){
+  const x=fixture({freshSessions}),b=createReceiptV2AuthBoundary({db:x.db,enabled:true,clock:()=>NOW});
+  let called=false;await assert.rejects(b.authorizeReceiptRead(token,()=>{called=true}),/AUTH_DENIED/);
+  assert.equal(called,false);assert.equal(x.sql.at(-1),'ROLLBACK');
+ }
+});
 test('valid DB session, scoped active operator and callback in same transaction',async()=>{
   const x=fixture(),b=createReceiptV2AuthBoundary({db:x.db,enabled:true,clock:()=>NOW});
   const obtained=await b.authorizeReceiptRead(token,actor=>{
@@ -38,12 +46,13 @@ test('valid DB session, scoped active operator and callback in same transaction'
     assert.equal('session_hash' in actor,false);return 'PROOF_READY';
   });
   assert.equal(obtained,'PROOF_READY');assert.equal(x.sql.at(-1),'COMMIT');
-  assert.equal(x.sql.filter(z=>typeof z==='object').length,3);
+  assert.equal(x.sql.filter(z=>typeof z==='object').length,4);
   const first=x.sql.find(z=>typeof z==='object');
   assert.match(first.text,/FOR SHARE/);
   assert.equal(first.params[0],crypto.createHash('sha256').update(token).digest('hex'));
   assert.equal(first.params[1],new Date(NOW).toISOString());
-  assert.match(x.sql.filter(z=>typeof z==='object').at(-1).text,/FOR SHARE OF m,i/);
+  assert.match(x.sql.filter(z=>typeof z==='object').at(-2).text,/FOR SHARE OF m,i/);
+  assert.match(x.sql.filter(z=>typeof z==='object').at(-1).text,/expires_at > pg_catalog\.clock_timestamp\(\)/);
 });
 test('missing, ambiguous, revoked and malformed sessions fail closed',async()=>{
   for(const sessions of [[],[session,session],[{...session,session_handle:'bad'}],

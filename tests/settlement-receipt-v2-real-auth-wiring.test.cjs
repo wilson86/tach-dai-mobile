@@ -40,7 +40,7 @@ test('opted-in real Auth service signs only after live SQL checks, no bearer/has
     expectedSession:{...actor,server_verified:true,membership_active:true,role:'operator'},
     nowSeconds:Math.trunc(tm/1000)+1}).verified,true);
   assert.equal(Object.hasOwn(e,'session_token'),false);assert.equal(Object.hasOwn(e,'session_hash'),false);
-  assert.equal(f.log.filter(x=>typeof x==='object').length,3);
+  assert.equal(f.log.filter(x=>typeof x==='object').length,4);
   const lookup=f.log.find(x=>typeof x==='object');
   assert.equal(lookup.args[0],tokenHash(t));
 });

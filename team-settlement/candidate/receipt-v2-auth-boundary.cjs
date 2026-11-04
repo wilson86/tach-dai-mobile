@@ -49,6 +49,18 @@ function createReceiptV2AuthBoundary({db,clock=()=>Date.now(),enabled=false}={})
             AND m.revoked_at IS NULL AND i.disabled_at IS NULL
           FOR SHARE OF m,i`,[s.workspace_id,s.user_id]));
       if (active.length !== 1 || !['admin','operator'].includes(active[0]?.team_role)) reject();
+      // Connection acquisition and row-lock waits can outlive the timestamp
+      // captured before entering the transaction. Check database wall time
+      // again immediately before invoking the signer; the verifier must still
+      // independently enforce session validity after this transaction ends.
+      const fresh=resultRows(await tx.query(
+        `SELECT session_handle,user_id,workspace_id
+           FROM kts_auth.sessions
+          WHERE session_hash=$1 AND revoked_at IS NULL
+            AND expires_at > pg_catalog.clock_timestamp()
+          FOR SHARE`,[hash]));
+      if(fresh.length!==1||fresh[0]?.session_handle!==s.session_handle||
+         fresh[0]?.user_id!==s.user_id||fresh[0]?.workspace_id!==s.workspace_id)reject();
       // Caller must be trusted backend code; this callback is never exposed
       // through HTTP, never accepted from browser JSON, and never persisted.
       const identity=Object.freeze({server_verified:true,membership_active:true,
