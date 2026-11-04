@@ -27,7 +27,7 @@ function makePool(kind,recordRows,trace,roleState){
    const head=String(sql).trim().split(/\s+/).slice(0,4).join(' ');
    trace.push(kind+':'+head);
    if(['BEGIN','COMMIT','ROLLBACK','SET TRANSACTION READ ONLY'].includes(sql))
-     return {rows:[],rowCount:0};
+     return {rows:[],rowCount:0,command:sql};
    if(String(sql).includes('set_config('))return {rows:[]};
    if(kind==='auth'&&String(sql).includes('FROM kts_auth.sessions'))
      return roleState.active?{rows:[{user_id:'fake_operator',workspace_id:'group_a'}]}:{rows:[]};
