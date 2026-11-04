@@ -51,7 +51,7 @@ function createLocalPilotRunner(deps={}){
     const submitted=receipt(await review(op,scope,{action:'submit',expected_revision:draft.revision,idempotency_key:submitKey}));
     if(submitted.state!=='PENDING_REVIEW'||submitted.revision!==draft.revision+1||submitted.feed_seq<=draft.feed_seq||submitted.event_id===draft.event_id)fail('TEAM_PILOT_SUBMIT_INVALID');
     await assertDenied('SELF_REVIEW',()=>review(op,scope,{action:'approve',expected_revision:submitted.revision,idempotency_key:approveKey}));
-    const rv=await login(reviewer);if(!rv||rv.workspace_id!==scope.workspace_id||rv.role!=='reviewer'||!ID.test(rv.user_id)||!ID.test(op.user_id)||rv.user_id===op.user_id)fail('TEAM_PILOT_REVIEWER_INVALID');
+    const rv=await login(reviewer);if(!rv||rv.workspace_id!==scope.workspace_id||rv.role!=='reviewer'||typeof rv.user_id!=='string'||typeof op.user_id!=='string'||!ID.test(rv.user_id)||!ID.test(op.user_id)||rv.user_id===op.user_id)fail('TEAM_PILOT_REVIEWER_INVALID');
     const approved=receipt(await review(rv,scope,{action:'approve',expected_revision:submitted.revision,idempotency_key:approveKey}));
     if(approved.state!=='REVIEWED'||approved.revision!==submitted.revision+1||approved.feed_seq<=submitted.feed_seq||approved.event_id===draft.event_id||approved.event_id===submitted.event_id)fail('TEAM_PILOT_RECEIPT_INVALID');
     const state=await getScope(rv,scope);if(!state||state.revision!==approved.revision||state.state!=='REVIEWED')fail('TEAM_PILOT_STATE_INVALID');
