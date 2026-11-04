@@ -142,7 +142,7 @@ function loadActualRules(){
   assert.equal(rules.preprocessChatText(copiedChat),
     '92 82 da 10n\n68 86 39 da 5n\n26 68 da 3n\n26 86 da 3n',
     'strip only envelope while retaining every wager line and stake');
-  const realApi={normalizeInput:rules.normalizeInput.bind(rules),validateCheckOnlyLine:rules.validateCheckOnlyLine.bind(rules),processLine:rules.processLine.bind(rules),splitBetChunks:rules.splitBetChunks.bind(rules)};
+  const realApi={canonical:rules.engine,normalizeInput:rules.normalizeInput.bind(rules),validateCheckOnlyLine:rules.validateCheckOnlyLine.bind(rules),processLine:rules.processLine.bind(rules),splitBetChunks:rules.splitBetChunks.bind(rules)};
   const date=new Date('2026-10-04T12:00:00');
   const mb=U.transformDaVongText('68 86 28 da 5n',realApi,'mb',rules.getSchedule('mb',date));
   assert.equal(mb.ok,true,mb.error); assert.deepEqual(Array.from(mb.outputs),['68 86 da 5n','68 28 da 5n','86 28 da 5n']);

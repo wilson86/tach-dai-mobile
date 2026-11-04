@@ -30,6 +30,7 @@ function element(tag="div"){
 }
 const ctx={
   console,Date,Set,Map,JSON,String,Number,Math,RegExp,Error,Array,Object,Promise,
+  localStorage:(()=>{const m=new Map();return {getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)}})(),
   navigator:{clipboard:{async writeText(text){clipboard.text=text;}}},
   document:{
     getElementById(id){return els[id]||(els[id]=element(id));},
@@ -75,7 +76,9 @@ async function main(){
   await rules.cutSelectedOutput();
   assert.equal(clipboard.text,firstLines.join("\n"),"cut clipboard scope");
   assert.equal(groups().length,1);
-  assert.equal(rules.els.input.value,"2d 19 b15n","cut source deletes only completed number group");
+  assert.match(rules.els.input.value,/^\[\[KTS_EXACT_OUTPUT_LEDGER_V1\]\]/u,"partial cut keeps exact result ledger and original source");
+  assert.equal(els.ledgerWorkOrigin.textContent,original,"original source remains auditable");
+  assert.equal(els.ledgerSourceView.value,secondLines.join("\n"),"working view contains only surviving result rows");
   assert.equal(rules.els.output.value,secondLines.join("\n"));
   const afterCut=rules.els.output.value;
   rules.run();
@@ -102,14 +105,16 @@ async function main(){
   els.selectAllOutputBtn.events.click();
   assert.match(els.resultGroupsSummary.textContent,new RegExp(`Đã chọn ${all.length}/${all.length}`));
   await rules.cutSelectedOutput();
-  assert.equal(rules.els.input.value,"");
+  assert.equal(JSON.parse(rules.els.input.value.split('\n').slice(1).join('\n')).origin,original);
+  assert.equal(JSON.parse(rules.els.input.value.split('\n').slice(1).join('\n')).rows.length,0);
   assert.equal(rules.els.output.value,"");
   assert.equal(groups().length,0);
   rules.undo();
   assert.equal(rules.els.input.value,original);
   assert.equal(rules.els.output.value,baseline);
   // Rejecting invalid source clears all checkbox groups, visibly shows raw error.
-  rules.els.input.value="2d 52 dx5n";
+  // Duplicate DX numbers are hard-rejected; singleton DX is NEEDS_ORACLE.
+  rules.els.input.value="2d 52 52 dx5n";
   rules.run();
   assert.equal(groups().length,0);
   assert.match(rules.els.output.value,/PHÁT HIỆN TIN SAI:/u);

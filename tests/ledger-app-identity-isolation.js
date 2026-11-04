@@ -54,7 +54,7 @@ map.set("tachDaiMobileExactOutputLedgerV1",marker+JSON.stringify(other));
 api.input.value="";
 api.restore();
 assert.equal(api.input.value,"","must never restore a foreign ledger into the app");
-assert.equal(map.has("tachDaiMobileExactOutputLedgerV1"),false,"invalid own storage must be cleared");
+assert.equal(map.get("tachDaiMobileExactOutputLedgerV1"),marker+JSON.stringify(other),"unrecognized bytes remain intact");
 assert.equal(map.has("tachDaiNgangExactOutputLedgerV1"),true,"other app storage never mutated");
 map.set("tachDaiMobileExactOutputLedgerV1",raw);
 api.restore();

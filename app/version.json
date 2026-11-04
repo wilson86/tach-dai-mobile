@@ -1,7 +1,7 @@
 {
-  "version": "1.0.21",
-  "updated": "2026-10-24",
-  "business_engine_sha256": "046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb",
+  "version": "1.0.27",
+  "updated": "2026-10-30",
+  "business_engine_sha256": "7952aa29eda4ba7117d0245ed71b79cf8f8643f291b94dbef268b710a4b849ea",
   "contract": "DX_DA_NUMBER_PAIRS_CONTEXTUAL_V2",
   "modes": [
     "tach",
@@ -28,5 +28,5 @@
     "shared_input_across_modes",
     "desktop_phone_same_davong_group_ui"
   ],
-  "notes": "Stage-only MB leading-dot normalization, raw-prefix Router safety gate, unchanged business engine; NOT DEPLOYED"
+  "notes": "Canonical duplicate approval preflight and envelope; DAT/DX hard reject. Candidate only; NOT DEPLOYED."
 }
