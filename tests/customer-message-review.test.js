@@ -24,12 +24,28 @@ test('ambiguous duplicate within one source and unknown fragments HOLD',()=>{
  const bad=createStore(storage());bad.add(msg('2','68 lo20n ???'));assert.throws(()=>require('../customer-message-review.js').aggregate(bad.read(),options),/UNRECOGNIZED/);
 });
 
-test('B/LO same exposure and malformed prefixes fail closed',()=>{
+test('B/Bao/LO same number merges from distinct source IDs before multiplier',()=>{
+ const core=require('../quyt-bao-review.js'),cleanCore=require('../clean-aggregate-review.js'),store=createStore(storage());
+ const opts={core,cleanCore,customerId:'quyt',market:'mb',businessDate:'2026-11-03',rate:'1,067'};
+ store.add(msg('1','86 lo60n'));store.add(msg('2','86 b15n'));
+ assert.equal(store.add(msg('2','86 b15n')).status,'ALREADY_PRESENT');
+ const r=require('../customer-message-review.js').aggregate(store.read(),opts);
+ assert.deepEqual(r.entries.map(e=>[e.number,e.kind,e.original,e.exact]),[['86','lo','75','80.025']]);
+ assert.deepEqual(r.entries[0].provenance.map(e=>[e.source_message_id,e.selector]),[['1','lo'],['2','b']]);
+ assert.deepEqual(store.read().map(e=>e.original_text),['86 lo60n','86 b15n']);
+ assert.equal(r.forwardAuthorized,false);assert.equal(r.entries[0].rounded,null);
+ const one=createStore(storage());one.add(msg('3','86 bao60n 86 b15n'));
+ assert.equal(require('../customer-message-review.js').aggregate(one.read(),opts).entries[0].original,'75');
+});
+test('malformed prefixes and conflicting source revisions remain HOLD',()=>{
  const core=require('../quyt-bao-review.js'),cleanCore=require('../clean-aggregate-review.js');
- const options={core,cleanCore,customerId:'quyt',market:'mb',businessDate:'2026-11-03',rate:'1,067'};
- for(const raw of ['86 lo60n\n86 b15n','68 lo20n\n.. 86 lo20n','68 lo20n\n| 86 lo20n']){
-  const s=createStore(storage());s.add(msg('1',raw));assert.throws(()=>require('../customer-message-review.js').aggregate(s.read(),options),/HOLD/);
+ const opts={core,cleanCore,customerId:'quyt',market:'mb',businessDate:'2026-11-03',rate:'1,067'};
+ for(const raw of ['68 lo20n\n.. 86 lo20n','68 lo20n\n| 86 lo20n']){
+  const s=createStore(storage());s.add(msg('1',raw));
+  assert.throws(()=>require('../customer-message-review.js').aggregate(s.read(),opts),/HOLD/);
  }
+ const s=createStore(storage());s.add(msg('1','86 lo60n'));
+ assert.throws(()=>s.add(msg('1','86 b15n')),/SOURCE_REVISION_CONFLICT/);
 });
 
 test('concurrent UI writers serialize their complete storage transaction',async()=>{
