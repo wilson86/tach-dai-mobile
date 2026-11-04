@@ -68,3 +68,16 @@ test('bad injected nonce and untrusted config fail closed',async()=>{
   await assert.rejects(f.signReceiptRead({bearerToken:TOKEN,keys:[ONE]}),/SIGNER_DENIED/);
   assert.throws(()=>createReceiptV2TrustedSigner({enabled:'true'}),/SIGNER_DENIED/);
 });
+
+test('Auth callback must be invoked exactly once and its exact signed object returned',async()=>{
+  for(const fakeAuth of [
+    {authorizeReceiptRead:async()=>({proof:'forged'})},
+    {authorizeReceiptRead:async(_,cb)=>{const e=await cb(ACTOR);return {...e};}},
+    {authorizeReceiptRead:async(_,cb)=>{await cb(ACTOR);return cb(ACTOR);}}
+  ]){
+    const secretProvider={currentSigningKey:async()=>baseKey()};
+    const signer=createReceiptV2TrustedSigner({auth:fakeAuth,keyProvider:secretProvider,
+      enabled:true,clock:()=>now,nonceSource:()=>Buffer.alloc(16,0x6c)});
+    await assert.rejects(signer.signReceiptRead({bearerToken:TOKEN,keys:[ONE]}),/SIGNER_DENIED/);
+  }
+});
