@@ -17,8 +17,8 @@ User walkthrough, entirely in **synthetic memory**:
 
 ## Evidence / limits
 
-Source path: `app/settlement-team-synthetic-walkthrough.html` (Git blob `3c499b0cae5a70a9b1733425fe2d4df2cbd9bb5d`).
-Node regression: `tests/settlement-team-synthetic-walkthrough.test.cjs` (Git blob `95a86bd3d456e33cba65e38dddaec59a389f8751`).
+Source path: `app/settlement-team-synthetic-walkthrough.html` (initial Git blob `3c499b0cae5a70a9b1733425fe2d4df2cbd9bb5d` (superseded by browser-qualified patch)).
+Node regression: `tests/settlement-team-synthetic-walkthrough.test.cjs` (initial Git blob `95a86bd3d456e33cba65e38dddaec59a389f8751` (superseded by new regression)).
 
 Exact local `git hash-object` matches these two GitHub blobs. Linux native Node.js 22.16.0:
 `node --check tests/settlement-team-synthetic-walkthrough.test.cjs` **PASS**;
@@ -28,3 +28,25 @@ Two attempts to run headless Chromium screenshot in the current sandbox timed ou
 This is a **product workflow preview only**, valuable for identifying UX misunderstandings before adopting a real shared group backend. It does not make KTS Settlement commercially/monetarily usable. Issue #32 independent security review, real PostgreSQL 16 least-privilege tenant isolation and authentic 65-case HIOSKT monetary verification are still mandatory gates.
 
 `WRITE_BLOCK=ENABLED; RELEASE=NO_GO; PRODUCTION_MUTATION=NONE; COST_USD=0`.
+
+## 2026-11-05 — Actual browser QA and Group B workflow fix (bounded demo scope)
+
+**Reproduced real user-facing bug in v1:** Group B could CREATE and SUBMIT but was **stuck at PENDING_REVIEW** because its only fake persona was `operator_b`. Group A had a reviewer, Group B did not. Before changing the source, real Chromium 144 through Playwright on a 390 × 844 mobile viewport completed Group A approval but demonstrated **zero available Group B reviewer accounts** after Group B submitted. This was a genuine offline walkthrough usability defect; not a production backend issue. The baseline mobile screenshot and original probe log are retained locally as reproduction evidence.
+
+**Fix:** Added `reviewer_b` fake persona (“Người duyệt E · Nhóm B”), made both actor and scope selectors accessible via associated HTML `<label>` elements, and corrected the landing copy to say there are multiple roles. The fake state machine remains **in-memory only**, never reads real credentials, never contacts a server and never performs monetary actions. No change to backend, migrations, money calculations or production scope.
+
+**Native Node.js 22.16.0, exact GitHub source bytes:**
+- HTML Git blob `2ac44456ea28b86b9ca09ab107c63aa354c1a892`
+- Regression Git blob `16889dcb3eeb38ba3c77b2575f6f5a1c9e3d8daf`
+- `node --check tests/settlement-team-synthetic-walkthrough.test.cjs` → PASS
+- `node --test tests/settlement-team-synthetic-walkthrough.test.cjs` → **8 PASS / 0 FAIL / 0 SKIP**. Includes Group B create→submit→independent approval, cross-tenant denial, tamper-resistant snapshots, label association, reset, stale-revision denial and no network APIs.
+
+**Actual Chromium 144, Playwright browser interaction:** Unlike the initial attempts to navigate directly to a file URL (blocked by the browser sandbox), this qualification injected the exact standalone HTML into a fresh browser document via `page.set_content()` and ran real DOM clicks/selections with page errors/request interception:
+- 390 × 844 mobile browser: **20/20 assertions PASS**;
+- 1366 × 768 desktop browser: **20/20 assertions PASS**;
+- Both workflows A and B completed, unauthorized viewer and cross-tenant access blocked, reset clears both groups, conflict and labels verified.
+- **0 JavaScript page errors; 0 network requests; 0 horizontal overflow** at these two viewport sizes.
+- Screenshots and logs saved under `/mnt/data/settlement_synthetic_demo/qa/`; **these are local browser QA, NOT real Android hardware or independent external acceptance.**
+- Browser automation did **not** verify OS-specific `file://` opening. A Linux Chrome policy blocked direct file URL in this sandbox. Standalone file mode on Windows/Android remains `NOT_RUN` until user or hardware verifies.
+
+**Qualification boundary:** No remaining failures were detected in the **specific 8 native Node and 40 Chromium assertions run on this fake-only demo**. This is **NOT** proof of absence of all bugs or real-money safety. The actual KTS Settlement backend, PostgreSQL16 tenant isolation and HIOSKT 65-case money oracle remain unqualified: `WRITE_BLOCK=ENABLED; RELEASE=NO_GO; COST_USD=0`.
