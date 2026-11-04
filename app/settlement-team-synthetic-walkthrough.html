@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'; img-src 'none'">
+<title>KTS Settlement · Thử quy trình nhóm (dữ liệu giả)</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#e8f2ff;background:#091326;font-size:15px}*{box-sizing:border-box}body{margin:0;padding:28px 18px}main{max-width:1020px;margin:auto}h1{font-size:clamp(25px,4vw,39px);line-height:1.12;margin:10px 0 14px}h2{margin:0 0 16px;font-size:19px}.tag{color:#72c7ff;letter-spacing:.15em;font-size:12px;font-weight:750}.lead{max-width:750px;color:#bed0e6;line-height:1.65}header{border-bottom:1px solid #243d60;padding:0 0 22px}.warning{background:#302515;border:1px solid #bb9049;color:#ffe0a0;border-radius:12px;padding:15px 17px;margin:20px 0;font-weight:650;line-height:1.55}.layout{display:grid;grid-template-columns:1fr 1fr;gap:18px}section{border:1px solid #274362;background:#111f37;border-radius:16px;padding:21px;margin:0 0 18px;box-shadow:0 8px 24px #0002}.wide{grid-column:1/-1}.caption{font-size:12px;font-weight:700;color:#94b9dc;margin:10px 0 7px}select,button{font:inherit;border-radius:9px;min-height:43px}select{border:1px solid #507397;color:#f4f9ff;background:#172d48;padding:0 10px;width:100%}button{border:1px solid #58b8f6;background:#1b5375;color:#fff;cursor:pointer;padding:9px 13px;font-weight:650}button:hover:not(:disabled){background:#246e94}button:disabled{opacity:.36;cursor:not-allowed}button.secondary{background:#152942;border-color:#516e8d}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:17px}.kv{display:grid;grid-template-columns:140px 1fr;gap:10px;margin:9px 0}.kv dt{color:#8fb4d8}.kv dd{margin:0;font-weight:700;overflow-wrap:anywhere}.pill{display:inline-block;border-radius:30px;background:#274061;padding:7px 11px;font-weight:750;color:#c9e8ff}.empty{color:#9fb3c7;font-style:italic}ol{padding-left:23px;line-height:1.7}li{margin:9px 0;padding:0 4px;color:#d7e7fa}.error{color:#ffb6a8}.ok{color:#99f0bb}.muted{color:#9eb4ca;font-size:13px}.notice{border-left:3px solid #71c5ff;padding:10px 12px;background:#182e49;min-height:44px}code{color:#a3e8ff}footer{color:#9fb3cb;font-size:12px;line-height:1.7;margin-top:16px}@media(max-width:720px){body{padding:15px 12px}.layout{grid-template-columns:1fr}section{padding:17px}.kv{grid-template-columns:115px 1fr}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="tag">KTS SETTLEMENT / OFFLINE WALKTHROUGH</div><h1>Thử quy trình làm việc nhóm</h1><p class="lead">Mô phỏng hai tài khoản, hai nhóm, tạo nháp → gửi duyệt → duyệt độc lập. Không cần server, mật khẩu hoặc cài đặt. Dùng để đánh giá thao tác trên điện thoại và Windows.</p></header>
+<div class="warning" role="alert">CHỈ DỮ LIỆU GIẢ · KHÔNG CÓ TÍNH TIỀN · KHÔNG LƯU HỒ SƠ · KHÔNG ĐỒNG BỘ SERVER · KHÔNG PHẢI BẢN PRODUCTION. Không nhập dữ liệu khách thật; ứng dụng tự xóa trạng thái khi tải lại.</div>
+<div class="layout">
+<section><h2>1. Chọn người và nhóm</h2><div class="caption">Người thao tác</div><select id="actor"><option value="operator_a">Nhân viên A · Nhóm A</option><option value="reviewer_a">Người duyệt B · Nhóm A</option><option value="operator_b">Nhân viên C · Nhóm B</option><option value="viewer_a">Người xem D · Nhóm A</option></select><div class="caption">Hồ sơ giả</div><select id="scope"><option value="A">Hồ sơ giả · Nhóm A</option><option value="B">Hồ sơ giả · Nhóm B</option></select><p class="muted">Nhân viên không thể duyệt nháp mình tạo. Người ngoài nhóm không thể xem hồ sơ.</p></section>
+<section><h2>2. Trạng thái hồ sơ</h2><dl class="kv"><dt>Nhóm</dt><dd id="out-group"></dd><dt>Phiên bản</dt><dd id="out-revision"></dd><dt>Trạng thái</dt><dd><span class="pill" id="out-state"></span></dd><dt>Người tạo</dt><dd id="out-creator"></dd><dt>Người duyệt</dt><dd id="out-approver"></dd></dl></section>
+<section class="wide"><h2>3. Thực hiện thao tác</h2><p class="notice" id="notice" role="status" aria-live="polite">Chọn Nhân viên A, tạo nháp rồi gửi duyệt.</p><div class="actions"><button id="create">Tạo nháp giả</button><button id="submit">Gửi duyệt (giả)</button><button id="approve">Duyệt độc lập (giả)</button><button id="conflict" class="secondary">Kiểm tra xung đột</button><button id="reset" class="secondary">Xóa toàn bộ dữ liệu giả</button></div><p class="muted">Các nút chỉ thay đổi bộ nhớ trên thiết bị này; không có HTTP, tài khoản thật, tiền hoặc dữ liệu được lưu.</p></section>
+<section class="wide"><h2>4. Nhật ký minh họa</h2><ol id="feed"><li class="empty">Chưa có hành động nào trong phiên.</li></ol></section>
+</div><footer>Thông tin nguồn: bản trình diễn độc lập của KTS Settlement, không thay thế backend chính thức. Quy trình nghiệp vụ thực tế chỉ được mở sau nghiệm thu PostgreSQL, bảo mật, Windows/Android và đối chiếu tài chính riêng. Mã không sử dụng mạng, localStorage hoặc IndexedDB.</footer>
+</main>
+<script>
+(function(){
+'use strict';
+const actors=Object.freeze({operator_a:{name:'Nhân viên A',workspace:'A',role:'operator'},reviewer_a:{name:'Người duyệt B',workspace:'A',role:'reviewer'},operator_b:{name:'Nhân viên C',workspace:'B',role:'operator'},viewer_a:{name:'Người xem D',workspace:'A',role:'viewer'}});
+const allowed=Object.freeze({EMPTY:['operator'],DRAFT:['operator'],PENDING_REVIEW:['reviewer'],REVIEWED:[]});
+function empty(){return {state:'EMPTY',revision:0,creator:null,approver:null,events:[]};}
+function createMachine(){
+ let scopes={A:empty(),B:empty()};
+ function snapshot(scope,actor){const a=actors[actor],s=scopes[scope];if(!a||!s)return {code:'INVALID_SELECTION'};if(a.workspace!==scope)return {code:'TENANT_DENIED'};return {code:'OK',state:s.state,revision:s.revision,creator:s.creator,approver:s.approver,events:s.events.map(x=>({...x}))};}
+ function apply({actor,scope,action,expectedRevision}={}){
+  const a=actors[actor],s=scopes[scope];
+  if(!a||!s)return {ok:false,code:'INVALID_SELECTION'};
+  if(a.workspace!==scope)return {ok:false,code:'TENANT_DENIED'};
+  if(!Number.isSafeInteger(expectedRevision)||expectedRevision!==s.revision)return {ok:false,code:'REVISION_CONFLICT'};
+  if(!['CREATE','SUBMIT','APPROVE'].includes(action))return {ok:false,code:'INVALID_ACTION'};
+  let next;
+  if(action==='CREATE'&&s.state==='EMPTY'&&a.role==='operator')next='DRAFT';
+  else if(action==='SUBMIT'&&s.state==='DRAFT'&&a.role==='operator'&&s.creator===actor)next='PENDING_REVIEW';
+  else if(action==='APPROVE'&&s.state==='PENDING_REVIEW'&&a.role==='reviewer'&&s.creator!==actor)next='REVIEWED';
+  else return {ok:false,code:'ROLE_OR_STATE_DENIED'};
+  s.state=next;s.revision++;
+  if(action==='CREATE')s.creator=actor;
+  if(action==='APPROVE')s.approver=actor;
+  s.events.push({revision:s.revision,actor:a.name,action,state:next});
+  return {ok:true,code:'SIMULATED_ONLY',revision:s.revision,state:next};
+ }
+ function reset(){scopes={A:empty(),B:empty()};return {ok:true,code:'SIMULATED_RESET'};}
+ return Object.freeze({snapshot,apply,reset});
+}
+const api=Object.freeze({createMachine,actors});
+if(typeof module==='object'&&module.exports)module.exports=api;
+if(typeof window!=='undefined')window.KtsSettlementSyntheticWalkthrough=api;
+if(typeof document==='undefined')return;
+const machine=createMachine(),el=id=>document.getElementById(id),selectActor=el('actor'),selectScope=el('scope'),notice=el('notice'),feed=el('feed');
+const names={EMPTY:'CHƯA TẠO',DRAFT:'BẢN NHÁP',PENDING_REVIEW:'CHỜ DUYỆT',REVIEWED:'ĐÃ DUYỆT (MÔ PHỎNG)'};
+function message(txt,error){notice.textContent=txt;notice.className='notice '+(error?'error':'ok');}
+function render(){
+ const actor=selectActor.value,scope=selectScope.value,s=machine.snapshot(scope,actor),permitted=s.code==='OK',a=actors[actor];
+ el('out-group').textContent='Nhóm '+scope;
+ el('out-revision').textContent=permitted?String(s.revision):'ẨN';
+ el('out-state').textContent=permitted?names[s.state]:'KHÔNG CÓ QUYỀN';
+ el('out-creator').textContent=permitted&&s.creator?actors[s.creator].name:'—';
+ el('out-approver').textContent=permitted&&s.approver?actors[s.approver].name:'—';
+ el('create').disabled=!permitted||s.state!=='EMPTY'||a.role!=='operator';
+ el('submit').disabled=!permitted||s.state!=='DRAFT'||s.creator!==actor;
+ el('approve').disabled=!permitted||s.state!=='PENDING_REVIEW'||a.role!=='reviewer'||s.creator===actor;
+ el('conflict').disabled=!permitted||s.revision===0;
+ feed.replaceChildren();
+ if(!permitted||s.events.length===0){const li=document.createElement('li');li.className='empty';li.textContent=permitted?'Chưa có hành động nào trong phiên.':'Không hiển thị sự kiện ngoài nhóm.';feed.appendChild(li);}
+ else for(const event of s.events){const li=document.createElement('li');li.textContent='R'+event.revision+' · '+event.actor+' · '+event.action+' → '+names[event.state];feed.appendChild(li);}
+}
+function act(action){const result=machine.apply({actor:selectActor.value,scope:selectScope.value,action,expectedRevision:machine.snapshot(selectScope.value,selectActor.value).revision});message(result.ok?'Đã thực hiện mô phỏng · '+names[result.state]:'Bị từ chối · '+result.code,!result.ok);render();}
+el('create').addEventListener('click',()=>act('CREATE'));
+el('submit').addEventListener('click',()=>act('SUBMIT'));
+el('approve').addEventListener('click',()=>act('APPROVE'));
+el('conflict').addEventListener('click',()=>{const s=machine.snapshot(selectScope.value,selectActor.value),r=machine.apply({actor:selectActor.value,scope:selectScope.value,action:'CREATE',expectedRevision:s.revision-1});message('Kiểm tra xung đột bản cũ: '+r.code,!r.ok);render();});
+el('reset').addEventListener('click',()=>{machine.reset();message('Đã xóa toàn bộ dữ liệu GIẢ trong bộ nhớ.',false);render();});
+for(const node of [selectActor,selectScope])node.addEventListener('change',()=>{message('Đã đổi góc nhìn · dữ liệu vẫn chỉ là mô phỏng.',false);render();});
+render();
+})();
+</script>
+</body>
+</html>
