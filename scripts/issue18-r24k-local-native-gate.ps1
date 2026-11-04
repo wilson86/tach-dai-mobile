@@ -24,6 +24,7 @@ $MobileRoot = Assert-CPath $MobileRoot
 $NgangRoot = Assert-CPath $NgangRoot
 $EvidenceRoot = Assert-CPath $EvidenceRoot $false
 if($MobileRoot -eq $NgangRoot -or $EvidenceRoot -eq $MobileRoot -or $EvidenceRoot -eq $NgangRoot) {throw 'WORKSPACE_OVERLAP_HOLD'}
+if($EvidenceRoot.StartsWith($MobileRoot+'\',[StringComparison]::OrdinalIgnoreCase) -or $EvidenceRoot.StartsWith($NgangRoot+'\',[StringComparison]::OrdinalIgnoreCase)) {throw 'EVIDENCE_WITHIN_SOURCE_CHECKOUT_HOLD'}
 foreach($tool in @('git','node')){if(-not (Get-Command $tool -ErrorAction SilentlyContinue)) {throw "TOOL_NOT_FOUND_HOLD: $tool"}}
 function Check-Repo([string]$Root,[string]$Expected) {
   $inside = (& git -C $Root rev-parse --is-inside-work-tree 2>&1 | Out-String).Trim()
