@@ -72,3 +72,51 @@ reduces the usable surface until trustworthy isolation can be proven.
 
 **WRITE_BLOCK=ENABLED; RELEASE=NO_GO; CI=NOT_RUN; COST_USD=0.**
 No merge, deploy, real database DDL, production mutation or E:/F: access.
+
+## 2026-11-05 — stronger deny-only composition; no legacy Ledger repository constructed
+
+A subsequent source audit found that the previous gate used
+`{...unqualifiedRepository}` to copy methods from the original direct-SQL
+Ledger repository and then overwrote 10 known methods with denials.
+That pattern is an unnecessarily fragile *allow by default*: a newly
+introduced method could be exposed through the spread even if the
+original 10 guards remained intact. It also constructed a repository
+that has no legitimate use until the read/transaction authority is
+qualified.
+
+**Fixed on this WIP branch:** `team-settlement/team-composition.cjs`
+no longer imports or constructs `createPostgresLedgerRepository` and
+does not spread an unqualified repository into a public object. It
+returns an explicit allowlist of exactly **10 deny-only functions**:
+four tenant reads fail `TEAM_DB_TENANT_READ_BOUNDARY_UNAVAILABLE`;
+six financial mutations fail
+`TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE`. It retains
+`authPool` and `ledgerPool` solely for the old explicit
+`verifyPools` qualification probe; the normal constructor makes
+no SQL connections or opens an HTTP port.
+
+New regression source
+`tests/settlement-team-no-legacy-ledger-construction.test.cjs`
+contains three native Node cases using `node:vm` to load the real
+composition code with fully injected dependency stubs, assert the legacy
+repository import is never attempted, assert the exact 10-method
+allowlist and all deny codes before SQL access, and reject
+`syntheticOnly=false`. No PostgreSQL or HTTP routes are exercised.
+
+**Actual qualification this batch:** Independently fetched the final
+GitHub composition blob and executed **that exact source** in an
+isolated V8 function wrapper with mocked dependencies. Observed 6
+approved imports, **zero** `postgres-ledger-repository` imports,
+the exact 10 methods and all expected denial codes. Both constructor
+and the returned server remained non-listening. The separately
+committed native Node test was syntax-checked in V8 but
+**NATIVE_NODE_TEST=NOT_RUN** from this chat environment; do not report
+a native Node PASS on these new test files. Tests with real underlying
+Auth/HTTP modules and a PostgreSQL16 role catalog are still NOT_RUN.
+
+**Release decision remains unchanged:** The reviewer cannot approve
+money mutations or real tenant reads until an independently approved
+SQL owner/key/locking design is proven with an actual isolated
+PostgreSQL16 role and tenant spoofing/concurrent revoke/cryptographic
+parity checks. Source-only V8 evidence is not that approval.
+`WRITE_BLOCK=ENABLED; RELEASE=NO_GO; COST_USD=0`.
