@@ -64,7 +64,7 @@ try{
  set('raw','2đ 21 b10n');
  assert('MT 2đ has 2 scheduled stations',$('after').textContent==='22n'&&$('result').value.includes('kh 21 b11n.'));
  select('market','mn');
- assert('change region invalidates stale Copy',$('copy').disabled);
+ assert('change region recomputes 2đ for MN, never carries MT station',!$('copy').disabled&&$('result').value.includes('ct 21 b11n.')&&!$('result').value.includes('kh 21 b11n.'));
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
