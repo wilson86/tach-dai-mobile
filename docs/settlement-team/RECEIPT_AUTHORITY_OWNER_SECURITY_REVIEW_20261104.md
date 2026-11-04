@@ -58,3 +58,14 @@ Check **effective** privileges from separately authenticated real SQL sessions, 
 - **End user:** No real settlement write, shared production balance, or recovery release is available yet.
 
 `SOURCE_SHA=b11e46c4667c82c827c80842c55eb7bd6f4ef203`; `DESIGN_SOURCE_REVIEW=COMPLETED_WITH_BLOCKERS`; `POSTGRES_DDL=NOT_RUN`; `PG_TENANT_PROOF=NOT_RUN`; `CI=NOT_RUN`; `WRITE_BLOCK=ENABLED`; `RELEASE=NO_GO`; `PRODUCTION_MUTATION=NONE`; `COST_USD=0`.
+
+## 6. V2 test-only canonical envelope fixture (2026-11-04, follow-up)
+
+The isolated source-only fixture `tests/fixtures/receipt-backend-proof-v2.cjs`, with `tests/settlement-receipt-backend-proof-v2.test.cjs`, specifies the following *future design candidate*; neither file is included in any migration, HTTP route, backend signer or production application import:
+
+- Domain separation: `kts-receipt-read-v2`; canonical byte encoding uses decimal UTF-8 byte length, a colon, and then the field value, concatenated for each field in this exact order: purpose, 16-hex key ID, 32-hex session handle, workspace ID, user ID, decimal key count, each sorted unique receipt key, 32-hex nonce, issued-at epoch seconds, expiry epoch seconds. HMAC-SHA256 is computed with an *injected 32-byte synthetic key*, independent of the session bearer in this fixture.
+- The comparison code uses `crypto.timingSafeEqual` after strict hex and length checks; the simulator refuses tampered fields, wrong tenant/actor/session handle, role not admin/operator, key rotation, TTL outside 1–30 seconds and invalid/sorted duplicate keys. An identical authorized **read** remains replayable inside the window.
+- The fixture deliberately accepts a caller-supplied `verifiedSession` object and an injected key; a JavaScript `server_verified` boolean is **not an authentication mechanism**, and a caller could forge it. No key origin, HSM, secret rotation, protected SQL store, canonical PostgreSQL verifier, nonce replay defense, DB grant policy or atomic revocation is implemented.
+- Source-bound local Node command: `node --test tests/settlement-receipt-backend-proof-v2.test.cjs`; 4/4 PASS under Linux Node 22.16.0 using files byte-for-byte matching the GitHub blobs at commit `42d3ec86310f6286da232c0ff359a5ee5fa63d0e`: module blob `f4e320b24d04320cb0aa7c4c676b7c4d6c8fa396`, test blob `f901c4aaee95ea8b0f5281856e88c8a1ce7b6c17`. This result verifies only the synthetic protocol model.
+
+**No promotion:** V2 backend key provenance, owner and crypto access, session DB handle/lookup/indexing, secure input paths, verifier SQL parser, rotation/revocation and PostgreSQL runtime proof still require independent design review and runtime evidence. `BLOCKED_UNAPPROVED_SQL_DESIGN`, `PG16=NOT_RUN`, `WRITE_BLOCK=ENABLED`, `RELEASE=NO_GO`.
