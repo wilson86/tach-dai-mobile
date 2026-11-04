@@ -24,7 +24,7 @@ test('half-up boundary: 0.499 down, 0.500 and 0.501 up', () => {
  assert.equal(a.total,'5');
  assert.equal(a.original,'4.5');
  assert.match(a.pretty, /21 b1n/u);
- assert.match(a.pretty, /22 23 b2n/u);
+ assert.match(a.pretty, /23 22 b2n/u); // pre-existing descending stake sort order
  printedStakesHaveNoFraction(a);
 });
 test('Quýt only scales BAO/LO then rounds each canonical number', () => {
