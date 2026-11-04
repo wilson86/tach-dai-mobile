@@ -289,6 +289,16 @@ async function main(){
                 receipt.parameter_log_probe={exit_code:logProbe.exit_code,stdout_tail:logProbe.output,stderr_tail:logProbe.error,
                   process_error:logProbe.problem,passed:logProbe.ok&&logProbe.output.includes('SYNTHETIC_EXTENDED_PROTOCOL_ERROR_LOG_OBSERVATION_PASS')};
                 if(!receipt.parameter_log_probe.passed)receipt.status='BLOCKED_PARAMETER_LOG_PROBE';
+                 if(receipt.parameter_log_probe.passed){
+                   const recoveryPath=realC(path.join(root,'scripts/settlement-pg-recovery-http-probe.cjs'));
+                   if(!recoveryPath.toLowerCase().startsWith((root+'\\').toLowerCase())||!fs.statSync(recoveryPath).isFile())
+                     fail('TEAM_PG_RECOVERY_SOURCE_INVALID');
+                   const recovery=exec(process.execPath,[recoveryPath,String(port),resolved],resolved,{...env,PGPORT:String(port)},45000);
+                   receipt.two_login_http_recovery={exit_code:recovery.exit_code,stdout_tail:recovery.output,
+                     stderr_tail:recovery.error,process_error:recovery.problem,
+                     passed:recovery.ok&&recovery.output.includes('SYNTHETIC_TWO_LOGIN_HTTP_PG_RECOVERY_PASS')};
+                   if(!receipt.two_login_http_recovery.passed)receipt.status='BLOCKED_TWO_LOGIN_HTTP_RECOVERY';
+                 }
               }
             }
           }
