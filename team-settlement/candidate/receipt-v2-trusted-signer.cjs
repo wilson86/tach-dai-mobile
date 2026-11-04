@@ -51,12 +51,17 @@ function createReceiptV2TrustedSigner({auth,keyProvider,clock=()=>Date.now(),
       callbackCount++;
       if (callbackCount!==1) deny();
       validActor(actor);
-      const now = clock();
-      if (!Number.isSafeInteger(now) || now<0) deny();
-      const seconds = Math.floor(now/1000);
-      if (!Number.isSafeInteger(seconds+ttlSeconds)) deny();
-      const expiration = seconds+ttlSeconds;
+      // Reading the signing key can be slow; do not capture issued_at or
+      // validate key expiry using the time *before* that asynchronous read.
+      const authObservedAt = clock();
+      if (!Number.isSafeInteger(authObservedAt) || authObservedAt<0) deny();
       const fetched = await keyProvider.currentSigningKey();
+      const now = clock();
+      if (!Number.isSafeInteger(now) || now<authObservedAt) deny();
+      const seconds = Math.floor(now/1000);
+      if (!Number.isSafeInteger(seconds+ttlSeconds) ||
+          !Number.isSafeInteger((seconds+ttlSeconds)*1000)) deny();
+      const expiration = seconds+ttlSeconds;
       if (!fetched || typeof fetched !== 'object' ||
           typeof fetched.key_id !== 'string' || !HEX16.test(fetched.key_id) ||
           !Buffer.isBuffer(fetched.secret_bytes) || fetched.secret_bytes.length!==32 ||
@@ -81,11 +86,23 @@ function createReceiptV2TrustedSigner({auth,keyProvider,clock=()=>Date.now(),
           session_handle:actor.session_handle,workspace_id:actor.workspace_id,
           user_id:actor.user_id,keys:ordered,nonce:nonceText,
           issued_at:seconds,expires_at:expiration,proof});
+        // HMAC computation and synchronous nonce generation can also outlive
+        // the deadline; fail closed instead of returning stale proof bytes.
+        const signedAt=clock();
+        if (!Number.isSafeInteger(signedAt) || signedAt<now ||
+            signedAt>=expiration*1000 ||
+            signedAt>=fetched.stop_signing_at_ms) deny();
         return created;
       } finally { localSecret.fill(0); }
     });
     // A substituted Auth adapter may not skip the signer or rewrite its result.
     if (callbackCount!==1 || reply!==created) deny();
+    // The Auth transaction can wait after our callback returns. Reject a
+    // proof which became stale before this signer actually returns it.
+    const returnedAt=clock();
+    if (!Number.isSafeInteger(returnedAt) ||
+        returnedAt<reply.issued_at*1000 ||
+        returnedAt>=reply.expires_at*1000) deny();
     return reply;
   }
   return Object.freeze({signReceiptRead});
