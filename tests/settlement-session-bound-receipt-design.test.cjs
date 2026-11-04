@@ -59,6 +59,7 @@ test('synthetic HMAC vectors bind tenant, keys, nonce and expiry but allow exact
 });
 test('read request is bounded and deterministic; no mutation, locks or SQL injection interpolations',()=>{
  assert.match(candidate,/pg_catalog\.cardinality\(p_keys\) NOT BETWEEN 1 AND 30/);
+ assert.match(candidate,/cardinality\(p_keys\) NOT BETWEEN 1 AND 30\s+THEN\s+RAISE EXCEPTION 'TEAM_RECEIPT_READ_PROOF_INVALID';\s+END IF;[^]*?IF EXISTS \(SELECT 1 FROM pg_catalog\.unnest\(p_keys\)/);
  assert.match(candidate,/ARRAY\(SELECT DISTINCT t\.k[^]*ORDER BY t\.k\) IS DISTINCT FROM p_keys/);
  assert.match(candidate,/r\.idempotency_key=ANY\(p_keys\)/);
  assert.match(candidate,/RETURN QUERY/);

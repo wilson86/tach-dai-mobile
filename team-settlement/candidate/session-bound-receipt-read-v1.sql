@@ -55,7 +55,12 @@ BEGIN
     OR p_expires IS NULL OR p_expires <= v_now OR p_expires > v_now+30
     OR p_keys IS NULL OR pg_catalog.array_ndims(p_keys)<>1
     OR pg_catalog.cardinality(p_keys) NOT BETWEEN 1 AND 30
-    OR EXISTS (SELECT 1 FROM pg_catalog.unnest(p_keys) AS t(k)
+  THEN
+    RAISE EXCEPTION 'TEAM_RECEIPT_READ_PROOF_INVALID';
+  END IF;
+  -- Keep array iteration and sort in a subsequent statement: SQL boolean
+  -- evaluation order within one expression is not a resource-limit guard.
+  IF EXISTS (SELECT 1 FROM pg_catalog.unnest(p_keys) AS t(k)
                WHERE k IS NULL OR k !~ '^draft_[a-f0-9]{32}$')
     OR ARRAY(SELECT DISTINCT t.k FROM pg_catalog.unnest(p_keys) AS t(k)
              ORDER BY t.k) IS DISTINCT FROM p_keys
