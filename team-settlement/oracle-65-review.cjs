@@ -38,12 +38,26 @@ function createOracle65ReviewPlan(input={}){
   return Object.freeze({suite_id,case_count:CASE_COUNT,cases:Object.freeze(cases)});
 }
 
-function applyOracle65Review(plan,decisions){
-  object(plan,'ORACLE_PLAN_INVALID');
+function validateReviewPlan(plan){
+  exact(plan,['suite_id','case_count','cases'],'ORACLE_PLAN_INVALID');
+  identifier(plan.suite_id,'ORACLE_SUITE_INVALID');
   if(plan.case_count!==CASE_COUNT||!Array.isArray(plan.cases)||plan.cases.length!==CASE_COUNT)
     fail('ORACLE_PLAN_INVALID');
+  const planned=new Map();
+  for(const row of plan.cases){
+    exact(row,['case_id','source_sha256','expected_sha256','status'],'ORACLE_PLAN_CASE_INVALID');
+    const case_id=identifier(row.case_id,'ORACLE_PLAN_CASE_INVALID');
+    if(planned.has(case_id)||row.status!=='PENDING')fail('ORACLE_PLAN_CASE_INVALID');
+    digest(row.source_sha256,'ORACLE_PLAN_SOURCE_HASH_INVALID');
+    digest(row.expected_sha256,'ORACLE_PLAN_EXPECTED_HASH_INVALID');
+    planned.set(case_id,row);
+  }
+  if(planned.size!==CASE_COUNT)fail('ORACLE_PLAN_INVALID');
+  return planned;
+}
+function applyOracle65Review(plan,decisions){
+  const planned=validateReviewPlan(plan);
   if(!Array.isArray(decisions)||decisions.length!==CASE_COUNT)fail('ORACLE_DECISION_COUNT_INVALID');
-  const planned=new Map(plan.cases.map(item=>[item.case_id,item]));
   const seen=new Set();
   const reviewed=decisions.map(item=>{
     exact(item,['case_id','actual_sha256','status','reviewer_ref'],'ORACLE_DECISION_INVALID');
