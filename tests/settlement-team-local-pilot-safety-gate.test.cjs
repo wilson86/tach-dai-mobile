@@ -49,3 +49,12 @@ test('feed must include the actual workflow receipt events',async()=>{
 test('idempotency keys cannot be reused for distinct workflow actions',async()=>{
  await assert.rejects(exec(null,{approveKey:'d'.repeat(16)}),/TEAM_PILOT_INPUT_INVALID/);
 });
+test('feed sequence gap or altered receipt sequence is denied',async()=>{
+ await assert.rejects(exec('feed_gap'),/TEAM_PILOT_FEED_INVALID/);
+});
+test('invalid human identity shape is denied even when role matches',async()=>{
+ const {scope,deps}=scenario(null);
+ const previous=deps.login;
+ deps.login=async who=>who==='reviewer'?{workspace_id:scope.workspace_id,role:'reviewer',user_id:123}:previous(who);
+ await assert.rejects(createLocalPilotRunner(deps).run({operator:'operator',reviewer:'reviewer',scope,...keys}),/TEAM_PILOT_REVIEWER_INVALID/);
+});
