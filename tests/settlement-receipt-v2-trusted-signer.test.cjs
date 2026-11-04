@@ -81,3 +81,48 @@ test('Auth callback must be invoked exactly once and its exact signed object ret
     await assert.rejects(signer.signReceiptRead({bearerToken:TOKEN,keys:[ONE]}),/SIGNER_DENIED/);
   }
 });
+
+test('slow signing key retrieval must use fresh time, never emit an already-expired proof',async()=>{
+  let time=now;
+  const signer=createReceiptV2TrustedSigner({
+    enabled:true,clock:()=>time,
+    auth:{authorizeReceiptRead:async(t,callback)=>callback(ACTOR)},
+    keyProvider:{currentSigningKey:async()=>{
+      time+=25000; // synthetic 25 seconds of await / key-store latency
+      return {...baseKey(),stop_signing_at_ms:now+70000,stop_verify_at_ms:now+90000};
+    }},
+    nonceSource:()=>Buffer.alloc(16,0x6c)
+  });
+  const result=await signer.signReceiptRead({bearerToken:TOKEN,keys:[ONE],ttlSeconds:20});
+  assert.equal(result.issued_at,Math.floor(time/1000));
+  assert.ok(result.expires_at>Math.floor(time/1000));
+});
+
+test('slow Auth callback after proof creation must not release an already-expired proof',async()=>{
+  let time=now;
+  const signer=createReceiptV2TrustedSigner({
+    enabled:true,clock:()=>time,
+    auth:{authorizeReceiptRead:async(t,callback)=>{
+      const result=await callback(ACTOR);
+      time+=30000; // simulates awaited post-sign Auth work or transaction latency
+      return result;
+    }},
+    keyProvider:{currentSigningKey:async()=>baseKey()},
+    nonceSource:()=>Buffer.alloc(16,0x6c)
+  });
+  await assert.rejects(signer.signReceiptRead({bearerToken:TOKEN,keys:[ONE],ttlSeconds:20}),/SIGNER_DENIED/);
+});
+
+test('key becoming expired during asynchronous fetch must not be used',async()=>{
+  let time=now;
+  const signer=createReceiptV2TrustedSigner({
+    enabled:true,clock:()=>time,
+    auth:{authorizeReceiptRead:async(t,callback)=>callback(ACTOR)},
+    keyProvider:{currentSigningKey:async()=>{
+      time+=45000;
+      return baseKey(); // stopped signing at initial now +40 seconds
+    }},
+    nonceSource:()=>Buffer.alloc(16,0x6c)
+  });
+  await assert.rejects(signer.signReceiptRead({bearerToken:TOKEN,keys:[ONE]}),/SIGNER_DENIED/);
+});
