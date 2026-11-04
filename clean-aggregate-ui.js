@@ -4,6 +4,7 @@
 function mount(){
  const input=document.getElementById("dvInput")||document.getElementById("input");
  const region=document.getElementById("sharedRegion")||document.getElementById("region");
+ const date=document.getElementById("sharedDate")||document.getElementById("date");
  const core=window.KTSCleanAggregate;
  if(!input||!region||!core||document.getElementById("ktsCleanReviewPanel"))return;
  const box=document.createElement("section");box.id="ktsCleanReviewPanel";
@@ -28,6 +29,7 @@ function mount(){
  const reset=()=>{snapshot=null;output.value="";actions.style.display="none";status.textContent="Tin thay đổi: bấm kiểm tra lại trước khi gộp.";};
  input.addEventListener("input",reset);
  region.addEventListener("change",reset);
+ if(date)date.addEventListener("change",reset);
  // Existing KTS Cut, Undo, Clear and Da Vong actions sometimes assign
  // textarea.value programmatically without firing an input event.
  // Invalidating is deliberately conservative: no stale copyable preview.
@@ -39,10 +41,10 @@ function mount(){
  // Parent Unified sync may also update an iframe input without an input event.
  // On focus or attempted copy, recheck the exact source/region snapshot.
  output.addEventListener("focus",()=>{
-  if(snapshot&&(snapshot.raw!==input.value||snapshot.region!==region.value))reset();
+  if(snapshot&&(snapshot.raw!==input.value||snapshot.region!==region.value||snapshot.date!==date?.value))reset();
  });
  output.addEventListener("copy",event=>{
-  if(!snapshot||snapshot.raw!==input.value||snapshot.region!==region.value){
+  if(!snapshot||snapshot.raw!==input.value||snapshot.region!==region.value||snapshot.date!==date?.value){
    event.preventDefault();reset();
   }
  });
@@ -64,8 +66,9 @@ function mount(){
   if(blocked()){status.textContent="HOLD: đang có tin gốc/ledger đã Cắt. Không gộp trên trạng thái đang Cắt.";return}
   try{
    const raw=input.value,selected=region.value;
-   const p=core.preview(raw,{region:selected,repeatDecision:"ask_operator",omitRegion:true});
-   snapshot={raw,region:selected,base:p};
+   const p=core.preview(raw,{region:selected,businessDate:date?.value,
+     repeatDecision:"ask_operator",omitRegion:selected==="mb"});
+   snapshot={raw,region:selected,date:date?.value,base:p};
    if(p.missingRegion){status.textContent="HOLD: chưa xác định đài/miền.";snapshot=null;return}
    if(p.requiresConfirmation){
     actions.style.display="flex";display(p,false);
@@ -74,7 +77,7 @@ function mount(){
   }catch(e){status.textContent="HOLD: "+String(e?.message||e);snapshot=null}
  });
  function confirmSelection(decision){
-  if(!snapshot||input.value!==snapshot.raw||region.value!==snapshot.region){reset();return}
+  if(!snapshot||input.value!==snapshot.raw||region.value!==snapshot.region||date?.value!==snapshot.date){reset();return}
   let ref;
   if(decision==="remove_copies"){
    const yes=window.confirm("Chỉ loại bản trùng nếu đã xác nhận đây là lỗi paste, KHÔNG phải khách đánh lần hai. Tiếp tục xem trước?");
@@ -83,8 +86,8 @@ function mount(){
    if(!ref?.trim()){status.textContent="HOLD: thiếu xác nhận và dấu vết; chưa loại cược.";return}
   }
   try{
-   const p=core.preview(snapshot.raw,{region:snapshot.region,repeatDecision:decision,
-      decisionReference:ref,omitRegion:true});
+   const p=core.preview(snapshot.raw,{region:snapshot.region,businessDate:snapshot.date,
+      repeatDecision:decision,decisionReference:ref,omitRegion:snapshot.region==="mb"});
    // Strict per-number conservation whenever intentional repeats are kept.
    if(decision==="keep_all"&&p.rawTotal!==p.total)throw Error("MONEY_CONSERVATION_FAILED");
    actions.style.display="none";display(p,true);
