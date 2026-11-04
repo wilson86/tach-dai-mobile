@@ -56,9 +56,10 @@ async function request(url,mode='navigate'){
   respondWith(p){promise=Promise.resolve(p)}});
  return promise?promise:undefined;
 }
-test('SW identity explicitly changes with MB+MNMT updated money sources',()=>{
- assert.match(sw,/v8-mbmnmt-money-safe-source/u);
+test('SW identity includes MB+MNMT money and stale Copy update',()=>{
+ assert.match(sw,/v9-clipboard-guard/u);
  assert.match(mb,/HOLD_CHENH_LECH_LAM_TRON/u);
+ assert.match(mb,/CLIPBOARD CÓ THỂ CHỨA TIN CŨ/u);
  assert.match(mnmt,/HOLD_CHENH_LECH_LAM_TRON/u);
  assert.match(sw,/\.\.\/station_calendar\.generated\.js/u);
 });
