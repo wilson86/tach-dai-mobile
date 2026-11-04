@@ -198,3 +198,21 @@ test('3d 5n reveals why HALF_UP and CEILING are different downstream money contr
  assert.equal(r.roundingDiffRows,3);
  assert.equal(r.rows.length,3);
 });
+
+
+test('unresolved HALF_UP vs CEILING money differences cannot be bypassed by a checkbox',()=>{
+ // Expected money receipt stays visible for a HUMAN RECEIVER oracle, but no
+ // materialized ticket or clipboard is allowed until the authority agrees.
+ const s=html;
+ assert.match(s,/if\(res\.roundingDiffRows>0\)/u);
+ assert.match(s,/HOLD_CHENH_LECH_LAM_TRON/u);
+ assert.match(s,/Copy chỉ xuất số cuối cùng/u);
+ assert.match(s,/function copyTicketValid\(ticket\)/u);
+ assert.match(s,/staleCopyWarning/u);
+ assert.match(s,/Không cho Copy cho đến khi phía nhận duyệt quy tắc/u);
+ // The core fixture is intentionally divergent; rejecting is a UI RELEASE gate.
+ const r=input('mn','2d 52 b15n',{tick:true});
+ assert.equal(r.roundingDiffRows,2);
+ assert.equal(r.total,'32');
+ assert.equal(r.ceilReference,'34');
+});
