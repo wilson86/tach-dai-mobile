@@ -21,7 +21,10 @@ function install(){
  copy.disabled=true;copy.style.cssText='padding:9px;border:1px solid #357;background:#d3f1ef;border-radius:6px';
  const help=document.createElement('div');help.style.cssText='font-size:12px;margin-top:5px';
  help.textContent='Mỗi tin độc lập đặt trên một dòng bắt đầu HN, hoặc dùng THÊM TIN GỐC có source_message_id. Bản này chỉ copy văn bản; KHÔNG xác nhận Router/Telegram hỗ trợ tiền thập phân, không tự gửi hoặc Cắt.';
- panel.append(title,label,preview,status,copy,help);output.insertAdjacentElement('afterend',panel);
+ const keepDuplicates=document.createElement('button');keepDuplicates.type='button';keepDuplicates.id='ktsQuytTicketKeepDuplicates';
+ keepDuplicates.textContent='XÁC NHẬN: các tin trùng là lượt cược độc lập — CỘNG ĐỦ';
+ keepDuplicates.hidden=true;keepDuplicates.style.cssText='display:none;padding:8px;border:1px solid #965;background:#fff2cf;margin:5px 0';
+ panel.append(title,label,preview,status,keepDuplicates,copy,help);output.insertAdjacentElement('afterend',panel);
  const scope=()=>({
   market:(document.getElementById('region')||document.getElementById('sharedRegion'))?.value||'',
   businessDate:(document.getElementById('date')||document.getElementById('sharedDate'))?.value||'',
@@ -48,7 +51,9 @@ function install(){
       typeof item.raw==='string'&&item.raw.length<=20000&&!item.raw.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]'))input.value=item.raw;
   }catch(_){/* Keep source empty on corrupt storage; never infer a ticket. */}
  }
+ let duplicateApprovedScope=null;
  let receipt=null;
+ function duplicateScope(){const s=scope();return JSON.stringify([input.value,s.customerId,s.market,s.businessDate])}
  function signature(){const s=scope();return JSON.stringify([input.value,s.market,s.businessDate,s.customerId,s.rate,s.optIn,check.checked])}
  function sources(s){
   const raw=input.value;
@@ -56,13 +61,16 @@ function install(){
   const lines=raw.split(/\n/u).filter(x=>x.trim());
   if(lines.length>100)throw Error('MESSAGE_LIMIT_HOLD');
   if(lines.length>1&&!lines.every(x=>/^hn\s/iu.test(x)))throw Error('MULTILINE_SOURCE_IDS_REQUIRED_HOLD');
-  // Local paste line IDs represent explicit one-line messages, never invented Telegram IDs.
+  // Pasted line IDs are local review boundaries, NOT verified Telegram IDs.
+  // Never assume two identical pasted lines are independent orders without confirmation.
+  if(new Set(lines.map(t=>t.trim().toLowerCase())).size!==lines.length&&
+     duplicateApprovedScope!==duplicateScope())throw Error('DUPLICATE_SOURCE_CONFIRMATION_REQUIRED_HOLD');
   return lines.map((original_text,index)=>({
    source_message_id:'paste-line-'+(index+1),original_text,customer_id:s.customerId,market:s.market,business_date:s.businessDate
   }));
  }
  function render(){
-  receipt=null;preview.value='';copy.disabled=true;
+  receipt=null;preview.value='';copy.disabled=true;keepDuplicates.hidden=true;keepDuplicates.style.display='none';
   const s=scope();
   if(!s.optIn||!s.customerId){check.checked=false;check.disabled=true;status.textContent='Chọn Khách & tỷ lệ và khách trong dropdown để gộp tin.';return}
   check.disabled=s.customerId!=='quyt';
@@ -80,7 +88,12 @@ function install(){
    preview.value=result.formatted;copy.disabled=false;
    status.textContent='GỘP '+result.sourceCount+' tin | tiền gốc '+result.totalOriginal+'n | tiền theo checkbox '+result.totalExact+
      'n | BAO/LÔ '+result.adjustedTotals.bao_lo+'n. REVIEW_ONLY; không tự chuyển chủ; số thập phân phải được tuyến nhận xác nhận.';
-  }catch(e){status.textContent='HOLD: '+String(e?.message||e)}
+  }catch(e){
+   if(String(e?.message||e).includes('DUPLICATE_SOURCE_CONFIRMATION_REQUIRED_HOLD')){
+    keepDuplicates.hidden=false;keepDuplicates.style.display='block';
+    status.textContent='HOLD: hai dòng tin có nội dung trùng. Chỉ xác nhận nếu đó là hai lượt khách đặt độc lập.';
+   }else status.textContent='HOLD: '+String(e?.message||e);
+  }
  }
  async function copyText(){
   const current=receipt;
@@ -92,8 +105,12 @@ function install(){
    status.textContent='ĐÃ COPY VĂN BẢN đối chiếu theo checkbox; KHÔNG gửi Router/Telegram. Nếu tuyến nhận không hỗ trợ số thập phân, KHÔNG dùng bản này để chuyển cược.';
   }catch(e){status.textContent='HOLD: Clipboard không khả dụng — '+String(e?.message||e)}
  }
+ keepDuplicates.addEventListener('click',()=>{
+  if(!window.confirm||!window.confirm('Xác nhận các dòng giống hệt là các tin khách đặt riêng biệt, đều được tính tiền?'))return;
+  duplicateApprovedScope=duplicateScope();render();
+ });
  check.addEventListener('change',render);copy.addEventListener('click',copyText);
- input.addEventListener('input',()=>{saveDraft();render()});
+ input.addEventListener('input',()=>{duplicateApprovedScope=null;saveDraft();render()});
  for(const id of ['ktsQuytRate','ktsReviewCustomer','ktsCustomerRateToggle','region','sharedRegion','date','sharedDate','today']){
   const e=document.getElementById(id);
   if(e)e.addEventListener(id==='ktsQuytRate'?'input':'change',()=>{if(id==='region'||id==='sharedRegion'||id==='date'||id==='sharedDate')check.checked=false;render()});
@@ -139,6 +156,7 @@ function install(){
    event.preventDefault();event.clipboardData.setData('text/plain',receipt.formatted);
   }
  });
+ window.addEventListener('kts:quyt-selection-v1',render);
  window.addEventListener('pageshow',render);
  render();
 }
