@@ -232,7 +232,7 @@ test('approved complete separator-only lines skip without losing original physic
  const full=input('mn','2d. 52. 852. B10n.\n--//-----//--\n3d. 43. 83.b 10n',opts);
  assert.equal(full.total,'100');
  assert.equal(full.sourceCount,2);
- reject('mn','2d 52 b10n\n--//-----//--\n\n3d 43 83 b',/tin 5/u,opts);
+ reject('mn','2d 52 b10n\n--//-----//--\n\n\n3d 43 83 b',/tin 5/u,opts);
 });
 test('all-divider input and malformed divider-like text HOLD atomically',()=>{
  const opts={businessDate:'2026-10-13'};
