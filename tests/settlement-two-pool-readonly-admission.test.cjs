@@ -57,6 +57,7 @@ test('reject bypassRLS, inherited membership and every direct money grant',()=>{
  }
 });
 test('audit projects all table and column mutation classes for each financial table',()=>{
+ assert.ok(A.AUDIT_SQL.includes('host(inet_server_addr()) AS server_address'));
  for(const name of ['workspaces','memberships','counterparties','scopes','scope_events','idempotency_receipts','identities']){
   for(const verb of ['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'])
    assert.ok(A.AUDIT_SQL.includes(`has_table_privilege(current_user,'kts_team.${name}','${verb}')`));

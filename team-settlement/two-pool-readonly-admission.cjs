@@ -14,7 +14,7 @@ const FINANCIAL_GRANTS=FINANCIAL_TABLES.flatMap(name=>{
 const AUDIT_SQL=[
 "SELECT current_user::text AS role, session_user::text AS session_role,",
 "current_database()::text AS database_name,",
-"inet_server_addr()::text AS server_address, inet_server_port()::integer AS server_port,",
+"host(inet_server_addr()) AS server_address, inet_server_port()::integer AS server_port,",
 "pg_postmaster_start_time()::text AS postmaster_started,",
 "(SELECT rolsuper FROM pg_catalog.pg_roles WHERE rolname=current_user) AS superuser,",
 "(SELECT rolbypassrls FROM pg_catalog.pg_roles WHERE rolname=current_user) AS bypass_rls,",
