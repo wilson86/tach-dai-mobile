@@ -44,8 +44,12 @@ async function observeSyntheticTenantGucExposure({pool,syntheticOnly=false}={}){
      db_connection_compromise_isolated:false,production_qualified:false,
      write_block:'ENABLED'});
  } finally {
-   if(began)try{await client.query('ROLLBACK')}catch(_){}
-   client.release(true);
+   try{
+     if(began){
+       const rollback=await client.query('ROLLBACK');
+       if(rollback?.command!=='ROLLBACK')deny('TEAM_GUC_PROBE_ROLLBACK_UNVERIFIED');
+     }
+   }finally{client.release(true)}
  }
 }
 module.exports=Object.freeze({observeSyntheticTenantGucExposure});

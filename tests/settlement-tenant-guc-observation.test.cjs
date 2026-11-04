@@ -2,11 +2,13 @@
 const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const {observeSyntheticTenantGucExposure:observe}=require('../team-settlement/tenant-guc-observation.cjs');
-function fixture({role='synthetic_recovery_ledger',leak=true,fail=false}={}){
+function fixture({role='synthetic_recovery_ledger',leak=true,fail=false,rollbackFailure=false,rollbackMissingTag=false}={}){
  const calls=[];let scoped=null,released=false;
  const pool={async connect(){calls.push('connect');return {
   async query(sql,args){
    if(sql==='BEGIN'||sql==='SET TRANSACTION READ ONLY'||sql==='ROLLBACK'){
+     if(sql==='ROLLBACK'&&rollbackFailure)throw Error('SYNTHETIC_ROLLBACK_FAILURE');
+     if(sql==='ROLLBACK'&&rollbackMissingTag)return {rows:[]};
      calls.push(sql);return {command:sql,rows:[]};
    }
    if(sql.includes('current_user::text'))return {rows:[{role,session_role:role}]};
@@ -35,6 +37,13 @@ test('real-login modeled GUC switch exposes a different synthetic tenant; releas
  'connect','BEGIN','SET TRANSACTION READ ONLY','SET_GUC:group_a',
  'RECEIPT_SELECT','SET_GUC:group_b','RECEIPT_SELECT','ROLLBACK','release:true']);
  assert.equal(f.isReleased(),true);
+});
+test('rollback failure or missing acknowledgement cannot report success and destroys client',async()=>{
+ for(const options of [{rollbackFailure:true},{rollbackMissingTag:true}]){
+   const f=fixture(options);
+   await assert.rejects(observe({pool:f.pool,syntheticOnly:true}));
+   assert.equal(f.isReleased(),true);
+ }
 });
 test('role mismatch, absent foreign fixture and DB failure must fail closed and release connection',async()=>{
  for(const options of [{role:'qa_admin'},{leak:false},{fail:true}]){
