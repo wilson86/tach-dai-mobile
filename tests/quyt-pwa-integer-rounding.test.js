@@ -28,10 +28,10 @@ test('half-up boundary: 0.499 down, 0.500 and 0.501 up', () => {
  printedStakesHaveNoFraction(a);
 });
 test('Quýt only scales BAO/LO then rounds each canonical number', () => {
- const a = merge('21 b55n. 22 b5n. 23 b100n. 34 dd10n.',{tick:true});
- assert.equal(a.original,'170');assert.equal(a.total,'181');
+ const a = merge('21 b55n. 22 b10n. 23 b100n. 34 dd10n.',{tick:true});
+ assert.equal(a.original,'175');assert.equal(a.total,'187');
  assert.match(a.pretty, /23 b107n/u); assert.match(a.pretty,/21 b59n/u);
- assert.match(a.pretty, /22 b5n/u);assert.match(a.pretty,/34 dd10n/u);
+ assert.match(a.pretty, /22 b11n/u);assert.match(a.pretty,/34 dd10n/u);
  const row=a.rows.find(x=>x.number==='21');
  assert.equal(row.beforeRounding,'58.685');
  assert.equal(row.adjusted,'59');
@@ -44,11 +44,11 @@ test('merge identical number wagers first, multiply and round exactly ONCE', () 
  assert.match(a.pretty,/21 b11n/u);
 });
 test('never round grand total instead of per-number amounts', () => {
- const a=merge('21 22 b5n.',{tick:true});
- assert.equal(a.original,'10');assert.equal(a.total,'10');
- assert.match(a.pretty,/21 22 b5n/u);
+ const a=merge('21 22 b10n.',{tick:true});
+ assert.equal(a.original,'20');assert.equal(a.total,'22');
+ assert.match(a.pretty,/21 22 b11n/u);
  assert.equal(a.rows.length,2);
- assert.equal(a.rows.reduce((sum,row)=>sum+Number(row.adjusted),0),10);
+ assert.equal(a.rows.reduce((sum,row)=>sum+Number(row.adjusted),0),22);
  printedStakesHaveNoFraction(a);
 });
 test('DA / DD / DAU / DUI are rounded to integers without Quýt multiplier', () => {
@@ -84,10 +84,16 @@ test('unsupported XC and market still HOLD, and source is never mutated',()=>{
  const a=app.merge(s,{...base,tick:true});
  assert.equal(s,copy);assert.equal(a.total,'59');
 });
-test('v5 service worker retains v4 money contract and adds group frames',()=>{
+test('v9 service worker retains fail-closed money guard and group frames',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v5-grouped-frames/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261105-v9-clipboard-guard/u);
  assert.match(html,/Sau nhân, chưa tròn/u);
  assert.match(html,/Xuất, đã tròn/u);
  assert.match(html,/TỔNG XUẤT \(ĐÃ LÀM TRÒN\)/u);
+});
+
+test('divergent HALF_UP vs CEIL Quyt amounts HOLD atomically, no partial ticket',()=>{
+ assert.throws(()=>merge('21 b15n. 44 dd10n.',{tick:true}),/HOLD_CHENH_LECH_LAM_TRON/u);
+ assert.throws(()=>merge('21 22 b5n.',{tick:true}),/HOLD_CHENH_LECH_LAM_TRON/u);
+ assert.equal(merge('21 b15n. 44 dd10n.',{tick:false}).total,'25');
 });

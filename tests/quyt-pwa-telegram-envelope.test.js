@@ -11,17 +11,17 @@ const source=html.match(/const OfflineKTS=\(\(\)=>\{[\s\S]*?\}\)\(\);/u);
 assert.ok(source,'offline core must exist');
 const app=vm.runInNewContext(source[0]+';OfflineKTS;');
 const args={market:'mb',customer:'quyt',tick:false,rate:'1.067'};
-const a='hn 21 b10n dd2n', b='hn 21 b5n';
+const a='hn 21 b5n dd2n', b='hn 21 b5n';
 const wrapped=s=>'[11/4/2026 6:06 PM] Cô Quýt: '+s;
 test('Telegram headers for two distinct messages with same timestamp are accepted',()=>{
  const t=app.merge(wrapped(a)+'\n'+wrapped(b),args), bare=app.merge(a+'\n'+b,args);
- assert.equal(t.total,'17');assert.equal(t.sourceCount,2);assert.equal(t.pretty,bare.pretty);
- assert.match(t.pretty,/21 b15n/u);assert.match(t.pretty,/21 dd2n/u);
+ assert.equal(t.total,'12');assert.equal(t.sourceCount,2);assert.equal(t.pretty,bare.pretty);
+ assert.match(t.pretty,/21 b10n/u);assert.match(t.pretty,/21 dd2n/u);
 });
 test('Only Quýt BAO/LO is multiplied once, including decimal amount',()=>{
  const r=app.merge(wrapped(a)+'\n'+wrapped(b),{...args,tick:true});
- assert.equal(r.total,'18');assert.match(r.pretty,/21 b16n/u);assert.match(r.pretty,/21 dd2n/u);
- assert.equal(app.merge(wrapped(a)+'\n'+wrapped(b),{...args,rate:'invalid',tick:false}).total,'17');
+ assert.equal(r.total,'13');assert.match(r.pretty,/21 b11n/u);assert.match(r.pretty,/21 dd2n/u);
+ assert.equal(app.merge(wrapped(a)+'\n'+wrapped(b),{...args,rate:'invalid',tick:false}).total,'12');
 });
 test('Wrong sender, invalid timestamp, malformed header and missing HN HOLD',()=>{
  assert.throws(()=>app.merge('[11/4/2026 6:06 PM] Cô Hiền: '+a,args),/Tên khách Telegram/u);
@@ -39,11 +39,11 @@ test('Duplicated pasted message contents require independent confirmation',()=>{
  const duplicate=wrapped(a)+'\n'+wrapped(a);
  assert.throws(()=>app.merge(duplicate,args),/TIN_TRÙNG_CHƯA_XÁC_NHẬN/u);
  const r=app.merge(duplicate,{...args,duplicateConfirmed:true});
- assert.equal(r.total,'24');assert.equal(r.sourceCount,2);
+ assert.equal(r.total,'14');assert.equal(r.sourceCount,2);
 });
 test('Offline release cache marker is updated and UI explains Telegram source',()=>{
  assert.match(html,/Dán <b>nguyên văn Telegram<\/b>/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v5-grouped-frames/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261105-v9-clipboard-guard/u);
  assert.doesNotMatch(html,/\b(?:fetch|XMLHttpRequest)\s*\(/u);
 });

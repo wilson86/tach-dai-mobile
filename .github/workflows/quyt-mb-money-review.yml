@@ -1,0 +1,31 @@
+name: Quyt MB fail-closed money and market review (public free Node)
+on:
+  pull_request:
+    paths:
+      - 'quyt-pwa/index.html'
+      - 'quyt-pwa/sw.js'
+      - 'tests/quyt-pwa-market-safe-sw.test.cjs'
+      - 'tests/quyt-pwa-stale-clipboard.test.cjs'
+      - 'tests/quyt-pwa-integer-rounding.test.js'
+      - 'tests/quyt-pwa-grouped-frames.test.js'
+      - 'tests/quyt-pwa-telegram-envelope.test.js'
+      - 'tests/quyt-pwa-missing-unit.test.js'
+      - 'tests/quyt-pwa-mb-money-hold.test.cjs'
+      - 'tests/quyt-pwa-mb-headless-smoke.cjs'
+      - '.github/workflows/quyt-mb-money-review.yml'
+permissions:
+  contents: read
+jobs:
+  mb-boundary-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: SHA-bound offline Node tests; no live data
+        run: |
+          node --version
+          node --test tests/quyt-pwa-mb-money-hold.test.cjs tests/quyt-pwa-market-safe-sw.test.cjs tests/quyt-pwa-stale-clipboard.test.cjs tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-telegram-envelope.test.js tests/quyt-pwa-missing-unit.test.js
+      - name: Real Chromium headless localhost DOM smoke (synthetic only)
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-pwa-mb-headless-smoke.cjs
