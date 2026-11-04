@@ -1,0 +1,55 @@
+# KTS Settlement — receipt V2 verifier, key custody, owner ACL and revocation decision
+Date: 2026-11-04. Source branch `codex/settlement-v2-expiry-delay-review-20261104`.
+STATUS: **DESIGN_PROPOSAL / INDEPENDENT_APPROVAL_REQUIRED / NO_GO**.
+
+This record supports review of the **unexecuted** `team-settlement/candidate/session-bound-receipt-read-v2.sql`. It does **not** authorize running that SQL, provisioning keys, granting EXECUTE, connecting PostgreSQL, merging, deploying or unlocking any financial write. V1 must remain rejected because its key is derivable from bearer/session hash.
+
+## Exact proof format (must pass independent JS ↔ PostgreSQL byte-parity tests)
+
+Purpose is ASCII `kts-receipt-read-v2`. HMAC-SHA256 uses a 32-byte **independent** backend-origin symmetric key. Binary message is the UTF-8 bytes of fields prefixed individually by the number of UTF-8 bytes written in ASCII decimal, then ASCII colon, then the original value, all concatenated with no separators between fields. Field order:
+
+`purpose, key_id, session_handle, workspace_id, user_id, number_of_keys, each_key_in_ascending_order, nonce, issued_at_seconds, expires_at_seconds`.
+
+`key_id` is 16 lowercase hex, `session_handle` is a server-only random 32 lowercase hex identifier indexed uniquely in `kts_auth.sessions` and **not** based on a bearer, `nonce` is 32 lowercase hex, list of 1–30 *sorted unique* `draft_`+32-lowercase-hex idempotency keys, and timestamps are decimal epoch seconds, bounded to a maximum lifetime of 30 seconds. `workspace_id` and `user_id` are nonempty ASCII `[A-Za-z0-9_-]` keys. HMAC digest is 64 lowercase hex. No additional normalization, locale conversion, delimiters or escaping may be introduced in either implementation. Compare with the existing `tests/fixtures/receipt-backend-proof-v2.cjs` vector source.
+
+The SQL candidate independently looks up `session_handle`, checks active session expiry/revocation, resolves membership and disabled-identity status *from database rows* and never authenticates an actor/tenant from client-controlled `kts.workspace_id` or role GUC. It resets transaction-local tenant from verified session. The real Auth callback remains backend-only; browser cannot request that function with arbitrary identity/proof fields.
+
+## Required key origin and custody (none provisioned)
+
+**Proposed custody:** the trusted Auth signer reads its randomly generated 32-byte key from an operator-managed protected secret backend, never from the bearer, session hash, URL, repository, GitHub Actions, browser local storage, request headers or logs. The SQL verifier must have access to corresponding key material through a **separately owned** private PostgreSQL storage table `kts_auth.receipt_v2_verifier_keys`. Proposed schema contract (NOT an executable migration):
+- `key_id text UNIQUE NOT NULL` (16 lowercase hex)
+- `secret_bytes bytea NOT NULL` (exactly 32 bytes)
+- `activated_at timestamptz NOT NULL`
+- `stop_verify_at timestamptz NOT NULL`
+- `revoked_at timestamptz NULL` (revocation timestamp).
+- Check that activation precedes stop_verify, and prohibit blank/malformed IDs and secrets. Index by key ID. Key bootstrap is an independently approved operator-only transaction; no key material in GitHub or code comments.
+
+**Custody tradeoff:** symmetric SQL verification means the verifier database necessarily holds a copy of the signing key or access to it; privilege compromise, backup exposure, logical dumps, SQL error/parameter logs and privileged SQL insiders become key theft risks. The design does NOT cryptographically prove that PostgreSQL itself cannot sign. If this threat is unacceptable, independently review asymmetric signatures and a vetted PostgreSQL verifier extension rather than silently accepting this symmetric design.
+
+**Rotation:** new key IDs must be issued only from the trusted secret authority, with distinct sign/verify activation. Retire old signing keys, then remove verifier access only after outstanding proof TTL plus verified clock skew; *immediate revoke* must deny previously signed proofs, and emergency compromise may invalidate outstanding reads. No fallback to bearer-derived material and no provision of a default key. Operator key rollback must never reenable a revoked key. Key usage/key ID logs must not contain secret or proof.
+
+**Owner/ACL:** independently qualify separate roles for (a) protected key-store owner, (b) non-login receipt function owner, (c) Auth signer login/pool and (d) Ledger runtime login/pool. The receipt owner has no LOGIN/SUPERUSER/BYPASSRLS/CREATEDB/CREATEROLE/role memberships, owns no session, receipt, membership or key table, has only necessary schema USAGE, column SELECT and audited `kts_crypto.hmac(bytea,bytea,text)` EXECUTE. The key-store owner alone may provision/rotate/revoke verifier keys. Ledger login has *only* explicitly approved function EXECUTE and schema USAGE; deny direct table AND column SELECT on receipts, events, session handles, key store and sensitive membership identities and all mutation of Auth tables, plus CREATE, BYPASSRLS, role inheritance and PUBLIC/default privileges. Confirm actual effective privilege sources using catalog queries on a disposable cluster. Neither candidate SQL nor this document creates users or GRANTs.
+
+**Direct Ledger read caveat:** existing `getScope`, `listCounterparties`, `getChanges`, `lookupRecoveryReceipts` and `inActorTransaction` directly access tenant/identity tables. Removing SELECT without protected replacements breaks the application, whereas leaving it makes a forged tenant GUC dangerous. Do not approve **system-wide** isolation until all Ledger read paths are covered by audited backend authorization or narrow functions and API contracts remain unchanged.
+
+## Revocation linearization and expiry
+
+The V2 SQL candidate uses `FOR SHARE` to hold a session row and membership/identity rows until its *own Ledger transaction completes*. It requires an explicitly **READ WRITE** transaction (even though it performs no persistent write) because PostgreSQL READ ONLY forbids `FOR SHARE`. This is a proposed tradeoff, not reviewed runtime behavior. Auth's earlier transaction locks do **not** span the Ledger transaction. A committed revoke **before** the Ledger's locking read begins must deny. A concurrent revoke may wait for the read to finish; a proof can be used in a transaction that linearizes *before* the revoke, even if the HTTP response follows revocation. A revoke that commits after a qualifying read started is not guaranteed to cancel the already-produced result. Confirm actual `FOR SHARE` / `UPDATE` conflict, lock wait, session expiry **before and after lock wait**, before and **after query delay**, membership revoke, identity disable, isolation and ledger-role RLS as independent PostgreSQL16 probes. Do not assert stronger guarantees than those tested.
+
+No write, settle, resend, auto-retry or financial mutation is permitted by this receipt reader. A timed-out/lost response stays UNKNOWN and `auto_retry=false`. A nonce is signed but **not persisted**: identical reads are replayable until expiry and rotation/revocation; never claim replay resistance without a stateful nonce table and reviewed concurrency semantics.
+
+## Blockers / go-no-go worksheet
+
+| Gate | Authority | Status |
+|---|---|---|
+| Actual protected signer/key distribution + rotation | Independent security reviewer | NOT_IMPLEMENTED / NOT_APPROVED |
+| SQL `candidate_receipt_read_v2` syntax and JS/HMAC byte parity | PG16 synthetic with exact SHA | NOT_RUN |
+| PG function owner, crypto provenance, PUBLIC/default ACL and real role separation | Independent reviewer + PG16 catalog probes | NOT_RUN |
+| Auth/Ledger revocation locks and expiry ordering | PG16 synthetic concurrent sessions | NOT_RUN |
+| All Ledger direct reads, RLS and tenant GUC forgery denial | Real-role PG16 probes | NOT_RUN |
+| Window/Android failure recovery, HIOSKT 65-case money oracle | Product/end user | NOT_RUN |
+| Production | Project release gate | **NO_GO**, `WRITE_BLOCK=ENABLED` |
+
+**Review request:** Independent reviewer must explicitly record acceptance or rejection of (1) symmetric-key exposure threat model, (2) session/role authority, (3) SQL ownership and full read-path replacement, and (4) revocation linearization. Self-review, fixture PASS and document publication are never approval.
+
+**COST_USD=0.** No secrets or customer data created, SQL NOT_RUN, no deploy/merge/production mutation, E:/F: prohibited.
