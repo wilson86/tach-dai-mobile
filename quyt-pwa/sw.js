@@ -1,6 +1,6 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-standalone-pwa-20261104-v2-telegram-envelope';
+const CACHE='kts-quyt-standalone-pwa-20261104-v3-missing-unit-confirm';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
