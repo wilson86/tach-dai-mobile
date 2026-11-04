@@ -333,7 +333,7 @@ const OfflineKTS=(()=>{
    original+=row.amount;adjusted+=row.rounded;
    // Reference only: canonical LO BAO_MULTIPLIER_CEIL uses CEILING, whereas
    // this owner-approved Quyt preview uses HALF_UP. Never assume Router parity.
-   const ceiling=((row.exact+M-1n)/M)*M;
+   const ceiling=row.kind==='b'&&opts.tick?((row.exact+M-1n)/M)*M:row.rounded; // CEIL policy applies to Quyt BAO/LO reference only
    ceilReference+=ceiling;
    if(row.kind==='b'&&opts.tick&&ceiling!==row.rounded)roundingDiffRows++;
   }
