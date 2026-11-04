@@ -294,7 +294,9 @@ check.tabIndex=-1;bar.style.display="none";
     const cleaner=window.KTSCleanAggregate;
     if(!cleaner||typeof cleaner.preview!=="function")throw Error("CLEAN_CORE_REQUIRED");
     const merged=cleaner.preview(original,{
-     region:selectedRegion?.value,omitRegion:true,
+     region:selectedRegion?.value,
+     businessDate:(document.getElementById("date")||document.getElementById("sharedDate"))?.value,
+     omitRegion:selectedRegion?.value==="mb",
      repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator"
     });
     if(merged.status!=="REVIEW_ONLY"){
@@ -310,8 +312,9 @@ check.tabIndex=-1;bar.style.display="none";
    const p=core.prepareExactGrouped(raw,{
     customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,
     rate:rate.value,sourceText:original,region:selectedRegion?.value,
+    businessDate:(document.getElementById("date")||document.getElementById("sharedDate"))?.value,
     cleanCore:window.KTSCleanAggregate,repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator",
-    omitRegion:true
+    omitRegion:selectedRegion?.value==="mb"
    });
    review.value=p.preview;
    status.textContent=(directMode?"GỘP TỪ TIN GỐC ✓":"Quýt ✓")+
@@ -415,7 +418,8 @@ check.tabIndex=-1;bar.style.display="none";
     const selectedRegion=document.getElementById("region")||document.getElementById("sharedRegion");
     const cleaner=window.KTSCleanAggregate;
     if(!cleaner||typeof cleaner.parse!=="function")throw Error("CLEAN_CORE_REQUIRED");
-    cleaner.parse(input.value,{region:selectedRegion?.value});
+    cleaner.parse(input.value,{region:selectedRegion?.value,
+     businessDate:(document.getElementById("date")||document.getElementById("sharedDate"))?.value});
     core.parseRate(rate.value);
     initialSourceBindAllowed=false;
     ownTop.__KTS_QUYT_SELECTED_V1__=true;
