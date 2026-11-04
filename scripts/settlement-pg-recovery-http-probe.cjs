@@ -6,6 +6,7 @@ const assert=require('node:assert/strict');
 const {createIsolatedTeamPrototype}=require('../team-settlement/team-composition.cjs');
 const {digest}=require('../team-settlement/server-ledger-api.cjs');
 const {inspectProposedPools}=require('../team-settlement/two-pool-readonly-admission.cjs');
+const {observeSyntheticTenantGucExposure}=require('../team-settlement/tenant-guc-observation.cjs');
 const DRIVER='C:\\KTS-Settlement\\w20-2d63c84e\\pg-driver-offline-20261104';
 const LOCK='BEA68A0C1FD5508BD35BCD41841A11850ED3842FD7294B30B77925795C2EDD1E';
 async function main(){
@@ -79,6 +80,13 @@ ALTER ROLE synthetic_recovery_ledger SET log_parameter_max_length_on_error=0;`);
   await assert.rejects(app.ledgerRepository.appendDraft(),/TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE/);
   const counts=await admin.query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='synthetic_recovery_event')::int AS events,(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key=$1)::int AS receipts",[id]);
   assert.deepEqual(counts.rows[0],{events:1,receipts:1});
+  // Deliberate defense-in-depth threat-model probe: this same independent
+  // ledger LOGIN has table SELECT rights and can set the untrusted custom GUC.
+  // It does not authorize or change production, and must not print row values.
+  const tenantGuc=await observeSyntheticTenantGucExposure({pool:ledgerPool,syntheticOnly:true});
+  assert.equal(tenantGuc.status,'SYNTHETIC_CALLER_WRITABLE_GUC_EXPOSURE_OBSERVED');
+  assert.equal(tenantGuc.production_qualified,false);
+  process.stdout.write('SYNTHETIC_CALLER_WRITABLE_GUC_EXPOSURE_OBSERVED operational_authority=BLOCKED direct_db_role_trust=NOT_VERIFIED\n');
   process.stdout.write('SYNTHETIC_TWO_LOGIN_HTTP_PG_RECOVERY_PASS matched=1 unknown=1 revoked=1 cross_tenant_denied=1 tampered_receipt_denied=1 private_reply_redacted=1 auto_retry=false events=1 receipts=1 write_block=ENABLED\n');
  }finally{
   if(server?.listening)await new Promise(resolve=>server.close(resolve));
