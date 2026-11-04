@@ -38,11 +38,20 @@ function createIsolatedTeamPrototype({
   // after auth connection loss. Deny writes even when a caller skips verifyPools.
   // This is a temporary safety block, not a working atomic mutation boundary.
   const denyUnqualifiedMutation=async()=>{throw Error('TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE');};
+  // Critical containment: a caller-controlled tenant GUC plus an unqualified
+  // Ledger login with direct SELECT can cross the tenant boundary, even for
+  // "read-only" endpoints. Neither the existing RLS policy nor prior
+  // synthetic fixture tests qualify a live read. Deny all Ledger tenant reads
+  // at the returned composition boundary until a SHA-bound restricted SQL
+  // role/verifier and complete read-surface review are approved.
+  const denyUnqualifiedRead=async()=>{throw Error('TEAM_DB_TENANT_READ_BOUNDARY_UNAVAILABLE');};
   const ledgerRepository=Object.freeze({...unqualifiedRepository,
     appendDraft:denyUnqualifiedMutation,appendDraftWithSessionProof:denyUnqualifiedMutation,
     reconcileDraftWithSessionProof:denyUnqualifiedMutation,advanceReview:denyUnqualifiedMutation,
     advanceReviewWithSessionProof:denyUnqualifiedMutation,
-    reconcileReviewWithSessionProof:denyUnqualifiedMutation});
+    reconcileReviewWithSessionProof:denyUnqualifiedMutation,
+    getScope:denyUnqualifiedRead,listCounterparties:denyUnqualifiedRead,
+    getChanges:denyUnqualifiedRead,lookupRecoveryReceipts:denyUnqualifiedRead});
   const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled,requireSessionLockForWrites:true});
   // A distinct, separately opted-in recovery inspector wires the actual
   // actor-scoped PostgreSQL READ ONLY receipt repository into the HTTP route.
