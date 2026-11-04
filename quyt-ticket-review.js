@@ -16,6 +16,7 @@ function ticket(messages,options){
  const market=String(options.market||'').toLowerCase(),date=String(options.businessDate||''),customerId=String(options.customerId||'');
  if(!['mb','mn','mt'].includes(market)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!customerId)fail('SCOPE_REQUIRED_HOLD');
  if(typeof options.multiply!=='boolean')fail('TOGGLE_REQUIRED_HOLD');
+ if(options.multiply===true&&customerId!=='quyt')fail('CUSTOMER_MULTIPLIER_NOT_AUTHORIZED_HOLD');
  const tick=options.multiply,rate=options.rateParser(options.rate||'1.067');
  const known=new Map(),exposures=new Map(),sources=[];let seenLabel='',serial=0,placement=0;
  for(const source of messages){
