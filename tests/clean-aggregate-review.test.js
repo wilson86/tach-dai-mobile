@@ -95,3 +95,30 @@ t("duoi = dui = đui for a complete amount; never infer a missing unit",()=>{
  assert.equal(x.originalText,raw);
  assert.throws(()=>A.preview("mb 98 đui25",{region:"mb"}),/MISSING_UNIT_HOLD.*line=1.*selector=đui/);
 });
+
+
+t("MN/MT without a named station are HOLD; only MB accepts stationless wager",()=>{
+ const input="86 lo75n";
+ const mb=A.preview(input,{region:"mb"});
+ assert.equal(mb.status,"REVIEW_ONLY");
+ assert.equal(mb.normalized,"MB 86 lo75n");
+ assert.equal(mb.originalText,input);
+ for(const region of ["mn","mt"]){
+  for(const raw of [input,region+" "+input,region+"\n"+input]){
+   const line=raw.includes("\n")?2:1;
+   assert.throws(()=>A.preview(raw,{region}),e=>
+     e.message.includes("STATION_NAME_REQUIRED_HOLD")&&e.message.includes("line="+line));
+   assert.equal(raw.includes(input),true,"No source edits during a rejected wager");
+  }
+  // An actual named station must still be checked by the canonical date/region
+  // schedule before a money preview: do not silently interpret the region as a station.
+  assert.throws(()=>A.preview("dn "+input,{region}),/UNRECOGNIZED_FRAGMENT/);
+ }
+});
+t("review money cannot bypass MN/MT station prefix via sourceExposures",()=>{
+ const core=require("../quyt-bao-review.js");
+ for(const region of ["mn","mt"])
+  assert.throws(()=>core.sourceExposures("86 lo75n",A,region),
+   /STATION_NAME_REQUIRED_HOLD.*line=1/);
+ assert.equal(core.sourceExposures("86 lo75n",A,"mb").clauses.length,1);
+});
