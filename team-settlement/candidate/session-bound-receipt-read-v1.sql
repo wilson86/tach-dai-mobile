@@ -12,7 +12,7 @@ BEGIN
        AND NOT rolcreaterole AND NOT rolcreatedb AND NOT rolreplication
   ) OR EXISTS (
     SELECT 1 FROM pg_catalog.pg_auth_members m
-    JOIN pg_catalog.pg_roles r ON r.oid=m.member
+    JOIN pg_catalog.pg_roles r ON r.oid=m.member OR r.oid=m.roleid
     WHERE r.rolname='kts_receipt_read_owner'
   ) OR EXISTS (
     SELECT 1 FROM pg_catalog.pg_class c

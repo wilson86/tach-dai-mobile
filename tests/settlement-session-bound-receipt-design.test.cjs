@@ -19,6 +19,7 @@ test('candidate is a non-deployed SECURITY DEFINER with no implicit PUBLIC/RUNTI
  assert.match(candidate,/OWNER TO kts_receipt_read_owner;/);
  assert.match(candidate,/NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls/);
  assert.match(candidate,/pg_catalog\.pg_auth_members m/);
+ assert.match(candidate,/r\.oid=m\.member OR r\.oid=m\.roleid/);
  assert.match(candidate,/r\.rolname='kts_receipt_read_owner'/);
  assert.doesNotMatch(candidate,/\bGRANT\s+(?:SELECT|EXECUTE|ALL)\s+/i);
  assert.doesNotMatch(candidate,/\bDROP\s+(?:TABLE|ROLE|FUNCTION)\s+/i);
