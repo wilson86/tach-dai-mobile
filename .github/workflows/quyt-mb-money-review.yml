@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'quyt-pwa/index.html'
+      - 'quyt-pwa/sw.js'
+      - 'tests/quyt-pwa-market-safe-sw.test.cjs'
       - 'tests/quyt-pwa-mb-money-hold.test.cjs'
       - 'tests/quyt-pwa-mb-headless-smoke.cjs'
       - '.github/workflows/quyt-mb-money-review.yml'
@@ -17,7 +19,7 @@ jobs:
       - name: SHA-bound offline Node tests; no live data
         run: |
           node --version
-          node --test tests/quyt-pwa-mb-money-hold.test.cjs
+          node --test tests/quyt-pwa-mb-money-hold.test.cjs tests/quyt-pwa-market-safe-sw.test.cjs
       - name: Real Chromium headless localhost DOM smoke (synthetic only)
         run: |
           command -v google-chrome || command -v chromium
