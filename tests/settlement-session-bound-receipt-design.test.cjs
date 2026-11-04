@@ -45,6 +45,17 @@ test('a bearer holder can derive the proposed HMAC key; backend origin is not pr
  assert.equal(crypto.createHmac('sha256',sessionHash).update(message).digest('hex'),
    crypto.createHmac('sha256',Buffer.from(independentlyDerived,'hex')).update(message).digest('hex'));
 });
+test('synthetic HMAC vectors bind tenant, keys, nonce and expiry but allow exact replay',()=>{
+ const key=crypto.createHash('sha256').update('synthetic_bearer_'+ 'a'.repeat(40)).digest();
+ const fields=['kts-receipt-read-v1','a'.repeat(64),'group_a','draft_'+ 'b'.repeat(32),'c'.repeat(32),'1793789000'];
+ const sign=parts=>crypto.createHmac('sha256',key).update(parts.join('|')).digest('hex');
+ const original=sign(fields);
+ assert.equal(sign([...fields]),original,'exact replay is intentionally not prevented');
+ for(const index of [1,2,3,4,5]){
+   const changed=[...fields];changed[index]+='x';
+   assert.notEqual(sign(changed),original,`field ${index} must be bound`);
+ }
+});
 test('read request is bounded and deterministic; no mutation, locks or SQL injection interpolations',()=>{
  assert.match(candidate,/pg_catalog\.cardinality\(p_keys\) NOT BETWEEN 1 AND 30/);
  assert.match(candidate,/ARRAY\(SELECT DISTINCT t\.k[^]*ORDER BY t\.k\) IS DISTINCT FROM p_keys/);
