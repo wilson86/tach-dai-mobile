@@ -106,6 +106,12 @@ try{
  window.__qaResolveCopy();
  await Promise.resolve();await Promise.resolve();await Promise.resolve();
  assert('stale group clipboard also warns and cannot claim success',$('status').textContent.includes('Clipboard CÓ THỂ chứa tin CŨ')&&$('copy').disabled&&window.__qaClipboard==='dn 21 b13n.');
+ set('raw','2d 52 b10n\\n--//-----//--\\n3d 43 b10n');
+ assert('approved divider lines skipped in real Chrome',$('sourceTotal').textContent==='20n'&&$('before').textContent==='50n'&&$('after').textContent==='55n'&&$('copy').disabled);
+ set('raw','2d 52 b10n\\n--//123//--');
+ assert('mixed number divider-like line remains atomic HOLD',$('copy').disabled&&$('ackMoney').disabled&&$('result').value==='');
+ set('raw','----\\n////');
+ assert('all-dividers HOLD and never unlock Copy',$('copy').disabled&&$('ackMoney').disabled&&$('status').textContent.includes('EMPTY_AFTER_PREPROCESS'));
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
