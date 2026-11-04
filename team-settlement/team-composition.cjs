@@ -4,7 +4,6 @@
 // No DB creation, no socket binding, no production or Telegram effects.
 const {createPgTransactionAdapter}=require('./pg-transaction-adapter.cjs');
 const {createPostgresAuthService}=require('./postgres-auth-service.cjs');
-const {createPostgresLedgerRepository}=require('./postgres-ledger-repository.cjs');
 const {createServerLedgerApi}=require('./server-ledger-api.cjs');
 const {createRecoveryReconciliation}=require('./recovery-reconciliation.cjs');
 const {createAuthHttpServer}=require('./auth-http-contract.cjs');
@@ -30,10 +29,11 @@ function createIsolatedTeamPrototype({
   if(syntheticAuthorizationDiagnostic!==null&&typeof syntheticAuthorizationDiagnostic!=='function')
     throw Error('TEAM_AUTHORIZATION_DIAGNOSTIC_INVALID');
   const authDb=createPgTransactionAdapter({pool:authPool});
-  const ledgerDb=createPgTransactionAdapter({pool:ledgerPool});
   const auth=createPostgresAuthService({db:authDb,clock});
-  const unqualifiedRepository=createPostgresLedgerRepository({db:ledgerDb,
-    syntheticAuthorizationDiagnostic});
+  // Fail-closed by construction: do not construct a direct tenant-table
+  // repository and then try to mask selected methods with object spreading.
+  // Even a future repository method must not become reachable by accident.
+  // The Ledger pool is retained only for explicit verifyPools role inspection.
   // The current split-connection session lock cannot protect a ledger commit
   // after auth connection loss. Deny writes even when a caller skips verifyPools.
   // This is a temporary safety block, not a working atomic mutation boundary.
@@ -45,7 +45,7 @@ function createIsolatedTeamPrototype({
   // at the returned composition boundary until a SHA-bound restricted SQL
   // role/verifier and complete read-surface review are approved.
   const denyUnqualifiedRead=async()=>{throw Error('TEAM_DB_TENANT_READ_BOUNDARY_UNAVAILABLE');};
-  const ledgerRepository=Object.freeze({...unqualifiedRepository,
+  const ledgerRepository=Object.freeze({
     appendDraft:denyUnqualifiedMutation,appendDraftWithSessionProof:denyUnqualifiedMutation,
     reconcileDraftWithSessionProof:denyUnqualifiedMutation,advanceReview:denyUnqualifiedMutation,
     advanceReviewWithSessionProof:denyUnqualifiedMutation,
