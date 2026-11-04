@@ -53,3 +53,18 @@ No write, settle, resend, auto-retry or financial mutation is permitted by this 
 **Review request:** Independent reviewer must explicitly record acceptance or rejection of (1) symmetric-key exposure threat model, (2) session/role authority, (3) SQL ownership and full read-path replacement, and (4) revocation linearization. Self-review, fixture PASS and document publication are never approval.
 
 **COST_USD=0.** No secrets or customer data created, SQL NOT_RUN, no deploy/merge/production mutation, E:/F: prohibited.
+
+
+## Confirmed design contradiction — FOR SHARE vs SELECT-only owner (2026-11-04 follow-up)
+
+**HARD BLOCKER `OWNER_ROW_LOCK_PRIVILEGE_CONFLICT`:** The candidate V2 SECURITY DEFINER function currently performs `SELECT ... FOR SHARE` on `kts_auth.sessions` and `FOR SHARE OF m,i` on `kts_team.memberships` and `kts_team.identities`. The owner contract above grants the function owner *only column SELECT*, not UPDATE. PostgreSQL 16's official privileges reference states that **both FOR UPDATE and FOR SHARE require UPDATE privilege on at least one column in addition to SELECT**. Source: PostgreSQL 16 §5.7 Privileges, https://www.postgresql.org/docs/16/ddl-priv.html. Therefore, even a correctly deployed key table and valid proof cannot make this candidate work under its declared SELECT-only owner privileges. The previous static tests did not detect the mismatch. This is a **source-level confirmed incompatibility**, not a proven PostgreSQL error on this SHA (PG16 remains NOT_RUN).
+
+The same issue applies to any other caller or function owner that executes these row locks. It must not be silently "fixed" by granting UPDATE to the Ledger runtime or SECURITY DEFINER owner: that expands mutation capability on sensitive session/membership/identity tables and can break the zero-write threat model. **Do not provision/grant UPDATE or deploy this SQL as a workaround.**
+
+Design choices for independent review (NONE APPROVED):
+
+1. **Strong serialized revocation:** restructure to use a separately isolated, trusted transaction/authorization service with an explicit narrow locking authority; prove that this authority can never be invoked to mutate financial or Auth tables by the Ledger/runtime role. Catalogue every UPDATE column grant and RLS behavior, including `SECURITY DEFINER` compromise scenarios. The existing Auth lock on a *different connection* is not atomic with Ledger read.
+2. **Strict SELECT-only owner:** remove row-locking and establish a weaker, explicitly documented revocation guarantee with double-check before/after query and independent timeout/recovery policy. Concurrent revoke may still race and must not be called linearizable or production-ready without acceptance.
+3. **Mutually held advisory transaction locks:** only if both the read path AND all logout/membership/identity revocation paths are redesigned to acquire the same backend-controlled locks and separately proven on real PostgreSQL. An advisory lock used by only one side provides no guarantee.
+
+The security reviewer must choose a coherent privilege/locking model and approve it explicitly. The selected model requires exact source changes and real PostgreSQL16 proof before removing this blocker. **`WRITE_BLOCK=ENABLED`; `PG16=NOT_RUN`; `RELEASE=NO_GO`.**
