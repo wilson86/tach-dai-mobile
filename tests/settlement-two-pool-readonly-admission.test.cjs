@@ -11,6 +11,7 @@ function row(role,kind){
   raw_append_execute:false,raw_review_execute:false,any_financial_mutation:false,
   read_credentials:kind==='auth',read_sessions:kind==='auth',read_memberships:true,
   read_credentials_any_column:kind==='auth',read_sessions_any_column:kind==='auth',
+  any_auth_mutation:kind==='auth',
   read_identity_user_id:true,read_identity_disabled_at:true,
   read_identity_auth_subject:kind==='auth',read_scope_events:kind==='ledger',
   read_receipts:kind==='ledger',read_scope_events_any_column:kind==='ledger',
@@ -112,6 +113,19 @@ test('Auth denies table or column SELECT on workspaces, counterparties and scope
   assert.throws(()=>A.assess(missing,ledger,...roles),/RESULT_MISSING/);
   for(const fn of ['has_table_privilege','has_any_column_privilege'])
    assert.ok(A.AUDIT_SQL.includes(`${fn}(current_user,'kts_team.${table}','SELECT')`));
+ }
+ assert.equal(A.assess(auth,ledger,...roles).write_block,'ENABLED');
+});
+test('Ledger rejects any table or column mutation on Auth sessions and credentials',()=>{
+ const [auth,ledger]=fresh();
+ assert.throws(()=>A.assess(auth,{...ledger,any_auth_mutation:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
+ const missing={...ledger};delete missing.any_auth_mutation;
+ assert.throws(()=>A.assess(auth,missing,...roles),/RESULT_MISSING/);
+ for(const table of ['credentials','sessions']){
+  for(const verb of ['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'])
+   assert.ok(A.AUDIT_SQL.includes(`has_table_privilege(current_user,'kts_auth.${table}','${verb}')`));
+  for(const verb of ['INSERT','UPDATE','REFERENCES'])
+   assert.ok(A.AUDIT_SQL.includes(`has_any_column_privilege(current_user,'kts_auth.${table}','${verb}')`));
  }
  assert.equal(A.assess(auth,ledger,...roles).write_block,'ENABLED');
 });

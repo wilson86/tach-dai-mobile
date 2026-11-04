@@ -16,6 +16,12 @@ const FINANCIAL_GRANTS=FINANCIAL_TABLES.flatMap(name=>{
  return [...TABLE_MUTATIONS.map(verb=>`has_table_privilege(current_user,'${table}','${verb}')`),
   ...['INSERT','UPDATE','REFERENCES'].map(verb=>`has_any_column_privilege(current_user,'${table}','${verb}')`)];
 }).join(' OR ');
+// Ledger must not mutate Auth state, including via a single-column grant.
+const AUTH_MUTATIONS=['credentials','sessions'].flatMap(name=>{
+ const table=`kts_auth.${name}`;
+ return [...TABLE_MUTATIONS.map(verb=>`has_table_privilege(current_user,'${table}','${verb}')`),
+  ...['INSERT','UPDATE','REFERENCES'].map(verb=>`has_any_column_privilege(current_user,'${table}','${verb}')`)];
+}).join(' OR ');
 const AUDIT_SQL=[
 "SELECT current_user::text AS role, session_user::text AS session_role,",
 "current_database()::text AS database_name,",
@@ -33,6 +39,7 @@ const AUDIT_SQL=[
 "COALESCE(has_function_privilege(current_user,to_regprocedure('kts_team.advance_review(text,text,date,text,text,bigint,text,text,text)'),'EXECUTE'),true) AS raw_review_execute,",
 `(${FINANCIAL_GRANTS}) AS any_financial_mutation,`,
 "has_table_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials,",
+`(${AUTH_MUTATIONS}) AS any_auth_mutation,`,
 "has_table_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions,",
 "has_any_column_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials_any_column,",
 "has_any_column_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions_any_column,",
@@ -63,7 +70,7 @@ const AUDIT_SQL=[
 ].join(' ');
 const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_schema',
  'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','any_financial_mutation','read_credentials','read_sessions',
- 'read_credentials_any_column','read_sessions_any_column',
+ 'read_credentials_any_column','read_sessions_any_column','any_auth_mutation',
  'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
  'read_scope_events','read_receipts','read_scope_events_any_column','read_receipts_any_column',
  'auth_read_workspaces','auth_read_counterparties','auth_read_scopes','insert_receipts','update_receipts',
@@ -114,6 +121,7 @@ function assess(auth,ledger,authName,ledgerName){
     AUTH_FORBIDDEN_READ_TABLES.some(name=>auth[`auth_read_${name}`]!==false))
    deny('TEAM_TWO_POOL_AUTH_MINIMUM_MISMATCH');
  if(ledger.read_credentials!==false||ledger.read_sessions!==false||
+    ledger.any_auth_mutation!==false||
     ledger.read_credentials_any_column!==false||ledger.read_sessions_any_column!==false||
     ledger.read_memberships!==true||ledger.read_identity_user_id!==true||
     ledger.read_identity_disabled_at!==true||ledger.read_identity_auth_subject!==false||
