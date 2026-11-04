@@ -54,9 +54,7 @@ DECLARE
   v_now bigint;
   v_message text := '';
   v_piece text;
-  v_value text;
   v_keys_count integer;
-  v_rowcount bigint;
 BEGIN
   -- Strict validation before any Auth, secret or tenant-table lookup.
   IF p_key_id IS NULL OR p_key_id !~ '^[a-f0-9]{16}$'
@@ -190,6 +188,12 @@ BEGIN
     WHERE r.workspace_id=v_workspace
       AND e.actor_user_id=v_user AND r.idempotency_key=ANY(p_keys)
     ORDER BY r.idempotency_key;
+  -- The query itself may be delayed beyond the expiry deadline. Throwing
+  -- after materializing RETURN QUERY prevents returning those buffered rows.
+  IF p_expires <= pg_catalog.floor(
+      pg_catalog.extract(epoch FROM pg_catalog.clock_timestamp()))::bigint THEN
+    RAISE EXCEPTION 'TEAM_RECEIPT_V2_EXPIRED';
+  END IF;
 END;
 $receipt_v2$;
 
