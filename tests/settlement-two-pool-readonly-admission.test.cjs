@@ -14,7 +14,7 @@ function row(role,kind){
   read_receipts:kind==='ledger',insert_receipts:false,update_receipts:false,
   update_receipts_any_column:false,insert_scope_events:false,insert_scopes:false,
   update_scopes:false,update_scopes_any_column:false,update_memberships:false,
-  insert_workspaces:false,insert_sessions:kind==='auth',revoke_sessions:kind==='auth',
+  insert_workspaces:false,insert_sessions:kind==='auth',insert_sessions_any_column:kind==='auth',revoke_sessions:kind==='auth',
   parameter_error_limit:'0',statement_log_mode:'none',error_statement_log_mode:'error'};
 }
 const fresh=()=>[row(roles[0],'auth'),row(roles[1],'ledger')];
@@ -75,6 +75,7 @@ test('recovery access requires identities and ledger events without exposing eve
  assert.throws(()=>A.assess(a,{...b,read_identity_auth_subject:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess(a,{...b,read_scope_events:false},...roles),/LEDGER_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess({...a,read_scope_events:true},b,...roles),/AUTH_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess(a,{...b,insert_sessions_any_column:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
 });
 test('missing COMMIT command tag is fatal even for audit SELECT',async()=>{
  const [a,b]=fresh(),events=[];

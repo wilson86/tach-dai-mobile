@@ -18,7 +18,7 @@ const AUDIT_SQL=[
 "has_schema_privilege(current_user,'kts_crypto','CREATE') AS create_crypto_schema,",
 "has_table_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials,",
 "has_table_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions,",
-"has_table_privilege(current_user,'kts_team.memberships','SELECT') AS read_memberships,",
+"(has_column_privilege(current_user,'kts_team.memberships','workspace_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','user_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','team_role','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','revoked_at','SELECT')) AS read_memberships,",
 "has_column_privilege(current_user,'kts_team.identities','user_id','SELECT') AS read_identity_user_id,",
 "has_column_privilege(current_user,'kts_team.identities','disabled_at','SELECT') AS read_identity_disabled_at,",
 "has_column_privilege(current_user,'kts_team.identities','auth_subject','SELECT') AS read_identity_auth_subject,",
@@ -33,7 +33,8 @@ const AUDIT_SQL=[
 "has_any_column_privilege(current_user,'kts_team.scopes','UPDATE') AS update_scopes_any_column,",
 "has_table_privilege(current_user,'kts_team.memberships','UPDATE') AS update_memberships,",
 "has_table_privilege(current_user,'kts_team.workspaces','INSERT') AS insert_workspaces,",
-"has_table_privilege(current_user,'kts_auth.sessions','INSERT') AS insert_sessions,",
+"(has_column_privilege(current_user,'kts_auth.sessions','session_hash','INSERT') AND has_column_privilege(current_user,'kts_auth.sessions','user_id','INSERT') AND has_column_privilege(current_user,'kts_auth.sessions','workspace_id','INSERT') AND has_column_privilege(current_user,'kts_auth.sessions','issued_at','INSERT') AND has_column_privilege(current_user,'kts_auth.sessions','expires_at','INSERT')) AS insert_sessions,",
+"has_any_column_privilege(current_user,'kts_auth.sessions','INSERT') AS insert_sessions_any_column,",
 "has_column_privilege(current_user,'kts_auth.sessions','revoked_at','UPDATE') AS revoke_sessions,",
 "current_setting('log_parameter_max_length_on_error',true) AS parameter_error_limit,",
 "current_setting('log_statement',true) AS statement_log_mode,",
@@ -45,7 +46,7 @@ const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_sche
  'read_scope_events','read_receipts','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
  'update_scopes','update_scopes_any_column','update_memberships',
- 'insert_workspaces','insert_sessions','revoke_sessions'];
+ 'insert_workspaces','insert_sessions','insert_sessions_any_column','revoke_sessions'];
 const DIRECT=['insert_receipts','update_receipts','update_receipts_any_column',
  'insert_scope_events','insert_scopes','update_scopes','update_scopes_any_column',
  'update_memberships','insert_workspaces'];
@@ -89,7 +90,7 @@ function assess(auth,ledger,authName,ledgerName){
     ledger.read_memberships!==true||ledger.read_identity_user_id!==true||
     ledger.read_identity_disabled_at!==true||ledger.read_identity_auth_subject!==false||
     ledger.read_scope_events!==true||ledger.read_receipts!==true||
-    ledger.insert_sessions!==false||ledger.revoke_sessions!==false)
+    ledger.insert_sessions_any_column!==false||ledger.revoke_sessions!==false)
    deny('TEAM_TWO_POOL_LEDGER_MINIMUM_MISMATCH');
  if(auth.parameter_error_limit!=='0'||ledger.parameter_error_limit!=='0'||
     auth.statement_log_mode!=='none'||ledger.statement_log_mode!=='none')
