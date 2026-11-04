@@ -48,12 +48,12 @@ test('no group output may be emitted on ambiguous or unsupported source',()=>{
  assert.throws(()=>app.merge('hn 21 22 da 20',base),/THIEU_N_CAN_XAC_NHAN/u);
  assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/chỉ nghiệm thu.*MB/u);
 });
-test('HTML has six separate readonly frames, unique scoped Copy buttons and v5 cache',()=>{
+test('HTML has six separate readonly frames, unique scoped Copy buttons and v6 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];
  assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','xc','dd','dau','dui']);
  assert.match(html,/id="betSections"/u);
  assert.match(html,/class="section-copy" disabled/u);
  assert.match(html,/class="section-text" readonly/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v5-grouped-frames/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261105-v6-clipboard-guard/u);
 });
