@@ -9,7 +9,8 @@ function row(role,kind){
   superuser:false,bypass_rls:false,has_role_memberships:false,
   default_acl_entries:0,create_auth_schema:false,create_team_schema:false,create_crypto_schema:false,
   read_credentials:kind==='auth',read_sessions:kind==='auth',read_memberships:true,
-  read_identities:true,read_scope_events:kind==='ledger',
+  read_identity_user_id:true,read_identity_disabled_at:true,
+  read_identity_auth_subject:kind==='auth',read_scope_events:kind==='ledger',
   read_receipts:kind==='ledger',insert_receipts:false,update_receipts:false,
   update_receipts_any_column:false,insert_scope_events:false,insert_scopes:false,
   update_scopes:false,update_scopes_any_column:false,update_memberships:false,
@@ -68,8 +69,10 @@ test('reject same pool, leaked auth credentials and unsafe log settings',async()
 });
 test('recovery access requires identities and ledger events without exposing events to auth',()=>{
  const [a,b]=fresh();
- assert.throws(()=>A.assess({...a,read_identities:false},b,...roles),/AUTH_MINIMUM_MISMATCH/);
- assert.throws(()=>A.assess(a,{...b,read_identities:false},...roles),/LEDGER_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess({...a,read_identity_auth_subject:false},b,...roles),/AUTH_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess(a,{...b,read_identity_user_id:false},...roles),/LEDGER_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess(a,{...b,read_identity_disabled_at:false},...roles),/LEDGER_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess(a,{...b,read_identity_auth_subject:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess(a,{...b,read_scope_events:false},...roles),/LEDGER_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess({...a,read_scope_events:true},b,...roles),/AUTH_MINIMUM_MISMATCH/);
 });

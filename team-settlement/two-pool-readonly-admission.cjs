@@ -19,7 +19,9 @@ const AUDIT_SQL=[
 "has_table_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials,",
 "has_table_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions,",
 "has_table_privilege(current_user,'kts_team.memberships','SELECT') AS read_memberships,",
-"has_table_privilege(current_user,'kts_team.identities','SELECT') AS read_identities,",
+"has_column_privilege(current_user,'kts_team.identities','user_id','SELECT') AS read_identity_user_id,",
+"has_column_privilege(current_user,'kts_team.identities','disabled_at','SELECT') AS read_identity_disabled_at,",
+"has_column_privilege(current_user,'kts_team.identities','auth_subject','SELECT') AS read_identity_auth_subject,",
 "has_table_privilege(current_user,'kts_team.scope_events','SELECT') AS read_scope_events,",
 "has_table_privilege(current_user,'kts_team.idempotency_receipts','SELECT') AS read_receipts,",
 "has_table_privilege(current_user,'kts_team.idempotency_receipts','INSERT') AS insert_receipts,",
@@ -39,7 +41,8 @@ const AUDIT_SQL=[
 ].join(' ');
 const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_schema',
  'create_team_schema','create_crypto_schema','read_credentials','read_sessions',
- 'read_memberships','read_identities','read_scope_events','read_receipts','insert_receipts','update_receipts',
+ 'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
+ 'read_scope_events','read_receipts','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
  'update_scopes','update_scopes_any_column','update_memberships',
  'insert_workspaces','insert_sessions','revoke_sessions'];
@@ -78,11 +81,13 @@ function assess(auth,ledger,authName,ledgerName){
  if(authName===ledgerName)deny('TEAM_TWO_POOL_IDENTITIES_NOT_ISOLATED');
  if(auth.read_credentials!==true||auth.read_sessions!==true||
     auth.insert_sessions!==true||auth.revoke_sessions!==true||
-    auth.read_memberships!==true||auth.read_identities!==true||
+    auth.read_memberships!==true||auth.read_identity_user_id!==true||
+    auth.read_identity_disabled_at!==true||auth.read_identity_auth_subject!==true||
     auth.read_scope_events!==false||auth.read_receipts!==false)
    deny('TEAM_TWO_POOL_AUTH_MINIMUM_MISMATCH');
  if(ledger.read_credentials!==false||ledger.read_sessions!==false||
-    ledger.read_memberships!==true||ledger.read_identities!==true||
+    ledger.read_memberships!==true||ledger.read_identity_user_id!==true||
+    ledger.read_identity_disabled_at!==true||ledger.read_identity_auth_subject!==false||
     ledger.read_scope_events!==true||ledger.read_receipts!==true||
     ledger.insert_sessions!==false||ledger.revoke_sessions!==false)
    deny('TEAM_TWO_POOL_LEDGER_MINIMUM_MISMATCH');
