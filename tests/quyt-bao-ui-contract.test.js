@@ -154,6 +154,7 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  window.top=window;window.KTSCustomerConfig=require("../customer-config-review.js");
  window.KTSCleanAggregate=require("../clean-aggregate-review.js");
  window.KTSQuytBaoReview=require("../quyt-bao-review.js");
+ let duplicateApprovals=0;window.confirm=()=>++duplicateApprovals>1;
  const dispatch=(node,type)=>{
   const event={type,preventDefault(){this.prevented=true},
    stopImmediatePropagation(){this.stopped=true}};
@@ -188,10 +189,12 @@ test("Quyt direct review groups pasted source without Tách output and never aut
  assert.equal(check.checked,false);
  check.checked=true;dispatch(check,"change");dispatch(direct,"click");
  assert.equal(review.value,"");
- assert.equal(keep.hidden,false);
  assert.match(status.textContent,/HOLD/);
- dispatch(keep,"click");
+ assert.equal(duplicateApprovals,1,"first explicit decision declined");
+ dispatch(direct,"click");
+ assert.equal(duplicateApprovals,2,"single second decision accepted");
  assert.match(review.value,/43 b 2n → 2\.134n/);
+ assert.equal(keep.hidden,true,"no extra blue/amber confirmation required");
  assert.equal(copy.disabled,true);
  const copyEvt=dispatch(review,"copy");
  assert.equal(copyEvt.prevented,true);
@@ -241,4 +244,14 @@ test("only Khách & tỷ lệ is visible; legacy Quýt checkbox stays private an
  assert.ok(ui.includes('if(!enabled())return'));
  assert.ok(ui.includes('bar.style.display=opted?"flex":"none"'));
  assert.ok(ui.includes('panel.style.display=opted&&customerId?"block":"none"'));
+});
+
+test("duplicate consent is tied to date, region, customer and rate",()=>{
+ const script=read("quyt-bao-review-ui.js");
+ assert.ok(script.includes("confirmedRepeatScope===repeatScope()"));
+ assert.ok(script.includes('JSON.stringify([customerId,market,date,rate.value,input.value])'));
+ assert.ok(script.includes('status.textContent="HOLD: ngày đã đổi'));
+ assert.ok(script.includes("if(!approved){")||script.includes("if(!yes){"));
+ assert.ok(script.includes("review.value=\"\";copy.disabled=true"));
+ assert.ok(!script.includes("fetch('/api/send"));
 });
