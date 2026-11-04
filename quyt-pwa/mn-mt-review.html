@@ -59,9 +59,9 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
   <label class="field" style="max-width:260px">Ngày xổ số (MN/MT bắt buộc)<input id="businessDate" type="date" aria-label="Ngày xổ số"></label>
   <p id="stationSchedule" class="tiny muted" style="margin-top:8px">Chọn ngày và ghi tên hoặc mã đài trên mỗi tin MN/MT.</p>
  </div>
- <p class="muted tiny">Chọn MN hoặc MT, chọn <b>ngày xổ số</b> và nhập mỗi tin ghi <b>một đài chính xác</b>: ví dụ <code>mn dn 21 b10n</code> hoặc <code>mt kh 21 b10n</code>. Có thể dán header Telegram nhưng ngày phải trùng ngày đã chọn. Với MB, tiếp tục sử dụng <a href="./index.html?v=5">PWA MB chính thức</a>. Không tự bỏ giờ/tên khỏi tin gốc.</p>
+ <p class="muted tiny">Chọn miền + ngày xổ số để lọc <b>đài đang mở</b>. Không cần chữ MN/MT trong tin: <code>dn 21 b10n</code>, <code>ct 21 b5n</code>, <code>2d 52 b10n</code> hoặc <code>3đ 43 dd5n</code>. <b>2d/3d</b> tự nhận hai/ba đài đầu theo lịch, <b>mỗi đài nhận nguyên tiền cược</b>. Thiếu tên/mã đài và không ghi 2d/3d hợp lệ → HOLD. Copy chỉ hiển thị tên/mã đài, không thêm MN/MT. <a href="./index.html?v=5">PWA MB</a>.</p>
  <label class="field" for="raw" style="margin:10px 0 7px">Tin nguồn (không bị sửa)</label>
- <textarea id="raw" placeholder="mn dn 21 b10n.&#10;mn ct 21 b5n.&#10;Mỗi dòng phải ghi đúng một đài hoạt động trong ngày." spellcheck="false"></textarea>
+ <textarea id="raw" placeholder="dn 21 b10n.&#10;ct 21 b5n.&#10;2d 52 b10n.&#10;3đ 43 dd5n." spellcheck="false"></textarea>
  <div id="status" class="notice hold" role="status">Dán tin vào ô trên để bắt đầu.</div>
  <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
@@ -72,7 +72,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
- <p class="muted tiny">Chế độ MN/MT thử nghiệm: gộp đúng từng đài được ghi rõ theo ngày chọn, chỉ B/LO, DD, ĐẦU, ĐUÔI; các trường hợp 2đ/3đ, ĐÁ, XC chưa xác minh sẽ HOLD toàn bộ. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
+ <p class="muted tiny">MN/MT tự lọc đài theo ngày. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. ĐÁ/DX/XC vẫn HOLD toàn bộ. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
   <section class="bet-section" data-bet-kind="b">
    <header><h3>B / BAO-LÔ</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
@@ -123,7 +123,7 @@ const OfflineKTS=(()=>{
  const T={b:'b',bao:'b','bao lo':'b',lo:'b','lô':'b',blo:'b',bl:'b',dd:'dd','đđ':'dd',da:'da','đá':'da',dau:'dau','đầu':'dau',dui:'dui',duoi:'dui','đui':'dui','đuôi':'dui',xc:'xc'};
  const kindRe=/^(?:bao\s+lo|đầu|đuôi|duoi|đui|dau|dui|đá|đđ|bao|blo|bl|lô|lo|dd|da|b|xc)(?![\p{L}])/iu;
  const stakeRe=/^(\d+(?:[.,]\d{1,3})?)n(?![\p{L}\p{N}])/iu;
- const numberRe=/^\d{2}(?!\d)/u;
+ const numberRe=/^\d{2,3}(?!\d)/u; // KTS legacy accepts 2- and 3-digit ticket numbers
  const rank={b:0,da:1,dd:2,dau:3,dui:4,xc:5};
  // Unapproved missing-n DA amounts are NOT automatically money. Explicit
  // operator confirmation is scoped to raw source, customer and market.
@@ -161,23 +161,32 @@ const OfflineKTS=(()=>{
  function stationScope(source,market,day,active,index){
   if(/^\s*hn(?=\s)/iu.test(source))fail('HN không phải tin MN/MT',`tin ${index+1}`);
   let line=source.trim();
-  const prefix=/^(mn|mt|mb)(?=\s)/iu.exec(line);
+  const prefix=/^(mn|mt|mb)(?=[\s.,:])/iu.exec(line);
   if(prefix){
    if(prefix[1].toLowerCase()!==market)fail('Miền trong tin khác miền đang chọn',`tin ${index+1}`);
-   line=line.slice(prefix[0].length).trimStart();
+   line=line.slice(prefix[0].length).replace(/^[\s.,:]+/u,'');
+  }
+  // Shared KTS TACH_3_MIEN: FIRST TWO / THREE scheduled stations.
+  // Each station receives FULL stake; none is divided by station count.
+  const t=/^([23])\s*(?:d|đ)(?=[\s.,:]|$)/iu.exec(line);
+  if(t){
+   const n=Number(t[1]);
+   if(active.length<n)fail('HOLD: ngày chọn không đủ '+n+' đài cho '+n+'d',`tin ${index+1}`);
+   const text=line.slice(t[0].length).replace(/^[\s.,:]+/u,'');
+   if(!text)fail('Thiếu số, loại cược hoặc tiền sau '+n+'d',`tin ${index+1}`);
+   return {stations:active.slice(0,n).map(x=>x[0]),text};
   }
   const aliases=active.flatMap(([code,name])=>[[code,code],[name,code]]).sort((a,b)=>b[0].length-a[0].length);
-  const low=line.toLocaleLowerCase('vi-VN');
-  for(const [alias,station] of aliases){
-   if(low.startsWith(alias.toLocaleLowerCase('vi-VN'))&&/^\s/u.test(line.slice(alias.length))){
-    const text=line.slice(alias.length).trimStart();
+  const lower=line.toLocaleLowerCase('vi-VN');
+  for(const [alias,code] of aliases){
+   if(lower.startsWith(alias.toLocaleLowerCase('vi-VN'))&&/^[\s.,:]/u.test(line.slice(alias.length))){
+    const text=line.slice(alias.length).replace(/^[\s.,:]+/u,'');
     if(!text)fail('Đài không có cược',`tin ${index+1}`);
-    return {station,text};
+    return {stations:[code],text};
    }
   }
-  fail('MN/MT cần mã hoặc tên đài đúng ngày, không tự suy ra 2đ/3đ',`tin ${index+1}`);
+  fail('HOLD: phải ghi tên/mã đài hoặc 2d/3d hợp lệ của đúng miền, đúng ngày',`tin ${index+1}`);
  }
-
  function fail(code,where=''){throw new Error(code+(where?' — '+where:''))}
  function decimal(raw){if(!/^\d+(?:[.,]\d{1,3})?$/u.test(raw))fail('Số tiền/hệ số không hợp lệ');
   const [whole,part='']=raw.replace(',','.').split('.');return BigInt(whole)*D+BigInt(part.padEnd(3,'0')||'0')}
@@ -297,11 +306,13 @@ const OfflineKTS=(()=>{
    if(opts.market!=='mb'&&parsed.bets.some(b=>b.kind==='da'))
     fail('MN/MT ĐÁ liên đài chưa có oracle cho PWA gộp; HOLD',`tin ${physicalLines[j]}`);
    for(const bet of parsed.bets){
-    const key=opts.market+'|'+(opts.businessDate||'')+'|'+scoped.station+'|'+bet.kind+'|'+bet.number;
-    let r=rows.get(key);
-    if(!r){r={kind:bet.kind,number:bet.number,station:scoped.station,amount:0n,seq:seq++,peak:0n,peakOrder:0};rows.set(key,r)}
-    if(bet.money>r.peak){r.peak=bet.money;r.peakOrder=placement}
-    placement++;r.amount+=bet.money;
+    for(const station of (scoped.stations||[''])){
+     const key=opts.market+'|'+(opts.businessDate||'')+'|'+station+'|'+bet.kind+'|'+bet.number;
+     let r=rows.get(key);
+     if(!r){r={kind:bet.kind,number:bet.number,station,amount:0n,seq:seq++,peak:0n,peakOrder:0};rows.set(key,r)}
+     if(bet.money>r.peak){r.peak=bet.money;r.peakOrder=placement}
+     placement++;r.amount+=bet.money;
+    }
    }
   }
   const sorted=[...rows.values()].sort((a,b)=>rank[a.kind]-rank[b.kind]||
@@ -331,7 +342,7 @@ const OfflineKTS=(()=>{
     if(out.at(-1)==='')out.pop();out[out.length-1]=out.at(-1).slice(0,-1)+' dui'+v+'n.';
    }else out.push((g.station?g.station+' ':'')+g.numbers.map(n=>n.replace('-',' ')).join(' ')+' '+g.kind+v+'n.');
   }
-  const headerLabel=opts.market==='mb'?(displayHN?'HN\n':''):opts.market.toUpperCase()+' '+opts.businessDate+'\n';
+  const headerLabel=opts.market==='mb'?(displayHN?'HN\n':''):''; // UI region scopes stations; Copy displays station codes only.
   const pretty=headerLabel+out.join('\n');
   // Sections are derived from the SAME canonical rounded rows as the full
   // message. No reparsing rendered text; no second multiplier or round.
@@ -380,7 +391,7 @@ function renderSchedule(){
  if(!selected)return;
  try{
   const rows=OfflineKTS.schedule(market.value,businessDate.value);
-  scheduleLabel.textContent='Đài hợp lệ: '+rows.map(([code,name])=>code+' ('+name+')').join(' • ')+'. Chỉ gộp khi tin ghi đúng một đài; không tự tách 2đ/3đ.';
+  scheduleLabel.textContent='Đài hợp lệ: '+rows.map(([code,name])=>code+' ('+name+')').join(' • ')+'. 2d → '+rows.slice(0,2).map(x=>x[0]).join('+')+'; 3d → '+(rows.length>=3?rows.slice(0,3).map(x=>x[0]).join('+'):'HOLD (ngày chỉ có '+rows.length+' đài)')+'.';
  }catch(e){scheduleLabel.textContent=String(e.message||e)}
 }
 function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
