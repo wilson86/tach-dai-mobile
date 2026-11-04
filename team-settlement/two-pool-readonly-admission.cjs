@@ -37,6 +37,8 @@ const AUDIT_SQL=[
 "has_column_privilege(current_user,'kts_team.identities','auth_subject','SELECT') AS read_identity_auth_subject,",
 "has_table_privilege(current_user,'kts_team.scope_events','SELECT') AS read_scope_events,",
 "has_table_privilege(current_user,'kts_team.idempotency_receipts','SELECT') AS read_receipts,",
+"has_any_column_privilege(current_user,'kts_team.scope_events','SELECT') AS read_scope_events_any_column,",
+"has_any_column_privilege(current_user,'kts_team.idempotency_receipts','SELECT') AS read_receipts_any_column,",
 "has_table_privilege(current_user,'kts_team.idempotency_receipts','INSERT') AS insert_receipts,",
 "has_table_privilege(current_user,'kts_team.idempotency_receipts','UPDATE') AS update_receipts,",
 "has_any_column_privilege(current_user,'kts_team.idempotency_receipts','UPDATE') AS update_receipts_any_column,",
@@ -57,7 +59,7 @@ const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_sche
  'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','any_financial_mutation','read_credentials','read_sessions',
  'read_credentials_any_column','read_sessions_any_column',
  'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
- 'read_scope_events','read_receipts','insert_receipts','update_receipts',
+ 'read_scope_events','read_receipts','read_scope_events_any_column','read_receipts_any_column','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
  'update_scopes','update_scopes_any_column','update_memberships',
  'insert_workspaces','insert_sessions','insert_sessions_any_column','revoke_sessions'];
@@ -100,7 +102,8 @@ function assess(auth,ledger,authName,ledgerName){
     auth.insert_sessions!==true||auth.revoke_sessions!==true||
     auth.read_memberships!==true||auth.read_identity_user_id!==true||
     auth.read_identity_disabled_at!==true||auth.read_identity_auth_subject!==true||
-    auth.read_scope_events!==false||auth.read_receipts!==false)
+    auth.read_scope_events!==false||auth.read_receipts!==false||
+    auth.read_scope_events_any_column!==false||auth.read_receipts_any_column!==false)
    deny('TEAM_TWO_POOL_AUTH_MINIMUM_MISMATCH');
  if(ledger.read_credentials!==false||ledger.read_sessions!==false||
     ledger.read_credentials_any_column!==false||ledger.read_sessions_any_column!==false||

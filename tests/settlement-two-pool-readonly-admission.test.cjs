@@ -13,7 +13,8 @@ function row(role,kind){
   read_credentials_any_column:kind==='auth',read_sessions_any_column:kind==='auth',
   read_identity_user_id:true,read_identity_disabled_at:true,
   read_identity_auth_subject:kind==='auth',read_scope_events:kind==='ledger',
-  read_receipts:kind==='ledger',insert_receipts:false,update_receipts:false,
+  read_receipts:kind==='ledger',read_scope_events_any_column:kind==='ledger',
+  read_receipts_any_column:kind==='ledger',insert_receipts:false,update_receipts:false,
   update_receipts_any_column:false,insert_scope_events:false,insert_scopes:false,
   update_scopes:false,update_scopes_any_column:false,update_memberships:false,
   insert_workspaces:false,insert_sessions:kind==='auth',insert_sessions_any_column:kind==='auth',revoke_sessions:kind==='auth',
@@ -89,6 +90,17 @@ test('recovery access requires identities and ledger events without exposing eve
  assert.throws(()=>A.assess(a,{...b,read_scope_events:false},...roles),/LEDGER_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess({...a,read_scope_events:true},b,...roles),/AUTH_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess(a,{...b,insert_sessions_any_column:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
+});
+test('Auth must not have even column-level receipt or event SELECT',()=>{
+ const [auth,ledger]=fresh();
+ for(const key of ['read_scope_events_any_column','read_receipts_any_column']){
+  assert.throws(()=>A.assess({...auth,[key]:true},ledger,...roles),/AUTH_MINIMUM_MISMATCH/);
+  const missing={...auth};delete missing[key];
+  assert.throws(()=>A.assess(missing,ledger,...roles),/RESULT_MISSING/);
+ }
+ for(const table of ['scope_events','idempotency_receipts'])
+  assert.ok(A.AUDIT_SQL.includes(`has_any_column_privilege(current_user,'kts_team.${table}','SELECT')`));
+ assert.equal(A.assess(auth,ledger,...roles).production_qualified,false);
 });
 test('missing COMMIT command tag is fatal even for audit SELECT',async()=>{
  const [a,b]=fresh(),events=[];
