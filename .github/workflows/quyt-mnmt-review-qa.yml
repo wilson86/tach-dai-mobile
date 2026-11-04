@@ -1,0 +1,24 @@
+name: Quyt MNMT review CI — free standard Ubuntu runner
+on:
+  pull_request:
+    paths:
+      - 'quyt-pwa/mn-mt-review.html'
+      - 'tests/quyt-pwa-mn-mt-*.test.js'
+      - 'tests/quyt-pwa-headless-smoke.cjs'
+      - '.github/workflows/quyt-mnmt-review-qa.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-review-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Source bound native Node
+        run: |
+          node --version
+          node --test tests/quyt-pwa-mn-mt-review.test.js tests/quyt-pwa-mn-mt-money-property.test.js
+      - name: Chrome headless end-user DOM smoke (mock clipboard, no Telegram)
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-pwa-headless-smoke.cjs
