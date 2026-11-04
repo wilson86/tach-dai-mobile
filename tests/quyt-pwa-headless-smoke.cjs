@@ -80,13 +80,22 @@ server.listen(0,'127.0.0.1',()=>{
   '--no-first-run','--disable-background-networking','--disable-extensions',
   '--user-data-dir=/tmp/quyt-review-qa-'+process.pid,'--virtual-time-budget=5000','--dump-dom',
   'http://127.0.0.1:'+port+'/quyt-pwa/mn-mt-review.html' ];
- const result=child.spawnSync(chrome,cmd,{encoding:'utf8',timeout:50000,maxBuffer:20*1024*1024});
- server.close();
- const html=result.stdout||'';
- const m=/<pre id="quyt-e2e-qa">([^<]+)<\/pre>/u.exec(html);
- if(!m){console.error('NO_BROWSER_QA_RECEIPT',String(result.stderr).slice(-1500));process.exitCode=1;return}
- let data;try{data=JSON.parse(m[1].replaceAll('&quot;','"').replaceAll('&amp;','&'))}
- catch(e){console.error('MALFORMED_BROWSER_RECEIPT',m[1].slice(0,300),String(e));process.exitCode=1;return}
- console.log(JSON.stringify({browser:'real Chromium headless / localhost HTML',qa:data},null,2));
- if(result.status!==0||data.fail!==0||data.pass<15)process.exitCode=1;
+ const proc=child.spawn(chrome,cmd,{stdio:['ignore','pipe','pipe']});
+ let stdout='',stderr='',timeout;
+ const limit=20*1024*1024;
+ proc.stdout.on('data',buf=>{stdout+=buf.toString();if(stdout.length>limit)proc.kill('SIGKILL')});
+ proc.stderr.on('data',buf=>{stderr=(stderr+buf.toString()).slice(-5000)});
+ timeout=setTimeout(()=>{console.error('CHROME_TIMEOUT');proc.kill('SIGKILL')},50000);
+ proc.on('error',e=>{console.error('CHROME_START_FAILED',String(e));clearTimeout(timeout);server.close();process.exitCode=1});
+ proc.on('close',status=>{
+  clearTimeout(timeout);server.close();
+  const open='<pre id="quyt-e2e-qa">',at=stdout.indexOf(open),end=stdout.indexOf('</pre>',at);
+  if(at<0||end<0){console.error('NO_BROWSER_QA_RECEIPT',stderr.slice(-1500));process.exitCode=1;return}
+  const raw=stdout.slice(at+open.length,end);
+  let result;
+  try{result=JSON.parse(raw.replaceAll('&quot;','"').replaceAll('&amp;','&'))}
+  catch(e){console.error('MALFORMED_BROWSER_RECEIPT',raw.slice(0,300),String(e));process.exitCode=1;return}
+  console.log(JSON.stringify({browser:'real Chromium headless / localhost HTML',qa:result},null,2));
+  if(status!==0||result.fail!==0||result.pass<15)process.exitCode=1;
+ });
 });
