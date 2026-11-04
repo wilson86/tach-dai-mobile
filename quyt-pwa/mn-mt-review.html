@@ -386,7 +386,7 @@ function resetFrames(){
  for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;}
 }
 function syncCopyGate(){
- const can=Boolean(currentValid()&&ack.checked&&!ack.disabled);
+ const can=Boolean(currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled);
  copy.disabled=!can;select.disabled=!can;
  for(const frame of frames){
   const section=current?.sections?.find(x=>x.kind===frame.kind);
@@ -419,6 +419,16 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,businessDate:businessDate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+  // Fail closed when two known money contracts disagree; a checkbox cannot
+  // substitute for an independently accepted receiving-money oracle.
+  if(res.roundingDiffRows>0){
+   $('sourceTotal').textContent=formatVi(res.sourceTotal);
+   $('before').textContent=formatVi(res.original);
+   $('factorReceipt').textContent='HOLD_CHENH_LECH_LAM_TRON: chưa có quy tắc tiền nhận thống nhất, KHÔNG xuất cược.';
+   $('roundingAudit').textContent=res.roundingDiffRows+' khoản BAO/LÔ có kết quả khác nhau. HALF_UP tham chiếu '+formatVi(res.total)+'; CEIL tham chiếu '+formatVi(res.ceilReference)+'. Không cho Copy cho đến khi phía nhận duyệt quy tắc.';
+   message('HOLD_CHENH_LECH_LAM_TRON: tiền theo HALF_UP khác CEIL, không xuất tin và không thể xác nhận bỏ qua.',true);
+   return;
+  }
   current={...res,raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;ack.disabled=false;
   for(const frame of frames){
    const section=res.sections.find(g=>g.kind===frame.kind);
@@ -443,19 +453,25 @@ ack.addEventListener('change',syncCopyGate);
 daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.value);if(!candidates.length)return;const examples=candidates.slice(0,3).map(x=>x.exact+' → '+x.assumed).join('; ');if(!confirm('Xác nhận tất cả '+candidates.length+' chỗ thiếu n là tiền theo đơn vị n?\n'+examples+'\nKhông sửa tin gốc; chỉ tính bản xem trước.'))return;confirmedDaScope=daScope();redraw()});
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
-select.addEventListener('click',()=>{if(!currentValid()||!ack.checked)return;out.focus();out.select();message('Đã chọn toàn bộ tin gộp. Nhấn Ctrl+C (trên Windows) hoặc Sao chép (trên điện thoại).',false)});
+select.addEventListener('click',()=>{if(!currentValid()||current.roundingDiffRows!==0||!ack.checked||ack.disabled||select.disabled)return;out.focus();out.select();message('Đã chọn toàn bộ tin gộp. Nhấn Ctrl+C (trên Windows) hoặc Sao chép (trên điện thoại).',false)});
+function copyTicketValid(ticket){return Boolean(current===ticket&&currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled)}
+function staleCopyWarning(){
+ message('HOLD: nguồn hoặc xác nhận đã thay đổi trong khi Copy. Clipboard CÓ THỂ chứa tin CŨ; không sử dụng, kiểm tra và Copy lại.',true);
+}
 for(const frame of frames){
  frame.button.addEventListener('click',async()=>{
-  const section=current?.sections.find(g=>g.kind===frame.kind);
-  if(!currentValid()||!ack.checked||ack.disabled||!section||!section.supported||!section.text||
+  const section=current?.sections.find(g=>g.kind===frame.kind),ticket=current;
+  if(!copyTicketValid(ticket)||!section||!section.supported||!section.text||
      section.text!==frame.field.value||frame.button.disabled){
    message('HOLD: tin nguồn, hệ số hoặc khung đã thay đổi. Không Copy dữ liệu cũ.',true);redraw();return;
   }
   try{
    if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');
    await navigator.clipboard.writeText(section.text);
+   if(!copyTicketValid(ticket)||section.text!==frame.field.value){staleCopyWarning();return;}
    message('ĐÃ COPY nhóm '+frame.kind.toUpperCase()+' ('+formatVi(section.total)+'). Không tự gửi Telegram/Router.',false);
   }catch(_){
+   if(!copyTicketValid(ticket)||section.text!==frame.field.value){staleCopyWarning();return}
    frame.field.focus();frame.field.select();let ok=false;
    try{ok=document.execCommand('copy')}catch(_e){}
    message(ok?'ĐÃ COPY nhóm '+frame.kind.toUpperCase()+'.':'Chưa được cấp quyền Copy. Nội dung nhóm đã được chọn để Copy thủ công.',!ok);
@@ -463,9 +479,20 @@ for(const frame of frames){
  });
 }
 copy.addEventListener('click',async()=>{
- if(!ack.checked||ack.disabled||!currentValid()){message('HOLD: nguồn/trạng thái đã thay đổi. Không Copy kết quả cũ.',true);redraw();return}
- try{if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');await navigator.clipboard.writeText(current.pretty);message('ĐÃ COPY bản người dùng đã xác nhận đối soát (HALF_UP). Tuyệt đối KHÔNG nhân lại hệ số. Không tự gửi Telegram/Router.',false)}
- catch(_){out.focus();out.select();let ok=false;try{ok=document.execCommand('copy')}catch(_e){}message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok)}
+ const ticket=current;
+ if(!copyTicketValid(ticket)||copy.disabled){message('HOLD: nguồn/trạng thái đã thay đổi. Không Copy kết quả cũ.',true);redraw();return}
+ try{
+  if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');
+  await navigator.clipboard.writeText(ticket.pretty);
+  if(!copyTicketValid(ticket)){staleCopyWarning();return}
+  message('ĐÃ COPY bản người dùng đã xác nhận đối soát (HALF_UP). Tuyệt đối KHÔNG nhân lại hệ số. Không tự gửi Telegram/Router.',false);
+ }catch(_){
+  if(!copyTicketValid(ticket)){staleCopyWarning();return}
+  out.focus();out.select();let ok=false;
+  try{ok=document.execCommand('copy')}catch(_e){}
+  if(!copyTicketValid(ticket)){staleCopyWarning();return}
+  message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok);
+ }
 });
 redraw();
 })();
