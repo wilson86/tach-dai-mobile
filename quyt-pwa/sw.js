@@ -1,7 +1,7 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-standalone-pwa-20261104-v5-grouped-frames';
-const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg'];
+const CACHE='kts-quyt-standalone-pwa-20261105-v6-png-icons';
+const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });
