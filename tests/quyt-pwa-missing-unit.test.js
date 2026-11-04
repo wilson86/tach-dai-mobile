@@ -54,8 +54,8 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v4',()=>{
+test('new standalone service-worker key must be version v5',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v4-half-up-integer/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261104-v5-grouped-frames/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });
