@@ -68,3 +68,26 @@ Design choices for independent review (NONE APPROVED):
 3. **Mutually held advisory transaction locks:** only if both the read path AND all logout/membership/identity revocation paths are redesigned to acquire the same backend-controlled locks and separately proven on real PostgreSQL. An advisory lock used by only one side provides no guarantee.
 
 The security reviewer must choose a coherent privilege/locking model and approve it explicitly. The selected model requires exact source changes and real PostgreSQL16 proof before removing this blocker. **`WRITE_BLOCK=ENABLED`; `PG16=NOT_RUN`; `RELEASE=NO_GO`.**
+
+
+## 2026-11-04 — Two V2 SQL verifier candidates now available for independent decision
+
+There are **two mutually exclusive, review-only** alternatives, and **neither is approved or production-ready**:
+
+| Contract dimension | Locked variant | SELECT-only variant |
+| --- | --- | --- |
+| SQL | `team-settlement/candidate/session-bound-receipt-read-v2.sql` | `team-settlement/candidate/session-bound-receipt-read-v2-select-only.sql` |
+| PostgreSQL owner privileges | `SELECT ... FOR SHARE` requires at least one column `UPDATE` on each locked table in addition to `SELECT`; conflicts with declared owner ACL | No `FOR SHARE`; can be evaluated against select-only owner plan |
+| Revocation | Proposed row-lock ordering *only within its own SQL transaction*; does not protect HTTP after commit | No revocation serialization. Adds a post-`RETURN QUERY` session, membership and identity recheck; **cannot** prevent revoke after the last check |
+| Data mutation | No intended persistent writes, but broader `UPDATE` authority would be necessary | No intended persistent writes and no extra UPDATE grants |
+| PostgreSQL16 compile / ACL / concurrency | **NOT_RUN** | **NOT_RUN** |
+| Independent review / release | **NOT_APPROVED / NO_GO** | **NOT_APPROVED / NO_GO** |
+
+**Design choice explicitly deferred to independent security review.** If strict revocation ordering is required, SELECT-only is not an acceptable substitute; designing a protected serialization mechanism that both the read function and *all* revocation paths participate in is mandatory, and the application write path must remain blocked until qualified. Do **not** silently switch the live program to SELECT-only.
+
+What has actually been proven here is only the **source shape**. A new `tests/settlement-receipt-v2-select-only-design.test.cjs` test records that the alternative has a separate function name, no lock clauses or GRANTs, and a second nonlocking session/membership/identity check after `RETURN QUERY`. It cannot prove SQL syntax, true PostgreSQL permissions, key storage or crypto byte parity. On this branch, 4 static assertions ran using isolated V8 **mock Node adapters**, not native Node/PG16; note this distinction in every downstream QA report.
+
+Required independent review verdict fields:
+`REVIEWER_ID`, `REVIEWED_SOURCE_SHA`, `SELECT_ONLY_RACE_ACCEPTED` (or `DENIED`), `LOCKING_OWNER_UPDATE_AUTHORITY_ACCEPTED` (or `DENIED`), `KEY_CUSTODY_APPROVED`, `COMPLETE_LEDGER_READ_SURFACE_APPROVED`, `POSTGRES_QUALIFICATION_PLAN_APPROVED`, plus evidence URLs and expiry date. Leave all fields `UNREVIEWED` until an actual independent reviewer provides them. Generic owner delegation does not substitute for independent evidence.
+
+**Only after this approval:** supervised disposable C:-only PostgreSQL16 native compile/cross-tenant privilege/concurrency QA, and then actual Windows/Android financial acceptance; no Actions billed, live write or deployment. `RELEASE=NO_GO; WRITE_BLOCK=ENABLED; COST_USD=0`.
