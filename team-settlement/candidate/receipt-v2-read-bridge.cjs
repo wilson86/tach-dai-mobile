@@ -8,6 +8,20 @@ const HEX64=/^[a-f0-9]{64}$/;
 const ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 const RECEIPT=/^draft_[a-f0-9]{32}$/;
 const MAX_BIGINT=9223372036854775807n;
+// Explicit projection boundary: never spread extra driver/SQL fields into a
+// customer-visible recovery result, even if the function changes in future.
+const RECEIPT_COLUMNS=Object.freeze(['workspace_id','idempotency_key',
+  'request_sha256','event_id','actor_user_id','partner_id','business_date',
+  'region','scope_revision','feed_seq','event_kind','payload_sha256']);
+const EVENT_KINDS=new Set(['DRAFT_CREATED','DRAFT_CHANGED','SUBMITTED',
+  'REVIEWED','CLOSED','REOPEN_REQUESTED','REOPENED','CORRECTION']);
+function validBusinessDate(value){
+  if(typeof value!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(value))return false;
+  const [y,m,d]=value.split('-').map(Number);
+  if(y<1||m<1||m>12)return false;
+  const leap=y%4===0&&(y%100!==0||y%400===0);
+  return d>=1&&d<=[31,leap?29:28,31,30,31,30,31,31,30,31,30,31][m-1];
+}
 const SQL=`SELECT workspace_id,idempotency_key,request_sha256,event_id,
   actor_user_id,partner_id,business_date,region,scope_revision,feed_seq,
   event_kind,payload_sha256
@@ -39,16 +53,18 @@ function checkEnvelope(e,nowMs){
 }
 function checkRow(row,e,known){
   if(!row||typeof row!=='object'||Array.isArray(row)||
+      Object.keys(row).length!==RECEIPT_COLUMNS.length||
+      RECEIPT_COLUMNS.some(field=>!Object.hasOwn(row,field))||
       row.workspace_id!==e.workspace_id||row.actor_user_id!==e.user_id||
       typeof row.idempotency_key!=='string'||!known.has(row.idempotency_key)||
       typeof row.request_sha256!=='string'||!HEX64.test(row.request_sha256)||
       typeof row.payload_sha256!=='string'||!HEX64.test(row.payload_sha256)||
       typeof row.event_id!=='string'||!ID.test(row.event_id)||
       typeof row.partner_id!=='string'||!ID.test(row.partner_id)||
-      typeof row.business_date!=='string'||!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(row.business_date)||
+      !validBusinessDate(row.business_date)||
       !['mn','mt','mb'].includes(row.region)||
       !numberBigint(row.scope_revision)||!numberBigint(row.feed_seq,false)||
-      typeof row.event_kind!=='string'||!ID.test(row.event_kind))deny();
+      typeof row.event_kind!=='string'||!EVENT_KINDS.has(row.event_kind))deny();
 }
 function createReceiptV2ReadBridge({signer,ledgerDb,clock=()=>Date.now(),enabled=false}={}){
   if(typeof enabled!=='boolean'||typeof clock!=='function')deny();
@@ -80,7 +96,8 @@ function createReceiptV2ReadBridge({signer,ledgerDb,clock=()=>Date.now(),enabled
         checkRow(row,e,known);
         if(seen.has(row.idempotency_key))deny();
         seen.add(row.idempotency_key);
-        found.push(Object.freeze({...row}));
+        found.push(Object.freeze(Object.fromEntries(
+          RECEIPT_COLUMNS.map(field=>[field,row[field]]))));
       }
       now=clock();
       if(!Number.isSafeInteger(now)||now<0)deny();
