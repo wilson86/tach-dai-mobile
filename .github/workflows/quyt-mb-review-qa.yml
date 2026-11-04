@@ -1,0 +1,27 @@
+name: Quyt MB standalone review CI (free public Node)
+on:
+  pull_request:
+    paths:
+      - 'quyt-pwa/index.html'
+      - 'quyt-pwa/sw.js'
+      - 'tests/quyt-pwa-integer-rounding.test.js'
+      - 'tests/quyt-pwa-grouped-frames.test.js'
+      - 'tests/quyt-pwa-telegram-envelope.test.js'
+      - 'tests/quyt-pwa-missing-unit.test.js'
+      - 'tests/quyt-pwa-stale-clipboard.test.cjs'
+      - '.github/workflows/quyt-mb-review-qa.yml'
+permissions:
+  contents: read
+concurrency:
+  group: quyt-mb-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  source-bound-mb-node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node version and source-bound synthetic MB money / Copy tests
+        run: |
+          node --version
+          node --test tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-telegram-envelope.test.js tests/quyt-pwa-missing-unit.test.js tests/quyt-pwa-stale-clipboard.test.cjs
