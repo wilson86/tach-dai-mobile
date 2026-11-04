@@ -97,7 +97,7 @@ try{
  assert('changed source disables old approval while copy pending',$('copy').disabled&&!$('ackMoney').checked);
  window.__qaResolveCopy();
  await Promise.resolve();await Promise.resolve();await Promise.resolve();
- assert('stale async clipboard never reports success',$('status').textContent.includes('Clipboard CÓ THỂ chứa tin CŨ')&&$('copy').disabled&&window.__qaClipboard==='dn 21 b10n.');
+ assert('stale async clipboard never reports success',$('status').textContent.includes('Clipboard CÓ THỂ chứa tin CŨ')&&$('copy').disabled&&window.__qaClipboard==='dn 21 b11n.');
  acknowledge();
  assert('fresh 12n message can be acknowledged independently',!$('copy').disabled);
  window.__qaDeferNextCopy=true;pane('b','.section-copy').click();
@@ -105,7 +105,7 @@ try{
  set('raw','dn 21 b13n');
  window.__qaResolveCopy();
  await Promise.resolve();await Promise.resolve();await Promise.resolve();
- assert('stale group clipboard also warns and cannot claim success',$('status').textContent.includes('Clipboard CÓ THỂ chứa tin CŨ')&&$('copy').disabled&&window.__qaClipboard==='dn 21 b12n.');
+ assert('stale group clipboard also warns and cannot claim success',$('status').textContent.includes('Clipboard CÓ THỂ chứa tin CŨ')&&$('copy').disabled&&window.__qaClipboard==='dn 21 b13n.');
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
