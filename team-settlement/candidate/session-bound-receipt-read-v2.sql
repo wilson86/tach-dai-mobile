@@ -11,6 +11,12 @@
 -- no secret values or privileges are embedded in this repository.
 -- Prerequisite: kts_auth.sessions.session_handle 32-hex server-only UNIQUE index.
 -- Never use a bearer, token hash, session hash, or browser field as the HMAC key.
+-- HARD BLOCKER: PostgreSQL16 SELECT FOR SHARE requires UPDATE privilege on
+-- at least one column of EACH locked table (sessions, memberships, identities),
+-- in addition to SELECT. The current owner design promises SELECT-only rights.
+-- These constraints CONFLICT: do NOT grant UPDATE to work around the design
+-- without a separately approved locking/role threat model. See
+-- docs/settlement-team/RECEIPT_V2_KEY_OWNER_REVOCATION_SECURITY_DECISION_20261104.md.
 -- Requires a READ WRITE transaction for FOR SHARE locks; this procedure
 -- performs NO persistent mutation but cannot be called in READ ONLY mode.
 BEGIN;
