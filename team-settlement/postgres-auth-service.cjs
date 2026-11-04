@@ -6,6 +6,7 @@
 const crypto=require('node:crypto');
 const {hashPassword,verifyPasswordAsync,PASSWORD_MIN,SESSION_TTL_MS,ROLES}=require('./auth-contract.cjs');
 const {actorFromServer}=require('./core-contract.cjs');
+const {createReceiptV2AuthBoundary}=require('./candidate/receipt-v2-auth-boundary.cjs');
 const KEY=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
 function error(code){throw new Error(code);}
 function key(value,code){if(typeof value!=='string'||!KEY.test(value))error(code);return value;}
@@ -188,7 +189,11 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
     });
   }
   function unavailable(){error('AUTH_ADMIN_UNAVAILABLE');}
+  // Private backend-only candidate. The production composition passes no V2 flag
+  // and MUST NOT expose this callback to HTTP or a generic client.
+  const receiptV2=receiptV2SessionHandleEnabled?
+    {authorizeReceiptRead:createReceiptV2AuthBoundary({db,clock,enabled:true}).authorizeReceiptRead}:{};
   return Object.freeze({login,verifySession,withVerifiedSession,revokeSession,
-    manageMembership,setIdentityDisabled:unavailable});
+    manageMembership,setIdentityDisabled:unavailable,...receiptV2});
 }
 module.exports=Object.freeze({createPostgresAuthService,tokenHash});
