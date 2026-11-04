@@ -42,7 +42,7 @@ test('offline HTML blocks all network calls and clearly prohibits real-money use
  assert.match(html,/KHÔNG CÓ TÍNH TIỀN/);
 });
 
- // Regression: both fake groups must be able to finish the same review flow.
+// Regression: both fake groups must be able to finish the same review flow.
 test('Group B has a distinct reviewer and can reach REVIEWED without leaking Group A',()=>{
  const m=createMachine();
  assert.equal(run(m,'operator_b','B','CREATE',0).state,'DRAFT');
