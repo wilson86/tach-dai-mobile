@@ -2094,9 +2094,25 @@ $("undoBtn").addEventListener("click",()=>{
   undoStack.pop();
   announceWorkingSource();
 });
-regionEl.addEventListener("change",updateUI);
-dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
-todayEl.addEventListener("change",updateUI);
+// When changing region/date, the previous *validation error* is no longer
+// evidence for the new scope. Invalidate only this derived error, not source,
+// successful result rows, Cut/Undo snapshots, or an exact-output ledger.
+// A new Tách run remains an explicit operator action.
+function invalidateOldScopeValidationError(){
+ if(!inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)&&
+    outputRecords.length===0&&
+    /^(?:PHÁT HIỆN TIN SAI:|XÁC NHẬN SỐ TRÙNG CẦN THIẾT)/u.test(outputEl.value)){
+  outputEl.value="";
+  setStatus("Miền/ngày đã đổi; bấm Kiểm tra + Tách để kiểm tra lại tin.","");
+ }
+}
+function updateUIAfterOperatorScopeChange(){
+ invalidateOldScopeValidationError();
+ updateUI();
+}
+regionEl.addEventListener("change",updateUIAfterOperatorScopeChange);
+dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUIAfterOperatorScopeChange();});
+todayEl.addEventListener("change",updateUIAfterOperatorScopeChange);
 
 // v2.0.5: mọi kiểu sửa/xóa Input đều đồng bộ Kết quả.
 // "input" bắt Backspace, Delete, Cut, paste, bàn phím mobile và native undo/redo.
