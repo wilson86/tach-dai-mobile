@@ -32,7 +32,10 @@ function buildSql(){
   'EXISTS(SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_roles o ON o.oid=p.proowner '+
   'WHERE p.oid='+fnOid+' AND o.rolname='+owner+
   " AND NOT o.rolcanlogin AND NOT o.rolsuper AND NOT o.rolbypassrls"+
-  " AND p.prosecdef AND 'search_path=pg_catalog'=ANY(p.proconfig)"+
+  " AND NOT o.rolcreaterole AND NOT o.rolcreatedb AND NOT o.rolreplication"+
+  " AND p.prosecdef AND p.proconfig=ARRAY['search_path=pg_catalog']::text[]"+
+  " AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace"+
+  " WHERE c.relowner=o.oid AND n.nspname IN ('kts_team','kts_auth') AND c.relkind IN ('r','p'))"+
   ' AND NOT EXISTS(SELECT 1 FROM pg_catalog.pg_auth_members m WHERE m.roleid='+ownerOid+' OR m.member='+ownerOid+')) AS owner_boundary,'+
   'EXISTS(SELECT 1 FROM pg_catalog.pg_proc p CROSS JOIN LATERAL pg_catalog.aclexplode('+
   "COALESCE(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl "+

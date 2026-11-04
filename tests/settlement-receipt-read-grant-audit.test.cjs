@@ -41,6 +41,9 @@ test('read-only query checks inherited/column grants, function ACL, owner and se
   assert.match(sql,/aclexplode/);
   assert.match(sql,/to_regprocedure/);
   assert.match(sql,/prosecdef/);
+  assert.match(sql,/NOT o\.rolcreaterole AND NOT o\.rolcreatedb AND NOT o\.rolreplication/);
+  assert.match(sql,/p\.proconfig=ARRAY\['search_path=pg_catalog'\]::text\[\]/);
+  assert.match(sql,/c\.relowner=o\.oid/);
   assert.match(sql,/candidate_receipt_read_v1/);
   assert.doesNotMatch(sql,/\b(?:GRANT\s+|REVOKE\s+|ALTER\s+TABLE|CREATE\s+(?:FUNCTION|TABLE)|DROP\s+(?:TABLE|FUNCTION)|INSERT\s+INTO|UPDATE\s+kts_|DELETE\s+FROM|TRUNCATE\s+TABLE|SET\s+ROLE|set_config\s*\()/i);
 });
