@@ -153,3 +153,48 @@ test('user selected MN/MT defines the filtered station, not copied region text',
  assert.equal(mn.pretty.includes('MN'),false);assert.equal(mt.pretty.includes('MT'),false);
  reject('mt','ct 52 b10n',/phải ghi tên\/mã đài/u);
 });
+
+test('three separate monetary figures: source stake, expanded exposure, post-Quyt rounded total',()=>{
+ const unscaled=input('mn','2d 52 b10n',{tick:false});
+ assert.equal(unscaled.sourceTotal,'10');
+ assert.equal(unscaled.original,'20');
+ assert.equal(unscaled.total,'20');
+ assert.equal(unscaled.roundingDiffRows,0);
+ const scaled=input('mn','2d 52 b10n',{tick:true});
+ assert.equal(scaled.sourceTotal,'10');assert.equal(scaled.original,'20');assert.equal(scaled.total,'22');
+ assert.equal(scaled.ceilReference,'22');
+ assert.equal(scaled.roundingDiffRows,0);
+ const three=input('mn','3d 52 b10n',{tick:true});
+ assert.equal(three.sourceTotal,'10');assert.equal(three.original,'30');assert.equal(three.total,'33');
+});
+test('CEIL monetary reference differs for Quyt BAO/LO, never changes user-approved HALF_UP or DD',()=>{
+ const half=input('mn','2d 52 b15n',{tick:true});
+ assert.equal(half.sourceTotal,'15');assert.equal(half.original,'30');
+ assert.equal(half.total,'32');assert.equal(half.ceilReference,'34');
+ assert.equal(half.roundingDiffRows,2);
+ const other=input('mn','2d 52 b15n dd5.2n',{tick:true});
+ assert.equal(other.sourceTotal,'20.2');assert.equal(other.original,'40.4');
+ assert.equal(other.total,'42');assert.equal(other.ceilReference,'44');
+ assert.equal(other.roundingDiffRows,2);
+ const plain=input('mn','dn 52 b15n',{tick:false});
+ assert.equal(plain.total,'15');assert.equal(plain.ceilReference,'15');
+});
+test('money-risk and manual acknowledgment controls exist on the review page',()=>{
+ assert.match(html,/id="ackMoney"[^>]*disabled/u);
+ assert.match(html,/id="sourceTotal"/u);
+ assert.match(html,/id="roundingAudit"/u);
+ assert.match(html,/id="factorReceipt"/u);
+ assert.match(html,/function syncCopyGate/u);
+ assert.match(html,/KHÔNG nhân hệ số lần nữa/u);
+ assert.match(html,/CHƯA DUYỆT GỬI TIỀN THẬT/u);
+});
+
+test('3d 5n reveals why HALF_UP and CEILING are different downstream money contracts',()=>{
+ const r=input('mn','3d 52 b5n',{tick:true});
+ assert.equal(r.sourceTotal,'5');
+ assert.equal(r.original,'15');
+ assert.equal(r.total,'15');        // 5.335 rounds to 5n at each of 3 stations.
+ assert.equal(r.ceilReference,'18'); // CEIL comparison 6n at each station.
+ assert.equal(r.roundingDiffRows,3);
+ assert.equal(r.rows.length,3);
+});
