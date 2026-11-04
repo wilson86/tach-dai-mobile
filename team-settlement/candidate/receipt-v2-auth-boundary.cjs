@@ -53,20 +53,28 @@ function createReceiptV2AuthBoundary({db,clock=()=>Date.now(),enabled=false}={})
       // captured before entering the transaction. Check database wall time
       // again immediately before invoking the signer; the verifier must still
       // independently enforce session validity after this transaction ends.
-      const fresh=resultRows(await tx.query(
-        `SELECT session_handle,user_id,workspace_id
-           FROM kts_auth.sessions
-          WHERE session_hash=$1 AND revoked_at IS NULL
-            AND expires_at > pg_catalog.clock_timestamp()
-          FOR SHARE`,[hash]));
-      if(fresh.length!==1||fresh[0]?.session_handle!==s.session_handle||
-         fresh[0]?.user_id!==s.user_id||fresh[0]?.workspace_id!==s.workspace_id)reject();
+      const assertFresh=async()=>{
+        const fresh=resultRows(await tx.query(
+          `SELECT session_handle,user_id,workspace_id
+             FROM kts_auth.sessions
+            WHERE session_hash=$1 AND revoked_at IS NULL
+              AND expires_at > pg_catalog.clock_timestamp()
+            FOR SHARE`,[hash]));
+        if(fresh.length!==1||fresh[0]?.session_handle!==s.session_handle||
+           fresh[0]?.user_id!==s.user_id||fresh[0]?.workspace_id!==s.workspace_id)reject();
+      };
+      await assertFresh();
       // Caller must be trusted backend code; this callback is never exposed
       // through HTTP, never accepted from browser JSON, and never persisted.
       const identity=Object.freeze({server_verified:true,membership_active:true,
         session_handle:s.session_handle,user_id:s.user_id,
         workspace_id:s.workspace_id,role:active[0].team_role});
-      return backendCallback(identity);
+      const result=await backendCallback(identity);
+      // Do not return a callback result if expiry occurred while it ran.
+      // This cannot undo callback side effects, prevent later revocation, or
+      // replace an independently enforced verifier at proof-use time.
+      await assertFresh();
+      return result;
     });
   }
   return Object.freeze({authorizeReceiptRead});

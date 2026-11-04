@@ -35,6 +35,13 @@ test('missing or changed session on DB-time recheck never reaches callback',asyn
   assert.equal(called,false);assert.equal(x.sql.at(-1),'ROLLBACK');
  }
 });
+test('session missing on post-callback check rolls back and does not return callback result',async()=>{
+ const freshSessions=[session],x=fixture({freshSessions});
+ const b=createReceiptV2AuthBoundary({db:x.db,enabled:true,clock:()=>NOW});
+ let called=false;
+ await assert.rejects(b.authorizeReceiptRead(token,()=>{called=true;freshSessions.pop();return 'synthetic_result';}),/AUTH_DENIED/);
+ assert.equal(called,true);assert.equal(x.sql.at(-1),'ROLLBACK');
+});
 test('valid DB session, scoped active operator and callback in same transaction',async()=>{
   const x=fixture(),b=createReceiptV2AuthBoundary({db:x.db,enabled:true,clock:()=>NOW});
   const obtained=await b.authorizeReceiptRead(token,actor=>{
@@ -46,12 +53,12 @@ test('valid DB session, scoped active operator and callback in same transaction'
     assert.equal('session_hash' in actor,false);return 'PROOF_READY';
   });
   assert.equal(obtained,'PROOF_READY');assert.equal(x.sql.at(-1),'COMMIT');
-  assert.equal(x.sql.filter(z=>typeof z==='object').length,4);
+  assert.equal(x.sql.filter(z=>typeof z==='object').length,5);
   const first=x.sql.find(z=>typeof z==='object');
   assert.match(first.text,/FOR SHARE/);
   assert.equal(first.params[0],crypto.createHash('sha256').update(token).digest('hex'));
   assert.equal(first.params[1],new Date(NOW).toISOString());
-  assert.match(x.sql.filter(z=>typeof z==='object').at(-2).text,/FOR SHARE OF m,i/);
+  assert.match(x.sql.filter(z=>typeof z==='object').at(-3).text,/FOR SHARE OF m,i/);
   assert.match(x.sql.filter(z=>typeof z==='object').at(-1).text,/expires_at > pg_catalog\.clock_timestamp\(\)/);
 });
 test('missing, ambiguous, revoked and malformed sessions fail closed',async()=>{
