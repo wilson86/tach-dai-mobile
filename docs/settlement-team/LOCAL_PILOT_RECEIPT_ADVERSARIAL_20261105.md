@@ -81,3 +81,44 @@ Qualified for source-level synthetic pilot negative regression only.
 Do **not** interpret an isolated mock pilot PASS as a real group-money
 release, a verified durable receipt or an independently signed security
 review. Continue complete live-source qualification under Issue #5.
+
+## Follow-up red→green on the same runner gate (2026-11-05)
+
+Two additional adversarial conditions were tested against the first patched
+runner and **both failed** (the pilot would have accepted them):
+
+- A purported operator with malformed `user_id=null` could pass the role
+  check and execute the synthetic `createDraft` callback **before** being
+  rejected at the later review step. Invalid operator identity must stop
+  before the first synthetic mutation.
+- A read-only change-feed row could declare a **foreign workspace_id**
+  while retaining an apparently valid matching event ID and sequence.
+  The runner must reject contradictory tenant provenance when provided
+  by the dependency, not just match event IDs.
+
+Both have now been fixed. The runner checks nonempty, valid operator user ID
+before `createDraft`. The feed verifier rejects explicit
+`workspace_id` fields that disagree with the trusted scope. A feed row
+with **no** workspace field remains valid for historical synthetic fixture
+compatibility: do not mistake this optional-field check for production-grade
+tenant isolation.
+
+**Final exact source SHA-bound native Node QA:** `git hash-object` matches
+GitHub remote for
+`team-settlement/local-pilot-runner.cjs` =
+`22b9e17e345a662b6a17db4083c837a41beffc8a`;
+`tests/settlement-team-local-pilot-safety-gate.test.cjs` =
+`f24f36df0246c886272658f3cbad4b9f3b71dc67`;
+unchanged original regression =
+`6c07e6e34fd6dcf1892e79d88b12a384aa670811`.
+`node --check` PASS; Node.js 22.16.0,
+`node --test tests/settlement-team-local-pilot-runner.test.cjs
+tests/pilot-safety-regression.test.cjs` **12 PASS / 0 FAIL / 0 SKIP**.
+The local new test is committed under
+`tests/settlement-team-local-pilot-safety-gate.test.cjs` with identical
+file content/hash; the old 10 PASS refer to intermediate code and
+**must not be used as final HEAD qualification**.
+
+No actual PostgreSQL, Windows, Android, private money oracle or independent
+security reviewer approval was part of these native synthetic tests. Keep
+`WRITE_BLOCK=ENABLED; RELEASE=NO_GO; COST_USD=0`.
