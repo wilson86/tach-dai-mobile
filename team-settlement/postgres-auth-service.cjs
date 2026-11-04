@@ -16,9 +16,11 @@ function tokenHash(token){
 const dummyHash=hashPassword('not-a-real-user-password',Buffer.alloc(16,0x4d));
 // Dummy scrypt verification reduces username enumeration timing differences;
 // it is not an alternative to HTTP rate limiting and secure credential handling.
-function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION_TTL_MS}={}){
+function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION_TTL_MS,
+  receiptV2SessionHandleEnabled=false}={}){
   if(!db||typeof db.transaction!=='function'||typeof clock!=='function'||
-      !Number.isSafeInteger(sessionTtlMs)||sessionTtlMs<=0||sessionTtlMs>24*60*60*1000)
+      !Number.isSafeInteger(sessionTtlMs)||sessionTtlMs<=0||sessionTtlMs>24*60*60*1000||
+      typeof receiptV2SessionHandleEnabled!=='boolean')
     error('AUTH_PERSISTENCE_CONFIG_INVALID');
 
   async function scoped(tx,workspaceId){
@@ -51,15 +53,30 @@ function createPostgresAuthService({db,clock=()=>Date.now(),sessionTtlMs=SESSION
         error('AUTH_CLOCK_INVALID');
       const token=crypto.randomBytes(32).toString('base64url');
       const expectedHash=tokenHash(token);
-      const inserted=rows(await tx.query(
+      // Default OFF. A separately reviewed V2 schema is required before enabling.
+      // The handle is random and independent of both bearer and session hash.
+      // Never return the handle to the browser or embed it in a bearer token.
+      const v2Handle=receiptV2SessionHandleEnabled?
+        crypto.randomBytes(16).toString('hex'):null;
+      const sql=receiptV2SessionHandleEnabled?
+        `INSERT INTO kts_auth.sessions(
+           session_hash,session_handle,user_id,workspace_id,issued_at,expires_at)
+         VALUES($1,$2,$3,$4,$5::timestamptz,$6::timestamptz)
+         RETURNING session_hash,session_handle`:
         `INSERT INTO kts_auth.sessions(session_hash,user_id,workspace_id,issued_at,expires_at)
          VALUES($1,$2,$3,$4::timestamptz,$5::timestamptz)
-         RETURNING session_hash`,
+         RETURNING session_hash`;
+      const params=receiptV2SessionHandleEnabled?
+        [expectedHash,v2Handle,account.user_id,workspace_id,
+          new Date(now).toISOString(),new Date(now+sessionTtlMs).toISOString()]:
         [expectedHash,account.user_id,workspace_id,
-         new Date(now).toISOString(),new Date(now+sessionTtlMs).toISOString()]));
-      // A successful SQL round trip is NOT a persisted login receipt.
-      // Deny a bearer when a broken adapter returns no or inconsistent rows.
-      if(inserted.length!==1||inserted[0]?.session_hash!==expectedHash)
+          new Date(now).toISOString(),new Date(now+sessionTtlMs).toISOString()];
+      const inserted=rows(await tx.query(sql,params));
+      // Only accept a precisely echoed DB receipt; do not issue a token on
+      // ambiguous or mismatching handle or a missing migration.
+      if(inserted.length!==1||inserted[0]?.session_hash!==expectedHash||
+         (receiptV2SessionHandleEnabled &&
+           inserted[0]?.session_handle!==v2Handle))
         error('AUTH_DATABASE_RESULT_INVALID');
       return Object.freeze({session_token:token,expires_at:now+sessionTtlMs});
     });
