@@ -1,11 +1,11 @@
-\\set ON_ERROR_STOP on
+\set ON_ERROR_STOP on
 -- READ-ONLY synthetic review ONLY; no grants, no role provisioning, no DML.
 -- Must be invoked by an explicitly approved supervised fresh C: scratch PG16.
-\\if :{?KTS_DISPOSABLE_PG_ONLY}
-\\else
-  \\echo BLOCKED_REQUIRE_EXPLICIT_KTS_DISPOSABLE_PG_ONLY
-  \\quit 3
-\\endif
+\if :{?KTS_DISPOSABLE_PG_ONLY}
+\else
+  \echo BLOCKED_REQUIRE_EXPLICIT_KTS_DISPOSABLE_PG_ONLY
+  SELECT 1/0; -- missing opt-in: ON_ERROR_STOP exits nonzero
+\endif
 BEGIN TRANSACTION READ ONLY;
 DO $review$
 DECLARE n integer;
@@ -92,4 +92,4 @@ BEGIN
 END;
 $review$;
 ROLLBACK;
-\\echo SYNTHETIC_TWO_ROLE_CATALOG_READONLY_PASS
+\echo SYNTHETIC_TWO_ROLE_CATALOG_READONLY_PASS
