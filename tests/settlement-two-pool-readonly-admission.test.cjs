@@ -8,6 +8,7 @@ function row(role,kind){
   server_port:4932,postmaster_started:'2026-11-04 00:00:00+00',
   superuser:false,bypass_rls:false,has_role_memberships:false,
   default_acl_entries:0,create_auth_schema:false,create_team_schema:false,create_crypto_schema:false,
+  raw_append_execute:false,raw_review_execute:false,
   read_credentials:kind==='auth',read_sessions:kind==='auth',read_memberships:true,
   read_identity_user_id:true,read_identity_disabled_at:true,
   read_identity_auth_subject:kind==='auth',read_scope_events:kind==='ledger',
@@ -46,7 +47,7 @@ test('two independent read-only pool probes produce evidence, NEVER release appr
 });
 test('reject bypassRLS, inherited membership and every direct money grant',()=>{
  const blockers=['superuser','bypass_rls','has_role_memberships','create_auth_schema',
-   'create_team_schema','create_crypto_schema','insert_receipts','update_receipts',
+   'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','insert_receipts','update_receipts',
    'update_receipts_any_column','insert_scope_events','insert_scopes',
    'update_scopes','update_scopes_any_column','update_memberships','insert_workspaces'];
  for(const side of [0,1])for(const flag of blockers){

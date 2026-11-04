@@ -16,6 +16,8 @@ const AUDIT_SQL=[
 "has_schema_privilege(current_user,'kts_auth','CREATE') AS create_auth_schema,",
 "has_schema_privilege(current_user,'kts_team','CREATE') AS create_team_schema,",
 "has_schema_privilege(current_user,'kts_crypto','CREATE') AS create_crypto_schema,",
+"COALESCE(has_function_privilege(current_user,to_regprocedure('kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)'),'EXECUTE'),true) AS raw_append_execute,",
+"COALESCE(has_function_privilege(current_user,to_regprocedure('kts_team.advance_review(text,text,date,text,text,bigint,text,text,text)'),'EXECUTE'),true) AS raw_review_execute,",
 "has_table_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials,",
 "has_table_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions,",
 "(has_column_privilege(current_user,'kts_team.memberships','workspace_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','user_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','team_role','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','revoked_at','SELECT')) AS read_memberships,",
@@ -41,7 +43,7 @@ const AUDIT_SQL=[
 "current_setting('log_min_error_statement',true) AS error_statement_log_mode"
 ].join(' ');
 const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_schema',
- 'create_team_schema','create_crypto_schema','read_credentials','read_sessions',
+ 'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','read_credentials','read_sessions',
  'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
  'read_scope_events','read_receipts','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
@@ -62,7 +64,8 @@ function validate(row,expected){
  for(const k of BOOLEAN)if(typeof row[k]!=='boolean')
    deny('TEAM_TWO_POOL_RESULT_MISSING_'+k);
  if(row.superuser||row.bypass_rls||row.has_role_memberships||
-    row.create_auth_schema||row.create_team_schema||row.create_crypto_schema)
+    row.create_auth_schema||row.create_team_schema||row.create_crypto_schema||
+    row.raw_append_execute||row.raw_review_execute)
    deny('TEAM_TWO_POOL_ROLE_PRIVILEGED');
  for(const k of DIRECT)if(row[k])deny('TEAM_TWO_POOL_DIRECT_MUTATION_'+k);
  if(!Number.isInteger(row.default_acl_entries)||row.default_acl_entries<0)
