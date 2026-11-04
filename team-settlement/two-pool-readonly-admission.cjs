@@ -29,6 +29,8 @@ const AUDIT_SQL=[
 `(${FINANCIAL_GRANTS}) AS any_financial_mutation,`,
 "has_table_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials,",
 "has_table_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions,",
+"has_any_column_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials_any_column,",
+"has_any_column_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions_any_column,",
 "(has_column_privilege(current_user,'kts_team.memberships','workspace_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','user_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','team_role','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','revoked_at','SELECT')) AS read_memberships,",
 "has_column_privilege(current_user,'kts_team.identities','user_id','SELECT') AS read_identity_user_id,",
 "has_column_privilege(current_user,'kts_team.identities','disabled_at','SELECT') AS read_identity_disabled_at,",
@@ -53,6 +55,7 @@ const AUDIT_SQL=[
 ].join(' ');
 const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_schema',
  'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','any_financial_mutation','read_credentials','read_sessions',
+ 'read_credentials_any_column','read_sessions_any_column',
  'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
  'read_scope_events','read_receipts','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
@@ -100,6 +103,7 @@ function assess(auth,ledger,authName,ledgerName){
     auth.read_scope_events!==false||auth.read_receipts!==false)
    deny('TEAM_TWO_POOL_AUTH_MINIMUM_MISMATCH');
  if(ledger.read_credentials!==false||ledger.read_sessions!==false||
+    ledger.read_credentials_any_column!==false||ledger.read_sessions_any_column!==false||
     ledger.read_memberships!==true||ledger.read_identity_user_id!==true||
     ledger.read_identity_disabled_at!==true||ledger.read_identity_auth_subject!==false||
     ledger.read_scope_events!==true||ledger.read_receipts!==true||

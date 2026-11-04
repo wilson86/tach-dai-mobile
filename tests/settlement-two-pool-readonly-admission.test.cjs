@@ -10,6 +10,7 @@ function row(role,kind){
   default_acl_entries:0,create_auth_schema:false,create_team_schema:false,create_crypto_schema:false,
   raw_append_execute:false,raw_review_execute:false,any_financial_mutation:false,
   read_credentials:kind==='auth',read_sessions:kind==='auth',read_memberships:true,
+  read_credentials_any_column:kind==='auth',read_sessions_any_column:kind==='auth',
   read_identity_user_id:true,read_identity_disabled_at:true,
   read_identity_auth_subject:kind==='auth',read_scope_events:kind==='ledger',
   read_receipts:kind==='ledger',insert_receipts:false,update_receipts:false,
@@ -66,6 +67,8 @@ test('audit projects all table and column mutation classes for each financial ta
 test('reject same pool, leaked auth credentials and unsafe log settings',async()=>{
  const [a,b]=fresh();
  assert.throws(()=>A.assess(a,{...b,read_credentials:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess(a,{...b,read_credentials_any_column:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
+ assert.throws(()=>A.assess(a,{...b,read_sessions_any_column:true},...roles),/LEDGER_MINIMUM_MISMATCH/);
  assert.throws(()=>A.assess(a,{...b,server_port:5400},...roles),/DIFFERENT_SERVER/);
  assert.throws(()=>A.assess(a,{...b,default_acl_entries:2},...roles),/DEFAULT_ACL_REVIEW_REQUIRED/);
  assert.throws(()=>A.assess({...a,parameter_error_limit:'128'},b,...roles),/PG_LOGGING_SETTINGS_UNSAFE/);
