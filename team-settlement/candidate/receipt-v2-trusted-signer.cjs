@@ -45,7 +45,11 @@ function createReceiptV2TrustedSigner({auth,keyProvider,clock=()=>Date.now(),
     const ordered = validKeys(keys);
     // Only a server-side DB-backed Auth boundary may grant actor authority.
     // No bearer or bearer-derived signing key enters the secret provider.
-    return auth.authorizeReceiptRead(bearerToken,async actor => {
+    let callbackCount=0;
+    let created=null;
+    const reply=await auth.authorizeReceiptRead(bearerToken,async actor => {
+      callbackCount++;
+      if (callbackCount!==1) deny();
       validActor(actor);
       const now = clock();
       if (!Number.isSafeInteger(now) || now<0) deny();
@@ -73,12 +77,16 @@ function createReceiptV2TrustedSigner({auth,keyProvider,clock=()=>Date.now(),
           actor.workspace_id,actor.user_id,ordered.length,...ordered,nonceText,seconds,expiration];
         const proof=crypto.createHmac('sha256',localSecret)
           .update(canonical(fields)).digest('hex');
-        return Object.freeze({key_id:fetched.key_id,
+        created=Object.freeze({key_id:fetched.key_id,
           session_handle:actor.session_handle,workspace_id:actor.workspace_id,
           user_id:actor.user_id,keys:ordered,nonce:nonceText,
           issued_at:seconds,expires_at:expiration,proof});
+        return created;
       } finally { localSecret.fill(0); }
     });
+    // A substituted Auth adapter may not skip the signer or rewrite its result.
+    if (callbackCount!==1 || reply!==created) deny();
+    return reply;
   }
   return Object.freeze({signReceiptRead});
 }
