@@ -44,12 +44,12 @@ assert.ok(calendar.length>0);
 assert.ok(rootHtml.includes('const APP_VERSION = "'+MOBILE+'"'));
 assert.ok(rootHtml.includes("v"+MOBILE));
 const rootCache=(rootSW.match(/^const CACHE_NAME = "([^"]+)";$/mu)||[])[1];
-assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-clean-r2-quyt-r24i-scope-error-refresh-balo-source-and-direct',
+assert.equal(rootCache,'tach-dai-mobile-v'+MOBILE+'-owner-singleton-dx-reject-clean-r2-quyt-r24i-quyt-two-message-ticket-preview',
   'root SW cache must identify the approved singleton-DX candidate, not an earlier duplicate-confirmation build');
 assert.ok(rootSW.includes('JSON.stringify({version:"'+MOBILE+'"})'));
 assert.ok(unifiedHtml.includes("Unified "+UNIFIED));
 assert.ok(unifiedHtml.includes('./unified-core.js?ux='+UNIFIED));
-assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2-quyt-r24i-scope-error-refresh-balo-source-and-direct'));
+assert.ok(unifiedHtml.includes('kts-tach-unified-v'+UNIFIED+'-owner-singleton-dx-0a0e54-clean-r2-quyt-r24i-quyt-two-message-ticket-preview'));
 assert.ok(unifiedCore.includes("const UX_VERSION='"+UNIFIED+"'"));
 assert.ok(unifiedSW.includes("kts-tach-unified-v"+UNIFIED+"-owner-singleton-dx-0a0e54"));
 assert.ok(unifiedSW.includes("'./unified-core.js?ux="+UNIFIED+"'"));
@@ -73,3 +73,10 @@ assert.ok(unifiedHtml.includes('https://wilson86.github.io/tach-dai-ngang/'),
 assert.ok(!rootHtml.includes("v2.0.30</span>"),"old published label not carried into candidate");
 assert.ok(!unifiedHtml.includes('unified-core.js?ux=1.0.18'));
 console.log("RELEASE REVIEW ASSET CONSISTENCY — MOBILE + UNIFIED PASS");
+
+for(const p of ['quyt-ticket-review.js','quyt-ticket-review-ui.js']){
+ assert.ok(rootHtml.includes('src="./'+p+'"'),'Mobile must load ticket review '+p);
+ assert.ok(unifiedHtml.includes('src="../'+p+'"'),'Unified must load ticket review '+p);
+ assert.ok(rootSW.includes('"./'+p+'"'),'Mobile SW must cache ticket review '+p);
+ assert.ok(unifiedSW.includes("'../"+p+"'"),'Unified SW must cache ticket review '+p);
+}
