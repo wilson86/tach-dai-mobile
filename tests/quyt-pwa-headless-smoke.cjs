@@ -7,7 +7,13 @@ const root=path.resolve(__dirname,'..');
 const sourceFile=path.join(root,'quyt-pwa/mn-mt-review.html');
 const original=fs.readFileSync(sourceFile,'utf8');
 const injection=`<script>
-Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async s=>{window.__qaClipboard=String(s)}}});
+Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:s=>{
+ if(window.__qaDeferNextCopy){
+  window.__qaDeferNextCopy=false;
+  return new Promise(resolve=>{window.__qaResolveCopy=()=>{window.__qaClipboard=String(s);resolve()};});
+ }
+ window.__qaClipboard=String(s);return Promise.resolve();
+}}});
 </script>`;
 const tests=`<script>
 (async()=>{
@@ -74,13 +80,24 @@ try{
  assert('change region recomputes 2đ for MN, always resets Copy',$('copy').disabled&&$('result').value.includes('ct 21 b11n.')&&!$('result').value.includes('kh 21 b11n.'));
  acknowledge();assert('re-acknowledge new region and date',!$('copy').disabled);
  set('raw','dn 52 b15n');
- assert('HALF_UP and CEIL reference disagreement explicitly warned',$('copy').disabled&&$('after').textContent==='16n'&&$('roundingAudit').textContent.includes('17n')&&$('roundingAudit').textContent.includes('KHÔNG tương đương'));
+ assert('HOLD mismatch: no final text and no Copy',$('copy').disabled&&$('result').value===''&&$('after').textContent==='—'&&$('roundingAudit').textContent.includes('17n')&&$('status').textContent.includes('HOLD_CHENH_LECH_LAM_TRON'));
  assert('CEIL mismatch always resets last approval',!$('ackMoney').checked);
- acknowledge();assert('requires acknowledgment on divergent money too',!$('copy').disabled);
+ acknowledge();assert('cannot bypass unresolved money policy by checking box',$('copy').disabled&&$('ackMoney').disabled&&[...document.querySelectorAll('.section-copy')].every(x=>x.disabled));
  set('raw','dn 52 b15n dd5.2n');
- assert('CEIL comparison never applies to DD',$('after').textContent==='21n'&&$('roundingAudit').textContent.includes('22n'));
+ assert('CEIL comparison never applies to DD even on HOLD',$('after').textContent==='—'&&$('roundingAudit').textContent.includes('22n')&&$('status').textContent.includes('HOLD'));
  set('raw','dn 52 xc10n');
  assert('HOLD disables acknowledgment and every Copy',$('ackMoney').disabled&&$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
+ set('raw','dn 21 b10n');
+ assert('safe money preview re-enables acknowledgment only',$('copy').disabled&&!$('ackMoney').disabled);
+ acknowledge();
+ assert('safe money Copy permitted after new acknowledgment',!$('copy').disabled);
+ window.__qaDeferNextCopy=true;$('copy').click();
+ assert('asynchronous clipboard pending',typeof window.__qaResolveCopy==='function');
+ set('raw','dn 21 b12n');
+ assert('changed source disables old approval while copy pending',$('copy').disabled&&!$('ackMoney').checked);
+ window.__qaResolveCopy();
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('stale async clipboard never reports success',$('status').textContent.includes('Clipboard CÓ THỂ chứa tin CŨ')&&$('copy').disabled&&window.__qaClipboard==='dn 21 b10n.');
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
