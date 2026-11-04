@@ -75,7 +75,7 @@ function createReceiptV2ReadBridge({signer,ledgerDb,clock=()=>Date.now(),enabled
       const result=await tx.query(SQL,params);
       if(!result||!Array.isArray(result.rows)||result.rows.length>known.size)deny();
       const seen=new Set();
-       const found=[];
+      const found=[];
       for(const row of result.rows){
         checkRow(row,e,known);
         if(seen.has(row.idempotency_key))deny();
@@ -88,4 +88,12 @@ function createReceiptV2ReadBridge({signer,ledgerDb,clock=()=>Date.now(),enabled
       return Object.freeze(found);
     });
     // Return is intentionally only a read receipt list, never SYNCED state.
-    // A lostÑÉ¹ÍÑ¥½¸½ÕÑ½µÍÑåÌU9-9=]8ì¼¹½ÐÕÑ¼ÉÑÉä¸(¹½Üõ±½¬ ¤ì(¥ 9ÕµÈ¹¥ÍM%¹ÑÈ¡¹½Ü¥ññ¹½ÜðÀ¥¹ä ¤ì(¡­¹Ù±½Á¡±¹½Ü¤ì(ÉÑÕÉ¸É½ÝÌì(ô(ÉÑÕÉ¸=©Ð¹Éé¡í±½½­ÕÁô¤ì)ô)µ½Õ±¹áÁ½ÉÑÌõ=©Ð¹Éé¡íÉÑI¥ÁÑXÉI	É¥ô¤ì(￿
+    // A lost transaction outcome stays UNKNOWN; do not auto retry.
+    now=clock();
+    if(!Number.isSafeInteger(now)||now<0)deny();
+    checkEnvelope(e,now);
+    return rows;
+  }
+  return Object.freeze({lookup});
+}
+module.exports=Object.freeze({createReceiptV2ReadBridge});
