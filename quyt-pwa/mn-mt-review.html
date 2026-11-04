@@ -240,9 +240,18 @@ const OfflineKTS=(()=>{
     if(/^\s*\[/u.test(source))fail('Header Telegram chưa được nhận diện; giữ nguyên tin để kiểm tra',`tin ${index+1}`);
     return {source,text:source};
    }
-   const day=Number(header[1]),month=Number(header[2]),hour=Number(header[4]),minute=Number(header[5]);
-   // Date is metadata, NOT a market or business-date authority.
-   if(day<1||day>31||month<1||month>12||hour<1||hour>12||minute>59)
+   const first=Number(header[1]),second=Number(header[2]),year=Number(header[3]);
+   const hour=Number(header[4]),minute=Number(header[5]);
+   // Telegram may export mm/dd or dd/mm. The operator-selected draw date
+   // disambiguates them; never pick one by timestamp or current clock.
+   function validDate(month,day){
+    if(month<1||month>12||day<1||day>31)return null;
+    const utc=new Date(Date.UTC(year,month-1,day,12));
+    if(utc.getUTCFullYear()!==year||utc.getUTCMonth()+1!==month||utc.getUTCDate()!==day)return null;
+    return String(year).padStart(4,'0')+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+   }
+   const possibleDates=[validDate(first,second),validDate(second,first)].filter(Boolean);
+   if(!possibleDates.length||hour<1||hour>12||minute>59)
     fail('Thời gian Telegram không hợp lệ',`tin ${index+1}`);
    const sender=header[7].trim().normalize('NFC');
    const expectedName=opts.customer==='quyt'?/^(?:cô\s+)?quýt$/iu:
@@ -253,8 +262,8 @@ const OfflineKTS=(()=>{
    if(opts.market==='mb'&&!/^\s*hn(?=\s)/iu.test(text))
     fail('Tin MB Telegram phải bắt đầu bằng HN sau tên khách',`tin ${index+1}`);
    if(opts.market!=='mb'){
-    const fromHeader=header[3]+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
-    if(fromHeader!==opts.businessDate)fail('Ngày Telegram khác ngày xổ số đã chọn; HOLD',`tin ${index+1}`);
+    if(!possibleDates.includes(opts.businessDate))
+     fail('Ngày Telegram khác ngày xổ số đã chọn; HOLD',`tin ${index+1}`);
    }
    return {source,text};
   });
