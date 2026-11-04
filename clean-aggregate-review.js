@@ -8,6 +8,21 @@ const unitRx=/^(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/iu;
 const labelRx=/^(hn|mb|mn|mt)(?![\p{L}\p{N}])/iu;
 const numberRx=/^\d{2,4}(?!\d)/u;
 const MAX_CLAUSES=500;
+const EXPECTED_ENGINE="0a0e541680405bd685a52225d637246064ef59a9715ea4afa72f750c9095e487";
+// Read-only station admissions must be bound to the generated day/engine authority.
+function stationCodes(options,market){
+ if(market!=="mn"&&market!=="mt")return [];
+ const date=String(options.businessDate||"");
+ if(!/^\d{4}-\d{2}-\d{2}$/u.test(date))return [];
+ const [year,month,day]=date.split("-").map(Number),d=new Date(year,month-1,day,12);
+ if(d.getFullYear()!==year||d.getMonth()!==month-1||d.getDate()!==day)return [];
+ const calendar=options.calendarAuthority||(typeof globalThis!=="undefined"?globalThis.KTS_STATION_CALENDAR:null);
+ if(!calendar||calendar.schema!=="KTS_STATION_SCHEDULE_AUTHORITY_V1"||
+   calendar.engine_sha256!==EXPECTED_ENGINE)return [];
+ const rows=calendar[market.toUpperCase()]?.[String(d.getDay())];
+ return Array.isArray(rows)?rows.map(row=>String(row?.[0]||"").toLowerCase()).filter(code=>/^[a-z]{1,5}$/u.test(code)):[];
+}
+
 function fail(code,at,line,selector){throw Error(code+(at===undefined?"":" @"+at)+(line===undefined?"":" line="+line)+(selector?" selector="+selector:""))}
 function units(token){
  const match=unitRx.exec(token);if(!match||match[0].length!==token.length)fail("STAKE_INVALID");
@@ -18,7 +33,9 @@ function units(token){
  return half;
 }
 function fmt(half){return Math.floor(half/2)+(half%2?".5":"")}
-function lex(raw){
+function lex(raw,options={}){
+ const region=options.region?REGION[String(options.region).toLowerCase()]:null;
+ const codes=stationCodes(options,region);
  if(typeof raw!=="string"||!raw.trim())fail("EMPTY_MESSAGE");
  const out=[];let i=0,ln=1;
  const text=raw.toLowerCase();
@@ -28,7 +45,11 @@ function lex(raw){
   }
   const suffix=text.slice(i);
   let m=unitRx.exec(suffix),type="amount";
-  if(!m){m=labelRx.exec(suffix);type="station"}
+  if(!m){m=labelRx.exec(suffix);type="region"}
+  if(!m&&codes.length){
+   const named=/^([a-z]{1,5})(?![\p{L}\p{N}])/iu.exec(suffix);
+   if(named&&codes.includes(named[1])){m=named;type="named_station"}
+  }
   if(!m){m=kindRx.exec(suffix);type="selector"}
   if(!m){m=numberRx.exec(suffix);type="number"}
   if(!m)fail("UNRECOGNIZED_FRAGMENT",i,ln);
@@ -45,13 +66,23 @@ function lex(raw){
 function parse(raw,options={}){
  const external=options.region?REGION[String(options.region).toLowerCase()]:null;
  if(options.region&&!external)fail("REGION_INVALID");
- const tokens=lex(raw),clauses=[];
- let station=external,group=[],previous=[],waiting=false;
+ const tokens=lex(raw,options),clauses=[];
+ let market=external,station=external==="mb"?"mb":null,group=[],previous=[],waiting=false;
+ let lastStationLine=0;
  for(let i=0;i<tokens.length;i++){
   const t=tokens[i];
-  if(t.type==="station"){
+  if(t.type==="region"){
    if(group.length&&!waiting)fail("STATION_INTERRUPTS_GROUP",t.offset);
-   station=REGION[t.value];if(external&&station!==external)fail("REGION_CONFLICT",t.offset);
+   market=REGION[t.value];if(external&&market!==external)fail("REGION_CONFLICT",t.offset);
+   station=market==="mb"?"mb":null;lastStationLine=0;
+   group=[];previous=[];waiting=false;continue;
+  }
+  if(t.type==="named_station"){
+   if(market!=="mn"&&market!=="mt")fail("STATION_REGION_INVALID_HOLD",t.offset,t.physicalLine);
+   if(group.length&&!waiting)fail("STATION_INTERRUPTS_GROUP",t.offset,t.physicalLine);
+   if(station&&lastStationLine===t.physicalLine)
+    fail("MULTI_STATION_REVIEW_HOLD",t.offset,t.physicalLine);
+   station=t.value;lastStationLine=t.physicalLine;
    group=[];previous=[];waiting=false;continue;
   }
   if(t.type==="number"){
@@ -60,7 +91,7 @@ function parse(raw,options={}){
    // for review-money grouping. The canonical Tách engine validates real
    // station aliases against the selected day's calendar; this review-only
    // tokenizer does not yet implement that contract and MUST fail closed.
-   if(station==="mn"||station==="mt")
+   if((market==="mn"||market==="mt")&&!station)
     fail("STATION_NAME_REQUIRED_HOLD",t.offset,t.physicalLine);
    if(waiting){group=[];previous=[];waiting=false}
    if(group.includes(t.value))fail("DUPLICATE_NUMBER_WITHIN_GROUP",t.offset);
@@ -69,6 +100,8 @@ function parse(raw,options={}){
   if(t.type==="selector"){
    const numbers=group.length?group:previous;
    if(!numbers.length)fail("SELECTOR_WITHOUT_NUMBERS",t.offset);
+   if((market==="mn"||market==="mt")&&!station)
+    fail("STATION_NAME_REQUIRED_HOLD",t.offset,t.physicalLine);
    const amount=tokens[++i];
    if(!amount||amount.type!=="amount")fail("SELECTOR_WITHOUT_AMOUNT",t.offset,t.physicalLine,t.value);
    const half=units(amount.value),kind=ALIAS[t.value.replace(/\s+/gu," ")];
