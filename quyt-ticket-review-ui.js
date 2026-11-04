@@ -29,6 +29,25 @@ function install(){
   rate:document.getElementById('ktsQuytRate')?.value||'1.067',
   optIn:document.getElementById('ktsCustomerRateToggle')?.checked===true
  });
+ // Session-tab draft preserves the exact source through F5; restore ONLY on matching customer/day/market.
+ const DRAFT_KEY='KTS_QUYT_TICKET_DRAFT_V1:'+((window.location&&window.location.pathname)||'root');
+ function saveDraft(){
+  const s=scope();
+  if(!s.optIn||!s.customerId||!window.sessionStorage)return;
+  try{
+   if(!input.value.trim()||input.value.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]')){window.sessionStorage.removeItem(DRAFT_KEY);return}
+   if(input.value.length>20000)throw Error('DRAFT_SIZE_HOLD');
+   window.sessionStorage.setItem(DRAFT_KEY,JSON.stringify({customerId:s.customerId,market:s.market,date:s.businessDate,raw:input.value}));
+  }catch(_){status.textContent='HOLD: không lưu được tin nháp qua F5'}
+ }
+ function restoreDraft(s){
+  if(input.value||!s.optIn||!s.customerId||!window.sessionStorage)return;
+  try{
+   const item=JSON.parse(window.sessionStorage.getItem(DRAFT_KEY)||'null');
+   if(item&&item.customerId===s.customerId&&item.market===s.market&&item.date===s.businessDate&&
+      typeof item.raw==='string'&&item.raw.length<=20000&&!item.raw.startsWith('[[KTS_EXACT_OUTPUT_LEDGER_V1]]'))input.value=item.raw;
+  }catch(_){/* Keep source empty on corrupt storage; never infer a ticket. */}
+ }
  let receipt=null;
  function signature(){const s=scope();return JSON.stringify([input.value,s.market,s.businessDate,s.customerId,s.rate,s.optIn,check.checked])}
  function sources(s){
@@ -48,6 +67,7 @@ function install(){
   if(!s.optIn||!s.customerId){check.checked=false;check.disabled=true;status.textContent='Chọn Khách & tỷ lệ và khách trong dropdown để gộp tin.';return}
   check.disabled=s.customerId!=='quyt';
   if(s.customerId!=='quyt'&&check.checked)check.checked=false;
+  restoreDraft(s);
   if(!input.value.trim()){status.textContent='Chưa có tin nguồn để gộp.';return}
   try{
    const result=engine.ticket(sources(s),{
@@ -73,13 +93,13 @@ function install(){
   }catch(e){status.textContent='HOLD: Clipboard không khả dụng — '+String(e?.message||e)}
  }
  check.addEventListener('change',render);copy.addEventListener('click',copyText);
- input.addEventListener('input',render);
+ input.addEventListener('input',()=>{saveDraft();render()});
  for(const id of ['ktsQuytRate','ktsReviewCustomer','ktsCustomerRateToggle','region','sharedRegion','date','sharedDate','today']){
   const e=document.getElementById(id);
   if(e)e.addEventListener(id==='ktsQuytRate'?'input':'change',()=>{if(id==='region'||id==='sharedRegion'||id==='date'||id==='sharedDate')check.checked=false;render()});
  }
  for(const id of ['undoBtn','clearBtn','cutBtn','sourceCutBtn','dvClear','dvCutSelection','dvSourceCut','runBtn','dvRun']){
-  const button=document.getElementById(id);if(button)button.addEventListener('click',()=>setTimeout(render,0));
+  const button=document.getElementById(id);if(button)button.addEventListener('click',()=>setTimeout(()=>{saveDraft();render()},0));
  }
  window.addEventListener('pageshow',render);
  render();
