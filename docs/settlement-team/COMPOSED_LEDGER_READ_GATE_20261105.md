@@ -108,11 +108,24 @@ GitHub composition blob and executed **that exact source** in an
 isolated V8 function wrapper with mocked dependencies. Observed 6
 approved imports, **zero** `postgres-ledger-repository` imports,
 the exact 10 methods and all expected denial codes. Both constructor
-and the returned server remained non-listening. The separately
-committed native Node test was syntax-checked in V8 but
-**NATIVE_NODE_TEST=NOT_RUN** from this chat environment; do not report
-a native Node PASS on these new test files. Tests with real underlying
-Auth/HTTP modules and a PostgreSQL16 role catalog are still NOT_RUN.
+and the returned server remained non-listening.
+
+Additionally the exact GitHub source and test were recreated on local
+Linux Node **v22.16.0** in
+`/mnt/data/settlement_read_guard/qualified_v2`, with independently
+verified Git blob hashes:
+`team-settlement/team-composition.cjs` =
+`0e1957900cad7525919b23ce3fc782fd7a50b85d`;
+`tests/settlement-team-no-legacy-ledger-construction.test.cjs` =
+`272b35c57a2cc1e021079014f07d657252494f32`.
+`node --check` on both files **PASS**;
+`node --test tests/settlement-team-no-legacy-ledger-construction.test.cjs`
+**3 PASS, 0 FAIL, 0 SKIP, exit 0**. These are native Node
+source-bound tests with *injected dependency stubs*, not complete
+integration with the real Auth/HTTP stack or PostgreSQL16.
+The previous focused composition denial checks were already qualified on
+the former SHA and were not unnecessarily re-run.
+Actual PostgreSQL catalog/privileges and Windows/Android QA remain NOT_RUN.
 
 **Release decision remains unchanged:** The reviewer cannot approve
 money mutations or real tenant reads until an independently approved
