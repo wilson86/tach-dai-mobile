@@ -74,6 +74,26 @@ test('Telegram metadata binds to selected business date and customer',()=>{
  assert.equal(input('mt','[11/15/2026 6:06 PM] Cô Quýt: mt kh 21 b10n',
    {businessDate:'2026-11-15'}).total,'10');
 });
+test('HOLD references the actual physical source line after blank lines',()=>{
+ const raw='mn dn 21 b10n\n\nmn ct 21 b10n\n\nmn ct 21 xx10n';
+ reject('mn',raw,/tin 5, vị trí/u);
+ reject('mn','mn dn 21 b10n\n\nmn tn 21 b10n',/tin 3/u);
+ reject('mn','mn dn 21 b10n\n\n[11\/1\/2026 6:06 PM] Cô Quýt: mn ct 21 b10n',/tin 3/u);
+});
+test('MN and MT never accept a hidden HN marker after a valid station prefix',()=>{
+ reject('mn','mn dn hn 21 b10n',/tin HN nằm sau mã đài/u);
+ reject('mt','mt dn hn 21 b10n',/tin HN nằm sau mã đài/u);
+ assert.equal(input('mn','mn dn 21 b10n').total,'10');
+});
+test('repeated numbers inside one clause HOLD instead of doubling an ambiguous stake',()=>{
+ reject('mn','mn dn 21 21 b10n',/số lặp trong cùng một nhóm cược/u);
+ reject('mt','mt dn 45 45 dd5n',/số lặp trong cùng một nhóm cược/u);
+ const separate=input('mn','mn dn 21 b10n. 21 b10n',{tick:true});
+ assert.equal(separate.total,'21');
+ assert.equal(separate.rows.length,1);
+ const two=input('mn','mn dn 21 b10n\nmn dn 21 b10n',{tick:true,duplicateConfirmed:true});
+ assert.equal(two.total,'21');
+});
 test('preview HTML remains online-only and cannot change live MB draft or offline SW',()=>{
  assert.match(html,/XEM TRƯỚC ONLINE/u);
  assert.match(html,/BẢN THỬ ONLINE MN\/MT/u);
