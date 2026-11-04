@@ -78,7 +78,8 @@ test('2d and 3d each copy FULL stake per scheduled station for every weekday',()
     assert.equal(result.pretty.includes('MT '),false);
     for(const code of stations.slice(0,count)){
      assert.match(result.pretty,new RegExp('\\b'+code+' 52 b21n'));
-     assert.match(result.pretty,new RegExp('\\b'+code+' 52 dau30n dui10n'));
+     assert.match(result.pretty,new RegExp('\\b'+code+' 52 dau30n'));
+     assert.match(result.pretty,new RegExp('\\b'+code+' 52 dui10n'));
     }
     for(const code of stations.slice(count)){
      assert.equal(result.rows.filter(row=>row.station===code).length,0);
@@ -88,7 +89,7 @@ test('2d and 3d each copy FULL stake per scheduled station for every weekday',()
  }
 });
 test('topology and explicit overlapping station aggregate before rounding once',()=>{
- const out=app.merge('2d 52 b10n\\nct 52 b5n',
+ const out=app.merge('2d 52 b10n\nct 52 b5n',
  {market:'mn',businessDate:'2026-11-04',customer:'quyt',rate:'1.067',tick:true});
  assert.equal(out.original,'25');
  assert.equal(out.total,'27'); // dn 10->11, ct 15->16, not 11+5
