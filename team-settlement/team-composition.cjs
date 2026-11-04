@@ -53,9 +53,10 @@ function createIsolatedTeamPrototype({
     getScope:denyUnqualifiedRead,listCounterparties:denyUnqualifiedRead,
     getChanges:denyUnqualifiedRead,lookupRecoveryReceipts:denyUnqualifiedRead});
   const ledger=createServerLedgerApi({auth,repository:ledgerRepository,syntheticReviewEnabled,requireSessionLockForWrites:true});
-  // A distinct, separately opted-in recovery inspector wires the actual
-  // actor-scoped PostgreSQL READ ONLY receipt repository into the HTTP route.
-  // Neither construction nor enabling the flag opens a port or database pool.
+  // Recovery inspection is still synthetically routable for negative tests,
+  // but its repository read now fails closed: no PostgreSQL role/tenant proof
+  // has qualified the legacy direct SELECT implementation. Enabling the flag
+  // does not authorize live receipt inspection or open a port by itself.
   const recoveryInspector=syntheticRecoveryInspectEnabled?
     createRecoveryReconciliation({auth,repository:ledgerRepository,
       syntheticOnly:true}):null;
