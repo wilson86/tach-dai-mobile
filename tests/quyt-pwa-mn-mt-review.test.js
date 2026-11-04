@@ -216,3 +216,29 @@ test('unresolved HALF_UP vs CEILING money differences cannot be bypassed by a ch
  assert.equal(r.total,'32');
  assert.equal(r.ceilReference,'34');
 });
+
+
+test('approved complete separator-only lines skip without losing original physical line index',()=>{
+ const opts={businessDate:'2026-10-13'};
+ const marks=['--//-----//--','---//---','----','////','————','___','\\\\\\\\\\\\','|||'];
+ for(const divider of marks){
+  const raw='2d 52 b10n\n'+divider+'\n3d 43 b10n';
+  const x=input('mn',raw,opts);
+  assert.equal(x.sourceCount,2);
+  assert.equal(x.sourceTotal,'20');
+  assert.equal(x.original,'50');
+  assert.equal(x.total,'50');
+ }
+ const full=input('mn','2d. 52. 852. B10n.\n--//-----//--\n3d. 43. 83.b 10n',opts);
+ assert.equal(full.total,'100');
+ assert.equal(full.sourceCount,2);
+ reject('mn','2d 52 b10n\n--//-----//--\n\n\n3d 43 83 b',/tin 5/u,opts);
+});
+test('all-divider input and malformed divider-like text HOLD atomically',()=>{
+ const opts={businessDate:'2026-10-13'};
+ reject('mn','----\n////',/EMPTY_AFTER_PREPROCESS/u,opts);
+ reject('mn','--//-----//--',/EMPTY_AFTER_PREPROCESS/u,opts);
+ for(const bad of ['--//123//--','--//oops//--','---?---','--//-----//--X','-- / --']){
+  reject('mn','2d 52 b10n\n'+bad,/HOLD/u,opts);
+ }
+});
