@@ -37,6 +37,7 @@ test('150 station-day mixed wager sets, tick and untick: 300 independent money o
    }
    assert.equal(out.rows.length,expected.size);
    assert.equal(Number(out.original),expectedRaw);
+   assert.equal(Number(out.sourceTotal),expectedRaw);
    assert.equal(Number(out.total),expectedResult);
    assert.equal(out.sections.reduce((n,x)=>n+Number(x.total),0),expectedResult);
    assert.equal(out.sourceCount,raw.length);
