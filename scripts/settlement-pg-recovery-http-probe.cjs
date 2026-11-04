@@ -60,12 +60,26 @@ ALTER ROLE synthetic_recovery_ledger SET log_parameter_max_length_on_error=0;`);
   const intent={id,status:'QUARANTINED',auto_retry:false,original_status:'PENDING',base_revision:0,scope,payload};
   async function inspect(item){const r=await fetch(origin+'/v1/recovery/receipts/inspect',{method:'POST',headers:{authorization:'Bearer '+token,'content-type':'application/json'},body:JSON.stringify({explicit_consent:true,quarantined:[item]})});return {status:r.status,body:await r.json()};}
   const matched=await inspect(intent);assert.equal(matched.status,200);assert.equal(matched.body.items[0].classification,'MATCHED_SERVER_RECEIPT');assert.equal(matched.body.items[0].auto_retry,false);
+  // Security negative tests on the SAME real PostgreSQL + two LOGIN HTTP path:
+  // the server must reject a different workspace and altered receipt digest.
+  const crossTenant=await inspect({...intent,scope:{...scope,workspace_id:'group_b'}});
+  assert.equal(crossTenant.status,422);
+  assert.equal(crossTenant.body.error,'TEAM_RECOVERY_QUARANTINE_REQUIRED');
+  const tampered=await inspect({...intent,payload:{synthetic:true,tampered:true}});
+  assert.equal(tampered.status,503);
+  assert.equal(tampered.body.error,'TEAM_RECOVERY_RECEIPT_UNVERIFIED');
+  for(const response of [matched,crossTenant,tampered]){
+    const reply=JSON.stringify(response.body);
+    for(const sensitive of [token,hash,scope.partner_id,'session_hash','request_sha256',
+      'payload_sha256','actor_user_id','feed_seq','synthetic_recovery_event'])
+      assert.equal(reply.includes(sensitive),false,'HTTP_PRIVATE_FIELD_LEAK');
+  }
   const missing=await inspect({...intent,id:'draft_'+crypto.randomBytes(16).toString('hex')});assert.equal(missing.status,200);assert.equal(missing.body.items[0].classification,'UNVERIFIED_NOT_SAFE_TO_RETRY');assert.equal(missing.body.auto_send_enabled,false);
   await app.auth.revokeSession(token);const revoked=await inspect(intent);assert.equal(revoked.status,401);
   await assert.rejects(app.ledgerRepository.appendDraft(),/TEAM_DB_ATOMIC_SESSION_BOUNDARY_UNAVAILABLE/);
   const counts=await admin.query("SELECT (SELECT count(*) FROM kts_team.scope_events WHERE event_id='synthetic_recovery_event')::int AS events,(SELECT count(*) FROM kts_team.idempotency_receipts WHERE idempotency_key=$1)::int AS receipts",[id]);
   assert.deepEqual(counts.rows[0],{events:1,receipts:1});
-  process.stdout.write('SYNTHETIC_TWO_LOGIN_HTTP_PG_RECOVERY_PASS matched=1 unknown=1 revoked=1 auto_retry=false events=1 receipts=1 write_block=ENABLED\n');
+  process.stdout.write('SYNTHETIC_TWO_LOGIN_HTTP_PG_RECOVERY_PASS matched=1 unknown=1 revoked=1 cross_tenant_denied=1 tampered_receipt_denied=1 private_reply_redacted=1 auto_retry=false events=1 receipts=1 write_block=ENABLED\n');
  }finally{
   if(server?.listening)await new Promise(resolve=>server.close(resolve));
   if(authPool)await authPool.end();if(ledgerPool)await ledgerPool.end();await admin.end();
