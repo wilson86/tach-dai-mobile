@@ -51,13 +51,13 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Tin đã gộp — sẵn để Copy</h2>
- <div class="totals"><div class="total">TỔNG TIỀN GỐC<strong id="before">—</strong></div><div class="total">TỔNG SAU TICK<strong id="after">—</strong></div></div>
+ <div class="totals"><div class="total">TỔNG GỐC (CHƯA LÀM TRÒN)<strong id="before">—</strong></div><div class="total">TỔNG XUẤT (ĐÃ LÀM TRÒN)<strong id="after">—</strong></div></div>
  <textarea id="result" readonly spellcheck="false" placeholder="Kết quả xuất hiện ngay khi tin hợp lệ."></textarea>
  <div class="actions"><button id="copy" type="button" disabled>COPY TIN GỘP</button><button id="select" class="secondary" type="button" disabled>Chọn toàn bộ để Copy thủ công</button></div>
- <details><summary>Xem bảng đối soát từng số / từng cặp</summary><div class="table-scroll"><table><thead><tr><th>Loại</th><th>Số/cặp</th><th>Gốc (n)</th><th>Sau tick (n)</th></tr></thead><tbody id="details"></tbody></table></div></details>
- <p class="warn tiny">Công cụ tính chính xác trước làm tròn. Chỉ Copy văn bản. Trước khi chuyển cược thật, xác nhận bên nhận hỗ trợ tiền thập phân và tự kiểm số tiền. Không tích hợp gửi tự động.</p>
+ <details><summary>Xem bảng đối soát từng số / từng cặp</summary><div class="table-scroll"><table><thead><tr><th>Loại</th><th>Số/cặp</th><th>Gốc (n)</th><th>Sau nhân, chưa tròn (n)</th><th>Xuất, đã tròn (n)</th></tr></thead><tbody id="details"></tbody></table></div></details>
+ <p class="warn tiny">Quy tắc số tiền xuất: gộp mỗi số/cặp trước, nhân BAO/LÔ một lần nếu tick Quýt; làm tròn từng số/cặp đến n nguyên (phần lẻ &lt; 0.5n xuống, ≥ 0.5n lên). Tổng xuất cộng chính các số đã làm tròn, không làm tròn lại tổng. Bảng đối soát giữ nguyên số chưa làm tròn. Khoản dương bị tròn thành 0n sẽ HOLD. Chỉ Copy văn bản; không tự gửi Router/Telegram.</p>
 </div>
-<footer>Phiên bản cấp tốc độc lập; không thay thế bản KTS production. Dữ liệu không gửi ra Internet. Bản nháp chỉ lưu trong phiên/tab trình duyệt nếu trình duyệt cho phép. Tiền không bao giờ được tự làm tròn.</footer>
+<footer>Phiên bản cấp tốc độc lập; không thay thế bản KTS production. Dữ liệu không gửi ra Internet. Bản nháp chỉ lưu trong phiên/tab trình duyệt nếu trình duyệt cho phép. Chỉ kết quả xuất mới làm tròn theo quy tắc bạn đã chọn; tin nguồn và sổ đối soát chính xác không bị sửa.</footer>
 </main>
 <script>
 'use strict';
@@ -176,23 +176,31 @@ const OfflineKTS=(()=>{
   }
   const sorted=[...rows.values()].sort((a,b)=>rank[a.kind]-rank[b.kind]||(a.kind==='da'?a.seq-b.seq:(a.amount===b.amount?a.peakOrder-b.peakOrder:(a.amount>b.amount?-1:1))));
   let original=0n,adjusted=0n;
-  for(const row of sorted){row.exact=row.amount*(opts.tick&&row.kind==='b'?multiplier:D);original+=row.amount;adjusted+=row.exact}
+  // Operator rule: round EACH canonical number/pair AFTER merging and multiplying.
+  // BigInt half-up: < 0.5n DOWN; >= 0.5n UP. Never round the grand total
+  // independently: its value must equal the sum of printed stake amounts.
+  for(const row of sorted){
+   row.exact=row.amount*(opts.tick&&row.kind==='b'?multiplier:D);
+   row.rounded=((row.exact+M/2n)/M)*M;
+   if(row.exact>0n&&row.rounded===0n)fail('HOLD: tiền dương làm tròn thành 0n; cần quyết định khách',row.number+' '+row.kind);
+   original+=row.amount;adjusted+=row.rounded;
+  }
   const grouped=[];
   for(const row of sorted){const last=grouped.at(-1);
-   if(row.kind!=='da'&&last&&last.kind===row.kind&&last.exact===row.exact){last.numbers.push(row.number)}
-   else grouped.push({kind:row.kind,numbers:[row.number],exact:row.exact});
+   if(row.kind!=='da'&&last&&last.kind===row.kind&&last.rounded===row.rounded){last.numbers.push(row.number)}
+   else grouped.push({kind:row.kind,numbers:[row.number],rounded:row.rounded});
   }
   const out=[];
   for(let i=0;i<grouped.length;i++){
    const g=grouped[i],prev=grouped[i-1];
    if(prev&&rank[prev.kind]!==rank[g.kind])out.push('');
-   const v=fmt(g.exact,M);
+   const v=fmt(g.rounded,M);
    if(g.kind==='dui'&&prev&&prev.kind==='dau'&&prev.numbers.length===1&&g.numbers.length===1&&prev.numbers[0]===g.numbers[0]){
     if(out.at(-1)==='')out.pop();out[out.length-1]=out.at(-1).slice(0,-1)+' dui'+v+'n.';
    }else out.push(g.numbers.map(n=>n.replace('-',' ')).join(' ')+' '+g.kind+v+'n.');
   }
   const pretty=(displayHN?'HN\n':'')+out.join('\n');
-  return {pretty,original:fmt(original,D),total:fmt(adjusted,M),rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),adjusted:fmt(r.exact,M)})),sourceCount:lines.length};
+  return {pretty,original:fmt(original,D),total:fmt(adjusted,M),rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
  return Object.freeze({merge,fmt,decimal,missingDaN});
 })();
@@ -216,8 +224,8 @@ function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=t
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
   current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
   $('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
-  for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),row.number.replace('-','–'),row.raw,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
-  message('ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'Chỉ BAO/LÔ được nhân ×'+rate.value+'.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Tin sẵn để Copy.',false);
+  for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
+  message('ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'Chỉ BAO/LÔ được nhân ×'+rate.value+'.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Đã làm tròn từng số/cặp xuống nếu lẻ <0.5n, lên nếu ≥0.5n; tổng xuất bằng tổng các khoản đã làm tròn. Tin sẵn để Copy.',false);
  }catch(e){const reason=String(e.message||e);if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu các số đó thật sự là tiền theo đơn vị n, bấm Xác nhận. Không tự thêm n.',true)}else if(reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: Có 2 tin cùng nội dung. Nếu khách thật sự đặt hai lượt riêng, bấm Xác nhận để cộng đủ. Nếu chỉ dán lặp, sửa ô nguồn.',true)}else message('HOLD: '+reason+'. Chưa có tin nào được xuất.',true)}
 }
 raw.addEventListener('input',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});market.addEventListener('change',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});

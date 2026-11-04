@@ -34,7 +34,7 @@ test('BAO/LO missing n after approval multiplies once only when ticked',()=>{
  assert.equal(core.missingDaN(raw).length,1);
  const base=core.merge(raw,{...opts,confirmMissingDaN:true});
  const adjusted=core.merge(raw,{...opts,confirmMissingDaN:true,tick:true});
- assert.equal(base.total,'40');assert.equal(adjusted.total,'42.68');
+ assert.equal(base.total,'40');assert.equal(adjusted.total,'42');
 });
 test('no text alteration by merge, no unapproved decimal or XC admission',()=>{
  const raw='21 22 da 20';const before=raw;
@@ -54,8 +54,8 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v3',()=>{
+test('new standalone service-worker key must be version v4',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v3-missing-unit-confirm/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261104-v4-half-up-integer/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });

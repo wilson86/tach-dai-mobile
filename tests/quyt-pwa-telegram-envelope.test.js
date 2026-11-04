@@ -20,7 +20,7 @@ test('Telegram headers for two distinct messages with same timestamp are accepte
 });
 test('Only Quýt BAO/LO is multiplied once, including decimal amount',()=>{
  const r=app.merge(wrapped(a)+'\n'+wrapped(b),{...args,tick:true});
- assert.equal(r.total,'18.005');assert.match(r.pretty,/21 b16\.005n/u);assert.match(r.pretty,/21 dd2n/u);
+ assert.equal(r.total,'18');assert.match(r.pretty,/21 b16n/u);assert.match(r.pretty,/21 dd2n/u);
  assert.equal(app.merge(wrapped(a)+'\n'+wrapped(b),{...args,rate:'invalid',tick:false}).total,'17');
 });
 test('Wrong sender, invalid timestamp, malformed header and missing HN HOLD',()=>{
@@ -44,6 +44,6 @@ test('Duplicated pasted message contents require independent confirmation',()=>{
 test('Offline release cache marker is updated and UI explains Telegram source',()=>{
  assert.match(html,/Dán <b>nguyên văn Telegram<\/b>/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v3-missing-unit-confirm/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261104-v4-half-up-integer/u);
  assert.doesNotMatch(html,/\b(?:fetch|XMLHttpRequest)\s*\(/u);
 });
