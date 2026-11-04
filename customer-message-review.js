@@ -50,7 +50,7 @@ function aggregate(messages,options){
   if(tags.length!==parsed.clauses.length)throw Error("SOURCE_PROVENANCE_HOLD");
   for(let i=0;i<parsed.clauses.length;i++){
    const c=parsed.clauses[i],tag=tags[i][1].toLowerCase().replace(/\s+/gu,"");
-   const kind=tag==="b"?"b":["bao","baolo","lô","lo","bl","blo"].includes(tag)?"lo":c.kind;
+   const kind=["b","bao","baolo","lô","lo","bl","blo"].includes(tag)?"lo":c.kind;
    if(!c.station)throw Error("STATION_REQUIRED_HOLD");
    for(const number of c.numbers){
     const key=JSON.stringify([c.station,kind,number]);let entry=grouped.get(key);
@@ -60,11 +60,11 @@ function aggregate(messages,options){
    }
   }
  }
- for(const e of grouped.values())if(e.kind==="b"&&grouped.has(JSON.stringify([e.station,"lo",e.number])))throw Error("B_LO_AUTHORITY_HOLD");
+ // Approved Bao/Lô sameness in review only; Router money and transfer remain HOLD.
  function decimal(n,d){let out=(n/d).toString(),r=n%d,f="";while(r&&f.length<8){r*=10n;f+=(r/d).toString();r%=d}if(r)throw Error("EXACT_DECIMAL_HOLD");return out+(f?"."+f:"")}
- const order={b:0,lo:0,dd:2,dau:4,duoi:5};
+ const order={lo:0,dd:2,dau:4,duoi:5};
  const entries=[...grouped.values()].sort((a,b)=>(order[a.kind]??99)-(order[b.kind]??99));
- for(const e of entries){e.original=decimal(BigInt(e.half),2n);const apply=e.kind==="b"||e.kind==="lo";e.exact=decimal(BigInt(e.half)*(apply?factor.numerator:1n),2n*(apply?factor.denominator:1n));e.rounded=null;}
+ for(const e of entries){e.original=decimal(BigInt(e.half),2n);const apply=e.kind==="lo";e.exact=decimal(BigInt(e.half)*(apply?factor.numerator:1n),2n*(apply?factor.denominator:1n));e.rounded=null;}
  return Object.freeze({entries,rate:factor.normalized,roundingPolicy:"HOLD_UNAPPROVED",forwardAuthorized:false});
 }
 
