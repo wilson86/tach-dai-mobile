@@ -20,7 +20,11 @@ async function issueForReview({auth, keyAuthority, nonceSource, bearerToken, key
     typeof bearerToken !== 'string' || !/^[A-Za-z0-9_-]{32,128}$/.test(bearerToken) ||
     !Number.isSafeInteger(nowSeconds) || nowSeconds < 0) deny();
   validateKeys(keys);
+  let invocationCount = 0;
+  let issuedProof;
   const signed = await auth.authorizeReceiptRead(bearerToken, async verifiedSession => {
+    invocationCount++;
+    if (invocationCount !== 1) deny();
     // Trust in verifiedSession depends ENTIRELY on real auth service behavior.
     if (!verifiedSession || verifiedSession.server_verified !== true ||
       verifiedSession.membership_active !== true ||
@@ -31,10 +35,12 @@ async function issueForReview({auth, keyAuthority, nonceSource, bearerToken, key
       !HEX16.test(material.keyId || '')) deny();
     const nonce = await nonceSource();
     if (typeof nonce !== 'string' || !HEX32.test(nonce)) deny();
-    return signForReview({backendKey:material.key, keyId:material.keyId,
+    issuedProof = signForReview({backendKey:material.key, keyId:material.keyId,
       verifiedSession, keys, nonce, nowSeconds});
+    return issuedProof;
   });
-  if (!signed || !HEX32.test(signed.nonce || '') ||
+  if (invocationCount !== 1 || signed !== issuedProof ||
+    !signed || !HEX32.test(signed.nonce || '') ||
     typeof signed.proof !== 'string' || !/^[a-f0-9]{64}$/.test(signed.proof) ||
     Object.prototype.hasOwnProperty.call(signed, 'key') ||
     Object.prototype.hasOwnProperty.call(signed, 'bearerToken')) deny();
