@@ -242,3 +242,14 @@ test('all-divider input and malformed divider-like text HOLD atomically',()=>{
   reject('mn','2d 52 b10n\n'+bad,/HOLD/u,opts);
  }
 });
+
+
+test('Windows CRLF pasted source: approved divider skips and physical error lines remain exact',()=>{
+ const opts={businessDate:'2026-10-13'};
+ const good=input('mn','2d 52 b10n\r\n--//-----//--\r\n3d 43 b10n',opts);
+ assert.equal(good.sourceCount,2);
+ assert.equal(good.sourceTotal,'20');
+ assert.equal(good.original,'50');
+ assert.equal(good.total,'50');
+ reject('mn','2d 52 b10n\r\n--//-----//--\r\n\r\n3d 43 83 b',/tin 4/u,opts);
+});
