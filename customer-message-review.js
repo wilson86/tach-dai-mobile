@@ -44,7 +44,7 @@ function aggregate(messages,options){
   if(!message||message.customer_id!==options.customerId||message.market!==options.market||message.business_date!==options.businessDate||message.message_status!=="RAW_SOURCE"||!message.source_message_id||ids.has(message.source_message_id))throw Error("SOURCE_SCOPE_OR_ID_HOLD");
   ids.add(message.source_message_id);
   if(/(^|\n)\s*\|[^\n]*\d|\.\./u.test(message.original_text))throw Error("MALFORMED_PREFIX_HOLD");
-  let parsed;try{parsed=core.sourceExposures(message.original_text,cleanCore,options.market)}catch(error){throw Error(String(error.message||error)+" message_id="+message.source_message_id)}
+  let parsed;try{parsed=core.sourceExposures(message.original_text,cleanCore,options.market,options)}catch(error){throw Error(String(error.message||error)+" message_id="+message.source_message_id)}
   if(parsed.repeatBlocks.length)throw Error("DUPLICATE_OPERATOR_CONFIRMATION_REQUIRED");
   const tags=[...message.original_text.matchAll(/((?:bao[ \t]+lo|blo|bao|lô|lo|bl|b|dd|d-d|dau|duoi|dui|đui|đầu|đuôi))[ \t]*(\d+(?:[.,]\d+)?)n(?![\p{L}\p{N}])/giu)];
   if(tags.length!==parsed.clauses.length)throw Error("SOURCE_PROVENANCE_HOLD");
