@@ -213,12 +213,16 @@ const OfflineKTS=(()=>{
   if(head)line=line.slice(head[0].length);
   if(!line.trim())fail('Tin không có cược',`tin ${index+1}`);
   const tokens=lex(line,index),bets=[];
-  let i=0,pending=[],previous=[];
+  let i=0,pending=[],previous=[],usedTypes=new Set();
   while(i<tokens.length){const token=tokens[i];
    if(token.type==='num'){pending.push(token.raw);i++;continue}
    if(token.type==='stake')fail('Số tiền không có loại cược',`tin ${index+1}`);
    const selector=T[token.raw.toLocaleLowerCase('vi-VN').replace(/\s+/gu,' ')];
    if(!selector)fail('Loại cược chưa được duyệt',token.raw);
+   // APPROVED N020/N021: same canonical selector needs fresh explicit numbers.
+   // Different types (B+DD, DAU+DUI) may reuse their previous number group.
+   if(pending.length)usedTypes=new Set();
+   if(usedTypes.has(selector))fail('HOLD: lặp loại cược khi chưa ghi nhóm số mới',`tin ${index+1}: ${token.raw}`);
    const nums=pending.length?pending.slice():previous.slice();
    if(!nums.length)fail('Loại cược không có số',`tin ${index+1}: ${token.raw}`);
    if(!tokens[i+1]||tokens[i+1].type!=='stake')fail('Thiếu tiền hoặc thiếu n',`tin ${index+1}: ${token.raw}`);
@@ -231,7 +235,7 @@ const OfflineKTS=(()=>{
    const money=decimal(tokens[i+1].raw.slice(0,-1));if(money<=0n)fail('Số tiền phải lớn hơn 0',`tin ${index+1}`);
    if(selector==='da'){bets.push({kind:'da',number:nums.slice().sort().join('-'),money,source:index})}
    else for(const number of nums)bets.push({kind:selector,number,money,source:index});
-   previous=nums;pending=[];i+=2;
+   usedTypes.add(selector);previous=nums;pending=[];i+=2;
   }
   if(pending.length)fail('Có số chưa ghi loại cược hoặc tiền',`tin ${index+1}`);
   if(!bets.length)fail('Tin không có cược',`tin ${index+1}`);
