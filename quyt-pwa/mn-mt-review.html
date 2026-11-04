@@ -247,11 +247,16 @@ const OfflineKTS=(()=>{
   const sourceAfterApproval=candidates.length?applyMissingDaN(raw):raw;
   // Keep physical source line numbers even when blank lines separate Telegram messages.
   const physicalLines=[];
+  // Canonical APPROVED ingress separators are complete lines of >=3
+  // - / en dash / em dash / _ / slash / backslash / pipe ONLY.
+  // Spaces inside or any letters/digits are NOT separators: fail closed.
+  const dividerRe=/^[-–—_/\\|]{3,}$/u;
   const lines=sourceAfterApproval.split(/\r?\n/u).filter((line,index)=>{
-   if(!line.trim())return false;
+   if(!line.trim()||dividerRe.test(line.trim()))return false;
    physicalLines.push(index+1);
    return true;
   });
+  if(!lines.length)fail('EMPTY_AFTER_PREPROCESS: chỉ có dòng trống hoặc đường phân cách, không có cược');
   if(lines.length>100)fail('Tối đa 100 tin mỗi lần');
   // Treat the Telegram date/time and sender ONLY as a verified envelope, never as a wager.
   // Keep raw unchanged in the textarea. Each physical line is an independent message.
