@@ -14,7 +14,7 @@ function receipt(value){
     fail('TEAM_PILOT_RECEIPT_INVALID');
   return value;
 }
-function verifyFeed(feed,receipts){
+function verifyFeed(feed,receipts,workspaceId){
   const items=feed?.items;
   if(!Array.isArray(items)||items.length<receipts.length||items.length>20)
     fail('TEAM_PILOT_FEED_INVALID');
@@ -23,6 +23,7 @@ function verifyFeed(feed,receipts){
     if(!item||typeof item!=='object'||Array.isArray(item)||
        typeof item.event_id!=='string'||!ID.test(item.event_id)||
        !positiveSequence(item.feed_seq)||item.feed_seq<=prev||
+       (item.workspace_id!==undefined&&item.workspace_id!==workspaceId)||
        byId.has(item.event_id))fail('TEAM_PILOT_FEED_INVALID');
     byId.set(item.event_id,item);prev=item.feed_seq;
   }
@@ -45,7 +46,7 @@ function createLocalPilotRunner(deps={}){
   const assertAdminRoutesDisabled=requireFn(deps.assertAdminRoutesDisabled,'assertAdminRoutesDisabled');
   async function run({operator,reviewer,scope,draftKey,submitKey,approveKey}={}){
     if(!operator||!reviewer||!scope||![draftKey,submitKey,approveKey].every(x=>typeof x==='string'&&x.length>=16)||new Set([draftKey,submitKey,approveKey]).size!==3)fail('TEAM_PILOT_INPUT_INVALID');
-    const op=await login(operator);if(!op||op.workspace_id!==scope.workspace_id||op.role!=='operator')fail('TEAM_PILOT_OPERATOR_INVALID');
+    const op=await login(operator);if(!op||op.workspace_id!==scope.workspace_id||op.role!=='operator'||typeof op.user_id!=='string'||!ID.test(op.user_id))fail('TEAM_PILOT_OPERATOR_INVALID');
     const draft=receipt(await createDraft(op,scope,{idempotency_key:draftKey,expected_revision:0}));
     if(draft.state!=='DRAFT'||draft.revision!==1)fail('TEAM_PILOT_DRAFT_INVALID');
     const submitted=receipt(await review(op,scope,{action:'submit',expected_revision:draft.revision,idempotency_key:submitKey}));
@@ -56,7 +57,7 @@ function createLocalPilotRunner(deps={}){
     if(approved.state!=='REVIEWED'||approved.revision!==submitted.revision+1||approved.feed_seq<=submitted.feed_seq||approved.event_id===draft.event_id||approved.event_id===submitted.event_id)fail('TEAM_PILOT_RECEIPT_INVALID');
     const state=await getScope(rv,scope);if(!state||state.revision!==approved.revision||state.state!=='REVIEWED')fail('TEAM_PILOT_STATE_INVALID');
     const feed=await getChanges(rv,{cursor:null,limit:20});
-    const verifiedFeedCount=verifyFeed(feed,[draft,submitted,approved]);
+    const verifiedFeedCount=verifyFeed(feed,[draft,submitted,approved],scope.workspace_id);
     await assertMembershipGuard();await assertAdminRoutesDisabled();
     return Object.freeze({status:'PASS',draft,submitted,approved,feed_count:verifiedFeedCount});
   }
