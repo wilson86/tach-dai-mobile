@@ -54,3 +54,47 @@ test('physical blank lines and region source marker do not become money',()=>{
  {market:'mn',businessDate:'2026-11-04',customer:'quyt',tick:false,rate:'1.067'}),
  /HN nằm sau/u);
 });
+
+// Canonical KTS topology authority: FIRST TWO/THREE active weekday stations
+// and FULL_PER_SEMANTIC_STATION stake. Not a horizontal division.
+test('2d and 3d each copy FULL stake per scheduled station for every weekday',()=>{
+ for(const market of ['mn','mt']){
+  for(let i=0;i<7;i++){
+   const date='2026-11-'+String(1+i).padStart(2,'0');
+   const stations=Array.from(app.schedule(market,date),x=>x[0]);
+   for(const count of [2,3]){
+    const raw=count+'d 52 b20n dau30n dui10n';
+    const options={market,businessDate:date,customer:'quyt',rate:'1.067',tick:true};
+    if(stations.length<count){
+     assert.throws(()=>app.merge(raw,options),/không đủ.*đài/u);
+     continue;
+    }
+    const result=app.merge(raw,options);
+    assert.equal(result.rows.length,count*3);
+    assert.equal(result.original,String(count*60));
+    assert.equal(result.total,String(count*61));
+    assert.equal(result.sections.reduce((sum,frame)=>sum+Number(frame.total),0),count*61);
+    assert.equal(result.pretty.includes('MN '),false);
+    assert.equal(result.pretty.includes('MT '),false);
+    for(const code of stations.slice(0,count)){
+     assert.match(result.pretty,new RegExp('\\b'+code+' 52 b21n'));
+     assert.match(result.pretty,new RegExp('\\b'+code+' 52 dau30n'));
+     assert.match(result.pretty,new RegExp('\\b'+code+' 52 dui10n'));
+    }
+    for(const code of stations.slice(count)){
+     assert.equal(result.rows.filter(row=>row.station===code).length,0);
+    }
+   }
+  }
+ }
+});
+test('topology and explicit overlapping station aggregate before rounding once',()=>{
+ const out=app.merge('2d 52 b10n\nct 52 b5n',
+ {market:'mn',businessDate:'2026-11-04',customer:'quyt',rate:'1.067',tick:true});
+ assert.equal(out.original,'25');
+ assert.equal(out.total,'27'); // dn 10->11, ct 15->16, not 11+5
+ assert.equal(out.rows.length,2);
+ assert.match(out.pretty,/dn 52 b11n/u);
+ assert.match(out.pretty,/ct 52 b16n/u);
+ assert.equal(out.sections.reduce((sum,x)=>sum+Number(x.total),0),27);
+});

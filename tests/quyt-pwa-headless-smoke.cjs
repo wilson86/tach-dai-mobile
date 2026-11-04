@@ -26,9 +26,9 @@ try{
  select('businessDate','2026-11-04');
  assert('valid date enables Copy',!$('copy').disabled && $('after').textContent==='10n');
  await click('copy');
- assert('full Copy actually fired',window.__qaClipboard==='MN 2026-11-04\\ndn 21 b10n.');
+ assert('full Copy actually fired',window.__qaClipboard==='dn 21 b10n.');
  await pane('b','.section-copy').click();await Promise.resolve();await Promise.resolve();
- assert('B group Copy fired',window.__qaClipboard==='MN 2026-11-04\\ndn 21 b10n.');
+ assert('B group Copy fired',window.__qaClipboard==='dn 21 b10n.');
  $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
  assert('Quyt tick scales once',$('after').textContent==='11n'&&pane('b','.section-text').value.includes('dn 21 b11n.'));
  set('raw','mn dn 21 b10n\\nmn ct 21 b10n');
@@ -39,8 +39,16 @@ try{
  assert('same clause double stake HOLD',$('copy').disabled&&$('status').textContent.includes('số lặp'));
  set('raw','mn dn 21 b10n\\n\\nmn ct 21 b10n\\n\\nmn ct 21 xx10n');
  assert('error physical line 5',$('copy').disabled&&$('status').textContent.includes('tin 5'));
- set('raw','mn dn 21 b10n\\nmn 2d 21 b10n');
- assert('2d and all sibling Copy HOLD',$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
+ set('raw','21 b10n');
+ assert('no station and no topology HOLD',$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
+ set('raw','2d 52 b10n');
+ assert('2d expands 2 active stations',!$('copy').disabled&&$('after').textContent==='22n'&&$('result').value.includes('dn 52 b11n.')&&$('result').value.includes('ct 52 b11n.'));
+ await click('copy');
+ assert('2d Copy has no MN/MT label',window.__qaClipboard.includes('ct 52 b11n.')&&!window.__qaClipboard.includes('MN')&&!window.__qaClipboard.includes('MT'));
+ set('raw','3đ 52 b10n');
+ assert('3đ expands 3 scheduled stations',$('after').textContent==='33n'&&$('result').value.includes('st 52 b11n.'));
+ set('raw','2d. 52. 852. B10n.');
+ assert('legacy compact 3-digit accepted',$('after').textContent==='44n'&&$('result').value.includes('852 b11n.'));
  set('raw','mn dn 21 xc10n');
  assert('XC and all sibling Copy HOLD',$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
  set('raw','[11/4/2026 6:06 PM] Cô Quýt: mn dn 21 b10n');
@@ -49,10 +57,14 @@ try{
  assert('change date invalidates stale Copy',$('copy').disabled);
  select('market','mt');
  select('businessDate','2026-11-04');
- set('raw','mt dn 21 b10n');
- assert('MT valid station',$('after').textContent==='11n'&&!$('copy').disabled);
+ set('raw','dn 21 b10n');
+ assert('MT valid station without prefix',$('after').textContent==='11n'&&!$('copy').disabled);
+ set('raw','3d 21 b10n');
+ assert('MT 3d missing third station HOLD',$('copy').disabled);
+ set('raw','2đ 21 b10n');
+ assert('MT 2đ has 2 scheduled stations',$('after').textContent==='22n'&&$('result').value.includes('kh 21 b11n.'));
  select('market','mn');
- assert('change region invalidates stale Copy',$('copy').disabled);
+ assert('change region recomputes 2đ for MN, never carries MT station',!$('copy').disabled&&$('result').value.includes('ct 21 b11n.')&&!$('result').value.includes('kh 21 b11n.'));
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
