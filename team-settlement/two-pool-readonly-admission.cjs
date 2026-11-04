@@ -6,6 +6,11 @@ const ROLE=/^[a-z][a-z0-9_]{2,62}$/;
 const FINANCIAL_TABLES=['workspaces','memberships','counterparties','scopes',
  'scope_events','idempotency_receipts','identities'];
 const TABLE_MUTATIONS=['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
+const AUTH_FORBIDDEN_READ_TABLES=['workspaces','counterparties','scopes'];
+const AUTH_FORBIDDEN_READS=AUTH_FORBIDDEN_READ_TABLES.map(name=>
+ `(has_table_privilege(current_user,'kts_team.${name}','SELECT') OR `+
+ `has_any_column_privilege(current_user,'kts_team.${name}','SELECT')) AS auth_read_${name}`
+).join(',');
 const FINANCIAL_GRANTS=FINANCIAL_TABLES.flatMap(name=>{
  const table=`kts_team.${name}`;
  return [...TABLE_MUTATIONS.map(verb=>`has_table_privilege(current_user,'${table}','${verb}')`),
@@ -36,6 +41,7 @@ const AUDIT_SQL=[
 "has_column_privilege(current_user,'kts_team.identities','disabled_at','SELECT') AS read_identity_disabled_at,",
 "has_column_privilege(current_user,'kts_team.identities','auth_subject','SELECT') AS read_identity_auth_subject,",
 "has_table_privilege(current_user,'kts_team.scope_events','SELECT') AS read_scope_events,",
+`${AUTH_FORBIDDEN_READS},`,
 "has_table_privilege(current_user,'kts_team.idempotency_receipts','SELECT') AS read_receipts,",
 "has_any_column_privilege(current_user,'kts_team.scope_events','SELECT') AS read_scope_events_any_column,",
 "has_any_column_privilege(current_user,'kts_team.idempotency_receipts','SELECT') AS read_receipts_any_column,",
@@ -59,7 +65,8 @@ const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_sche
  'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','any_financial_mutation','read_credentials','read_sessions',
  'read_credentials_any_column','read_sessions_any_column',
  'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
- 'read_scope_events','read_receipts','read_scope_events_any_column','read_receipts_any_column','insert_receipts','update_receipts',
+ 'read_scope_events','read_receipts','read_scope_events_any_column','read_receipts_any_column',
+ 'auth_read_workspaces','auth_read_counterparties','auth_read_scopes','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
  'update_scopes','update_scopes_any_column','update_memberships',
  'insert_workspaces','insert_sessions','insert_sessions_any_column','revoke_sessions'];
@@ -103,7 +110,8 @@ function assess(auth,ledger,authName,ledgerName){
     auth.read_memberships!==true||auth.read_identity_user_id!==true||
     auth.read_identity_disabled_at!==true||auth.read_identity_auth_subject!==true||
     auth.read_scope_events!==false||auth.read_receipts!==false||
-    auth.read_scope_events_any_column!==false||auth.read_receipts_any_column!==false)
+    auth.read_scope_events_any_column!==false||auth.read_receipts_any_column!==false||
+    AUTH_FORBIDDEN_READ_TABLES.some(name=>auth[`auth_read_${name}`]!==false))
    deny('TEAM_TWO_POOL_AUTH_MINIMUM_MISMATCH');
  if(ledger.read_credentials!==false||ledger.read_sessions!==false||
     ledger.read_credentials_any_column!==false||ledger.read_sessions_any_column!==false||

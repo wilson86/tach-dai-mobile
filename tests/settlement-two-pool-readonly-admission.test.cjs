@@ -14,7 +14,8 @@ function row(role,kind){
   read_identity_user_id:true,read_identity_disabled_at:true,
   read_identity_auth_subject:kind==='auth',read_scope_events:kind==='ledger',
   read_receipts:kind==='ledger',read_scope_events_any_column:kind==='ledger',
-  read_receipts_any_column:kind==='ledger',insert_receipts:false,update_receipts:false,
+  read_receipts_any_column:kind==='ledger',auth_read_workspaces:false,
+  auth_read_counterparties:false,auth_read_scopes:false,insert_receipts:false,update_receipts:false,
   update_receipts_any_column:false,insert_scope_events:false,insert_scopes:false,
   update_scopes:false,update_scopes_any_column:false,update_memberships:false,
   insert_workspaces:false,insert_sessions:kind==='auth',insert_sessions_any_column:kind==='auth',revoke_sessions:kind==='auth',
@@ -101,6 +102,18 @@ test('Auth must not have even column-level receipt or event SELECT',()=>{
  for(const table of ['scope_events','idempotency_receipts'])
   assert.ok(A.AUDIT_SQL.includes(`has_any_column_privilege(current_user,'kts_team.${table}','SELECT')`));
  assert.equal(A.assess(auth,ledger,...roles).production_qualified,false);
+});
+test('Auth denies table or column SELECT on workspaces, counterparties and scopes',()=>{
+ const [auth,ledger]=fresh();
+ for(const table of ['workspaces','counterparties','scopes']){
+  const key=`auth_read_${table}`;
+  assert.throws(()=>A.assess({...auth,[key]:true},ledger,...roles),/AUTH_MINIMUM_MISMATCH/);
+  const missing={...auth};delete missing[key];
+  assert.throws(()=>A.assess(missing,ledger,...roles),/RESULT_MISSING/);
+  for(const fn of ['has_table_privilege','has_any_column_privilege'])
+   assert.ok(A.AUDIT_SQL.includes(`${fn}(current_user,'kts_team.${table}','SELECT')`));
+ }
+ assert.equal(A.assess(auth,ledger,...roles).write_block,'ENABLED');
 });
 test('missing COMMIT command tag is fatal even for audit SELECT',async()=>{
  const [a,b]=fresh(),events=[];
