@@ -4,6 +4,7 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
+const crypto=require('node:crypto');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const candidate=read('team-settlement/candidate/session-bound-receipt-read-v1.sql');
@@ -17,6 +18,8 @@ test('candidate is a non-deployed SECURITY DEFINER with no implicit PUBLIC/RUNTI
  assert.match(candidate,/FROM PUBLIC;/);
  assert.match(candidate,/OWNER TO kts_receipt_read_owner;/);
  assert.match(candidate,/NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls/);
+ assert.match(candidate,/pg_catalog\.pg_auth_members m/);
+ assert.match(candidate,/r\.rolname='kts_receipt_read_owner'/);
  assert.doesNotMatch(candidate,/\bGRANT\s+(?:SELECT|EXECUTE|ALL)\s+/i);
  assert.doesNotMatch(candidate,/\bDROP\s+(?:TABLE|ROLE|FUNCTION)\s+/i);
 });
@@ -27,11 +30,20 @@ test('signature and scope are derived from ACTIVE authenticated DB session, NOT 
  assert.match(candidate,/kts-receipt-read-v1/);
  assert.match(candidate,/kts_crypto\.hmac\(/);
  assert.match(candidate,/pg_catalog\.decode\(v_secret,'hex'\)/);
+ assert.match(candidate,/session hash is derivable from the bearer/);
  assert.match(candidate,/set_config\('kts\.workspace_id',v_workspace,true\)/);
  assert.match(candidate,/m\.revoked_at IS NULL AND i\.disabled_at IS NULL/);
  assert.match(candidate,/v_role NOT IN \('admin','operator'\)/);
  assert.match(candidate,/e\.actor_user_id=v_user/);
  assert.match(candidate,/r\.workspace_id=v_workspace/);
+});
+test('a bearer holder can derive the proposed HMAC key; backend origin is not proven',()=>{
+ const bearer='synthetic_bearer_'+ 'a'.repeat(40);
+ const sessionHash=crypto.createHash('sha256').update(bearer).digest();
+ const independentlyDerived=crypto.createHash('sha256').update(bearer).digest('hex');
+ const message='kts-receipt-read-v1|synthetic|group_a|draft_key|nonce|123';
+ assert.equal(crypto.createHmac('sha256',sessionHash).update(message).digest('hex'),
+   crypto.createHmac('sha256',Buffer.from(independentlyDerived,'hex')).update(message).digest('hex'));
 });
 test('read request is bounded and deterministic; no mutation, locks or SQL injection interpolations',()=>{
  assert.match(candidate,/pg_catalog\.cardinality\(p_keys\) NOT BETWEEN 1 AND 30/);

@@ -11,6 +11,10 @@ BEGIN
        AND NOT rolcanlogin AND NOT rolsuper AND NOT rolbypassrls
        AND NOT rolcreaterole AND NOT rolcreatedb AND NOT rolreplication
   ) OR EXISTS (
+    SELECT 1 FROM pg_catalog.pg_auth_members m
+    JOIN pg_catalog.pg_roles r ON r.oid=m.member
+    WHERE r.rolname='kts_receipt_read_owner'
+  ) OR EXISTS (
     SELECT 1 FROM pg_catalog.pg_class c
     JOIN pg_catalog.pg_roles r ON r.oid=c.relowner
     WHERE r.rolname='kts_receipt_read_owner'
@@ -42,6 +46,8 @@ DECLARE
 BEGIN
   -- A caller-supplied tenant GUC or actor GUC is NEVER authentication.
   -- All authorization inputs are bound to a per-session, expiry-limited HMAC.
+  -- The session hash is derivable from the bearer: this HMAC is NOT proof
+  -- that the request came from a trusted backend rather than a bearer holder.
   IF p_session_id IS NULL OR p_session_id !~ '^[a-f0-9]{64}$'
     OR p_nonce IS NULL OR p_nonce !~ '^[a-f0-9]{32}$'
     OR p_proof IS NULL OR p_proof !~ '^[a-f0-9]{64}$'
