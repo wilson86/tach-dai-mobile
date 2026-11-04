@@ -49,3 +49,18 @@ These are *source-level paths*, NOT proof that every privilege is granted to eac
 No production runtime path imports this design fixture, and no migration or runtime grant has been changed. Do not treat 6/6 local Node fixture PASS as PostgreSQL tenant isolation.
 
 **Reviewer verdict:** Source design clarification/negative fixture complete. `V1=REJECTED`; `V2=DESIGN_ONLY`; `INDEPENDENT_SECURITY_SIGNOFF=NOT_GRANTED`; `POSTGRES_DDL=NOT_RUN`; `WRITE_BLOCK=ENABLED`; `RELEASE=NO_GO`; `PRODUCTION_MUTATION=NONE`; `COST_USD=0`.
+
+
+## Executable source-risk census added (2026-11-04)
+
+`scripts/settlement-read-surface-audit.cjs` is a **read-only local source diagnostic**, deliberately not a PostgreSQL security attestation. It scans only the actual Ledger and Auth repository implementation source files, inventories literal `FROM/JOIN kts_team.*` and `kts_auth.*` references by surrounding method, and returns:
+
+- `BLOCKED_DIRECT_SQL_TENANT_READ` with exit code 2 whenever any known direct tenant read is present. This is an intentionally negative diagnostic. Running it successfully and observing exit 2 is **not** tenant isolation PASS.
+- `REVIEW_REQUIRED_NO_STATIC_READS`, never security PASS, if the static scan finds none. Dynamic SQL, role/ACL policy and runtime auth could still be wrong.
+- Fail-closed errors if either canonical source file is missing or an unrecognized `kts_team/kts_auth` table is encountered. This is a regex-based census, not a complete parser or evidence of effective DB grants.
+
+On GitHub HEAD `6c1c77f81c7057c3aac830a07d070d8a87881034`, the static scan of fetched Ledger blob `4ee2d59cbcd6ff110fcf9fd06f7c7e39cf8c1095` and Auth blob `fa1e12b9be227dd0e6c9a3a231d4598b18b373a3` found **16 direct FROM/JOIN clauses over 9 methods**, including Auth `manageMembership` not listed in the original eight-path inventory. These are *read references*, NOT 16 proven credential access violations.
+
+The isolated local Node 22.16.0 test `node --test tests/settlement-read-surface-audit.test.cjs` has **4/4 PASS** using two **synthetic source-shaped stand-ins**; both test and audit script are exact GitHub blob-byte matches (`580a4c436b0148e8ee3dfdfeff0ca7548c35d7f3`, `994b9c5d4259dc7ce123a811a0b22970ace9b18b`). Because direct Git clone is blocked in the local container, full native test against the entire actual repository checkout is **NOT_RUN**. The actual GitHub source text was separately inspected through the connector; no claim of native full-checkout QA is made.
+
+**Operational rule:** Do not revoke direct SELECT in production until every affected Ledger read path has a reviewed replacement and regression evidence. Do not mark tenant security PASS merely because this diagnostic correctly reports BLOCKED. No runtime, SQL migration, deployment or write gate changed.
