@@ -3,6 +3,14 @@
 // No connection, credentials, network, SQL writes or deployment on import.
 const {createPgTransactionAdapter}=require('./pg-transaction-adapter.cjs');
 const ROLE=/^[a-z][a-z0-9_]{2,62}$/;
+const FINANCIAL_TABLES=['workspaces','memberships','counterparties','scopes',
+ 'scope_events','idempotency_receipts','identities'];
+const TABLE_MUTATIONS=['INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER'];
+const FINANCIAL_GRANTS=FINANCIAL_TABLES.flatMap(name=>{
+ const table=`kts_team.${name}`;
+ return [...TABLE_MUTATIONS.map(verb=>`has_table_privilege(current_user,'${table}','${verb}')`),
+  ...['INSERT','UPDATE','REFERENCES'].map(verb=>`has_any_column_privilege(current_user,'${table}','${verb}')`)];
+}).join(' OR ');
 const AUDIT_SQL=[
 "SELECT current_user::text AS role, session_user::text AS session_role,",
 "current_database()::text AS database_name,",
@@ -18,6 +26,7 @@ const AUDIT_SQL=[
 "has_schema_privilege(current_user,'kts_crypto','CREATE') AS create_crypto_schema,",
 "COALESCE(has_function_privilege(current_user,to_regprocedure('kts_team.append_draft(text,text,date,text,bigint,text,text,text,jsonb)'),'EXECUTE'),true) AS raw_append_execute,",
 "COALESCE(has_function_privilege(current_user,to_regprocedure('kts_team.advance_review(text,text,date,text,text,bigint,text,text,text)'),'EXECUTE'),true) AS raw_review_execute,",
+`(${FINANCIAL_GRANTS}) AS any_financial_mutation,`,
 "has_table_privilege(current_user,'kts_auth.credentials','SELECT') AS read_credentials,",
 "has_table_privilege(current_user,'kts_auth.sessions','SELECT') AS read_sessions,",
 "(has_column_privilege(current_user,'kts_team.memberships','workspace_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','user_id','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','team_role','SELECT') AND has_column_privilege(current_user,'kts_team.memberships','revoked_at','SELECT')) AS read_memberships,",
@@ -43,7 +52,7 @@ const AUDIT_SQL=[
 "current_setting('log_min_error_statement',true) AS error_statement_log_mode"
 ].join(' ');
 const BOOLEAN=['superuser','bypass_rls','has_role_memberships','create_auth_schema',
- 'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','read_credentials','read_sessions',
+ 'create_team_schema','create_crypto_schema','raw_append_execute','raw_review_execute','any_financial_mutation','read_credentials','read_sessions',
  'read_memberships','read_identity_user_id','read_identity_disabled_at','read_identity_auth_subject',
  'read_scope_events','read_receipts','insert_receipts','update_receipts',
  'update_receipts_any_column','insert_scope_events','insert_scopes',
@@ -68,6 +77,7 @@ function validate(row,expected){
     row.raw_append_execute||row.raw_review_execute)
    deny('TEAM_TWO_POOL_ROLE_PRIVILEGED');
  for(const k of DIRECT)if(row[k])deny('TEAM_TWO_POOL_DIRECT_MUTATION_'+k);
+ if(row.any_financial_mutation)deny('TEAM_TWO_POOL_DIRECT_MUTATION_EFFECTIVE');
  if(!Number.isInteger(row.default_acl_entries)||row.default_acl_entries<0)
    deny('TEAM_TWO_POOL_DEFAULT_ACL_UNKNOWN');
  if(typeof row.parameter_error_limit!=='string'||
