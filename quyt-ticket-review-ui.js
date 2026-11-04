@@ -117,14 +117,14 @@ function install(){
   const button=document.getElementById(id);
   if(!button)continue;
   button.addEventListener('click',event=>{
-   if(!quytMode())return;
+   if(!quytMode()||!check.checked)return;
    event.preventDefault();event.stopImmediatePropagation();
    status.textContent='HOLD: Cắt cược Quýt khi đang xem tiền gộp có thể làm sai sổ nguồn. Chỉ Copy văn bản đối chiếu.';
   },true);
  }
  for(const type of ['copy','cut']){
   output.addEventListener(type,event=>{
-   if(!quytMode())return;
+   if(!quytMode()||(type==='cut'&&!check.checked))return;
    event.preventDefault();
    if(type==='copy'&&receipt&&receipt.stamp===signature()&&event.clipboardData){
     event.clipboardData.setData('text/plain',receipt.formatted);
