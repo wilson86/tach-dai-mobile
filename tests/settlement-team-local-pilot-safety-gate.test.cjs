@@ -58,3 +58,20 @@ test('invalid human identity shape is denied even when role matches',async()=>{
  deps.login=async who=>who==='reviewer'?{workspace_id:scope.workspace_id,role:'reviewer',user_id:123}:previous(who);
  await assert.rejects(createLocalPilotRunner(deps).run({operator:'operator',reviewer:'reviewer',scope,...keys}),/TEAM_PILOT_REVIEWER_INVALID/);
 });
+test('invalid operator identity is denied BEFORE synthetic draft creation',async()=>{
+ const {scope,deps}=scenario(null);
+ let draftWrites=0;
+ const start=deps.login;deps.login=async who=>who==='operator'?{workspace_id:scope.workspace_id,role:'operator',user_id:null}:start(who);
+ const write=deps.createDraft;deps.createDraft=async(...args)=>{draftWrites++;return write(...args)};
+ await assert.rejects(createLocalPilotRunner(deps).run({operator:'operator',reviewer:'reviewer',scope,...keys}),/TEAM_PILOT_OPERATOR_INVALID/);
+ assert.equal(draftWrites,0);
+});
+test('feed with forged cross-tenant workspace is rejected even when ID and sequence match',async()=>{
+ const {scope,deps}=scenario(null);
+ const original=deps.getChanges;
+ deps.getChanges=async(...args)=>{
+   const value=await original(...args);
+   return {items:value.items.map((row,i)=>({...row,workspace_id:i===2?'fake_group_b':'fake_group_a'}))};
+ };
+ await assert.rejects(createLocalPilotRunner(deps).run({operator:'operator',reviewer:'reviewer',scope,...keys}),/TEAM_PILOT_FEED_INVALID/);
+});
