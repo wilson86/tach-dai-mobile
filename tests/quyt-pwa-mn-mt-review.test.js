@@ -24,7 +24,7 @@ test('only exact canonical weekday stations MN/MT are eligible',()=>{
 test('source retains two stations as independent money exposures, including same number',()=>{
  const a=input('mn','mn dn 21 b10n\nmn ct 21 b10n',{tick:true});
  assert.equal(a.total,'22');assert.equal(a.rows.length,2);
- assert.equal(a.sections.find(x=>x.kind==='b').text,'MN '+date+'\ndn 21 b11n.\nct 21 b11n.');
+ assert.equal(a.sections.find(x=>x.kind==='b').text,'dn 21 b11n.\nct 21 b11n.');
  assert.equal(a.sourceCount,2);
  assert.equal(a.sections.reduce((n,s)=>n+BigInt(s.total),0n),22n);
 });
@@ -45,23 +45,23 @@ test('one named station supports approved selectors B/LO, DD, DAU, DUI',()=>{
 });
 test('MT DN disambiguates to Da Nang not MN Dong Nai; date is authoritative',()=>{
  const a=input('mt','mt dn 21 b10n',{tick:true});
- assert.equal(a.total,'11');assert.equal(a.pretty,'MT '+date+'\ndn 21 b11n.');
+ assert.equal(a.total,'11');assert.equal(a.pretty,'dn 21 b11n.');
  assert.equal(a.sections.find(x=>x.kind==='b').total,'11');
  reject('mn','mt dn 21 b10n',/Miền trong tin khác miền/u);
 });
 test('the calendar and region must be explicit; wrong station, 2d, and missing station HOLD',()=>{
- reject('mn','mn tn 21 b10n',/cần mã hoặc tên đài/u);
- reject('mn','mn 21 b10n',/cần mã hoặc tên đài/u);
- reject('mn','mn 2d 21 b10n',/không tự suy ra/u);
+ reject('mn','mn tn 21 b10n',/phải ghi tên\/mã đài/u);
+ reject('mn','21 b10n',/phải ghi tên\/mã đài/u);
+ assert.equal(input('mn','2d 21 b10n').total,'20');
  reject('mn','mn dn 21 b10n',/phải chọn ngày/u,{businessDate:''});
  reject('mn','hn 21 b10n',/HN không phải/u);
- reject('mt','mt ct 21 b10n',/cần mã hoặc tên đài/u);
+ reject('mt','mt ct 21 b10n',/phải ghi tên\/mã đài/u);
 });
 test('unapproved XC and cross-station DA are full HOLD and never partially summed',()=>{
  reject('mn','mn dn 21 xc10n',/XC chưa có quy tắc/u);
  reject('mt','mt dn 21 22 da5n',/ĐÁ liên đài/u);
  reject('mn','mn dn 21 b10n\nmn ct 21 xc5n',/XC chưa có quy tắc/u);
- reject('mn','mn dn 21 b10n\nmn 2d 21 b10n',/không tự suy ra/u);
+ assert.equal(input('mn','mn dn 21 b10n\n2d 21 b10n').total,'30');
 });
 test('Telegram metadata binds to selected business date and customer',()=>{
  const valid='[11/4/2026 6:06 PM] Cô Quýt: mn dn 21 b10n';
@@ -93,6 +93,45 @@ test('repeated numbers inside one clause HOLD instead of doubling an ambiguous s
  assert.equal(separate.rows.length,1);
  const two=input('mn','mn dn 21 b10n\nmn dn 21 b10n',{tick:true,duplicateConfirmed:true});
  assert.equal(two.total,'21');
+});
+test('selected region alone resolves stations without MN/MT labels in Copy',()=>{
+ const mn=input('mn','dn 21 b10n\nct 21 b10n',{tick:true});
+ assert.equal(mn.pretty,'dn 21 b11n.\nct 21 b11n.');
+ assert.equal(mn.total,'22');
+ assert.equal(mn.sections.find(x=>x.kind==='b').text,mn.pretty);
+ const mt=input('mt','dn 21 b10n',{tick:true});
+ assert.equal(mt.pretty,'dn 21 b11n.');
+ assert.equal(mt.total,'11');
+ reject('mn','21 b10n',/phải ghi tên\/mã đài/u);
+ reject('mn','mt dn 21 b10n',/Miền trong tin khác/u);
+});
+test('2d/3d/2đ/3đ first weekday stations get FULL amount with no implicit division',()=>{
+ const a=input('mn','2d 52 b10n',{tick:true});
+ assert.equal(a.pretty,'dn 52 b11n.\nct 52 b11n.');
+ assert.equal(a.total,'22');assert.equal(a.rows.length,2);
+ const b=input('mn','3đ 52 b10n',{tick:true});
+ assert.equal(b.total,'33');assert.equal(b.rows.length,3);
+ assert.match(b.pretty,/st 52 b11n/u);
+ const mt=input('mt','2đ 52 dd10n');
+ assert.equal(mt.total,'20');assert.equal(mt.rows.length,2);
+ reject('mt','3d 52 b10n',/không đủ 3 đài/u);
+});
+test('approved Router P001/P002 shorthand: compact periods and 3-digit numbers',()=>{
+ const a=input('mn','2d. 52. 852. B10n.\n3d. 43. 83.b 10n');
+ assert.equal(a.total,'100');
+ assert.equal(a.rows.length,10);
+ const b=input('mn','2d 52 b10n\n3d 43 b10n');
+ assert.equal(b.total,'50');
+});
+test('numeric topology never overrides ambiguous or invalid money-bearing clauses',()=>{
+ reject('mn','2d',/Thiếu số, loại cược/u);
+ reject('mn','2d 52',/(?:Thiếu tiền|Có số chưa ghi)/u);
+ reject('mn','3d 43 83 b',/(?:Thiếu tiền|Cú pháp)/u);
+ reject('mn','2d 52 52 b10n',/số lặp/u);
+ reject('mn','2d 52 b10n\ninvalid',/HOLD/u);
+ reject('mn','2d 52 dx5n',/Cú pháp chưa rõ/u);
+ reject('mn','3d 52 xc5n',/XC/u);
+ reject('mn','2d 52 53 da5n',/ĐÁ liên đài/u);
 });
 test('preview HTML remains online-only and cannot change live MB draft or offline SW',()=>{
  assert.match(html,/XEM TRƯỚC ONLINE/u);
