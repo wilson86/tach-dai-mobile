@@ -45,10 +45,15 @@ test("Quyt review never moves a later same-stake number ahead of another wager",
  assert.equal(result.preview,"43 b107n\n34 b54n\n44 b107n");
  assert.deepEqual(result.receipts.map(x=>x.number),["43","34","44"]);
 });
-test("B and canonical LO stay DISTINCT even for same number",()=>{
+test("B and LO same number aggregate before multiplier, pure B remains B",()=>{
  const p=run("43 b1n 43 lo1n","43 b1n 43 lo1n");
- assert.equal(p.preview,"43 b2n\n43 lo2n");
- assert.equal(p.receipts.length,2);
+ assert.equal(p.preview,"43 lo3n");
+ assert.equal(p.receipts.length,1);
+ assert.equal(p.receipts[0].before,"2");
+ assert.equal(run("43 b2n","43 b2n").preview,"43 b3n");
+ const collapsed=run("43 b1n 43 lo1n","43 lo2n");
+ assert.equal(collapsed.preview,"43 lo3n");
+ assert.throws(()=>run("43 b1n","43 lo1n"),/SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD/);
 });
 test("DD, DAU and DUOI aggregate without the Quyt multiplier",()=>{
  const p=run("88 dd20n 88 dd20n 98 dau50n 98 duoi150n 43 b100n",
