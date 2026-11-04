@@ -4,6 +4,7 @@ on:
     paths:
       - 'quyt-pwa/index.html'
       - 'tests/quyt-pwa-mb-money-hold.test.cjs'
+      - 'tests/quyt-pwa-mb-headless-smoke.cjs'
       - '.github/workflows/quyt-mb-money-review.yml'
 permissions:
   contents: read
@@ -17,3 +18,7 @@ jobs:
         run: |
           node --version
           node --test tests/quyt-pwa-mb-money-hold.test.cjs
+      - name: Real Chromium headless localhost DOM smoke (synthetic only)
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-pwa-mb-headless-smoke.cjs
