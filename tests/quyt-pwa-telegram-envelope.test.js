@@ -33,7 +33,7 @@ test('Wrong sender, invalid timestamp, malformed header and missing HN HOLD',()=
 test('Wager-bearing unknown and money without n HOLD without dropping tokens',()=>{
  assert.throws(()=>app.merge(wrapped('hn 21 b10n 99'),args),/chưa ghi loại cược/u);
  assert.throws(()=>app.merge(wrapped('hn 21 xc10n'),args),/XC chưa có quy tắc/u);
- assert.throws(()=>app.merge(wrapped('hn 21 b10'),args),/(?:Cú pháp chưa rõ|Thiếu tiền hoặc thiếu n)/u);
+ assert.throws(()=>app.merge(wrapped('hn 21 b10'),args),/THIEU_N_CAN_XAC_NHAN/u);
 });
 test('Duplicated pasted message contents require independent confirmation',()=>{
  const duplicate=wrapped(a)+'\n'+wrapped(a);
@@ -44,6 +44,6 @@ test('Duplicated pasted message contents require independent confirmation',()=>{
 test('Offline release cache marker is updated and UI explains Telegram source',()=>{
  assert.match(html,/Dán <b>nguyên văn Telegram<\/b>/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v2-telegram-envelope/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261104-v3-missing-unit-confirm/u);
  assert.doesNotMatch(html,/\b(?:fetch|XMLHttpRequest)\s*\(/u);
 });
