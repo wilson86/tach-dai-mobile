@@ -101,6 +101,44 @@ function install(){
  for(const id of ['undoBtn','clearBtn','cutBtn','sourceCutBtn','dvClear','dvCutSelection','dvSourceCut','runBtn','dvRun']){
   const button=document.getElementById(id);if(button)button.addEventListener('click',()=>setTimeout(()=>{saveDraft();render()},0));
  }
+ // In Quýt customer review, the OLD result-copy button must not export raw, unmerged money.
+ // Route the normal Copy action to the same verified text-only review snapshot.
+ function quytMode(){const s=scope();return s.optIn&&s.customerId==='quyt'&&Boolean(input.value.trim())}
+ for(const id of ['copyBtn','dvCopy','ledgerWorkCopy']){
+  const button=document.getElementById(id);
+  if(!button)continue;
+  button.addEventListener('click',event=>{
+   if(!quytMode())return;
+   event.preventDefault();event.stopImmediatePropagation();
+   void copyText();
+  },true);
+ }
+ for(const id of ['cutBtn','dvCutSelection','ledgerWorkCut','sourceCutBtn','dvSourceCut']){
+  const button=document.getElementById(id);
+  if(!button)continue;
+  button.addEventListener('click',event=>{
+   if(!quytMode())return;
+   event.preventDefault();event.stopImmediatePropagation();
+   status.textContent='HOLD: Cắt cược Quýt khi đang xem tiền gộp có thể làm sai sổ nguồn. Chỉ Copy văn bản đối chiếu.';
+  },true);
+ }
+ for(const type of ['copy','cut']){
+  output.addEventListener(type,event=>{
+   if(!quytMode())return;
+   event.preventDefault();
+   if(type==='copy'&&receipt&&receipt.stamp===signature()&&event.clipboardData){
+    event.clipboardData.setData('text/plain',receipt.formatted);
+    status.textContent='Đã Copy toàn bộ tin gộp dạng văn bản. Chưa được xác nhận chuyển Router.';
+   }else status.textContent='HOLD: kết quả cũ không được xuất; dùng COPY TIN GỘP của bản review.';
+  },true);
+ }
+ preview.addEventListener('copy',event=>{
+  if(!receipt||receipt.stamp!==signature()||preview.value!==receipt.formatted){
+   event.preventDefault();status.textContent='HOLD: bản xem trước đã hết hiệu lực.';
+  }else if(event.clipboardData){
+   event.preventDefault();event.clipboardData.setData('text/plain',receipt.formatted);
+  }
+ });
  window.addEventListener('pageshow',render);
  render();
 }
