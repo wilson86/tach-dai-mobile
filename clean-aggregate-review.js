@@ -55,6 +55,13 @@ function parse(raw,options={}){
    group=[];previous=[];waiting=false;continue;
   }
   if(t.type==="number"){
+   // Only MB can omit a station at the start of the ticket. A region marker
+   // ("mn"/"mt") is NOT a station name, and must never make a wager eligible
+   // for review-money grouping. The canonical Tách engine validates real
+   // station aliases against the selected day's calendar; this review-only
+   // tokenizer does not yet implement that contract and MUST fail closed.
+   if(station==="mn"||station==="mt")
+    fail("STATION_NAME_REQUIRED_HOLD",t.offset,t.physicalLine);
    if(waiting){group=[];previous=[];waiting=false}
    if(group.includes(t.value))fail("DUPLICATE_NUMBER_WITHIN_GROUP",t.offset);
    group.push(t.value);continue;
