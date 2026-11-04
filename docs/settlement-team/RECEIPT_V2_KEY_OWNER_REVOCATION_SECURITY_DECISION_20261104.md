@@ -152,3 +152,11 @@ The bridge checks envelope framing, key ordering, signer identity and TTL at iss
 - Unmodified real Node signer: `75a97a559fbe4c641c62fa75aff64bf19c5dd7b4`
 
 **No production promotion:** The read bridge remains opt-in default OFF, no HTTP integration, no SQL V2 deployment, key provisioning, direct Ledger read isolation closure, independent reviewer or actual PG16 QA. `WRITE_BLOCK=ENABLED; RELEASE=NO_GO; COST_USD=0`.
+
+## 2026-11-05 — Independent security review handoff OPEN (not approved)
+
+The independently verifiable review decision has been separated from the long project discussion to [GitHub Issue #32](https://github.com/wilson86/tach-dai-mobile/issues/32), titled **KTS Settlement V2 — independent SQL owner, key custody and tenant isolation security decision (BLOCKED)**. The request is bound to source baseline `a308298b10d498dea614b15409c7a801e9b22a30` and links the two mutually exclusive SQL candidate contracts, key-store/crypto design, whole-Ledger tenant-read risk, and disposable PostgreSQL16 acceptance criteria.
+
+**This issue is an unassigned request, not an independent review or approval.** There is no named independent reviewer, signed SHA-specific verdict, authorized grant/lock design, qualified key authority, or PostgreSQL16 isolation result. Opening the issue does not start a workflow, trigger CI, relax any release gate, or authorize changes to production. The next permissible implementation batch must first read the real review verdict and independently verify source HEAD drift; a self-authored assistant critique cannot fill in `REVIEWER_ID` or `DECISION=APPROVE`.
+
+**STOP conditions:** `SECURITY_SIGNOFF=NOT_GRANTED`, `PG16=NOT_RUN`, `WRITE_BLOCK=ENABLED`, `RELEASE=NO_GO`, `COST_USD=0`. No merge, deployment, SQL/secret bootstrap, E:/F:, or live customer data.
