@@ -296,7 +296,16 @@ async function main(){
                    const recovery=exec(process.execPath,[recoveryPath,String(port),resolved],resolved,{...env,PGPORT:String(port)},45000);
                    receipt.two_login_http_recovery={exit_code:recovery.exit_code,stdout_tail:recovery.output,
                      stderr_tail:recovery.error,process_error:recovery.problem,
-                     passed:recovery.ok&&recovery.output.includes('SYNTHETIC_TWO_LOGIN_HTTP_PG_RECOVERY_PASS')};
+                     passed:recovery.ok&&
+                     recovery.output.includes('SYNTHETIC_TWO_LOGIN_HTTP_PG_RECOVERY_PASS')&&
+                     recovery.output.includes('SYNTHETIC_CALLER_WRITABLE_GUC_EXPOSURE_OBSERVED')};
+                   receipt.tenant_guc_trust={
+                     synthetic_login_can_change_tenant_scope:
+                       recovery.output.includes('SYNTHETIC_CALLER_WRITABLE_GUC_EXPOSURE_OBSERVED'),
+                     server_boundary_exposure_path:'NOT_VERIFIED',
+                     deployment_qualification:'BLOCKED_TRUSTED_TENANT_AUTHORITY',
+                     public_report_safe:true
+                   };
                    if(!receipt.two_login_http_recovery.passed)receipt.status='BLOCKED_TWO_LOGIN_HTTP_RECOVERY';
                  }
               }
