@@ -253,3 +253,21 @@ test('Windows CRLF pasted source: approved divider skips and physical error line
  assert.equal(good.total,'50');
  reject('mn','2d 52 b10n\r\n--//-----//--\r\n\r\n3d 43 83 b',/tin 4/u,opts);
 });
+
+
+test('approved N020/N021 reject same selector without fresh number group, even if alias',()=>{
+ const opts={businessDate:'2026-10-13'};
+ reject('mn','2d 52 b10n b20n',/lặp loại cược/u,opts);
+ reject('mn','2d 52 b10n\n2d 43 b10n b20n',/lặp loại cược.*tin 2/u,opts);
+ reject('mn','2d 52 bao10n lo20n',/lặp loại cược/u,opts);
+ reject('mn','2d 52 b10n dd5n b20n',/lặp loại cược/u,opts);
+});
+test('fresh number group and distinct selectors still aggregate without losing placement',()=>{
+ const opts={businessDate:'2026-10-13'};
+ const a=input('mn','2d 52 b10n. 52 b20n',opts);
+ assert.equal(a.sourceTotal,'30');assert.equal(a.original,'60');assert.equal(a.total,'60');
+ const b=input('mn','2d 52 b10n dd5n',opts);
+ assert.equal(b.sourceTotal,'15');assert.equal(b.total,'30');
+ const c=input('mn','2d 52 dau25n dui45n',opts);
+ assert.equal(c.sourceTotal,'70');assert.equal(c.total,'140');
+});
