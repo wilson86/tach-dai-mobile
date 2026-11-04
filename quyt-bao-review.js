@@ -86,10 +86,13 @@ function sourceExposures(text,cleanCore,region,options={}){
   const kind=tag==="b"?"b":["bao","baolo","lô","lo","bl","blo"].includes(tag)?"lo":c.kind;
   if(!c.station)throw Error("STATION_REQUIRED_FOR_GROUPING");
   for(const n of c.numbers){
-   const key=JSON.stringify([c.station,kind,n]);
-   const before=map.get(key)?.half||0;
+   const family=kind==="b"||kind==="lo"?"bao_lo":kind;
+   const key=JSON.stringify([c.station,family,n]);
+   const previous=map.get(key);
+   const before=previous?.half||0;
    if(!Number.isSafeInteger(before+c.half))throw Error("GROUP_STAKE_OVERFLOW");
-   map.set(key,{station:c.station,kind,number:n,half:before+c.half});
+   const mergedKind=family==="bao_lo"&&(kind==="lo"||previous?.kind==="lo")?"lo":kind;
+   map.set(key,{station:c.station,kind:mergedKind,number:n,half:before+c.half});
   }
  }
  return {map,clauses,repeatBlocks:cleanCore.tandem(clauses)};
@@ -111,7 +114,7 @@ function prepareGrouped(output,options={}){
  if(src.map.size!==dest.map.size)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
  for(const [key,stake] of src.map){
   const other=dest.map.get(key);
-  if(!other||other.half!==stake.half)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
+  if(!other||other.half!==stake.half||other.kind!==stake.kind)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
  }
  // Reject changes to the original order, even when all amounts sum correctly.
  const sourceOrder=[...src.map.keys()],outputOrder=[...dest.map.keys()];
