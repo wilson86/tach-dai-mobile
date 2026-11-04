@@ -188,3 +188,13 @@ test('money-risk and manual acknowledgment controls exist on the review page',()
  assert.match(html,/KHÔNG nhân hệ số lần nữa/u);
  assert.match(html,/CHƯA DUYỆT GỬI TIỀN THẬT/u);
 });
+
+test('3d 5n reveals why HALF_UP and CEILING are different downstream money contracts',()=>{
+ const r=input('mn','3d 52 b5n',{tick:true});
+ assert.equal(r.sourceTotal,'5');
+ assert.equal(r.original,'15');
+ assert.equal(r.total,'15');        // 5.335 rounds to 5n at each of 3 stations.
+ assert.equal(r.ceilReference,'18'); // CEIL comparison 6n at each station.
+ assert.equal(r.roundingDiffRows,3);
+ assert.equal(r.rows.length,3);
+});
