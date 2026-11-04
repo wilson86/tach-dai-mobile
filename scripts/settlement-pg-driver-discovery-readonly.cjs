@@ -30,7 +30,12 @@ function find({root,resolve=require.resolve,realpath}){
  let folder=path.win32.dirname(target);
  for(let n=0;n<9;n++){
   const pkg=path.win32.join(folder,'package.json');
-  if(fs.existsSync(pkg)){
+  // lstat checks only the package.json link itself: never dereference a
+  // symlink or junction into E:/F: before checking source provenance.
+  let stat=null;
+  try{stat=fs.lstatSync(pkg);}catch(e){if(e.code!=='ENOENT')throw e;}
+  if(stat){
+   if(!stat.isFile()||stat.isSymbolicLink())fail('PG_DRIVER_PACKAGE_SYMLINK_UNREVIEWED');
    const p=JSON.parse(fs.readFileSync(pkg,'utf8'));
    if(p.name==='pg'){
     if(typeof p.version!=='string'||!/^[0-9]+\.[0-9]+\.[0-9]+/.test(p.version))
@@ -52,6 +57,7 @@ function main(argv=process.argv.slice(2)){
  if(process.platform!=='win32')fail('PG_DRIVER_WINDOWS_ONLY');
  if(argv.length!==2||argv[0]!=='--read-only'||
     !/^--expected-sha=[a-f0-9]{40}$/.test(argv[1]))fail('PG_DRIVER_SHA_REQUIRED');
+ if(process.env.NODE_PATH)fail('PG_DRIVER_GLOBAL_NODE_PATH_UNREVIEWED');
  const dir=insideC(process.cwd());
  const git=(...args)=>cp.execFileSync('git',args,{
    cwd:dir,encoding:'utf8',timeout:10000,windowsHide:true}).trim();
