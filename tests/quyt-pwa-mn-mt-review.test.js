@@ -142,3 +142,14 @@ test('preview HTML remains online-only and cannot change live MB draft or offlin
  assert.match(html,/id="businessDate"/u);
  assert.match(html,/id="betSections"/u);
 });
+
+test('user selected MN/MT defines the filtered station, not copied region text',()=>{
+ const mn=input('mn','dn 52 b10n',{tick:true});
+ const mt=input('mt','dn 52 b10n',{tick:true});
+ assert.equal(mn.pretty,'dn 52 b11n.');
+ assert.equal(mt.pretty,'dn 52 b11n.');
+ assert.equal(mn.total,'11');assert.equal(mt.total,'11');
+ assert.equal(mn.rows[0].station,'dn');assert.equal(mt.rows[0].station,'dn');
+ assert.equal(mn.pretty.includes('MN'),false);assert.equal(mt.pretty.includes('MT'),false);
+ reject('mt','ct 52 b10n',/phải ghi tên\/mã đài/u);
+});
