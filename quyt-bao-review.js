@@ -71,11 +71,11 @@ function fmtHalf(units){
  if(!Number.isSafeInteger(units)||units<=0)throw Error("GROUP_STAKE_INVALID");
  return Math.floor(units/2).toString()+(units%2?".5":"");
 }
-function sourceExposures(text,cleanCore,region){
+function sourceExposures(text,cleanCore,region,options={}){
  if(!cleanCore||typeof cleanCore.parse!=="function")throw Error("CLEAN_CORE_REQUIRED");
  // Canonical parser validates the complete input; regex tags merely preserve
  // the B vs LO distinction that the WIP clean display aliases both to "b".
- const clauses=cleanCore.parse(text,{region});
+ const clauses=cleanCore.parse(text,{region,businessDate:options.businessDate});
  const unsupported=clauses.find(c=>c.kind==="da"||c.kind==="xc");
  if(unsupported)throw Error("MONEY_AUTHORITY_HOLD @"+unsupported.offset+" line="+unsupported.line+" selector="+unsupported.kind);
  const matches=[...text.matchAll(GROUP_SELECTOR)];
@@ -105,8 +105,8 @@ function prepareGrouped(output,options={}){
  const rate=parseRate(options.rate===undefined?DEFAULT_RATE:options.rate);
  const clean=options.cleanCore;
  const region=options.region;
- const src=sourceExposures(options.sourceText,clean,region);
- const dest=sourceExposures(output,clean,region);
+ const src=sourceExposures(options.sourceText,clean,region,options);
+ const dest=sourceExposures(output,clean,region,options);
  // No silently split or changed money and no already-applied multiplier.
  if(src.map.size!==dest.map.size)throw Error("SOURCE_OUTPUT_EXPOSURE_MISMATCH_HOLD");
  for(const [key,stake] of src.map){
