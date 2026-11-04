@@ -212,6 +212,10 @@ const OfflineKTS=(()=>{
    if(!tokens[i+1]||tokens[i+1].type!=='stake')fail('Thiếu tiền hoặc thiếu n',`tin ${index+1}: ${token.raw}`);
    if(selector==='xc')fail('XC chưa có quy tắc tiền được duyệt',`tin ${index+1}`);
    if(selector==='da'&&(nums.length!==2||nums[0]===nums[1]))fail('ĐÁ phải có đúng hai số khác nhau; ĐÁ vòng chưa được duyệt',`tin ${index+1}`);
+   // Repeated number in a single clause has no separate source/order identity.
+   // Never silently double its stake; distinct clauses/messages still aggregate.
+   if(selector!=='da'&&new Set(nums).size!==nums.length)
+    fail('HOLD: số lặp trong cùng một nhóm cược; cần sửa hoặc xác nhận nguồn riêng',`tin ${index+1}`);
    const money=decimal(tokens[i+1].raw.slice(0,-1));if(money<=0n)fail('Số tiền phải lớn hơn 0',`tin ${index+1}`);
    if(selector==='da'){bets.push({kind:'da',number:nums.slice().sort().join('-'),money,source:index})}
    else for(const number of nums)bets.push({kind:selector,number,money,source:index});
@@ -229,15 +233,22 @@ const OfflineKTS=(()=>{
   if(candidates.length&&!opts.confirmMissingDaN)
    fail('THIEU_N_CAN_XAC_NHAN',candidates.length+' đoạn thiếu n; ví dụ '+candidates[0].exact+' → '+candidates[0].assumed);
   const sourceAfterApproval=candidates.length?applyMissingDaN(raw):raw;
-  const lines=sourceAfterApproval.split(/\r?\n/u).filter(x=>x.trim());
+  // Keep physical source line numbers even when blank lines separate Telegram messages.
+  const physicalLines=[];
+  const lines=sourceAfterApproval.split(/\r?\n/u).filter((line,index)=>{
+   if(!line.trim())return false;
+   physicalLines.push(index+1);
+   return true;
+  });
   if(lines.length>100)fail('Tối đa 100 tin mỗi lần');
   // Treat the Telegram date/time and sender ONLY as a verified envelope, never as a wager.
   // Keep raw unchanged in the textarea. Each physical line is an independent message.
   // Unknown senders / malformed headers HOLD instead of quietly deleting bet-like text.
   const messages=lines.map((source,index)=>{
+   const physicalLine=physicalLines[index];
    const header=/^\s*\[(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s+(AM|PM)\]\s+([^:\r\n]{1,80}):\s*(.*)$/iu.exec(source);
    if(!header){
-    if(/^\s*\[/u.test(source))fail('Header Telegram chưa được nhận diện; giữ nguyên tin để kiểm tra',`tin ${index+1}`);
+    if(/^\s*\[/u.test(source))fail('Header Telegram chưa được nhận diện; giữ nguyên tin để kiểm tra',`tin ${physicalLine}`);
     return {source,text:source};
    }
    const first=Number(header[1]),second=Number(header[2]),year=Number(header[3]);
@@ -252,18 +263,18 @@ const OfflineKTS=(()=>{
    }
    const possibleDates=[validDate(first,second),validDate(second,first)].filter(Boolean);
    if(!possibleDates.length||hour<1||hour>12||minute>59)
-    fail('Thời gian Telegram không hợp lệ',`tin ${index+1}`);
+    fail('Thời gian Telegram không hợp lệ',`tin ${physicalLine}`);
    const sender=header[7].trim().normalize('NFC');
    const expectedName=opts.customer==='quyt'?/^(?:cô\s+)?quýt$/iu:
                       opts.customer==='hien'?/^(?:cô\s+)?hiền$/iu:null;
    if(!expectedName||!expectedName.test(sender))
-    fail('Tên khách Telegram không khớp khách đang chọn',`tin ${index+1}`);
+    fail('Tên khách Telegram không khớp khách đang chọn',`tin ${physicalLine}`);
    const text=header[8];
    if(opts.market==='mb'&&!/^\s*hn(?=\s)/iu.test(text))
-    fail('Tin MB Telegram phải bắt đầu bằng HN sau tên khách',`tin ${index+1}`);
+    fail('Tin MB Telegram phải bắt đầu bằng HN sau tên khách',`tin ${physicalLine}`);
    if(opts.market!=='mb'){
     if(!possibleDates.includes(opts.businessDate))
-     fail('Ngày Telegram khác ngày xổ số đã chọn; HOLD',`tin ${index+1}`);
+     fail('Ngày Telegram khác ngày xổ số đã chọn; HOLD',`tin ${physicalLine}`);
    }
    return {source,text};
   });
@@ -279,10 +290,12 @@ const OfflineKTS=(()=>{
   const rows=new Map();let seq=0,placement=0,displayHN=false;
   for(let j=0;j<lines.length;j++){
    const scoped=opts.market==='mb'?{station:'',text:messages[j].text}:
-    stationScope(messages[j].text,opts.market,opts.businessDate,active,j);
-   const parsed=parseMessage(scoped.text,j);displayHN ||= parsed.hasHN;
+    stationScope(messages[j].text,opts.market,opts.businessDate,active,physicalLines[j]-1);
+   if(opts.market!=='mb'&&/^\s*hn(?=\s)/iu.test(scoped.text))
+    fail('HOLD: tin HN nằm sau mã đài MN/MT; không được đổi miền',`tin ${physicalLines[j]}`);
+   const parsed=parseMessage(scoped.text,physicalLines[j]-1);displayHN ||= parsed.hasHN;
    if(opts.market!=='mb'&&parsed.bets.some(b=>b.kind==='da'))
-    fail('MN/MT ĐÁ liên đài chưa có oracle cho PWA gộp; HOLD',`tin ${j+1}`);
+    fail('MN/MT ĐÁ liên đài chưa có oracle cho PWA gộp; HOLD',`tin ${physicalLines[j]}`);
    for(const bet of parsed.bets){
     const key=opts.market+'|'+(opts.businessDate||'')+'|'+scoped.station+'|'+bet.kind+'|'+bet.number;
     let r=rows.get(key);
