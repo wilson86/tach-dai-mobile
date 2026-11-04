@@ -27,3 +27,17 @@ The previously authored `team-settlement/candidate/receipt-v2-session-handle.sql
 4. Real Windows/Android recovery and HIOSKT/operator financial oracle, independent reviewer/end-user approval before any write release. Currently NOT_RUN/BLOCKED.
 
 `STATUS=BLOCKED_SECURITY_DESIGN`; `WRITE_BLOCK=ENABLED`; `RELEASE=NO_GO`; `PRODUCTION_MUTATION=NONE`; `GITHUB_CI=NOT_RUN`; `COST_USD=0`. No real customer or financial data, new deployed databases, production writes, E:/F: access, CI trigger, merges or deployments.
+
+## 2026-11-04: actual durable Auth-service V2 callback integrated but default OFF
+
+Prior record above remains source-specific to the earlier login-handle candidate. This update is a separate batch with base `2f2e5e293a2b1311416dd2c9906bbc266d57de2a`.
+
+`team-settlement/postgres-auth-service.cjs` now imports the already reviewed/tested candidate `createReceiptV2AuthBoundary` and **exposes `authorizeReceiptRead` only when the existing `receiptV2SessionHandleEnabled` configuration is explicitly true**. When absent/false, the Auth service object retains the exact original method list, and the actual `team-settlement/team-composition.cjs` still constructs it without the flag. No HTTP handler, Ledger repository, migration, secret storage, permission, production or financial mutation is changed. The opted-in method opens a fresh Auth transaction, checks persisted session handle and membership, and invokes only an internal server callback; it **does not establish** secret custody or ledger transaction atomicity.
+
+New `tests/settlement-receipt-v2-real-auth-wiring.test.cjs` verifies: default-off method absent; opted-in Auth→proof fixture→verify fixture success; revoked/missing/viewer membership or mismatched DB tenant blocks access to injected signer key. An initial local test run failed because the test erroneously referenced an undefined variable `role`, not because of the application implementation; fixed in the local test before GitHub commit and reran.
+
+**Source-bound focused QA:** Linux Node.js 22.16.0 in isolated `/mnt/data/settlement_v2_integration_batch`. Actual changed source Git blob `ff018a51b08bc4607acbe47337ede10707522c7b` and new test blob `b5975a0fe79e3e5382b32b060d4a8b8326ab5117` both match SHA-exact GitHub files. `node --test tests/settlement-receipt-v2-real-auth-wiring.test.cjs tests/settlement-v2-login-handle-flag.test.cjs` = **7 PASS, 0 FAIL, 0 SKIP**. The second test file was unchanged from the prior qualification, but was included because the modified Auth source makes a new dependency combination.
+
+**Limitations:** Original unchanged `auth-contract.cjs` and `core-contract.cjs` are represented by local synthetic stubs in this focused container; test transactions and signer/key/verifier are synthetic. This is not a full unmodified-repository/native scrypt, actual PostgreSQL16 or production security test. GitHub Actions/Windows QA/real tenant/session isolation and HIOSKT operator money oracle remain NOT_RUN. No user Windows C: execution occurred. The PostgreSQL16 candidate `receipt-v2-session-handle.sql` remains unapproved/unexecuted.
+
+**Blocking release decision:** Independent authority/key management/owner crypto and all Ledger direct-read closure remain unapproved. No reviewed SQL V2 verifier, no actual revocation concurrency proof, no actual PG catalog tenant isolation, no HTTP/Android end-to-end acceptance. `WRITE_BLOCK=ENABLED; RELEASE=NO_GO; PRODUCTION_MUTATION=NONE; COST_USD=0`.
