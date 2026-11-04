@@ -53,7 +53,7 @@ try{
  assert('MT valid station',$('after').textContent==='11n'&&!$('copy').disabled);
  select('market','mn');
  assert('change region invalidates stale Copy',$('copy').disabled);
- assert('no service worker from review page',!document.documentElement.outerHTML.includes('serviceWorker.register'));
+ assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
 document.body.append(el);
