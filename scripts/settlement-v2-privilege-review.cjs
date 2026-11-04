@@ -7,20 +7,40 @@ function evaluateCandidate(sql, decision) {
   if (typeof sql !== 'string' || typeof decision !== 'string' ||
       sql.length < 100 || decision.length < 100)
     throw Error('SETTLEMENT_V2_REVIEW_INPUT_INVALID');
-  const sessionLock = /FROM\s+kts_auth\.sessions[\s\S]{0,350}?FOR SHARE\s*;/i.test(sql);
-  const membershipLock = /FROM\s+kts_team\.memberships[\s\S]{0,450}?FOR SHARE OF m,i\s*;/i.test(sql);
+  // PostgreSQL 16 SELECT docs: ALL four row-lock modes require UPDATE
+  // privilege on at least one column of each locked table (plus SELECT).
+  // Parse within a single SQL statement to avoid conflating unrelated locks.
+  const rowLockPattern = /\bFOR\s+(NO\s+KEY\s+UPDATE|KEY\s+SHARE|UPDATE|SHARE)(?:\s+OF\s+[A-Za-z_][A-Za-z_0-9]*(?:\s*,\s*[A-Za-z_][A-Za-z_0-9]*)*)?\s*$/i;
+  function lockMode(table) {
+    const fromTable = new RegExp('\\bFROM\\s+' + table.replaceAll('.', '\\.') + '\\b', 'i');
+    for (const statement of sql.split(';')) {
+      if (!fromTable.test(statement)) continue;
+      const found = rowLockPattern.exec(statement.trim());
+      if (found) return found[1].replace(/\s+/g, ' ').toUpperCase();
+    }
+    return null;
+  }
+  const sessionLockMode = lockMode('kts_auth.sessions');
+  const membershipLockMode = lockMode('kts_team.memberships');
+  const sessionLock = sessionLockMode !== null;
+  const membershipLock = membershipLockMode !== null;
   const selectOnly = /has only necessary schema USAGE, column SELECT and audited/i.test(decision);
   const issues = [];
-  if (sessionLock && membershipLock && selectOnly) {
-    issues.push('FOR_SHARE_REQUIRES_UPDATE_PRIVILEGE_ON_LOCKED_TABLES');
+  if (selectOnly && (sessionLock || membershipLock)) {
+    issues.push('ANY_ROW_LOCK_MODE_REQUIRES_UPDATE_PRIVILEGE');
+    if (sessionLockMode === 'SHARE' || membershipLockMode === 'SHARE')
+      issues.push('FOR_SHARE_REQUIRES_UPDATE_PRIVILEGE_ON_LOCKED_TABLES');
     issues.push('DECLARED_SELECT_ONLY_OWNER_CONFLICTS_WITH_ROW_LOCKS');
   }
+  if (!sessionLock || !membershipLock)
+    issues.push('STRICT_REVOCATION_ROW_LOCKS_NOT_PROVEN');
   if (!/receipt_v2_verifier_keys/.test(sql) ||
       !/SQL verifier.*NOT_RUN|NOT_EXECUTED|NOT_RUN/.test(decision))
     issues.push('CUSTODY_OR_DB_QUALIFICATION_EVIDENCE_MISSING');
   // A zero-issue static scan is STILL not approval to apply DDL or enable writes.
   return Object.freeze({verdict:'BLOCKED_REVIEW_REQUIRED',
     session_lock_detected:sessionLock,membership_lock_detected:membershipLock,
+    session_lock_mode:sessionLockMode,membership_lock_mode:membershipLockMode,
     declaration_select_only:selectOnly,issues:Object.freeze(issues),
     postgres_executed:false,tenant_isolation_approved:false,
     independent_review_approved:false,production_ready:false});
