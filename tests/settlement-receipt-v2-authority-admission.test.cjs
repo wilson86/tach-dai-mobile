@@ -62,6 +62,20 @@ test('fail closed on unavailable secret, wrong key size, invalid id, invalid non
   await assert.rejects(issueForReview(y.fixture),/AUTHORITY_DENIED/);
   assert.deepEqual(y.calls,['auth','secret','nonce']);
 });
+test('authorization callback cannot be skipped, invoked twice or swap signed result',async()=>{
+  const a=context();
+  a.fixture.auth.authorizeReceiptRead=async()=>Object.freeze({nonce:'c'.repeat(32),proof:'d'.repeat(64)});
+  await assert.rejects(issueForReview(a.fixture),/AUTHORITY_DENIED/);
+  assert.deepEqual(a.calls,[]);
+  const b=context();
+  b.fixture.auth.authorizeReceiptRead=async(_token,work)=>{await work(verifiedSession);return work(verifiedSession);};
+  await assert.rejects(issueForReview(b.fixture),/AUTHORITY_DENIED/);
+  assert.deepEqual(b.calls,['secret','nonce']);
+  const c=context();
+  c.fixture.auth.authorizeReceiptRead=async(_token,work)=>({...await work(verifiedSession)});
+  await assert.rejects(issueForReview(c.fixture),/AUTHORITY_DENIED/);
+  assert.deepEqual(c.calls,['secret','nonce']);
+});
 test('module is fixture-only and contains no production I/O or persisted secret',()=>{
   const fs=require('node:fs'),path=require('node:path');
   const s=fs.readFileSync(path.join(__dirname,'fixtures/receipt-v2-authority-admission.cjs'),'utf8');
