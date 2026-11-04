@@ -82,3 +82,14 @@ test('SQL error remains a failure, no automatic replay',async()=>{
   await assert.rejects(f.bridge.lookup({bearerToken:token,keys:[key]}),/TEAM_DB_COMMIT_OUTCOME_UNKNOWN/);
   assert.deepEqual(f.metrics(),{signCalls:1,queryCalls:1,txnCalls:1});
 });
+test('reject unexpected receipt column, bad event, and impossible date',async()=>{
+  for(const bad of [
+    {...receipt(),extra_debug_field:'unexpected'},
+    {...receipt(),event_kind:'UNKNOWN_KIND'},
+    {...receipt(),business_date:'2026-02-30'},
+    {...receipt(),business_date:'2026-13-10'}
+  ]){
+    const f=harness({dbRows:[bad]});
+    await assert.rejects(f.bridge.lookup({bearerToken:token,keys:[key]}),/READ_UNQUALIFIED/);
+  }
+});
