@@ -69,6 +69,10 @@ test('Telegram metadata binds to selected business date and customer',()=>{
  assert.equal(a.total,'10');
  reject('mn','[11/3/2026 6:06 PM] Cô Quýt: mn dn 21 b10n',/Ngày Telegram khác ngày/u);
  reject('mn','[11/4/2026 6:06 PM] Cô Hiền: mn dn 21 b10n',/Tên khách Telegram không khớp/u);
+ assert.equal(input('mn','[4/11/2026 6:06 PM] Cô Quýt: mn dn 21 b10n').total,'10');
+ reject('mn','[11/15/2026 6:06 PM] Cô Quýt: mn dn 21 b10n',/Ngày Telegram khác ngày/u);
+ assert.equal(input('mt','[11/15/2026 6:06 PM] Cô Quýt: mt kh 21 b10n',
+   {businessDate:'2026-11-15'}).total,'10');
 });
 test('preview HTML remains online-only and cannot change live MB draft or offline SW',()=>{
  assert.match(html,/XEM TRƯỚC ONLINE/u);
