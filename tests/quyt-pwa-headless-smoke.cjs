@@ -112,6 +112,12 @@ try{
  assert('mixed number divider-like line remains atomic HOLD',$('copy').disabled&&$('ackMoney').disabled&&$('result').value==='');
  set('raw','----\\n////');
  assert('all-dividers HOLD and never unlock Copy',$('copy').disabled&&$('ackMoney').disabled&&$('status').textContent.includes('EMPTY_AFTER_PREPROCESS'));
+ set('raw','2d 52 b10n b20n');
+ assert('repeated selector without fresh numbers is full HOLD',$('copy').disabled&&$('ackMoney').disabled&&$('result').value===''&&$('status').textContent.includes('lặp loại cược'));
+ set('raw','2d 52 b10n. 52 b2n');
+ assert('fresh explicit number group still merges before single multiplier',$('sourceTotal').textContent==='12n'&&$('before').textContent==='24n'&&$('after').textContent==='26n'&&$('copy').disabled);
+ set('raw','2d 52 b10n dd5n');
+ assert('distinct B and DD on one number group remain valid',$('sourceTotal').textContent==='15n'&&$('after').textContent==='32n'&&!$('ackMoney').disabled);
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
