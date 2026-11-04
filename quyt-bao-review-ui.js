@@ -56,7 +56,14 @@ function install(){
  panel.append(title,status,keep,direct,review,copy,note);
  output.insertAdjacentElement("afterend",panel);
  let confirmedRepeatSource=null;
+ let confirmedRepeatScope=null;
  let checkedSource="";
+ // Repeat approval is valid for one exact customer, region, day, rate and source.
+ function repeatScope(){
+  const market=(document.getElementById("region")||document.getElementById("sharedRegion"))?.value||"";
+  const date=(document.getElementById("date")||document.getElementById("sharedDate"))?.value||"";
+  return JSON.stringify([customerId,market,date,rate.value,input.value]);
+ }
  let directMode=false;
  // Allow one initial complete pasted ticket when Quýt was selected on an empty form.
  // Never silently re-arm after source edits, Cut/Undo, or a rejected fragment.
@@ -297,7 +304,7 @@ check.tabIndex=-1;bar.style.display="none";
      region:selectedRegion?.value,
      businessDate:(document.getElementById("date")||document.getElementById("sharedDate"))?.value,
      omitRegion:selectedRegion?.value==="mb",
-     repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator"
+     repeatDecision:confirmedRepeatSource===original&&confirmedRepeatScope===repeatScope()?"keep_all":"ask_operator"
     });
     if(merged.status!=="REVIEW_ONLY"){
      if(merged.requiresConfirmation){
@@ -313,7 +320,7 @@ check.tabIndex=-1;bar.style.display="none";
     customer:"Quýt",inputStage:"CANONICAL_UNADJUSTED_RESULT",alreadyTransformed:false,
     rate:rate.value,sourceText:original,region:selectedRegion?.value,
     businessDate:(document.getElementById("date")||document.getElementById("sharedDate"))?.value,
-    cleanCore:window.KTSCleanAggregate,repeatDecision:confirmedRepeatSource===original?"keep_all":"ask_operator",
+    cleanCore:window.KTSCleanAggregate,repeatDecision:confirmedRepeatSource===original&&confirmedRepeatScope===repeatScope()?"keep_all":"ask_operator",
     omitRegion:selectedRegion?.value==="mb"
    });
    review.value=p.preview;
@@ -332,6 +339,7 @@ check.tabIndex=-1;bar.style.display="none";
  keep.addEventListener("click",()=>{
   if(!enabled()||!input.value.trim())return;
   confirmedRepeatSource=input.value;
+  confirmedRepeatScope=repeatScope();
   refresh();
  });
  direct.addEventListener("click",()=>{
@@ -340,6 +348,36 @@ check.tabIndex=-1;bar.style.display="none";
    ownTop.__KTS_QUYT_SOURCE_V1__=input.value;notifyAll();
   }
   if(!enabled()){status.textContent="HOLD: chỉ Quýt được xem trước tiền; hãy chọn Quýt và dán tin.";return;}
+  // One explicit confirmation in this path; blue clean-review is optional.
+  const original=input.value;
+  const selectedRegion=document.getElementById("region")||document.getElementById("sharedRegion");
+  const selectedDate=document.getElementById("date")||document.getElementById("sharedDate");
+  try{
+   const cleaner=window.KTSCleanAggregate;
+   if(!cleaner||typeof cleaner.preview!=="function")throw Error("CLEAN_CORE_REQUIRED");
+   const p=cleaner.preview(original,{
+    region:selectedRegion?.value,businessDate:selectedDate?.value,
+    omitRegion:selectedRegion?.value==="mb",repeatDecision:"ask_operator"
+   });
+   if(p.requiresConfirmation&&
+      !(confirmedRepeatSource===original&&confirmedRepeatScope===repeatScope())){
+    const yes=window.confirm(
+     "Phát hiện "+p.repeated.length+" đoạn cược lặp. Xác nhận TẤT CẢ đều là lượt khách đặt thật (không phải dán nhầm)? "+
+     "Giữ "+p.rawClauses+" lượt, tiền gốc "+p.rawTotal+
+     "n; chỉ xem trước sau khi nhân hệ số một lần. Không chuyển/gửi tiền."
+    );
+    if(!yes){
+     review.value="";copy.disabled=true;
+     status.textContent="HOLD: các lượt trùng chưa được xác nhận. Tin gốc không đổi.";
+     return;
+    }
+    confirmedRepeatSource=original;confirmedRepeatScope=repeatScope();
+   }
+  }catch(e){
+   review.value="";copy.disabled=true;
+   status.textContent="HOLD: "+String(e?.message||e);
+   return;
+  }
   directMode=true;
   refresh();
  });
@@ -436,9 +474,18 @@ check.tabIndex=-1;bar.style.display="none";
  });
  const region=document.getElementById("region")||document.getElementById("sharedRegion");
  if(region)region.addEventListener("change",()=>{
+  confirmedRepeatScope=null;
   if(enabled())clearSelection("HOLD: miền/đài đã đổi, Quýt và hệ số trở về mặc định.");
   else {confirmedRepeatSource=null;reset()}
  });
+ for(const id of ["date","sharedDate"]){
+  const node=document.getElementById(id);
+  if(node)node.addEventListener("change",()=>{
+   confirmedRepeatSource=null;confirmedRepeatScope=null;
+   directMode=false;review.value="";copy.disabled=true;
+   status.textContent="HOLD: ngày đã đổi, cần kiểm tra lại nguồn và xác nhận trùng.";
+  });
+ }
  // The prepared text must not enter the Router until transform-once authority exists.
  copy.addEventListener("click",event=>{
   event.preventDefault();
