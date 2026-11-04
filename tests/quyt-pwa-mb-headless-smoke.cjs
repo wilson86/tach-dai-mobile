@@ -11,8 +11,14 @@ const bootstrap=String.raw`<script>
 sessionStorage.setItem('KTS_OFFLINE_QUYT_DRAFT_V1',JSON.stringify({
  market:'mn',customer:'quyt',raw:'hn 21 b10n'
 }));
-Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{
- window.__qaClipboard=String(text);
+Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:text=>{
+ if(window.__qaDeferClipboard){
+  window.__qaDeferClipboard=false;
+  return new Promise((resolve,reject)=>{window.__qaFinishClipboard=failed=>{
+   if(failed)reject(new Error('denied'));else{window.__qaClipboard=String(text);resolve()}
+  }});
+ }
+ window.__qaClipboard=String(text);return Promise.resolve();
 }}});
 </script>`;
 const checks=String.raw`<script>
@@ -61,6 +67,26 @@ try{
  set('market','mn','change');
  assert('programmatic unsupported MN selection also rejects atomically',
   el('copy').disabled&&el('result').value===''&&el('status').textContent.includes('HOLD'));
+ set('market','mb','change');
+ set('customer','quyt','change');
+ set('raw','hn 21 b55n');
+ window.__qaDeferClipboard=true; window.__qaFinishClipboard=null;
+ el('copy').click();
+ assert('full clipboard request is asynchronous',typeof window.__qaFinishClipboard==='function');
+ set('raw','hn 21 b90n');
+ window.__qaFinishClipboard(false);
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('full stale Copy warns instead of claiming success',
+  el('status').textContent.includes('CLIPBOARD CÓ THỂ CHỨA TIN CŨ')&&!el('status').textContent.includes('ĐÃ COPY')&&el('result').value.includes('90n'));
+ set('raw','hn 21 b55n');
+ window.__qaDeferClipboard=true; window.__qaFinishClipboard=null;
+ document.querySelector('[data-bet-kind="b"] .section-copy').click();
+ assert('group clipboard request is asynchronous',typeof window.__qaFinishClipboard==='function');
+ set('raw','hn 21 b90n');
+ window.__qaFinishClipboard(true);
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('group rejected stale Copy warns, no fallback stale overwrite',
+  el('status').textContent.includes('CLIPBOARD CÓ THỂ CHỨA TIN CŨ')&&!el('status').textContent.includes('ĐÃ COPY'));
 }catch(error){report.push({name:'EXCEPTION',pass:false,error:String(error)})}
 const target=document.createElement('pre');
 target.id='quyt-mb-browser-qa';
