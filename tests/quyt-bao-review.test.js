@@ -60,10 +60,14 @@ test("DD, DAU and DUOI aggregate without the Quyt multiplier",()=>{
              "88 dd40n 98 dau50n 98 duoi150n 43 b100n");
  assert.equal(p.preview,"88 dd40n\n98 dau50n\n98 duoi150n\n43 b107n");
 });
-test("same bet across two EXPLICIT stations cannot be merged",()=>{
- const p=run("MB 43 b1n MN 43 b1n","MB 43 b1n MN 43 b1n",
- {region:undefined,omitRegion:false});
- assert.equal(p.preview,"MB 43 b2n\nMN 43 b2n");
+test("two scheduled MN stations keep the same number separate, missing station HOLD",()=>{
+ require("../station_calendar.generated.js");
+ const source="dn 43 b1n\nct 43 b1n";
+ const p=run(source,source,{region:"mn",businessDate:"2026-11-04",omitRegion:false});
+ assert.equal(p.preview,"DN 43 b2n\nCT 43 b2n");
+ assert.equal(p.receipts.length,2);
+ assert.throws(()=>run("mn 43 b1n","mn 43 b1n",
+  {region:"mn",businessDate:"2026-11-04"}),/STATION_NAME_REQUIRED_HOLD/);
 });
 test("customer duplicate confirmation is mandatory before any review output",()=>{
  assert.throws(()=>run("43 b1n 43 b1n","43 b2n",
