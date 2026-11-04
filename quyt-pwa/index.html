@@ -136,6 +136,43 @@ const OfflineKTS=(()=>{
  function applyMissingDaN(source){return source.replace(missingDaNRe,(_raw,left,money)=>left+money+'n')}
 
  const D=1000n, M=1000000n;
+ // Reuse canonical PUBLIC Mobile station_calendar.generated.js: never copy
+ // private KTS schedule into the public standalone PWA.
+ const ENGINE_SHA='046935677f9d88468b71246410444c27435c72e1415aeb359c799452584c36eb';
+ const CALENDAR_SHA='edb384eadc4bb1bf9109727247776109fcc7d23835d7e8114076ff207bd5296d';
+ function schedule(market,businessDate){
+  if(!['mn','mt'].includes(market))fail('Chỉ lấy lịch đài MN/MT');
+  if(!/^\d{4}-\d{2}-\d{2}$/u.test(String(businessDate||'')))fail('MN/MT phải chọn ngày xổ số hợp lệ');
+  const [y,m,d]=businessDate.split('-').map(Number),day=new Date(Date.UTC(y,m-1,d,12));
+  if(day.getUTCFullYear()!==y||day.getUTCMonth()+1!==m||day.getUTCDate()!==d)fail('Ngày xổ số không hợp lệ');
+  const calendar=globalThis.KTS_STATION_CALENDAR;
+  if(!calendar||calendar.schema!=='KTS_STATION_SCHEDULE_AUTHORITY_V1'||
+     calendar.engine_sha256!==ENGINE_SHA||calendar.authority_sha256!==CALENDAR_SHA)
+   fail('HOLD: lịch đài không đúng bản thẩm quyền Mobile');
+  const rows=calendar[market.toUpperCase()]?.[day.getUTCDay()];
+  if(!Array.isArray(rows)||!rows.length||rows.some(x=>!Array.isArray(x)||x.length!==2))fail('Thiếu lịch đài trong ngày đã chọn');
+  return rows;
+ }
+ function stationScope(source,market,day,active,index){
+  if(/^\s*hn(?=\s)/iu.test(source))fail('HN không phải tin MN/MT',`tin ${index+1}`);
+  let line=source.trim();
+  const prefix=/^(mn|mt|mb)(?=\s)/iu.exec(line);
+  if(prefix){
+   if(prefix[1].toLowerCase()!==market)fail('Miền trong tin khác miền đang chọn',`tin ${index+1}`);
+   line=line.slice(prefix[0].length).trimStart();
+  }
+  const aliases=active.flatMap(([code,name])=>[[code,code],[name,code]]).sort((a,b)=>b[0].length-a[0].length);
+  const low=line.toLocaleLowerCase('vi-VN');
+  for(const [alias,station] of aliases){
+   if(low.startsWith(alias.toLocaleLowerCase('vi-VN'))&&/^\s/u.test(line.slice(alias.length))){
+    const text=line.slice(alias.length).trimStart();
+    if(!text)fail('Đài không có cược',`tin ${index+1}`);
+    return {station,text};
+   }
+  }
+  fail('MN/MT cần mã hoặc tên đài đúng ngày, không tự suy ra 2đ/3đ',`tin ${index+1}`);
+ }
+
  function fail(code,where=''){throw new Error(code+(where?' — '+where:''))}
  function decimal(raw){if(!/^\d+(?:[.,]\d{1,3})?$/u.test(raw))fail('Số tiền/hệ số không hợp lệ');
   const [whole,part='']=raw.replace(',','.').split('.');return BigInt(whole)*D+BigInt(part.padEnd(3,'0')||'0')}
@@ -182,7 +219,7 @@ const OfflineKTS=(()=>{
  function merge(raw,opts={}){
   if(typeof raw!=='string'||!raw.trim())fail('Chưa có tin nguồn');
   if(!['mb','mn','mt'].includes(opts.market))fail('Chưa chọn miền hợp lệ');
-  if(opts.market!=='mb')fail('Bản offline cấp tốc chỉ nghiệm thu gộp HN theo miền Bắc (MB); MN/MT cần xác minh đài/ngày ở KTS chính');
+  const active=opts.market==='mb'?null:schedule(opts.market,opts.businessDate);
   const candidates=missingDaN(raw);
   if(candidates.length&&!opts.confirmMissingDaN)
    fail('THIEU_N_CAN_XAC_NHAN',candidates.length+' đoạn thiếu n; ví dụ '+candidates[0].exact+' → '+candidates[0].assumed);
@@ -208,12 +245,16 @@ const OfflineKTS=(()=>{
    if(!expectedName||!expectedName.test(sender))
     fail('Tên khách Telegram không khớp khách đang chọn',`tin ${index+1}`);
    const text=header[8];
-   if(!/^\s*hn(?=\s)/iu.test(text))
-    fail('Tin Telegram phải bắt đầu bằng HN sau tên khách',`tin ${index+1}`);
+   if(opts.market==='mb'&&!/^\s*hn(?=\s)/iu.test(text))
+    fail('Tin MB Telegram phải bắt đầu bằng HN sau tên khách',`tin ${index+1}`);
+   if(opts.market!=='mb'){
+    const fromHeader=header[3]+'-'+String(month).padStart(2,'0')+'-'+String(day).padStart(2,'0');
+    if(fromHeader!==opts.businessDate)fail('Ngày Telegram khác ngày xổ số đã chọn; HOLD',`tin ${index+1}`);
+   }
    return {source,text};
   });
-  if(lines.length>1&&!messages.every(m=>/^\s*hn(?=\s)/iu.test(m.text)))
-   fail('Nhiều dòng: mỗi dòng phải là tin độc lập bắt đầu HN (có thể kèm [giờ] Cô Quýt:)');
+  if(opts.market==='mb'&&lines.length>1&&!messages.every(m=>/^\s*hn(?=\s)/iu.test(m.text)))
+   fail('Nhiều dòng MB: mỗi dòng phải là tin độc lập bắt đầu HN (có thể kèm [giờ] Cô Quýt:)');
   // Compare wager contents rather than metadata: identical Telegram orders
   // must be explicitly confirmed as separate money-bearing placements.
   const fingerprints=messages.map(m=>m.text.trim().toLocaleLowerCase('vi-VN').replace(/\s+/gu,' '));
@@ -223,11 +264,22 @@ const OfflineKTS=(()=>{
   if(opts.tick&&opts.customer!=='quyt')fail('Hệ số Quýt không được áp dụng cho khách khác');
   const rows=new Map();let seq=0,placement=0,displayHN=false;
   for(let j=0;j<lines.length;j++){
-   const parsed=parseMessage(messages[j].text,j);displayHN ||= parsed.hasHN;
-   for(const bet of parsed.bets){const key=opts.market+'|'+bet.kind+'|'+bet.number;
-    let r=rows.get(key);if(!r){r={kind:bet.kind,number:bet.number,amount:0n,seq:seq++,peak:0n,peakOrder:0};rows.set(key,r)}if(bet.money>r.peak){r.peak=bet.money;r.peakOrder=placement}placement++;r.amount+=bet.money;}
+   const scoped=opts.market==='mb'?{station:'',text:messages[j].text}:
+    stationScope(messages[j].text,opts.market,opts.businessDate,active,j);
+   const parsed=parseMessage(scoped.text,j);displayHN ||= parsed.hasHN;
+   if(opts.market!=='mb'&&parsed.bets.some(b=>b.kind==='da'))
+    fail('MN/MT ĐÁ liên đài chưa có oracle cho PWA gộp; HOLD',`tin ${j+1}`);
+   for(const bet of parsed.bets){
+    const key=opts.market+'|'+(opts.businessDate||'')+'|'+scoped.station+'|'+bet.kind+'|'+bet.number;
+    let r=rows.get(key);
+    if(!r){r={kind:bet.kind,number:bet.number,station:scoped.station,amount:0n,seq:seq++,peak:0n,peakOrder:0};rows.set(key,r)}
+    if(bet.money>r.peak){r.peak=bet.money;r.peakOrder=placement}
+    placement++;r.amount+=bet.money;
+   }
   }
-  const sorted=[...rows.values()].sort((a,b)=>rank[a.kind]-rank[b.kind]||(a.kind==='da'?a.seq-b.seq:(a.amount===b.amount?a.peakOrder-b.peakOrder:(a.amount>b.amount?-1:1))));
+  const sorted=[...rows.values()].sort((a,b)=>rank[a.kind]-rank[b.kind]||
+   (a.station===b.station?0:((active?.findIndex(x=>x[0]===a.station)??0)-(active?.findIndex(x=>x[0]===b.station)??0)))||
+   (a.kind==='da'?a.seq-b.seq:(a.amount===b.amount?a.peakOrder-b.peakOrder:(a.amount>b.amount?-1:1))));
   let original=0n,adjusted=0n;
   // Operator rule: round EACH canonical number/pair AFTER merging and multiplying.
   // BigInt half-up: < 0.5n DOWN; >= 0.5n UP. Never round the grand total
@@ -240,33 +292,34 @@ const OfflineKTS=(()=>{
   }
   const grouped=[];
   for(const row of sorted){const last=grouped.at(-1);
-   if(row.kind!=='da'&&last&&last.kind===row.kind&&last.rounded===row.rounded){last.numbers.push(row.number)}
-   else grouped.push({kind:row.kind,numbers:[row.number],rounded:row.rounded});
+   if(row.kind!=='da'&&last&&last.kind===row.kind&&last.station===row.station&&last.rounded===row.rounded){last.numbers.push(row.number)}
+   else grouped.push({kind:row.kind,station:row.station,numbers:[row.number],rounded:row.rounded});
   }
   const out=[];
   for(let i=0;i<grouped.length;i++){
    const g=grouped[i],prev=grouped[i-1];
    if(prev&&rank[prev.kind]!==rank[g.kind])out.push('');
    const v=fmt(g.rounded,M);
-   if(g.kind==='dui'&&prev&&prev.kind==='dau'&&prev.numbers.length===1&&g.numbers.length===1&&prev.numbers[0]===g.numbers[0]){
+   if(g.kind==='dui'&&prev&&prev.kind==='dau'&&prev.station===g.station&&prev.numbers.length===1&&g.numbers.length===1&&prev.numbers[0]===g.numbers[0]){
     if(out.at(-1)==='')out.pop();out[out.length-1]=out.at(-1).slice(0,-1)+' dui'+v+'n.';
-   }else out.push(g.numbers.map(n=>n.replace('-',' ')).join(' ')+' '+g.kind+v+'n.');
+   }else out.push((g.station?g.station+' ':'')+g.numbers.map(n=>n.replace('-',' ')).join(' ')+' '+g.kind+v+'n.');
   }
-  const pretty=(displayHN?'HN\n':'')+out.join('\n');
+  const headerLabel=opts.market==='mb'?(displayHN?'HN\n':''):opts.market.toUpperCase()+' '+opts.businessDate+'\n';
+  const pretty=headerLabel+out.join('\n');
   // Sections are derived from the SAME canonical rounded rows as the full
   // message. No reparsing rendered text; no second multiplier or round.
   const sectionKinds=['b','da','xc','dd','dau','dui'];
   const sections=sectionKinds.map(kind=>{
    const matching=grouped.filter(group=>group.kind===kind);
    const sum=sorted.filter(row=>row.kind===kind).reduce((total,row)=>total+row.rounded,0n);
-   const lines=matching.map(group=>group.numbers.map(number=>number.replace('-',' ')).join(' ')+' '+kind+fmt(group.rounded,M)+'n.');
-   return {kind,text:lines.length?(displayHN?'HN\n':'')+lines.join('\n'):'',total:fmt(sum,M),count:sorted.filter(row=>row.kind===kind).length,supported:kind!=='xc'};
+   const lines=matching.map(group=>(group.station?group.station+' ':'')+group.numbers.map(number=>number.replace('-',' ')).join(' ')+' '+kind+fmt(group.rounded,M)+'n.');
+   return {kind,text:lines.length?headerLabel+lines.join('\n'):'',total:fmt(sum,M),count:sorted.filter(row=>row.kind===kind).length,supported:kind!=='xc'};
   });
   if(sections.reduce((total,group)=>total+BigInt(group.total),0n)!==adjusted/M)
    fail('HOLD: tổng từng khung khác tổng đã gộp');
-  return {pretty,sections,original:fmt(original,D),total:fmt(adjusted,M),rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
+  return {pretty,sections,original:fmt(original,D),total:fmt(adjusted,M),rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,businessDate:opts.businessDate||'',rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
- return Object.freeze({merge,fmt,decimal,missingDaN});
+ return Object.freeze({merge,fmt,decimal,missingDaN,schedule});
 })();
 </script>
 <script>
