@@ -17,7 +17,7 @@ function ticket(messages,options){
  if(!['mb','mn','mt'].includes(market)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||!customerId)fail('SCOPE_REQUIRED_HOLD');
  if(typeof options.multiply!=='boolean')fail('TOGGLE_REQUIRED_HOLD');
  if(options.multiply===true&&customerId!=='quyt')fail('CUSTOMER_MULTIPLIER_NOT_AUTHORIZED_HOLD');
- const tick=options.multiply,rate=options.rateParser(options.rate||'1.067');
+ const tick=options.multiply,rate=options.rateParser(tick?(options.rate??'1.067'):'1'); // OFF always returns original, even if draft rate is invalid.
  const known=new Map(),exposures=new Map(),sources=[];let seenLabel='',serial=0,placement=0;
  for(const source of messages){
   if(!source||typeof source.source_message_id!=='string'||!source.source_message_id||typeof source.original_text!=='string'||!source.original_text.trim()||source.customer_id!==customerId||source.market!==market||source.business_date!==date)fail('MESSAGE_SCOPE_HOLD');
