@@ -508,6 +508,11 @@ check.tabIndex=-1;bar.style.display="none";
   if(!button)continue;
   button.addEventListener("click",event=>{
     if(!enabled())return;
+    // The isolated ticket-review panel owns its validated Copy/Cut routing.
+    // This older listener is registered first and previously stopped its
+    // newer capture listener before it could copy the correctly merged ticket.
+    const mergedPanel=document.getElementById("ktsTicketMergePanel");
+    if(mergedPanel&&customerId==="quyt"&&typeof window.KTSQuytTicketReview?.ticket==="function")return;
     event.preventDefault();event.stopImmediatePropagation();
     status.textContent="HOLD Quýt: Cắt/Copy gốc bị khóa khi chọn Quýt. Dùng bản xem trước Quýt; chưa có quyền tự gửi hay Cắt bản đã nhân.";
     refresh();
