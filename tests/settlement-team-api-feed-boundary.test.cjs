@@ -12,6 +12,7 @@ test('feed API rejects foreign tenants, gaps, malformed pages and wrong cursors'
  for(const page of [null,{...valid,items:[item(1,'group_b')]},
   {...valid,items:[item(2)]},{...valid,next_cursor:cursor(2)},
   {...valid,next_cursor:cursor(1,'group_b')},{...valid,has_more:'false'},
+  {...valid,items:[{...item(1),synthetic_callback:()=>{}}]},
   {...valid,items:[item(1),item(1)],next_cursor:cursor(1)},
   {...valid,sync_status:'PENDING'},{...valid,items:[],next_cursor:cursor(1)}])
   await assert.rejects(make(page).getChanges('token',{limit:2}),/TEAM_FEED_RESPONSE_UNVERIFIED/);
@@ -33,4 +34,15 @@ test('actual HTTP feed route redacts foreign page and preserves valid page',asyn
   page={items:[item(1)],next_cursor:cursor(1),has_more:false,sync_status:'SYNCED'};
   const good=await request();assert.equal(good.status,200);assert.deepEqual(await good.json(),page);
  }finally{await new Promise((resolve,reject)=>server.close(e=>e?reject(e):resolve()));}
+});
+test('feed validation does not return repository-owned mutable page after auth transaction await',async()=>{
+ let release,ready;const gate=new Promise(resolve=>{release=resolve;});
+ const finished=new Promise(resolve=>{ready=resolve;});
+ const page={items:[item(1)],next_cursor:cursor(1),has_more:false,sync_status:'SYNCED'};
+ const auth={verifySession:async()=>actor,withVerifiedSession:async(_token,work)=>{const result=await work(actor);ready();await gate;return result;}};
+ const api=createServerLedgerApi({auth,repository:{appendDraft:async()=>{},getScope:async()=>{},getChanges:async()=>page}});
+ const pending=api.getChanges('token',{limit:2});await finished;
+ page.items[0].workspace_id='group_b';release();
+ const result=await pending;
+ assert.equal(result.items[0].workspace_id,'group_a');
 });

@@ -180,7 +180,12 @@ function createServerLedgerApi({
     return withSessionActor(sessionToken,async trustedActor=>{
     if (typeof repository.getChanges !== 'function') throw new Error('TEAM_ROUTE_NOT_ENABLED');
     const previousCursor=decodeCursor(cursor,trustedActor.workspace_id);
-    const page=await repository.getChanges(trustedActor,{cursor,limit});
+    const rawPage=await repository.getChanges(trustedActor,{cursor,limit});
+    // Detach nested rows before validation. The auth transaction may still
+    // await COMMIT after this callback; a repository-owned reference must not
+    // be able to change the verified page while that transaction is pending.
+    let page;try{page=structuredClone(rawPage);}
+    catch(_){throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');}
     if(!page||typeof page!=='object'||Array.isArray(page)||page.sync_status!=='SYNCED'||
        !Array.isArray(page.items)||page.items.length>limit||typeof page.has_more!=='boolean'||
        (page.has_more&&page.items.length!==limit))throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');
