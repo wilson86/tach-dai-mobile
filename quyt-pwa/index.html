@@ -61,7 +61,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <label class="field" for="raw" style="margin:10px 0 7px">Tin nguồn (không bị sửa)</label>
  <textarea id="raw" placeholder="hn 21 b10n dd5n. 12 13 da20n.&#10;hn 21 b5n dd10n." spellcheck="false"></textarea>
  <div id="status" class="notice hold" role="status">Dán tin vào ô trên để bắt đầu.</div>
- <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
+ <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button><button type="button" id="startNewBatch" hidden style="background:#924b14">XÁC NHẬN LƯỢT MỚI (KHÔNG GỬI TRÙNG)</button></div>
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
 </div>
 <div class="card">
@@ -286,9 +286,22 @@ const frames=[...document.querySelectorAll('#betSections .bet-section')].map(nod
  cutSelected:node.querySelector('.section-cut-selected'),
  choices:node.querySelector('.section-row-list')
 }));
-const cutStorageKey='KTS_QUYT_SCOPED_CUT_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[];
+const cutStorageKey='KTS_QUYT_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null;
+function loadGuard(){
+ try{const rawRecord=sessionStorage.getItem(cutGuardKey);if(!rawRecord)return;
+  const record=JSON.parse(rawRecord);if(!record||typeof record.scope!=='string'||record.phase!=='cut')throw Error('BAD_GUARD');cutGuard=record;
+ }catch(_){cutGuard={scope:'CORRUPT',phase:'blocked'}}
+}
+function writeGuard(record){
+ const text=JSON.stringify(record);sessionStorage.setItem(cutGuardKey,text);
+ if(sessionStorage.getItem(cutGuardKey)!==text)throw Error('HOLD_GUARD_SAVE_FAILED');cutGuard=record;
+}
+function preflightCutStorage(){
+ const key=cutGuardKey+'_PROBE';sessionStorage.setItem(key,'ok');
+ if(sessionStorage.getItem(key)!=='ok')throw Error('HOLD_STORAGE_UNAVAILABLE');sessionStorage.removeItem(key);
+}
 function cutScope(){return JSON.stringify([raw.value,customer.value,market.value,tick.checked,rate.value])}
-function saveCuts(){try{sessionStorage.setItem(cutStorageKey,JSON.stringify({scope:cutScope(),keys:[...cutKeys],undo:cutUndo}))}catch(_){}}
+function saveCuts(){const receipt=JSON.stringify({scope:cutScope(),keys:[...cutKeys],undo:cutUndo});sessionStorage.setItem(cutStorageKey,receipt);if(sessionStorage.getItem(cutStorageKey)!==receipt)throw Error('HOLD_LEDGER_SAVE_FAILED')}
 function restoreCuts(){
  cutKeys=new Set();cutUndo=[];
  try{const x=JSON.parse(sessionStorage.getItem(cutStorageKey)||'null');
@@ -342,12 +355,19 @@ function daScope(){return JSON.stringify([raw.value,customer.value,market.value]
 function redraw(restore=false){
  activeBase=null;current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
- if(!restore){cutKeys=new Set();cutUndo=[];saveCuts();}
  persist();
+ if(cutGuard&&(cutGuard.scope!==cutScope()||cutGuard.phase!=='cut')){
+  $('startNewBatch').hidden=false;
+  message('HOLD_CUT_REPLAY: đã Cắt/Copy cược lượt trước; sửa nguồn, hệ số hoặc miền KHÔNG được tự tái xuất số đã Cắt. Khôi phục nguồn gốc, hoặc xác nhận lượt mới độc lập sau khi đối soát.',true);
+  return;
+ }
+ $('startNewBatch').hidden=true;
+ if(!restore&&!cutGuard){cutKeys=new Set();cutUndo=[];try{saveCuts()}catch(_){/*Cắt bị khóa bởi kiểm tra lưu trữ*/}}
+
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{
   const result=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
-  if(restore)restoreCuts();
+  if(restore||cutGuard)restoreCuts();
   activeBase=result;renderCut(result);
   message('ĐÃ GỘP '+result.sourceCount+' tin. '+(cutKeys.size?'Còn lại '+current.rows.length+' số/cặp chưa Cắt.':'Chọn số để Cắt hoặc Cắt toàn nhóm.')+' Nguồn gốc giữ nguyên.',false);
  }catch(e){
@@ -365,6 +385,13 @@ tick.addEventListener('change',redraw);
 daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.value);if(!candidates.length)return;const examples=candidates.slice(0,3).map(x=>x.exact+' → '+x.assumed).join('; ');if(!confirm('Xác nhận tất cả '+candidates.length+' chỗ thiếu n là tiền theo đơn vị n?\n'+examples+'\nKhông sửa tin gốc; chỉ tính bản xem trước.'))return;confirmedDaScope=daScope();redraw()});
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
+$('startNewBatch').addEventListener('click',()=>{
+ if(!cutGuard)return;
+ if(!confirm('CẢNH BÁO: lượt trước đã Cắt/Copy. Chỉ mở lượt mới khi đã đối soát và xác nhận KHÔNG GỬI TRÙNG. Đây là lượt đặt ĐỘC LẬP thật sự?'))return;
+ try{sessionStorage.removeItem(cutGuardKey);sessionStorage.removeItem(cutStorageKey);cutGuard=null;cutKeys=new Set();cutUndo=[];confirmedRaw=null;confirmedDaScope=null;$('startNewBatch').hidden=true;redraw();
+  message('Đã xác nhận lượt mới độc lập. Kiểm tra số và tiền trước khi gửi.',false);
+ }catch(e){message('HOLD: không thể bắt đầu lượt mới an toàn: '+String(e.message||e),true)}
+});
 select.addEventListener('click',()=>{if(!current)return;out.focus();out.select();message('Đã chọn toàn bộ tin gộp. Nhấn Ctrl+C (trên Windows) hoặc Sao chép (trên điện thoại).',false)});
 async function cutGroup(frame,selectedOnly){
  const ticket=current,base=activeBase;
@@ -379,13 +406,14 @@ async function cutGroup(frame,selectedOnly){
   if(!payload)throw Error('HOLD_EMPTY_CUT_PAYLOAD');
   QuytCutLedger.derive(base,new Set([...cutKeys,...keys]));
  }catch(e){message('HOLD: không xác minh được sổ Cắt. '+String(e.message||e),true);return}
+ try{preflightCutStorage()}catch(e){message('HOLD: trình duyệt không lưu được lịch sử Cắt, KHÔNG COPY. '+String(e.message||e),true);return}
  try{if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');await navigator.clipboard.writeText(payload)}
  catch(_){message('HOLD: Copy thất bại, KHÔNG CẮT.',true);return}
  if(current!==ticket||activeBase!==base||!currentValid()||keys.some(k=>cutKeys.has(k))){message('HOLD: nguồn thay đổi trong lúc Cắt. Clipboard CÓ THỂ chứa tin cũ; chưa xóa.',true);return}
  cutUndo.push([...cutKeys]);if(cutUndo.length>30)cutUndo.shift();
  for(const k of keys)cutKeys.add(k);
- try{renderCut(base);saveCuts();message('ĐÃ CẮT '+keys.length+' số/cặp nhóm '+frame.kind.toUpperCase()+' và Copy. Các khung và tin cuối đồng bộ ngay; nguồn không đổi.',false)}
- catch(e){cutKeys=new Set(cutUndo.pop()||[]);current=null;out.value='';resetFrames();message('HOLD: phát hiện lệch sổ Cắt, dừng xuất tin. '+String(e.message||e),true)}
+ try{saveCuts();writeGuard({scope:cutScope(),phase:'cut'});renderCut(base);message('ĐÃ CẮT '+keys.length+' số/cặp nhóm '+frame.kind.toUpperCase()+' và Copy. Các khung và tin cuối đồng bộ ngay; nguồn không đổi.',false)}
+ catch(e){current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();message('HOLD: clipboard có thể đã Copy nhưng trạng thái Cắt chưa xác nhận. KHÔNG GỬI LẠI. '+String(e.message||e),true)}
 }
 $('undoQuytCut').addEventListener('click',()=>{if(!activeBase||!cutUndo.length)return;const prior=cutUndo.pop();try{QuytCutLedger.derive(activeBase,new Set(prior));cutKeys=new Set(prior);renderCut(activeBase);saveCuts();message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false)}catch(e){cutUndo.push(prior);message('HOLD: Hoàn tác bị chặn: '+String(e.message||e),true)}});
 for(const frame of frames){
@@ -418,7 +446,7 @@ copy.addEventListener('click',async()=>{
  try{if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');await navigator.clipboard.writeText(ticket.pretty);if(ticket!==current||!currentValid()){message('HOLD: clipboard có thể chứa tin cũ, hãy Copy lại.',true);return}message('ĐÃ COPY chính xác nội dung theo checkbox hiện tại. Không tự gửi Telegram/Router.',false)}
  catch(_){out.focus();out.select();let ok=false;try{ok=document.execCommand('copy')}catch(_e){}message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok)}
 });
-redraw(true);
+loadGuard();redraw(true);
 })();
 </script>
 <script>
