@@ -672,7 +672,13 @@
       // or accept a scope from a different user/workspace.
       if (!sessionToken || workspaceId === null)
         return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED' };
-      if (!scope || scope.workspace_id !== workspaceId ||
+      if (!scope || typeof scope!=='object' || Array.isArray(scope))
+        return { status: STATUS.BLOCKED, error: 'SYNC_SCOPE_INVALID' };
+      // Compare the response against the exact validated request, not a
+      // caller-owned object that may change while the GET is in flight.
+      scope=Object.freeze({workspace_id:scope.workspace_id,partner_id:scope.partner_id,
+        business_date:scope.business_date,region:scope.region});
+      if (scope.workspace_id !== workspaceId ||
           typeof scope.partner_id !== 'string' ||
           !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(scope.partner_id) ||
           typeof scope.business_date !== 'string' ||

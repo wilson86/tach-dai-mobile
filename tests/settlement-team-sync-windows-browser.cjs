@@ -51,11 +51,14 @@ async function main(){
   assert.deepEqual(extraCheck,{status:'BLOCKED',items:0});
   const scopeRace=await ev(`(async()=>{let release,posted;const gate=new Promise(r=>release=r);const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async(url,options)=>{if(url==='/v1/session'){await gate;return {ok:true,status:200,json:async()=>({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:'user_race',role:'operator'})}}if(url==='/v1/scopes/review'){posted=JSON.parse(options.body);return {ok:false,status:503,json:async()=>({})}}throw Error('UNEXPECTED') }});c.setSessionToken('e'.repeat(43),'group_a',{accountId:'user_race'});const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-11-05',region:'mn'};const p=c.reviewScope('submit_review',scope,1);scope.partner_id='fake_partner_2';release();const result=await p;return {scope:posted&&posted.scope.partner_id,status:result.status}})()`);
   assert.deepEqual(scopeRace,{scope:'fake_partner_1',status:'NEEDS_RECONCILIATION'});
+  const readRace=await ev(`(async()=>{async function run(partner){let release;const gate=new Promise(r=>release=r);let requested;const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async(url)=>{requested=url;await gate;return {ok:true,status:200,json:async()=>({workspace_id:'group_a',partner_id:partner,business_date:'2026-11-05',region:'mn',revision:0,state:'DRAFT'})}}});c.setSessionToken('f'.repeat(43),'group_a',{accountId:'user_a'});const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-11-05',region:'mn'};const pending=c.readScope(scope);scope.partner_id='fake_partner_2';release();const result=await pending;return {requested,status:result.status}}return {wrong:await run('fake_partner_2'),correct:await run('fake_partner_1')}})()`);
+  assert.deepEqual(readRace,{wrong:{requested:'/v1/scopes/fake_partner_1/2026-11-05/mn',status:'BLOCKED'},correct:{requested:'/v1/scopes/fake_partner_1/2026-11-05/mn',status:'SYNCED'}});
   console.log('PASS real Chrome localStorage: invalid scope denied; valid intent restored and quarantined');
   console.log('PASS real Chrome actor check: foreign same-workspace user denied');
   console.log('PASS real Chrome directory: wrong requested kind denied');
   console.log('PASS real Chrome directory: unexpected fields denied');
   console.log('PASS real Chrome review scope: original preserved across async auth');
+  console.log('PASS real Chrome read scope: response bound to original request');
   console.log('PILOT_STAGE_NAVIGATE');await call('Page.navigate',{url:origin+'/settlement-team-pilot.html'});
   ready=false;for(let i=0;i<80;i++){ready=await ev("document.readyState==='complete' && !!document.getElementById('team-login') && !!window.KtsTeamPilotUI");if(ready)break;await sleep(100);}assert.equal(ready,true);
   // Prior checks intentionally left a quarantined synthetic draft in this
