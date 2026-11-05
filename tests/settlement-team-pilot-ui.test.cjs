@@ -273,6 +273,18 @@ test('UI clears former user feed and warns when remote logout revocation is unve
  assert.doesNotMatch(h.els['team-notice'].textContent,/^Đã đăng xuất và xác nhận máy chủ/);
  h.mounted.dispose();
 });
+test('directory metadata disappears on external identity change and unverified logout',async()=>{
+ for(const mode of ['external','unverified-logout']){
+  const h=harness({logoutRevokeUnverified:true});
+  h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+  h.els['team-directory'].fire('click');await tick();
+  assert.equal(h.els['team-counterparties'].children.length,1);
+  if(mode==='external'){h.state.session_epoch++;h.state.workspace_id='group_b';h.notify();}
+  else {h.els['team-logout'].fire('click');await tick();}
+  assert.equal(h.els['team-counterparties'].children.length,0,mode);
+  h.mounted.dispose();
+ }
+});
 
 test('read-only reviewer status comes only from verified scope; no approval control exists',async()=>{
  const h=harness();

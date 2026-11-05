@@ -96,7 +96,11 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false,syntheticReco
       identityEpoch++;selectionEpoch++;
       clearVerifiedHistory();
       clearReview();clearRecovery();
+      // Directory entries are tenant data too; never retain a prior actor's
+      // list through external account rotation or an uncertain remote logout.
+      clear(e['team-counterparties']);
     }
+    if(!state.authenticated)clear(e['team-counterparties']);
     e['team-context'].textContent=state.authenticated?
       'Đã đăng nhập: '+String(state.workspace_id||'unknown'):'Chưa đăng nhập';
     const reviews=Array.isArray(state.review_attempts)?state.review_attempts:[];
@@ -225,6 +229,7 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false,syntheticReco
       if(!sync.snapshot().authenticated){
         clearVerifiedHistory(); // Do not show former user's feed after local logout.
         clearReview();
+        clear(e['team-counterparties']);
         if(err&&err.message==='SYNC_LOGOUT_REVOKE_UNVERIFIED'){
           tell('Đã xóa phiên trên trình duyệt. CHƯA XÁC MINH thu hồi phiên trên máy chủ vì lỗi mạng/phản hồi; không coi là đăng xuất máy chủ thành công.');
           return;

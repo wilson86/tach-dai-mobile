@@ -7,9 +7,15 @@ const base=approvedDirectory('C:\\KTS-Settlement\\w20-2d63c84e');
 const profile=fs.mkdtempSync(path.join(base,'kts-demo-chrome-'));
 const client=fs.readFileSync(path.resolve(__dirname,'../app/settlement-team-sync-client.js'));
 const html=Buffer.from('<!doctype html><title>synthetic sync fixture</title><script src="/client.js"></script>');
+const appFiles=new Map(['settlement-team-pilot.html','settlement-team-pilot.css','settlement-team-review-audit.js','settlement-team-sync-client.js','settlement-team-pilot-ui.js','settlement-team-pilot-start.js'].map(name=>['/'+name,fs.readFileSync(path.resolve(__dirname,'../app',name))]));
 const server=http.createServer((req,res)=>{
  if(req.url==='/'){res.writeHead(200,{'content-type':'text/html'});res.end(html);}
  else if(req.url==='/client.js'){res.writeHead(200,{'content-type':'text/javascript'});res.end(client);}
+ else if(appFiles.has(req.url)){res.writeHead(200,{'content-type':req.url.endsWith('.html')?'text/html':req.url.endsWith('.css')?'text/css':'text/javascript'});res.end(appFiles.get(req.url));}
+ else if(req.url==='/v1/login'&&req.method==='POST'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({session_token:'x'.repeat(43),expires_at:123}));}
+ else if(req.url==='/v1/session'&&req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:'user_a',role:'operator'}));}
+ else if(req.url.startsWith('/v1/counterparties?')&&req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify([{workspace_id:'group_a',partner_id:'fake_partner_1',partner_kind:'customer',display_name:'Synthetic'}]));}
+ else if(req.url==='/v1/logout'&&req.method==='POST'){res.writeHead(503,{'content-type':'application/json'});res.end('{}');}
  else{res.writeHead(404);res.end();}
 });
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
@@ -46,6 +52,19 @@ async function main(){
   console.log('PASS real Chrome actor check: foreign same-workspace user denied');
   console.log('PASS real Chrome directory: wrong requested kind denied');
   console.log('PASS real Chrome directory: unexpected fields denied');
+  console.log('PILOT_STAGE_NAVIGATE');await call('Page.navigate',{url:origin+'/settlement-team-pilot.html'});
+  ready=false;for(let i=0;i<80;i++){ready=await ev("document.readyState==='complete' && !!document.getElementById('team-login') && !!window.KtsTeamPilotUI");if(ready)break;await sleep(100);}assert.equal(ready,true);
+  // Prior checks intentionally left a quarantined synthetic draft in this
+  // disposable profile. Clear it so logout has no native unsent-data dialog.
+  await ev('localStorage.clear()');
+  console.log('PILOT_STAGE_LOGIN');await ev("document.getElementById('team-subject').value='synthetic_user';document.getElementById('team-password').value='synthetic-password';document.getElementById('team-login').requestSubmit()");
+  let ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-context').textContent.includes('Đã đăng nhập')");if(ok)break;await sleep(100);}assert.equal(ok,true);
+  console.log('PILOT_STAGE_DIRECTORY');await ev("document.getElementById('team-directory').click()");
+  ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-counterparties').children.length===1");if(ok)break;await sleep(100);}assert.equal(ok,true);
+  console.log('PILOT_STAGE_LOGOUT');await ev("document.getElementById('team-logout').click()");
+  ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-notice').textContent.includes('CHƯA XÁC MINH thu hồi')");if(ok)break;await sleep(100);}assert.equal(ok,true);
+  assert.equal(await ev("document.getElementById('team-counterparties').children.length"),0);
+  console.log('PASS real Chrome pilot UI: directory cleared after unverified logout');
   await call('Browser.close');
  }finally{
   if(ws)ws.close();if(child){await waitExit(child,5000);if(!exited(child)){child.kill();await waitExit(child,3000);}if(!exited(child))throw Error('CHROME_NOT_CLOSED');}
