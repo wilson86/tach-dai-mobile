@@ -11,6 +11,7 @@ on:
       - 'tests/quyt-pwa-telegram-envelope.test.js'
       - 'tests/quyt-pwa-missing-unit.test.js'
       - 'tests/quyt-pwa-mb-money-hold.test.cjs'
+      - 'tests/quyt-pwa-owner-rounding.test.cjs'
       - 'tests/quyt-pwa-mb-headless-smoke.cjs'
       - '.github/workflows/quyt-mb-money-review.yml'
 permissions:
@@ -24,7 +25,7 @@ jobs:
       - name: SHA-bound offline Node tests; no live data
         run: |
           node --version
-          node --test tests/quyt-pwa-mb-money-hold.test.cjs tests/quyt-pwa-market-safe-sw.test.cjs tests/quyt-pwa-stale-clipboard.test.cjs tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-telegram-envelope.test.js tests/quyt-pwa-missing-unit.test.js
+          node --test tests/quyt-pwa-owner-rounding.test.cjs tests/quyt-pwa-mb-money-hold.test.cjs tests/quyt-pwa-market-safe-sw.test.cjs tests/quyt-pwa-stale-clipboard.test.cjs tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-telegram-envelope.test.js tests/quyt-pwa-missing-unit.test.js
       - name: Real Chromium headless localhost DOM smoke (synthetic only)
         run: |
           command -v google-chrome || command -v chromium
