@@ -40,6 +40,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 .bet-section button{min-height:40px;padding:8px 12px;font-size:13px}
 .bet-section.pending{background:#fff8f1}
 .bet-section.pending textarea{background:#fff8f1}
+.section-row-list{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.section-row-list label{display:flex;align-items:center;gap:6px;padding:6px 9px;border:1px solid #c6d8e6;border-radius:7px;background:#eaf3fa;font-size:13px}
 [hidden]{display:none!important}
 @media(max-width:600px){.bet-section-grid{grid-template-columns:1fr;gap:9px}.bet-section textarea{min-height:90px}}
 
@@ -60,46 +61,47 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <label class="field" for="raw" style="margin:10px 0 7px">Tin nguồn (không bị sửa)</label>
  <textarea id="raw" placeholder="hn 21 b10n dd5n. 12 13 da20n.&#10;hn 21 b5n dd10n." spellcheck="false"></textarea>
  <div id="status" class="notice hold" role="status">Dán tin vào ô trên để bắt đầu.</div>
- <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
+ <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button><button type="button" id="startNewBatch" hidden style="background:#924b14">XÁC NHẬN LƯỢT MỚI (KHÔNG GỬI TRÙNG)</button></div>
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
 </div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Tổng tiền đã gộp</h2>
- <div class="totals"><div class="total">TỔNG GỐC (CHƯA LÀM TRÒN)<strong id="before">—</strong></div><div class="total">TỔNG XUẤT (ĐÃ LÀM TRÒN)<strong id="after">—</strong></div></div>
+ <div class="totals"><div class="total">TỔNG GỐC (CHƯA LÀM TRÒN)<strong id="before">—</strong></div><div class="total">TỔNG CÒN LẠI (ĐÃ LÀM TRÒN)<strong id="after">—</strong></div></div>
+ <div class="actions"><button id="undoQuytCut" class="secondary" type="button" disabled>HOÀN TÁC CẮT</button><span class="tiny" id="cutReceipt" role="status">Chưa cắt; giữ nguyên tin gốc.</span></div>
 </div>
 <div class="card" id="groupedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
- <p class="muted tiny">Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
+ <p class="muted tiny">Mỗi nhóm có Copy, Cắt nhóm, hoặc đánh dấu từng số rồi Cắt đã chọn. Chỉ phần chưa Cắt mới xuất hiện trong tin gộp cuối; tin nguồn giữ nguyên để đối chiếu. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
   <section class="bet-section" data-bet-kind="b">
    <header><h3>B / BAO-LÔ</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm B / BAO-LÔ" placeholder="Không có cược nhóm này"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY B / BAO-LÔ</button></div>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY B / BAO-LÔ</button><button class="section-cut" type="button" disabled>CẮT NHÓM</button><button class="section-cut-selected" type="button" disabled>CẮT ĐÃ CHỌN</button></div><div class="section-row-list"></div>
   </section>
   <section class="bet-section" data-bet-kind="da">
    <header><h3>ĐÁ</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm ĐÁ" placeholder="Không có cược nhóm này"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐÁ</button></div>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐÁ</button><button class="section-cut" type="button" disabled>CẮT NHÓM</button><button class="section-cut-selected" type="button" disabled>CẮT ĐÃ CHỌN</button></div><div class="section-row-list"></div>
   </section>
   <section class="bet-section" data-bet-kind="dd">
    <header><h3>DD</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm DD" placeholder="Không có cược nhóm này"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY DD</button></div>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY DD</button><button class="section-cut" type="button" disabled>CẮT NHÓM</button><button class="section-cut-selected" type="button" disabled>CẮT ĐÃ CHỌN</button></div><div class="section-row-list"></div>
   </section>
   <section class="bet-section pending" data-bet-kind="xc">
    <header><h3>XC (CHƯA DUYỆT)</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm XC (CHƯA DUYỆT)" placeholder="XC chưa được duyệt; không tự nhận cược"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY XC (CHƯA DUYỆT)</button></div>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY XC (CHƯA DUYỆT)</button><button class="section-cut" type="button" disabled>CẮT NHÓM</button><button class="section-cut-selected" type="button" disabled>CẮT ĐÃ CHỌN</button></div><div class="section-row-list"></div>
   </section>
   <section class="bet-section" data-bet-kind="dau">
    <header><h3>ĐẦU</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm ĐẦU" placeholder="Không có cược nhóm này"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐẦU</button></div>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐẦU</button><button class="section-cut" type="button" disabled>CẮT NHÓM</button><button class="section-cut-selected" type="button" disabled>CẮT ĐÃ CHỌN</button></div><div class="section-row-list"></div>
   </section>
   <section class="bet-section" data-bet-kind="dui">
    <header><h3>ĐUÔI</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm ĐUÔI" placeholder="Không có cược nhóm này"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐUÔI</button></div>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐUÔI</button><button class="section-cut" type="button" disabled>CẮT NHÓM</button><button class="section-cut-selected" type="button" disabled>CẮT ĐÃ CHỌN</button></div><div class="section-row-list"></div>
   </section>
  </div>
 </div>
@@ -107,7 +109,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <h2 style="font-size:19px;margin:0 0 8px">COPY TOÀN BỘ TIN ĐÃ GỘP</h2>
  <textarea id="result" readonly spellcheck="false" placeholder="Kết quả xuất hiện ngay khi tin hợp lệ."></textarea>
  <div class="actions"><button id="copy" type="button" disabled>COPY TIN GỘP</button><button id="select" class="secondary" type="button" disabled>Chọn toàn bộ để Copy thủ công</button></div>
- <p class="muted tiny">Có thể Copy cả tin ở trên hoặc Copy riêng từng khung bên dưới.</p>
+ <p class="muted tiny">Tin gộp cuối luôn đồng bộ với các ô đã Cắt. Nút Hoàn tác nằm phía trên; tin nguồn nguyên văn không bị thay đổi.</p>
  <details><summary>Xem bảng đối soát từng số / từng cặp</summary><div class="table-scroll"><table><thead><tr><th>Loại</th><th>Số/cặp</th><th>Gốc (n)</th><th>Sau nhân, chưa tròn (n)</th><th>Xuất, đã tròn (n)</th></tr></thead><tbody id="details"></tbody></table></div></details>
  <p class="warn tiny">Quy tắc số tiền xuất: gộp mỗi số/cặp trước, nhân BAO/LÔ một lần nếu tick Quýt; làm tròn từng số/cặp đến n nguyên (phần lẻ &lt; 0.5n xuống, ≥ 0.5n lên). Tổng xuất cộng chính các số đã làm tròn, không làm tròn lại tổng. Bảng đối soát giữ nguyên số chưa làm tròn. Khoản dương bị tròn thành 0n sẽ HOLD. Chỉ Copy văn bản; không tự gửi Router/Telegram.</p>
 </div>
@@ -270,19 +272,72 @@ const OfflineKTS=(()=>{
  return Object.freeze({merge,fmt,decimal,missingDaN});
 })();
 </script>
+<script src="./quyt-cut-ledger.js"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),status=$('status'),copy=$('copy'),select=$('select'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
-const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null;
+const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null,restoredTick=false;
 const frames=[...document.querySelectorAll('#betSections .bet-section')].map(node=>({
  kind:node.getAttribute('data-bet-kind'),
  field:node.querySelector('.section-text'),
  total:node.querySelector('.section-total'),
- button:node.querySelector('.section-copy')
+ button:node.querySelector('.section-copy'),
+ cut:node.querySelector('.section-cut'),
+ cutSelected:node.querySelector('.section-cut-selected'),
+ choices:node.querySelector('.section-row-list')
 }));
+const cutStorageKey='KTS_QUYT_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null,cutInFlight=false;
+function loadGuard(){
+ try{const rawRecord=sessionStorage.getItem(cutGuardKey);if(!rawRecord)return;
+  const record=JSON.parse(rawRecord);if(!record||typeof record.scope!=='string'||!['cut','pending'].includes(record.phase))throw Error('BAD_GUARD');cutGuard=record;
+ }catch(_){cutGuard={scope:'CORRUPT',phase:'blocked'}}
+}
+function writeGuard(record){
+ const text=JSON.stringify(record);sessionStorage.setItem(cutGuardKey,text);
+ if(sessionStorage.getItem(cutGuardKey)!==text)throw Error('HOLD_GUARD_SAVE_FAILED');cutGuard=record;
+}
+function preflightCutStorage(){
+ const key=cutGuardKey+'_PROBE';sessionStorage.setItem(key,'ok');
+ if(sessionStorage.getItem(key)!=='ok')throw Error('HOLD_STORAGE_UNAVAILABLE');sessionStorage.removeItem(key);
+}
+function cutScope(){return JSON.stringify([raw.value,customer.value,market.value,tick.checked,rate.value])}
+function saveCuts(){const receipt=JSON.stringify({scope:cutScope(),keys:[...cutKeys],undo:cutUndo});sessionStorage.setItem(cutStorageKey,receipt);if(sessionStorage.getItem(cutStorageKey)!==receipt)throw Error('HOLD_LEDGER_SAVE_FAILED')}
+function restoreCuts(){
+ cutKeys=new Set();cutUndo=[];
+ try{const x=JSON.parse(sessionStorage.getItem(cutStorageKey)||'null');
+  if(!x||x.scope!==cutScope())return;
+  if(!Array.isArray(x.keys)||x.keys.length>5000||!Array.isArray(x.undo)||x.undo.length>30||x.undo.some(a=>!Array.isArray(a)||a.length>5000))throw Error('HOLD_SAVED_CUT_CORRUPT');
+  cutKeys=new Set(x.keys);cutUndo=x.undo.map(a=>a.slice());
+ }catch(e){throw Error('HOLD_SAVED_CUT_CORRUPT')}
+}
 function resetFrames(){
  $('groupedResultsCard').hidden=true;$('combinedResultsCard').hidden=true;
- for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.field.closest('.bet-section').hidden=true;}
+ for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.cut.disabled=true;frame.cutSelected.disabled=true;frame.choices.replaceChildren();frame.field.closest('.bet-section').hidden=true;}
+ $('undoQuytCut').disabled=true;$('cutReceipt').textContent='Chưa cắt; giữ nguyên tin gốc.';
+}
+function renderCut(base){
+ const v=QuytCutLedger.derive(base,cutKeys);
+ current={...v,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=v.pretty;copy.disabled=!v.pretty;select.disabled=!v.pretty;
+ let visibleGroups=0;
+ for(const frame of frames){
+  const section=v.sections.find(g=>g.kind===frame.kind);if(!section)throw Error('HOLD_LEDGER_SECTION');
+  frame.field.value=section.text;frame.field.closest('.bet-section').hidden=!(section.supported&&section.text);
+  if(section.supported&&section.text)visibleGroups++;
+  frame.total.textContent=section.text?formatVi(section.total):(section.supported?'0n':'HOLD XC');
+  frame.button.disabled=!section.supported||!section.text;frame.cut.disabled=!section.supported||!section.text;frame.cutSelected.disabled=true;frame.choices.replaceChildren();
+  for(const row of v.rows.filter(r=>r.kind===frame.kind)){
+   const label=document.createElement('label'),box=document.createElement('input'),text=document.createElement('span');
+   box.type='checkbox';box.value=QuytCutLedger.key(row);box.className='cut-row-check';
+   text.textContent=row.number.replace('-','–')+' • '+row.adjusted+'n';
+   label.append(box,text);frame.choices.append(label);
+  }
+ }
+ $('groupedResultsCard').hidden=visibleGroups===0;$('combinedResultsCard').hidden=!v.pretty;
+ $('before').textContent=formatVi(base.original);$('after').textContent=formatVi(v.total);
+ $('cutReceipt').textContent=v.cutCount?'Đã Cắt '+v.cutCount+' số/cặp ('+formatVi(v.cutTotal)+'). Còn '+formatVi(v.total)+'. Nguồn gốc giữ nguyên.':'Chưa Cắt; nguồn gốc giữ nguyên.';
+ $('undoQuytCut').disabled=cutUndo.length===0;
+ $('details').replaceChildren();
+ for(const row of v.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
 }
 function currentValid(){
  return current&&current.raw===raw.value&&current.customer===customer.value&&current.market===market.value&&
@@ -291,35 +346,38 @@ function currentValid(){
 
 let rates={quyt:'1.067',hien:'1.000',khac:'1.000'};
 try{const saved=JSON.parse(localStorage.getItem(ratesKey)||'null');if(saved&&typeof saved==='object')for(const id of Object.keys(rates))if(typeof saved[id]==='string'&&/^\d+(?:[.,]\d{1,3})?$/u.test(saved[id]))rates[id]=saved[id]}catch(_){/*local-only*/}
-try{const state=JSON.parse(sessionStorage.getItem(storageKey)||'null');if(state&&['quyt','hien','khac'].includes(state.customer)&&['mb','mn','mt'].includes(state.market)&&typeof state.raw==='string'&&state.raw.length<60000){customer.value=state.customer;market.value=state.market;raw.value=state.raw}}catch(_){/*local-only*/}
-rate.value=rates[customer.value];
-function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw.value,customer:customer.value,market:market.value}))}catch(_){}try{localStorage.setItem(ratesKey,JSON.stringify(rates))}catch(_){}}
+try{const state=JSON.parse(sessionStorage.getItem(storageKey)||'null');if(state&&['quyt','hien','khac'].includes(state.customer)&&['mb','mn','mt'].includes(state.market)&&typeof state.raw==='string'&&state.raw.length<60000){customer.value=state.customer;market.value=state.market;raw.value=state.raw;restoredTick=state.tick===true&&state.customer==='quyt'}}catch(_){/*local-only*/}
+rate.value=rates[customer.value];tick.checked=restoredTick;
+function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked}))}catch(_){}try{localStorage.setItem(ratesKey,JSON.stringify(rates))}catch(_){}}
 function formatVi(x){const [whole,fraction]=String(x).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+(fraction?','+fraction:'')+'n'}
 function message(text,isHold){status.textContent=text;status.classList.toggle('hold',Boolean(isHold))}
 function daScope(){return JSON.stringify([raw.value,customer.value,market.value])}
-function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
+function redraw(restore=false){
+ activeBase=null;current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
+ if(cutGuard&&(cutGuard.scope!==cutScope()||cutGuard.phase!=='cut')){
+  $('startNewBatch').hidden=false;
+  message('HOLD_CUT_REPLAY: đã Cắt/Copy cược lượt trước; sửa nguồn, hệ số hoặc miền KHÔNG được tự tái xuất số đã Cắt. Khôi phục nguồn gốc, hoặc xác nhận lượt mới độc lập sau khi đối soát.',true);
+  return;
+ }
+ $('startNewBatch').hidden=true;
+ if(!restore&&!cutGuard){cutKeys=new Set();cutUndo=[];try{saveCuts()}catch(_){/*Cắt bị khóa bởi kiểm tra lưu trữ*/}}
+
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
- try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
-  current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
-  let visibleGroups=0;
-  for(const frame of frames){
-   const section=res.sections.find(g=>g.kind===frame.kind);
-   if(!section)throw Error('HOLD: thiếu phân nhóm '+frame.kind);
-   frame.field.value=section.text;
-   frame.field.closest('.bet-section').hidden=!(section.supported&&section.text);
-   if(section.supported&&section.text)visibleGroups++;
-   frame.total.textContent=section.text?formatVi(section.total):(section.supported?'0n':'HOLD XC');
-   frame.button.disabled=!section.supported||!section.text;
-  }
-  $('groupedResultsCard').hidden=visibleGroups===0;
-  $('combinedResultsCard').hidden=!res.pretty;
-  $('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
-  for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
-  message('ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'Chỉ BAO/LÔ được nhân ×'+rate.value+'.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Đã làm tròn từng số/cặp xuống nếu lẻ <0.5n, lên nếu ≥0.5n; tổng xuất bằng tổng các khoản đã làm tròn. Tin sẵn để Copy.',false);
- }catch(e){const reason=String(e.message||e);if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu các số đó thật sự là tiền theo đơn vị n, bấm Xác nhận. Không tự thêm n.',true)}else if(reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: Có 2 tin cùng nội dung. Nếu khách thật sự đặt hai lượt riêng, bấm Xác nhận để cộng đủ. Nếu chỉ dán lặp, sửa ô nguồn.',true)}else message('HOLD: '+reason+'. Chưa có tin nào được xuất.',true)}
+ try{
+  const result=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+  if(restore||cutGuard)restoreCuts();
+  activeBase=result;renderCut(result);
+  message('ĐÃ GỘP '+result.sourceCount+' tin. '+(cutKeys.size?'Còn lại '+current.rows.length+' số/cặp chưa Cắt.':'Chọn số để Cắt hoặc Cắt toàn nhóm.')+' Nguồn gốc giữ nguyên.',false);
+ }catch(e){
+  const reason=String(e.message||e);current=null;activeBase=null;out.value='';copy.disabled=true;resetFrames();
+  if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu đúng là tiền n, hãy xác nhận.',true)}
+  else if(reason==='TIN_TRÙNG_CHƯA_XAC_NHAN'||reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: tin trùng; phải xác nhận đây là hai lần đặt riêng.',true)}
+  else message('HOLD: '+reason+'. Không Cắt hoặc xuất tin.',true);
+ }
 }
+
 raw.addEventListener('input',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});market.addEventListener('change',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});
 customer.addEventListener('change',()=>{rate.value=rates[customer.value]||'1.000';confirmedRaw=null;confirmedDaScope=null;redraw()});
 rate.addEventListener('input',()=>{rates[customer.value]=rate.value;redraw()});
@@ -327,10 +385,62 @@ tick.addEventListener('change',redraw);
 daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.value);if(!candidates.length)return;const examples=candidates.slice(0,3).map(x=>x.exact+' → '+x.assumed).join('; ');if(!confirm('Xác nhận tất cả '+candidates.length+' chỗ thiếu n là tiền theo đơn vị n?\n'+examples+'\nKhông sửa tin gốc; chỉ tính bản xem trước.'))return;confirmedDaScope=daScope();redraw()});
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
+$('startNewBatch').addEventListener('click',()=>{
+ if(!cutGuard)return;
+ if(cutInFlight){message('HOLD: đang Cắt, chờ xác nhận kết quả trước khi đổi lượt.',true);return}
+ if(!confirm('CẢNH BÁO: lượt trước đã Cắt/Copy. Chỉ mở lượt mới khi đã đối soát và xác nhận KHÔNG GỬI TRÙNG. Đây là lượt đặt ĐỘC LẬP thật sự?'))return;
+ try{sessionStorage.removeItem(cutGuardKey);sessionStorage.removeItem(cutStorageKey);cutGuard=null;cutKeys=new Set();cutUndo=[];confirmedRaw=null;confirmedDaScope=null;$('startNewBatch').hidden=true;redraw();
+  message('Đã xác nhận lượt mới độc lập. Kiểm tra số và tiền trước khi gửi.',false);
+ }catch(e){message('HOLD: không thể bắt đầu lượt mới an toàn: '+String(e.message||e),true)}
+});
 select.addEventListener('click',()=>{if(!current)return;out.focus();out.select();message('Đã chọn toàn bộ tin gộp. Nhấn Ctrl+C (trên Windows) hoặc Sao chép (trên điện thoại).',false)});
+async function cutGroup(frame,selectedOnly){
+ const ticket=current,base=activeBase;
+ if(cutInFlight){message('HOLD: một lần Cắt đang Copy, không thực hiện Cắt thứ hai.',true);return}
+ if(!ticket||!base||!currentValid()||!ticket.pretty){message('HOLD: tin nguồn hoặc kết quả thay đổi; chưa Cắt.',true);return}
+ const candidates=ticket.rows.filter(r=>r.kind===frame.kind).map(QuytCutLedger.key);
+ const keys=selectedOnly?[...frame.choices.querySelectorAll('input:checked')].map(x=>x.value):candidates;
+ if(!keys.length||keys.some(k=>!candidates.includes(k)||cutKeys.has(k))){message('HOLD: chưa chọn số hợp lệ để Cắt.',true);return}
+ let payload;
+ try{
+  const before=selectedOnly?new Set(base.rows.filter(r=>!keys.includes(QuytCutLedger.key(r))).map(QuytCutLedger.key)):null;
+  payload=selectedOnly?QuytCutLedger.derive(base,before).pretty:ticket.sections.find(s=>s.kind===frame.kind)?.text;
+  if(!payload)throw Error('HOLD_EMPTY_CUT_PAYLOAD');
+  QuytCutLedger.derive(base,new Set([...cutKeys,...keys]));
+ }catch(e){message('HOLD: không xác minh được sổ Cắt. '+String(e.message||e),true);return}
+ const guardBeforeCut=cutGuard;
+ try{preflightCutStorage();writeGuard({scope:cutScope(),phase:'pending'})}
+ catch(e){message('HOLD: không lưu được biên nhận Cắt, KHÔNG COPY. '+String(e.message||e),true);return}
+ cutInFlight=true;
+ copy.disabled=true;select.disabled=true;
+ for(const f of frames){f.button.disabled=true;f.cut.disabled=true;f.cutSelected.disabled=true}
+ try{if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');await navigator.clipboard.writeText(payload)}
+ catch(_){
+  cutInFlight=false;
+  try{if(guardBeforeCut)writeGuard(guardBeforeCut);else{sessionStorage.removeItem(cutGuardKey);cutGuard=null}}
+  catch(e){cutGuard={scope:'CORRUPT',phase:'pending'};message('HOLD: không hoàn tác được biên nhận clipboard, KHÔNG XUẤT. '+String(e.message||e),true);return}
+  redraw(Boolean(cutGuard));
+  message('HOLD: Copy thất bại, KHÔNG CẮT.',true);return;
+ }
+ if(current!==ticket||activeBase!==base||!currentValid()||keys.some(k=>cutKeys.has(k))){
+  cutInFlight=false;redraw(true);
+  message('HOLD_CUT_REPLAY: clipboard có thể chứa tin CŨ. Lượt Cắt chưa xác minh; phải đối soát rồi xác nhận lượt mới.',true);return;
+ }
+ cutUndo.push([...cutKeys]);if(cutUndo.length>30)cutUndo.shift();
+ for(const k of keys)cutKeys.add(k);
+ try{saveCuts();writeGuard({scope:cutScope(),phase:'cut'});renderCut(base);message('ĐÃ CẮT '+keys.length+' số/cặp nhóm '+frame.kind.toUpperCase()+' và Copy. Các khung và tin cuối đồng bộ ngay; nguồn không đổi.',false)}
+ catch(e){current=null;activeBase=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();message('HOLD: clipboard đã có thể chứa cược cũ nhưng sổ Cắt chưa xác minh. KHÔNG COPY LẠI. '+String(e.message||e),true)}
+ finally{cutInFlight=false}
+}
+$('undoQuytCut').addEventListener('click',()=>{if(!activeBase||!cutUndo.length)return;if(cutInFlight){message('HOLD: đang Copy để Cắt, chưa được Undo.',true);return}const prior=cutUndo.pop();try{QuytCutLedger.derive(activeBase,new Set(prior));cutKeys=new Set(prior);renderCut(activeBase);saveCuts();message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false)}catch(e){cutUndo.push(prior);message('HOLD: Hoàn tác bị chặn: '+String(e.message||e),true)}});
+for(const frame of frames){
+ frame.choices.addEventListener('change',()=>{frame.cutSelected.disabled=!currentValid()||!frame.choices.querySelector('input:checked')});
+ frame.cut.addEventListener('click',()=>cutGroup(frame,false));
+ frame.cutSelected.addEventListener('click',()=>cutGroup(frame,true));
+}
 for(const frame of frames){
  frame.button.addEventListener('click',async()=>{
-  const section=current?.sections.find(g=>g.kind===frame.kind);
+  const ticket=current,section=ticket?.sections.find(g=>g.kind===frame.kind);
   if(!currentValid()||!section||!section.supported||!section.text||
      section.text!==frame.field.value||frame.button.disabled){
    message('HOLD: tin nguồn, hệ số hoặc khung đã thay đổi. Không Copy dữ liệu cũ.',true);redraw();return;
@@ -338,6 +448,7 @@ for(const frame of frames){
   try{
    if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');
    await navigator.clipboard.writeText(section.text);
+   if(ticket!==current||!currentValid()||section.text!==frame.field.value){message('HOLD: clipboard có thể chứa tin cũ, hãy Copy lại.',true);return}
    message('ĐÃ COPY nhóm '+frame.kind.toUpperCase()+' ('+formatVi(section.total)+'). Không tự gửi Telegram/Router.',false);
   }catch(_){
    frame.field.focus();frame.field.select();let ok=false;
@@ -347,11 +458,12 @@ for(const frame of frames){
  });
 }
 copy.addEventListener('click',async()=>{
- if(!current||current.raw!==raw.value||current.customer!==customer.value||current.market!==market.value||current.tick!==tick.checked||current.rate!==rate.value||current.pretty!==out.value){message('HOLD: nguồn/trạng thái đã thay đổi. Không Copy kết quả cũ.',true);redraw();return}
- try{if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');await navigator.clipboard.writeText(current.pretty);message('ĐÃ COPY chính xác nội dung theo checkbox hiện tại. Không tự gửi Telegram/Router.',false)}
+ const ticket=current;
+ if(!current||current.raw!==raw.value||current.customer!==customer.value||current.market!==market.value||current.tick!==tick.checked||current.rate!==rate.value||current.pretty!==out.value||copy.disabled){message('HOLD: nguồn/trạng thái đã thay đổi. Không Copy kết quả cũ.',true);redraw();return}
+ try{if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');await navigator.clipboard.writeText(ticket.pretty);if(ticket!==current||!currentValid()){message('HOLD: clipboard có thể chứa tin cũ, hãy Copy lại.',true);return}message('ĐÃ COPY chính xác nội dung theo checkbox hiện tại. Không tự gửi Telegram/Router.',false)}
  catch(_){out.focus();out.select();let ok=false;try{ok=document.execCommand('copy')}catch(_e){}message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok)}
 });
-redraw();
+loadGuard();redraw(true);
 })();
 </script>
 <script>
