@@ -64,6 +64,22 @@ try{
  assert('stale combined Copy never falls back to a different ticket',legacyCalls===0);
  assert('stale combined Copy keeps HOLD warning',$('status').textContent.includes('HOLD'));
  navigator.clipboard.writeText=safeWrite;document.execCommand=safeExec;
+ // A pending normal Copy must exclude a concurrent Cut/second Copy, or clipboard order is unknowable.
+ set('raw','hn 21 b10n dd5n');
+ let finishCopy, writeCount=0;
+ navigator.clipboard.writeText=()=>{writeCount++;return new Promise(ok=>{finishCopy=ok})};
+ section('b').querySelector('.section-copy').click();
+ assert('group Copy has unresolved clipboard receipt',typeof finishCopy==='function');
+ assert('group Copy pending disables Cut UI',section('b').querySelector('.section-cut').disabled);
+ assert('group Copy pending disables global Copy UI',$('copy').disabled);
+ finishCopy();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('group Copy completion restores Cut UI',!section('b').querySelector('.section-cut').disabled);
+ $('copy').click();
+ assert('combined Copy has unresolved clipboard receipt',writeCount===2);
+ assert('combined Copy pending disables group Cut UI',section('b').querySelector('.section-cut').disabled);
+ finishCopy();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ navigator.clipboard.writeText=safeWrite;
+
  set('raw','hn 21 b10n dd5n. 21 22 da20n.');
  assert('six group and select Cut controls',document.querySelectorAll('.section-cut').length===6&&document.querySelectorAll('.section-cut-selected').length===6);
  assert('before Cut total 35n',$('after').textContent==='35n');
