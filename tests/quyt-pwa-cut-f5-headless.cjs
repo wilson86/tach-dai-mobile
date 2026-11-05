@@ -18,6 +18,9 @@ const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent
 const flush=async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve()};
 try{
  if(sessionStorage.getItem('QA_QUYT_CUT_REFRESH_STAGE')==='after'){
+  const first=JSON.parse(sessionStorage.getItem('QA_QUYT_CUT_FIRST_PHASE')||'null');
+  assert('first-phase receipt available',Array.isArray(first));
+  if(Array.isArray(first))report.push(...first);
   assert('F5 restored raw source',$('raw').value==='hn 21 b10n dd5n');
   assert('F5 restored Quyt multiplier toggle',$('tick').checked===true);
   assert('F5 keeps B cut, only DD remains',$('result').value.includes('dd5n')&&!$('result').value.includes('b11n')&&$('after').textContent==='5n'&&frame('b').hidden);
@@ -25,6 +28,7 @@ try{
   $('undoQuytCut').click();
   assert('Undo after F5 returns full 16n',$('after').textContent==='16n'&&$('result').value.includes('b11n'));
   sessionStorage.removeItem('QA_QUYT_CUT_REFRESH_STAGE');
+  sessionStorage.removeItem('QA_QUYT_CUT_FIRST_PHASE');
  }else{
   set('raw','hn 21 b10n dd5n');
   $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
@@ -46,6 +50,7 @@ try{
   frame('b').querySelector('.section-cut').click();await flush();
   assert('normal Cut B after clipboard works',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
   assert('local ledger persisted for reload',sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1').includes('b|21'));
+  sessionStorage.setItem('QA_QUYT_CUT_FIRST_PHASE',JSON.stringify(report));
   sessionStorage.setItem('QA_QUYT_CUT_REFRESH_STAGE','after');
   window.location.reload();return;
  }
@@ -85,6 +90,6 @@ server.listen(0,'127.0.0.1',()=>{
   try{result=JSON.parse(stdout.slice(at+start.length,end).replaceAll('&quot;','"').replaceAll('&amp;','&'))}
   catch(e){console.error('BROWSER_RECEIPT_PARSE_FAILED',String(e));process.exitCode=1;return}
   console.log(JSON.stringify({browser:'actual Chromium headless, localhost, synthetic data',result},null,2));
-  if(status!==0||result.fail>0||result.pass<5)process.exitCode=1;
+  if(status!==0||result.fail>0||result.pass<12)process.exitCode=1;
  });
 });
