@@ -26,6 +26,7 @@ function element(){
  };
 }
 function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='SYNCED',reconnectDrafts=[],logoutRevokeUnverified=false,
+ directoryStatuses=['SYNCED'],
  syntheticReviewUiEnabled=false,syntheticRecoveryUiEnabled=false,recoveryRows=null,recoveryGate=null,reviewState='DRAFT',reviewOutcomes=['SYNCED'],feedItems=null,feedPages=null,
  pullHasMore=false,reconnectItems=[],reconnectHasMore=false,readGate=null,pullGate=null,reconnectGate=null,reviewGate=null,reviewNoReceipt=false}={}){
  const ids=['team-login','team-subject','team-password','team-workspace',
@@ -41,7 +42,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
  };
  const win=element();win.confirm=()=>false;
  const state={authenticated:false,workspace_id:null,drafts:[],review_attempts:[],session_epoch:0};
- let listener=null,requestCount=0;const calls=[];
+ let listener=null,requestCount=0,directoryCount=0;const calls=[];
  const notify=()=>{if(listener)listener({...state,drafts:state.drafts.slice()});};
  const client={
    snapshot:()=>({...state,drafts:state.drafts.map(v=>({...v}))}),
@@ -75,7 +76,7 @@ function harness({syncStatus='SYNCED',pullStatuses=['SYNCED'],reconnectStatus='S
      return {status:'REVIEW_ONLY',auto_send_enabled:false,
        all_receipts_verified:items.every(x=>x.classification==='MATCHED_SERVER_RECEIPT'),items};
    },
-   async listCounterparties(){calls.push('listCounterparties');return {status:'SYNCED',items:[
+   async listCounterparties(){calls.push('listCounterparties');const status=directoryStatuses[Math.min(directoryCount++,directoryStatuses.length-1)];if(status!=='SYNCED')return {status,error:'SYNC_SERVER_REJECTED',items:[]};return {status:'SYNCED',items:[
      {workspace_id:state.workspace_id,partner_id:'fake_customer_1',partner_kind:'customer',display_name:'Synthetic Customer'}
    ]};},
    async reviewScope(action,selected,revision,options={}){
@@ -284,6 +285,16 @@ test('directory metadata disappears on external identity change and unverified l
   assert.equal(h.els['team-counterparties'].children.length,0,mode);
   h.mounted.dispose();
  }
+});
+test('failed directory refresh removes previously displayed entries',async()=>{
+ const h=harness({directoryStatuses:['SYNCED','BLOCKED']});
+ h.els['team-login'].fire('submit',{preventDefault(){}});await tick();
+ h.els['team-directory'].fire('click');await tick();
+ assert.equal(h.els['team-counterparties'].children.length,1);
+ h.els['team-directory'].fire('click');await tick();
+ assert.equal(h.els['team-counterparties'].children.length,0);
+ assert.match(h.els['team-notice'].textContent,/CHƯA XÁC MINH danh bạ/);
+ h.mounted.dispose();
 });
 
 test('read-only reviewer status comes only from verified scope; no approval control exists',async()=>{

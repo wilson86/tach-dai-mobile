@@ -202,6 +202,9 @@ function mount({doc,win,client,Sync,syntheticReviewUiEnabled=false,syntheticReco
   on(e['team-directory'],'click',()=>void action(async()=>{
     if(typeof sync.listCounterparties!=='function')throw Error('TEAM_PILOT_DIRECTORY_UNAVAILABLE');
     const startIdentity=identityEpoch;
+    // A refresh in flight or rejected by the server must not leave stale
+    // directory entries looking usable for the current read.
+    clear(e['team-counterparties']);
     const result=await sync.listCounterparties();
     if(dead||startIdentity!==identityEpoch||!sync.snapshot().authenticated){
       clear(e['team-counterparties']);

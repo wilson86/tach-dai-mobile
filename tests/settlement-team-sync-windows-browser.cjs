@@ -8,13 +8,14 @@ const profile=fs.mkdtempSync(path.join(base,'kts-demo-chrome-'));
 const client=fs.readFileSync(path.resolve(__dirname,'../app/settlement-team-sync-client.js'));
 const html=Buffer.from('<!doctype html><title>synthetic sync fixture</title><script src="/client.js"></script>');
 const appFiles=new Map(['settlement-team-pilot.html','settlement-team-pilot.css','settlement-team-review-audit.js','settlement-team-sync-client.js','settlement-team-pilot-ui.js','settlement-team-pilot-start.js'].map(name=>['/'+name,fs.readFileSync(path.resolve(__dirname,'../app',name))]));
+let directoryRequests=0;
 const server=http.createServer((req,res)=>{
  if(req.url==='/'){res.writeHead(200,{'content-type':'text/html'});res.end(html);}
  else if(req.url==='/client.js'){res.writeHead(200,{'content-type':'text/javascript'});res.end(client);}
  else if(appFiles.has(req.url)){res.writeHead(200,{'content-type':req.url.endsWith('.html')?'text/html':req.url.endsWith('.css')?'text/css':'text/javascript'});res.end(appFiles.get(req.url));}
  else if(req.url==='/v1/login'&&req.method==='POST'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({session_token:'x'.repeat(43),expires_at:123}));}
  else if(req.url==='/v1/session'&&req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:'user_a',role:'operator'}));}
- else if(req.url.startsWith('/v1/counterparties?')&&req.method==='GET'){res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify([{workspace_id:'group_a',partner_id:'fake_partner_1',partner_kind:'customer',display_name:'Synthetic'}]));}
+ else if(req.url.startsWith('/v1/counterparties?')&&req.method==='GET'){directoryRequests++;res.writeHead(directoryRequests===2?503:200,{'content-type':'application/json'});res.end(directoryRequests===2?'{}':JSON.stringify([{workspace_id:'group_a',partner_id:'fake_partner_1',partner_kind:'customer',display_name:'Synthetic'}]));}
  else if(req.url==='/v1/logout'&&req.method==='POST'){res.writeHead(503,{'content-type':'application/json'});res.end('{}');}
  else{res.writeHead(404);res.end();}
 });
@@ -61,6 +62,12 @@ async function main(){
   let ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-context').textContent.includes('Đã đăng nhập')");if(ok)break;await sleep(100);}assert.equal(ok,true);
   console.log('PILOT_STAGE_DIRECTORY');await ev("document.getElementById('team-directory').click()");
   ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-counterparties').children.length===1");if(ok)break;await sleep(100);}assert.equal(ok,true);
+  await ev("document.getElementById('team-directory').click()");
+  ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-notice').textContent.includes('CHƯA XÁC MINH danh bạ')");if(ok)break;await sleep(100);}assert.equal(ok,true);
+  assert.equal(await ev("document.getElementById('team-counterparties').children.length"),0);
+  await ev("document.getElementById('team-directory').click()");
+  ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-counterparties').children.length===1");if(ok)break;await sleep(100);}assert.equal(ok,true);
+  console.log('PASS real Chrome pilot UI: failed refresh clears stale directory');
   console.log('PILOT_STAGE_LOGOUT');await ev("document.getElementById('team-logout').click()");
   ok=false;for(let i=0;i<80;i++){ok=await ev("document.getElementById('team-notice').textContent.includes('CHƯA XÁC MINH thu hồi')");if(ok)break;await sleep(100);}assert.equal(ok,true);
   assert.equal(await ev("document.getElementById('team-counterparties').children.length"),0);
