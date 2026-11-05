@@ -7,10 +7,10 @@ const http=require('node:http');
 const cp=require('node:child_process');
 const root=path.resolve(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'quyt-pwa/index.html'),'utf8');
-const bootstrap=String.raw\`<script>
+const bootstrap=String.raw`<script>
 Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:s=>{window.__qaClipboard=String(s);return Promise.resolve()}}});
-</script>\`;
-const checks=String.raw\`<script>
+</script>`;
+const checks=String.raw`<script>
 (async()=>{
 const report=[],$=id=>document.getElementById(id);
 const assert=(name,pass)=>report.push({name,pass:Boolean(pass)});
@@ -48,7 +48,7 @@ const result=document.createElement('pre');result.id='quyt-mb-browser-qa';
 result.textContent=JSON.stringify({pass:report.filter(x=>x.pass).length,fail:report.filter(x=>!x.pass).length,report});
 document.body.append(result);
 })();
-</script>\`;
+</script>`;
 if(!source.includes('</head>')||!source.includes('</body>'))throw Error('HTML_MISSING_CLOSING_TAG');
 const rendered=source.replace('</head>',bootstrap+'\n</head>').replace('</body>',checks+'\n</body>');
 const server=http.createServer((req,res)=>{
