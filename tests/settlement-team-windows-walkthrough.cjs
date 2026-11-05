@@ -2,16 +2,40 @@
 // Windows, real Chrome, standalone fake-only file. No app server or database.
 const fs=require('node:fs');
 const path=require('node:path');
-const os=require('node:os');
 const cp=require('node:child_process');
 const assert=require('node:assert/strict');
 const {pathToFileURL}=require('node:url');
 const chrome='C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe';
-const profile=fs.mkdtempSync(path.join(os.tmpdir(),'kts-demo-chrome-'));
 const file=path.resolve(__dirname,'../app/settlement-team-synthetic-walkthrough.html');
-const evidence=process.env.KTS_DEMO_EVIDENCE_DIR;
+const ROOT='C:\\KTS-Settlement\\w20-2d63c84e';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function approvedDirectory(candidate){
+ if(process.platform!=='win32'||typeof candidate!=='string'||!path.win32.isAbsolute(candidate))throw Error('C_ONLY_DIRECTORY_REQUIRED');
+ const target=path.resolve(candidate),base=path.resolve(ROOT);
+ const relative=path.relative(base,target);
+ if(!/^C:\\/i.test(target)||relative==='..'||relative.startsWith('..'+path.sep)||path.isAbsolute(relative))throw Error('DIRECTORY_OUTSIDE_CONTROL_ROOT');
+ let current=path.parse(target).root;
+ for(const part of target.slice(current.length).split(path.sep).filter(Boolean)){
+  current=path.join(current,part);const st=fs.lstatSync(current);
+  if(st.isSymbolicLink()||!st.isDirectory())throw Error('DIRECTORY_REPARSE_OR_NON_DIRECTORY');
+ }
+ if(fs.realpathSync.native(target).toLowerCase()!==target.toLowerCase())throw Error('DIRECTORY_IDENTITY_MISMATCH');
+ return target;
+}
+const exited=child=>child.exitCode!==null||child.signalCode!==null;
+async function waitExit(child,ms){if(exited(child))return;await Promise.race([new Promise(resolve=>child.once('exit',resolve)),sleep(ms)]);}
+function removeOwnedProfile(profile){
+ const resolved=approvedDirectory(profile),base=approvedDirectory(ROOT);
+ if(path.dirname(resolved).toLowerCase()!==base.toLowerCase()||!path.basename(resolved).startsWith('kts-demo-chrome-'))throw Error('PROFILE_IDENTITY_INVALID');
+ let files=0,bytes=0;
+ function inspect(dir){for(const entry of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,entry.name),s=fs.lstatSync(p);if(s.isSymbolicLink())throw Error('PROFILE_REPARSE_PRESERVED');if(s.isDirectory())inspect(p);else if(s.isFile()){files++;bytes+=s.size;}else throw Error('PROFILE_UNKNOWN_OBJECT_PRESERVED');}}
+ inspect(resolved);console.log(`PROFILE_INVENTORY files=${files} bytes=${bytes}`);
+ fs.rmSync(resolved,{recursive:true});console.log('OWNED_PROFILE_REMOVED');
+}
 async function main(){
+ const evidence=approvedDirectory(process.env.KTS_DEMO_EVIDENCE_DIR);
+ const base=approvedDirectory(ROOT);
+ const profile=fs.mkdtempSync(path.join(base,'kts-demo-chrome-'));
  const child=cp.spawn(chrome,['--headless=new','--disable-gpu','--no-first-run',
   '--no-default-browser-check','--remote-debugging-port=0',`--user-data-dir=${profile}`,'about:blank'],{stdio:'ignore'});
  let ws,port,seq=0;const pending=new Map();let errors=[];
@@ -45,15 +69,22 @@ async function main(){
    assert.match(await ev("document.getElementById('out-state').textContent"),/ĐÃ DUYỆT/);
    assert.equal(await ev('document.documentElement.scrollWidth<=innerWidth'),true,'horizontal overflow');
    assert.deepEqual(errors,[]);
-   if(evidence){const shot=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(evidence,`walkthrough-${viewport.width}x${viewport.height}.png`),Buffer.from(shot.data,'base64'));}
+   if(evidence){const shot=await call('Page.captureScreenshot',{format:'png'});fs.writeFileSync(path.join(evidence,`walkthrough-${viewport.width}x${viewport.height}.png`),Buffer.from(shot.data,'base64'),{flag:'wx'});}
    console.log(`PASS file:// Chrome ${viewport.width}x${viewport.height} fake A/B workflows and tenant view`);
   }
   await call('Browser.close');
  }finally{
   if(ws)ws.close();
-  if(child.exitCode===null){await Promise.race([new Promise(resolve=>child.once('exit',resolve)),sleep(5000)]);if(child.exitCode===null){child.kill();await Promise.race([new Promise(resolve=>child.once('exit',resolve)),sleep(3000)]);}}
-  if(child.exitCode===null)throw Error('OWNED_CHROME_STILL_RUNNING');
+  await waitExit(child,5000);if(!exited(child)){child.kill();await waitExit(child,3000);}
+  if(!exited(child))throw Error('OWNED_CHROME_STILL_RUNNING');
   console.log('OWNED_CHROME_EXITED');
+  // Confirm no Chrome process reports the exact owned profile before removal.
+  const scan=cp.spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',
+   "$p=$env:KTS_OWNED_PROFILE; @(Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) }).Count"],
+   {encoding:'utf8',timeout:10000,env:{...process.env,KTS_OWNED_PROFILE:profile}});
+  if(scan.error||scan.status!==0||String(scan.stdout).trim()!=='0')throw Error('OWNED_CHROME_DESCENDANTS_UNVERIFIED_PROFILE_PRESERVED');
+  removeOwnedProfile(profile);
  }
 }
-main().catch(e=>{console.error(e.message);process.exitCode=1;});
+if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1;});
+module.exports={exited,waitExit,approvedDirectory,removeOwnedProfile};
