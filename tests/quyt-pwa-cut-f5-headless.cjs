@@ -27,6 +27,8 @@ try{
   set('raw','hn 21 b12n dd5n');
   assert('editing after Cut must HOLD and disable all Copy',$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HOLD'));
   assert('editing after Cut requires explicit new-batch acknowledgement',!$('startNewBatch').hidden);
+  const oldConfirm=window.confirm;window.confirm=()=>false;$('startNewBatch').click();window.confirm=oldConfirm;
+  assert('rejecting new-batch confirmation retains financial HOLD',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
   set('raw','hn 21 b10n dd5n');
   assert('restoring exact source retains prior B cut',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
   set('rate','1.050');
