@@ -27,7 +27,7 @@ test('CUT one of 2 grouped BAO numbers retains other number exactly',()=>{
  const b=bet('hn 21 22 b10n dd5n', {...opts,tick:false});
  const v=cut(b,['b|21']);
  assert.match(v.pretty,/22 b10n/u);assert.doesNotMatch(v.pretty,/21 b10n/u);
- assert.equal(v.total,'15');assert.equal(v.cutTotal,'10');
+ assert.equal(v.total,'20');assert.equal(v.cutTotal,'10');
 });
 test('CUT same-number DAU keeps DUI valid without recomputing',()=>{
  const b=bet('hn 55 dau5n dui15n', {...opts,tick:false});
