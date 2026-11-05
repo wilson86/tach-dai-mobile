@@ -40,15 +40,18 @@ try{
   !!document.querySelector('a[href="./mn-mt-review.html"]'));
  assert('old market selection options removed',
   !document.querySelector('option[value="mn"],option[value="mt"]'));
+ assert('MB before merge result frames hidden',el('groupedResultsCard').hidden&&el('combinedResultsCard').hidden&&[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
  set('market','mb','change');
  assert('explicit MB choice clears legacy notice and computes valid stake',
   el('oldMarketNotice').hidden&&el('copy').disabled===false&&el('after').textContent==='10n');
+ assert('MB B-only shows only B',!el('groupedResultsCard').hidden&&!el('combinedResultsCard').hidden&&!document.querySelector('[data-bet-kind="b"]').hidden&&['da','dd','xc','dau','dui'].every(k=>document.querySelector('[data-bet-kind="'+k+'"]').hidden));
  set('raw','hn 21 b15n');
  el('tick').checked=true;el('tick').dispatchEvent(new Event('change',{bubbles:true}));
  assert('unsafe CEIL/HALF_UP BAO ticket HARD HOLD',
   el('copy').disabled&&el('result').value===''&&el('status').textContent.includes('HOLD_CHENH_LECH_LAM_TRON'));
  assert('all sibling group Copy disabled on money HOLD',
   [...document.querySelectorAll('.section-copy')].every(x=>x.disabled));
+ assert('MB money HOLD hides previous result frames',el('groupedResultsCard').hidden&&el('combinedResultsCard').hidden&&[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
  set('raw','hn 21 b10n');
  assert('safe Quyt BAO money still shows preview and allows Copy',
   el('after').textContent==='11n'&&!el('copy').disabled&&el('result').value.includes('21 b11n'));
@@ -58,6 +61,7 @@ try{
  set('raw','hn 21 b10n dd10n');
  assert('DD remains unmultiplied while B scales once',
   el('after').textContent==='21n'&&!el('copy').disabled);
+ assert('B+DD shows only populated groups in order',!document.querySelector('[data-bet-kind="b"]').hidden&&!document.querySelector('[data-bet-kind="dd"]').hidden&&['da','xc','dau','dui'].every(k=>document.querySelector('[data-bet-kind="'+k+'"]').hidden)&&[...document.querySelectorAll('#betSections .bet-section:not([hidden])')].map(x=>x.dataset.betKind).join(',')==='b,dd');
  set('customer','hien','change');
  assert('switching off Quyt clears tick and returns original stake',
   el('tick').checked===false&&el('tick').disabled&&el('after').textContent==='20n');
@@ -67,6 +71,7 @@ try{
  set('market','mn','change');
  assert('programmatic unsupported MN selection also rejects atomically',
   el('copy').disabled&&el('result').value===''&&el('status').textContent.includes('HOLD'));
+ assert('unsupported market HOLD hides stale MB results',el('groupedResultsCard').hidden&&el('combinedResultsCard').hidden);
  set('market','mb','change');
  set('customer','quyt','change');
  set('raw','hn 21 b55n');

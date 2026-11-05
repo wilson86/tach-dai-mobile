@@ -40,6 +40,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 .bet-section button{min-height:40px;padding:8px 12px;font-size:13px}
 .bet-section.pending{background:#fff8f1}
 .bet-section.pending textarea{background:#fff8f1}
+[hidden]{display:none!important}
 @media(max-width:600px){.bet-section-grid{grid-template-columns:1fr;gap:9px}.bet-section textarea{min-height:90px}}
 
 @media(max-width:600px){.wrap{padding:8px 8px 28px}.card{padding:11px}.field{flex-basis:135px}h1{font-size:20px}.totals{gap:5px}.total{padding:9px}.total strong{font-size:17px}#raw{min-height:240px}#result{min-height:270px}}
@@ -73,7 +74,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <p id="roundingAudit" class="warn tiny" aria-live="polite"></p>
  <label class="check" id="moneyAcknowledgment" style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
 </div>
-<div class="card">
+<div class="card" id="groupedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
  <p class="muted tiny">MN/MT tự lọc đài theo ngày. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. ĐÁ/DX/XC vẫn HOLD toàn bộ. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
@@ -87,15 +88,15 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm ĐÁ" placeholder="Không có cược nhóm này"></textarea>
    <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐÁ</button></div>
   </section>
-  <section class="bet-section pending" data-bet-kind="xc">
-   <header><h3>XC (CHƯA DUYỆT)</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
-   <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm XC (CHƯA DUYỆT)" placeholder="XC chưa được duyệt; không tự nhận cược"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY XC (CHƯA DUYỆT)</button></div>
-  </section>
   <section class="bet-section" data-bet-kind="dd">
    <header><h3>DD</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm DD" placeholder="Không có cược nhóm này"></textarea>
    <div class="actions"><button type="button" class="section-copy" disabled>COPY DD</button></div>
+  </section>
+  <section class="bet-section pending" data-bet-kind="xc">
+   <header><h3>XC (CHƯA DUYỆT)</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
+   <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm XC (CHƯA DUYỆT)" placeholder="XC chưa được duyệt; không tự nhận cược"></textarea>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY XC (CHƯA DUYỆT)</button></div>
   </section>
   <section class="bet-section" data-bet-kind="dau">
    <header><h3>ĐẦU</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
@@ -109,7 +110,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
   </section>
  </div>
 </div>
-<div class="card">
+<div class="card" id="combinedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">COPY TOÀN BỘ TIN ĐÃ GỘP</h2>
  <textarea id="result" readonly spellcheck="false" placeholder="Kết quả xuất hiện ngay khi tin hợp lệ."></textarea>
  <div class="actions"><button id="copy" type="button" disabled>COPY TIN GỘP</button><button id="select" class="secondary" type="button" disabled>Chọn toàn bộ để Copy thủ công</button></div>
@@ -392,7 +393,8 @@ const frames=[...document.querySelectorAll('#betSections .bet-section')].map(nod
  button:node.querySelector('.section-copy')
 }));
 function resetFrames(){
- for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;}
+ $('groupedResultsCard').hidden=true;$('combinedResultsCard').hidden=true;
+ for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.field.closest('.bet-section').hidden=true;}
 }
 function syncCopyGate(){
  const can=Boolean(currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled);
@@ -439,13 +441,18 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
    return;
   }
   current={...res,raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;ack.disabled=false;
+  let visibleGroups=0;
   for(const frame of frames){
    const section=res.sections.find(g=>g.kind===frame.kind);
    if(!section)throw Error('HOLD: thiếu phân nhóm '+frame.kind);
    frame.field.value=section.text;
+   frame.field.closest('.bet-section').hidden=!(section.supported&&section.text);
+   if(section.supported&&section.text)visibleGroups++;
    frame.total.textContent=section.text?formatVi(section.total):(section.supported?'0n':'HOLD XC');
    frame.button.disabled=true; // Remains locked until the operator confirms the CURRENT receipt.
   }
+  $('groupedResultsCard').hidden=visibleGroups===0;
+  $('combinedResultsCard').hidden=!res.pretty;
   $('sourceTotal').textContent=formatVi(res.sourceTotal);$('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
   $('factorReceipt').textContent=(tick.checked?'ĐÃ NHÂN BAO/LÔ ×'+rate.value+' và làm tròn HALF_UP theo từng số/đài.':'CHƯA NHÂN HỆ SỐ.')+' Copy chỉ xuất số cuối cùng; KHÔNG nhân thêm ở Router hoặc phía nhận.';
   $('roundingAudit').textContent=res.roundingDiffRows?'CẢNH BÁO ĐỐI SOÁT: '+res.roundingDiffRows+' số/đài BAO/LÔ khác quy tắc CEIL tham chiếu. Tổng theo HALF_UP PWA: '+formatVi(res.total)+'; tổng giả định làm tròn lên mọi khoản: '+formatVi(res.ceilReference)+'. Hai kết quả KHÔNG tương đương; phải thống nhất với phía nhận trước khi Copy.':'Quy tắc xuất: làm tròn HALF_UP từng số/đài. Chưa có bằng chứng quy tắc này giống Router; phải đối soát phía nhận.';

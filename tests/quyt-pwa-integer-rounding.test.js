@@ -84,9 +84,9 @@ test('unsupported XC and market still HOLD, and source is never mutated',()=>{
  const a=app.merge(s,{...base,tick:true});
  assert.equal(s,copy);assert.equal(a.total,'59');
 });
-test('v9 service worker retains fail-closed money guard and group frames',()=>{
+test('v10 service worker retains fail-closed money guard and group frames',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261105-v9-clipboard-guard/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261105-v10-hide-empty-groups/u);
  assert.match(html,/Sau nhân, chưa tròn/u);
  assert.match(html,/Xuất, đã tròn/u);
  assert.match(html,/TỔNG XUẤT \(ĐÃ LÀM TRÒN\)/u);

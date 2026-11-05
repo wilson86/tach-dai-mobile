@@ -28,10 +28,13 @@ const acknowledge=()=>{ $('ackMoney').checked=true;$('ackMoney').dispatchEvent(n
 try{
  assert('page rendered',Boolean($('raw')&&$('businessDate')&&frame('b')));
  assert('MN scope visible',$('regionScope').style.display==='block');
+ assert('before merging neither group nor full-result card exists visually',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
  set('raw','mn dn 21 b10n');
  assert('missing draw date HOLD',$('copy').disabled);
+ assert('missing date never displays empty group boxes',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden);
  select('businessDate','2026-11-04');
  assert('valid date shows preview but Copy locked',$('copy').disabled && $('after').textContent==='10n');
+ assert('B-only preview has exactly one visible group and no blank placeholders',!$('groupedResultsCard').hidden&&!$('combinedResultsCard').hidden&&!frame('b').hidden&&['da','dd','xc','dau','dui'].every(x=>frame(x).hidden));
  assert('source/exposure/output independent',$('sourceTotal').textContent==='10n'&&$('before').textContent==='10n'&&$('after').textContent==='10n');
  await click('copy');
  assert('cannot Copy without acknowledging',!window.__qaClipboard);
@@ -47,6 +50,7 @@ try{
  assert('stations separate and subtotal conserved',$('after').textContent==='22n'&&pane('b','.section-total').textContent==='22n'&&$('copy').disabled);
  set('raw','mn dn hn 21 b10n');
  assert('nested HN always HOLD',$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HN nằm sau'));
+ assert('invalid source atomically hides all previous grouped UI',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
  set('raw','mn dn 21 21 b10n');
  assert('same clause double stake HOLD',$('copy').disabled&&$('status').textContent.includes('số lặp'));
  set('raw','mn dn 21 b10n\\n\\nmn ct 21 b10n\\n\\nmn ct 21 xx10n');
@@ -64,6 +68,7 @@ try{
  assert('legacy compact 3-digit accepted',$('after').textContent==='44n'&&$('result').value.includes('852 b11n.'));
  set('raw','mn dn 21 xc10n');
  assert('XC and all sibling Copy HOLD',$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
+ assert('XC HOLD never displays false XC group or prior approved group',$('groupedResultsCard').hidden&&frame('xc').hidden&&frame('b').hidden);
  set('raw','[11/4/2026 6:06 PM] Cô Quýt: mn dn 21 b10n');
  assert('Telegram US month/day accepted, Copy requires new acknowledgment',$('after').textContent==='11n'&&$('copy').disabled);
  select('businessDate','2026-11-05');
@@ -118,6 +123,7 @@ try{
  assert('fresh explicit number group still merges before single multiplier',$('sourceTotal').textContent==='12n'&&$('before').textContent==='24n'&&$('after').textContent==='26n'&&$('copy').disabled);
  set('raw','2d 52 b10n dd5n');
  assert('distinct B and DD on one number group remain valid',$('sourceTotal').textContent==='15n'&&$('after').textContent==='32n'&&!$('ackMoney').disabled);
+ assert('B+DD displays only populated groups in required order',!frame('b').hidden&&!frame('dd').hidden&&['da','xc','dau','dui'].every(x=>frame(x).hidden)&&[...document.querySelectorAll('#betSections .bet-section:not([hidden])')].map(x=>x.dataset.betKind).join(',')==='b,dd');
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});

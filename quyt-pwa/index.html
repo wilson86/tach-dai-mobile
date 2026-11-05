@@ -40,6 +40,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 .bet-section button{min-height:40px;padding:8px 12px;font-size:13px}
 .bet-section.pending{background:#fff8f1}
 .bet-section.pending textarea{background:#fff8f1}
+[hidden]{display:none!important}
 @media(max-width:600px){.bet-section-grid{grid-template-columns:1fr;gap:9px}.bet-section textarea{min-height:90px}}
 
 @media(max-width:600px){.wrap{padding:8px 8px 28px}.card{padding:11px}.field{flex-basis:135px}h1{font-size:20px}.totals{gap:5px}.total{padding:9px}.total strong{font-size:17px}#raw{min-height:240px}#result{min-height:270px}}
@@ -68,7 +69,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <h2 style="font-size:19px;margin:0 0 8px">Tổng tiền đã gộp</h2>
  <div class="totals"><div class="total">TỔNG GỐC (CHƯA LÀM TRÒN)<strong id="before">—</strong></div><div class="total">TỔNG XUẤT (ĐÃ LÀM TRÒN)<strong id="after">—</strong></div></div>
 </div>
-<div class="card">
+<div class="card" id="groupedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
  <p class="muted tiny">Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
@@ -82,15 +83,15 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm ĐÁ" placeholder="Không có cược nhóm này"></textarea>
    <div class="actions"><button type="button" class="section-copy" disabled>COPY ĐÁ</button></div>
   </section>
-  <section class="bet-section pending" data-bet-kind="xc">
-   <header><h3>XC (CHƯA DUYỆT)</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
-   <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm XC (CHƯA DUYỆT)" placeholder="XC chưa được duyệt; không tự nhận cược"></textarea>
-   <div class="actions"><button type="button" class="section-copy" disabled>COPY XC (CHƯA DUYỆT)</button></div>
-  </section>
   <section class="bet-section" data-bet-kind="dd">
    <header><h3>DD</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
    <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm DD" placeholder="Không có cược nhóm này"></textarea>
    <div class="actions"><button type="button" class="section-copy" disabled>COPY DD</button></div>
+  </section>
+  <section class="bet-section pending" data-bet-kind="xc">
+   <header><h3>XC (CHƯA DUYỆT)</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
+   <textarea class="section-text" readonly spellcheck="false" aria-label="Tin gộp nhóm XC (CHƯA DUYỆT)" placeholder="XC chưa được duyệt; không tự nhận cược"></textarea>
+   <div class="actions"><button type="button" class="section-copy" disabled>COPY XC (CHƯA DUYỆT)</button></div>
   </section>
   <section class="bet-section" data-bet-kind="dau">
    <header><h3>ĐẦU</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
@@ -104,7 +105,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
   </section>
  </div>
 </div>
-<div class="card">
+<div class="card" id="combinedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">COPY TOÀN BỘ TIN ĐÃ GỘP</h2>
  <textarea id="result" readonly spellcheck="false" placeholder="Kết quả xuất hiện ngay khi tin hợp lệ."></textarea>
  <div class="actions"><button id="copy" type="button" disabled>COPY TIN GỘP</button><button id="select" class="secondary" type="button" disabled>Chọn toàn bộ để Copy thủ công</button></div>
@@ -281,13 +282,15 @@ const OfflineKTS=(()=>{
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),status=$('status'),copy=$('copy'),select=$('select'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
 const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null;
 const frames=[...document.querySelectorAll('#betSections .bet-section')].map(node=>({
+ node,
  kind:node.getAttribute('data-bet-kind'),
  field:node.querySelector('.section-text'),
  total:node.querySelector('.section-total'),
  button:node.querySelector('.section-copy')
 }));
 function resetFrames(){
- for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;}
+ $('groupedResultsCard').hidden=true;$('combinedResultsCard').hidden=true;
+ for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.node.hidden=true;}
 }
 function currentValid(){
  return current&&current.raw===raw.value&&current.customer===customer.value&&current.market===market.value&&
@@ -308,13 +311,18 @@ function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=t
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
   current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
+  let visibleGroups=0;
   for(const frame of frames){
    const section=res.sections.find(g=>g.kind===frame.kind);
    if(!section)throw Error('HOLD: thiếu phân nhóm '+frame.kind);
    frame.field.value=section.text;
+   frame.node.hidden=!(section.supported&&section.text);
+   if(section.supported&&section.text)visibleGroups++;
    frame.total.textContent=section.text?formatVi(section.total):(section.supported?'0n':'HOLD XC');
    frame.button.disabled=!section.supported||!section.text;
   }
+  $('groupedResultsCard').hidden=visibleGroups===0;
+  $('combinedResultsCard').hidden=!res.pretty;
   $('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
   for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
   message('ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'Chỉ BAO/LÔ được nhân ×'+rate.value+'.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Đã làm tròn từng số/cặp xuống nếu lẻ <0.5n, lên nếu ≥0.5n; tổng xuất bằng tổng các khoản đã làm tròn. Tin sẵn để Copy.',false);

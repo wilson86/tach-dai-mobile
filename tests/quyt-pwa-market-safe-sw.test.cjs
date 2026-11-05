@@ -57,7 +57,7 @@ async function request(url,mode='navigate'){
  return promise?promise:undefined;
 }
 test('SW identity includes MB+MNMT money and stale Copy update',()=>{
- assert.match(sw,/v9-clipboard-guard/u);
+ assert.match(sw,/v10-hide-empty-groups/u);
  assert.match(mb,/HOLD_CHENH_LECH_LAM_TRON/u);
  assert.match(mb,/CLIPBOARD CÓ THỂ CHỨA TIN CŨ/u);
  assert.match(mnmt,/HOLD_CHENH_LECH_LAM_TRON/u);
