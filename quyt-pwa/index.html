@@ -249,8 +249,8 @@ const OfflineKTS=(()=>{
    if(row.exact>0n&&row.rounded===0n)fail('HOLD: tiền dương làm tròn thành 0n; cần quyết định khách',row.number+' '+row.kind);
    original+=row.amount;adjusted+=row.rounded;
   }
-  if(roundingDiffRows)fail('HOLD_CHENH_LECH_LAM_TRON',
-   roundingDiffRows+' khoản BAO/LÔ khác quy tắc CEIL của Router; cần đối soát bên nhận trước khi xuất tin');
+  // Owner approved nearest integer HALF_UP; difference is a receiving-Router HOLD,
+  // not a reason to erase the correct preview from independent audit.
   const grouped=[];
   for(const row of sorted){const last=grouped.at(-1);
    if(row.kind!=='da'&&last&&last.kind===row.kind&&last.rounded===row.rounded){last.numbers.push(row.number)}
@@ -277,7 +277,7 @@ const OfflineKTS=(()=>{
   });
   if(sections.reduce((total,group)=>total+BigInt(group.total),0n)!==adjusted/M)
    fail('HOLD: tổng từng khung khác tổng đã gộp');
-  return {pretty,sections,original:fmt(original,D),total:fmt(adjusted,M),rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
+  return {pretty,sections,original:fmt(original,D),total:fmt(adjusted,M),roundingDiffRows,rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
  return Object.freeze({merge,fmt,decimal,missingDaN});
 })();
@@ -315,6 +315,11 @@ function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=t
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+  if(res.roundingDiffRows){
+   $('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
+   message('HOLD_CHENH_LECH_LAM_TRON: Quýt đã làm tròn HALF_UP theo xác nhận của chủ. Router hiện dùng CEIL khác. Chỉ xem tổng, KHÔNG COPY hay gửi tuyến trên.',true);
+   return;
+  }
   current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
   let visibleGroups=0;
   for(const frame of frames){

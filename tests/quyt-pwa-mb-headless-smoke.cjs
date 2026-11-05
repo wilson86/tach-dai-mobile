@@ -52,6 +52,8 @@ try{
  assert('all sibling group Copy disabled on money HOLD',
   [...document.querySelectorAll('.section-copy')].every(x=>x.disabled));
  assert('MB money HOLD hides previous result frames',el('groupedResultsCard').hidden&&el('combinedResultsCard').hidden&&[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
+ set('raw','hn 21 b75n');
+ assert('owner 75n→80n preview not eligible for Copy until Router parity',el('after').textContent==='80n'&&el('copy').disabled&&el('result').value===''&&el('status').textContent.includes('HOLD_CHENH_LECH_LAM_TRON'));
  set('raw','hn 21 b10n');
  assert('safe Quyt BAO money still shows preview and allows Copy',
   el('after').textContent==='11n'&&!el('copy').disabled&&el('result').value.includes('21 b11n'));

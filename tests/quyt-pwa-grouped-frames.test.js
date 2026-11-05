@@ -62,6 +62,7 @@ test('HTML has six scoped frames, hidden empty groups and v10 cache',()=>{
  assert.match(sw,/kts-quyt-standalone-pwa-20261105-v10-hide-empty-groups/u);
 });
 
-test('one unsafe BAO row blocks all grouped frames',()=>{
- assert.throws(()=>app.merge('hn 21 b15n. 44 dd10n.',base),/HOLD_CHENH_LECH_LAM_TRON/u);
+test('one Router-incompatible BAO row is flagged and UI blocks materializing output',()=>{
+ const o=app.merge('hn 21 b15n. 44 dd10n.',base);assert.equal(o.total,'26');assert.equal(o.roundingDiffRows,1);
+ assert.match(html,/if\(res\.roundingDiffRows\)/u);
 });

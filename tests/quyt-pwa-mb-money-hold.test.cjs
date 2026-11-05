@@ -19,10 +19,10 @@ test('MB base stake remains unchanged without Quyt checkbox',()=>{
  assert.equal(calculate('hn 21 b15n').total,'15');
  assert.equal(calculate('hn 21 b10n').total,'10');
 });
-test('BAO multiplier mismatch HALF_UP vs CEIL blocks whole ticket rather than printing a stake',()=>{
- hold('hn 21 b15n',{tick:true},/HOLD_CHENH_LECH_LAM_TRON/u);
- hold('hn 21 b75n',{tick:true},/HOLD_CHENH_LECH_LAM_TRON/u);
- hold('hn 21 b15n dd10n',{tick:true},/HOLD_CHENH_LECH_LAM_TRON/u);
+test('owner-approved integer preview flags unresolved receiving Router CEIL',()=>{
+ const a=calculate('hn 21 b15n',{tick:true});assert.equal(a.total,'16');assert.equal(a.roundingDiffRows,1);
+ const b=calculate('hn 21 b75n',{tick:true});assert.equal(b.total,'80');assert.equal(b.roundingDiffRows,1);assert.equal(b.rows[0].beforeRounding,'80.025');
+ const c=calculate('hn 21 b15n dd10n',{tick:true});assert.equal(c.total,'26');assert.equal(c.roundingDiffRows,1);
 });
 test('nondiscrepant Quyt amount and unscaled other groups stay usable',()=>{
  assert.equal(calculate('hn 21 b10n',{tick:true}).total,'11');
