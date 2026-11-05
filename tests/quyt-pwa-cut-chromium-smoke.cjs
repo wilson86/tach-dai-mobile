@@ -54,7 +54,9 @@ try{
  $('undoQuytCut').click();
  assert('Undo source-amount restore',$('after').textContent==='35n'&&$('result').value.includes('b10n'));
  set('raw','hn 21 22 b10n dd5n');
- assert('two B rows selectable',section('b').querySelectorAll('.cut-row-check').length===2);
+ assert('edit after earlier Cut forces HOLD and manual reset',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
+ const originalConfirm=window.confirm;window.confirm=()=>true;$('startNewBatch').click();window.confirm=originalConfirm;
+ assert('new independent source after explicit confirmation provides two B rows',section('b').querySelectorAll('.cut-row-check').length===2);
  const first=section('b').querySelector('.cut-row-check');first.checked=true;first.dispatchEvent(new Event('change',{bubbles:true}));
  assert('selected Cut enabled',!section('b').querySelector('.section-cut-selected').disabled);
  section('b').querySelector('.section-cut-selected').click();await Promise.resolve();await Promise.resolve();await Promise.resolve();
@@ -99,6 +101,6 @@ server.listen(0,'127.0.0.1',()=>{
   try{result=JSON.parse(stdout.slice(at+start.length,end).replaceAll('&quot;','"').replaceAll('&amp;','&'))}
   catch(e){console.error('BROWSER_RECEIPT_PARSE_FAILED',String(e));process.exitCode=1;return}
   console.log(JSON.stringify({browser:'actual Chromium headless, localhost, synthetic data',result},null,2));
-  if(status!==0||result.fail>0||result.pass<28)process.exitCode=1;
+  if(status!==0||result.fail>0||result.pass<29)process.exitCode=1;
  });
 });
