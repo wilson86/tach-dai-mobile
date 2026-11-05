@@ -46,3 +46,18 @@ test('legacy MN/MT draft is kept but not automatically relabelled as MB',()=>{
  assert.match(html,/market\.value='';\$\('oldMarketNotice'\)\.hidden=false/u);
  assert.match(html,/HOLD: bản nháp cũ chọn MN\/MT/u);
 });
+
+
+test('REVIEW N019: duplicate number in a single MB clause must HOLD instead of doubling money',()=>{
+ hold('hn 21 21 b10n',{tick:false},/HOLD: số lặp trong cùng một nhóm cược/u);
+});
+test('REVIEW N020: repeated MB selector without fresh numbers must HOLD, including b→bao aliases',()=>{
+ hold('hn 21 b10n b20n',{tick:false},/HOLD: lặp loại cược/u);
+ hold('hn 21 b10n bao20n',{tick:false},/HOLD: lặp loại cược/u);
+});
+test('REVIEW positive: truly separate MB clauses and messages still add both placements',()=>{
+ const a=calculate('hn 21 b10n. 21 b20n',{tick:false});
+ assert.equal(a.total,'30');
+ const b=calculate('hn 21 b10n\nhn 21 b20n',{tick:false});
+ assert.equal(b.total,'30');
+});
