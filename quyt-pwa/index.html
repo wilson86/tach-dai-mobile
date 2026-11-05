@@ -162,21 +162,26 @@ const OfflineKTS=(()=>{
   if(head)line=line.slice(head[0].length);
   if(!line.trim())fail('Tin không có cược',`tin ${index+1}`);
   const tokens=lex(line,index),bets=[];
-  let i=0,pending=[],previous=[];
+  let i=0,pending=[],previous=[],usedTypes=new Set();
   while(i<tokens.length){const token=tokens[i];
    if(token.type==='num'){pending.push(token.raw);i++;continue}
    if(token.type==='stake')fail('Số tiền không có loại cược',`tin ${index+1}`);
    const selector=T[token.raw.toLocaleLowerCase('vi-VN').replace(/\s+/gu,' ')];
    if(!selector)fail('Loại cược chưa được duyệt',token.raw);
+   // Approved N020: same canonical selector requires a new explicit number group.
+   if(pending.length)usedTypes=new Set();
+   if(usedTypes.has(selector))fail('HOLD: lặp loại cược khi chưa ghi nhóm số mới',`tin ${index+1}: ${token.raw}`);
    const nums=pending.length?pending.slice():previous.slice();
    if(!nums.length)fail('Loại cược không có số',`tin ${index+1}: ${token.raw}`);
    if(!tokens[i+1]||tokens[i+1].type!=='stake')fail('Thiếu tiền hoặc thiếu n',`tin ${index+1}: ${token.raw}`);
    if(selector==='xc')fail('XC chưa có quy tắc tiền được duyệt',`tin ${index+1}`);
    if(selector==='da'&&(nums.length!==2||nums[0]===nums[1]))fail('ĐÁ phải có đúng hai số khác nhau; ĐÁ vòng chưa được duyệt',`tin ${index+1}`);
+   // Approved N019: duplicate numbers within one clause must not silently multiply money.
+   if(selector!=='da'&&new Set(nums).size!==nums.length)fail('HOLD: số lặp trong cùng một nhóm cược',`tin ${index+1}`);
    const money=decimal(tokens[i+1].raw.slice(0,-1));if(money<=0n)fail('Số tiền phải lớn hơn 0',`tin ${index+1}`);
    if(selector==='da'){bets.push({kind:'da',number:nums.slice().sort().join('-'),money,source:index})}
    else for(const number of nums)bets.push({kind:selector,number,money,source:index});
-   previous=nums;pending=[];i+=2;
+   usedTypes.add(selector);previous=nums;pending=[];i+=2;
   }
   if(pending.length)fail('Có số chưa ghi loại cược hoặc tiền',`tin ${index+1}`);
   if(!bets.length)fail('Tin không có cược',`tin ${index+1}`);
@@ -244,8 +249,8 @@ const OfflineKTS=(()=>{
    if(row.exact>0n&&row.rounded===0n)fail('HOLD: tiền dương làm tròn thành 0n; cần quyết định khách',row.number+' '+row.kind);
    original+=row.amount;adjusted+=row.rounded;
   }
-  if(roundingDiffRows)fail('HOLD_CHENH_LECH_LAM_TRON',
-   roundingDiffRows+' khoản BAO/LÔ khác quy tắc CEIL của Router; cần đối soát bên nhận trước khi xuất tin');
+  // Owner approved nearest integer HALF_UP; difference is a receiving-Router HOLD,
+  // not a reason to erase the correct preview from independent audit.
   const grouped=[];
   for(const row of sorted){const last=grouped.at(-1);
    if(row.kind!=='da'&&last&&last.kind===row.kind&&last.rounded===row.rounded){last.numbers.push(row.number)}
@@ -272,7 +277,7 @@ const OfflineKTS=(()=>{
   });
   if(sections.reduce((total,group)=>total+BigInt(group.total),0n)!==adjusted/M)
    fail('HOLD: tổng từng khung khác tổng đã gộp');
-  return {pretty,sections,original:fmt(original,D),total:fmt(adjusted,M),rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
+  return {pretty,sections,original:fmt(original,D),total:fmt(adjusted,M),roundingDiffRows,rows:sorted.map(r=>({kind:r.kind,number:r.number,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),sourceCount:lines.length,rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
  return Object.freeze({merge,fmt,decimal,missingDaN});
 })();
@@ -310,6 +315,11 @@ function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=t
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+  if(res.roundingDiffRows){
+   $('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
+   message('HOLD_CHENH_LECH_LAM_TRON: Quýt đã làm tròn HALF_UP theo xác nhận của chủ. Router hiện dùng CEIL khác. Chỉ xem tổng, KHÔNG COPY hay gửi tuyến trên.',true);
+   return;
+  }
   current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
   let visibleGroups=0;
   for(const frame of frames){

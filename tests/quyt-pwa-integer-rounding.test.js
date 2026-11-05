@@ -92,8 +92,9 @@ test('v10 service worker retains fail-closed money guard and group frames',()=>{
  assert.match(html,/TỔNG XUẤT \(ĐÃ LÀM TRÒN\)/u);
 });
 
-test('divergent HALF_UP vs CEIL Quyt amounts HOLD atomically, no partial ticket',()=>{
- assert.throws(()=>merge('21 b15n. 44 dd10n.',{tick:true}),/HOLD_CHENH_LECH_LAM_TRON/u);
- assert.throws(()=>merge('21 22 b5n.',{tick:true}),/HOLD_CHENH_LECH_LAM_TRON/u);
+test('divergent HALF_UP vs CEIL flags UI HOLD but preserves integer audit preview',()=>{
+ const a=merge('21 b15n. 44 dd10n.',{tick:true});assert.equal(a.total,'26');assert.equal(a.roundingDiffRows,1);
+ const b=merge('21 22 b5n.',{tick:true});assert.equal(b.total,'10');assert.equal(b.roundingDiffRows,2);
  assert.equal(merge('21 b15n. 44 dd10n.',{tick:false}).total,'25');
+ assert.match(html,/if\(res\.roundingDiffRows\)/u);
 });

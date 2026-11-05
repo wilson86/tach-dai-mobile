@@ -19,10 +19,10 @@ test('MB base stake remains unchanged without Quyt checkbox',()=>{
  assert.equal(calculate('hn 21 b15n').total,'15');
  assert.equal(calculate('hn 21 b10n').total,'10');
 });
-test('BAO multiplier mismatch HALF_UP vs CEIL blocks whole ticket rather than printing a stake',()=>{
- hold('hn 21 b15n',{tick:true},/HOLD_CHENH_LECH_LAM_TRON/u);
- hold('hn 21 b75n',{tick:true},/HOLD_CHENH_LECH_LAM_TRON/u);
- hold('hn 21 b15n dd10n',{tick:true},/HOLD_CHENH_LECH_LAM_TRON/u);
+test('owner-approved integer preview flags unresolved receiving Router CEIL',()=>{
+ const a=calculate('hn 21 b15n',{tick:true});assert.equal(a.total,'16');assert.equal(a.roundingDiffRows,1);
+ const b=calculate('hn 21 b75n',{tick:true});assert.equal(b.total,'80');assert.equal(b.roundingDiffRows,1);assert.equal(b.rows[0].beforeRounding,'80.025');
+ const c=calculate('hn 21 b15n dd10n',{tick:true});assert.equal(c.total,'26');assert.equal(c.roundingDiffRows,1);
 });
 test('nondiscrepant Quyt amount and unscaled other groups stay usable',()=>{
  assert.equal(calculate('hn 21 b10n',{tick:true}).total,'11');
@@ -45,4 +45,19 @@ test('legacy MN/MT draft is kept but not automatically relabelled as MB',()=>{
  assert.match(html,/raw\.value=state\.raw;if\(state\.market==='mb'\)/u);
  assert.match(html,/market\.value='';\$\('oldMarketNotice'\)\.hidden=false/u);
  assert.match(html,/HOLD: bản nháp cũ chọn MN\/MT/u);
+});
+
+
+test('REVIEW N019: duplicate number in a single MB clause must HOLD instead of doubling money',()=>{
+ hold('hn 21 21 b10n',{tick:false},/HOLD: số lặp trong cùng một nhóm cược/u);
+});
+test('REVIEW N020: repeated MB selector without fresh numbers must HOLD, including b→bao aliases',()=>{
+ hold('hn 21 b10n b20n',{tick:false},/HOLD: lặp loại cược/u);
+ hold('hn 21 b10n bao20n',{tick:false},/HOLD: lặp loại cược/u);
+});
+test('REVIEW positive: truly separate MB clauses and messages still add both placements',()=>{
+ const a=calculate('hn 21 b10n. 21 b20n',{tick:false});
+ assert.equal(a.total,'30');
+ const b=calculate('hn 21 b10n\nhn 21 b20n',{tick:false});
+ assert.equal(b.total,'30');
 });
