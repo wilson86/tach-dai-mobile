@@ -58,6 +58,8 @@ async function main(){
   assert.deepEqual(recoveryRace,{wrong:{sent:idA,error:'TEAM_RECOVERY_RECEIPT_UNVERIFIED'},correct:{sent:idA,result:idA}});
   const unboundFeed=await ev(`(async()=>{let calls=0;const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async()=>{calls++;return {ok:true,status:200,json:async()=>({sync_status:'SYNCED',items:[{event_id:'fake_event',workspace_id:'other',feed_seq:1}],next_cursor:'opaque'})}}});c.setSessionToken('h'.repeat(43));const r=await c.pullChanges();return {status:r.status,error:r.error,calls,cursor:c.snapshot().cursor}})()`);
   assert.deepEqual(unboundFeed,{status:'BLOCKED',error:'AUTH_SESSION_REQUIRED',calls:0,cursor:null});
+  const collision=await ev(`(()=>{const descriptor=Object.getOwnPropertyDescriptor(crypto,'randomUUID');Object.defineProperty(crypto,'randomUUID',{configurable:true,value:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});try{const opts={fetchImpl:async()=>{throw Error('NO_NETWORK')}};const a=window.KtsSettlementSyncClient.createSyncClient(opts),b=window.KtsSettlementSyncClient.createSyncClient(opts);a.setSessionToken('i'.repeat(43),'group_a',{accountId:'user_collision'});b.setSessionToken('j'.repeat(43),'group_a',{accountId:'user_collision'});const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-11-05',region:'mn'};a.queueDraft(scope,{synthetic:true,memo:'original'});let denied=false;try{b.queueDraft(scope,{synthetic:true,memo:'other'})}catch(e){denied=e.message==='SYNC_DRAFT_ID_COLLISION'}return {denied,original:a.snapshot().drafts[0].payload.memo,otherCount:b.snapshot().drafts.length}}finally{if(descriptor)Object.defineProperty(crypto,'randomUUID',descriptor);else delete crypto.randomUUID}})()`);
+  assert.deepEqual(collision,{denied:true,original:'original',otherCount:0});
   console.log('PASS real Chrome localStorage: invalid scope denied; valid intent restored and quarantined');
   console.log('PASS real Chrome actor check: foreign same-workspace user denied');
   console.log('PASS real Chrome directory: wrong requested kind denied');
@@ -66,6 +68,7 @@ async function main(){
   console.log('PASS real Chrome read scope: response bound to original request');
   console.log('PASS real Chrome recovery inspection: original request IDs enforced');
   console.log('PASS real Chrome feed: unbound workspace blocked before fetch');
+  console.log('PASS real Chrome synthetic UUID collision preserves original intent');
   console.log('PILOT_STAGE_NAVIGATE');await call('Page.navigate',{url:origin+'/settlement-team-pilot.html'});
   ready=false;for(let i=0;i<80;i++){ready=await ev("document.readyState==='complete' && !!document.getElementById('team-login') && !!window.KtsTeamPilotUI");if(ready)break;await sleep(100);}assert.equal(ready,true);
   // Prior checks intentionally left a quarantined synthetic draft in this

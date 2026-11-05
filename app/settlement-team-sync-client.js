@@ -434,6 +434,15 @@
           !['mn','mt','mb'].includes(scope.region) || !validBusinessDate(scope.business_date))
         throw new Error('SYNC_SCOPE_INVALID');
       const id = newDraftId();
+      // A broken random source or an existing intent from another tab must
+      // never replace a pending item or reuse a durable dispatch marker.
+      if (pending.has(id)) throw new Error('SYNC_DRAFT_ID_COLLISION');
+      if (accountId && workspaceId && store && typeof store.get==='function') {
+        let existing=null,dispatched=null;
+        try { existing=store.get(intentKey(id)); dispatched=store.get(intentKey(id)+':dispatched'); }
+        catch (_) { /* normal persistence failure handling keeps dispatch blocked */ }
+        if (existing!=null || dispatched!=null) throw new Error('SYNC_DRAFT_ID_COLLISION');
+      }
       const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING, created_at:new Date().toISOString() };
       pending.set(id, item);
       persistPendingDrafts();
