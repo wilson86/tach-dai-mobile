@@ -53,6 +53,9 @@ try{
   navigator.clipboard.writeText=()=>{copyCalls++;return new Promise(done=>{resolveCut=done})};
   frame('b').querySelector('.section-cut').click();
   assert('async Cut in progress',typeof resolveCut==='function');
+  const pendingChoice=frame('b').querySelector('.cut-row-check');
+  pendingChoice.checked=true;pendingChoice.dispatchEvent(new Event('change',{bubbles:true}));
+  assert('pending Cut cannot reenable selected-Cut action',frame('b').querySelector('.section-cut-selected').disabled);
   frame('b').querySelector('.section-cut').click();
   assert('second rapid Cut does not copy twice',copyCalls===1);
   set('raw','hn 21 b12n dd5n');
