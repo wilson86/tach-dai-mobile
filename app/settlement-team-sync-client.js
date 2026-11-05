@@ -808,6 +808,7 @@
          actor.workspace_id!==workspaceId||
          typeof actor.user_id!=='string'||
          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(actor.user_id)||
+         actor.user_id!==accountId||
          !['operator','admin'].includes(actor.role))
         throw Error('SYNC_ACTOR_UNVERIFIED');
       return Object.freeze({server_verified:true,membership_active:true,

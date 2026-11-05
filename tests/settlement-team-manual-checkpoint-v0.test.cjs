@@ -231,7 +231,7 @@ test('explicit sync-client GET /v1/session returns only validated server actor',
   calls.push({url,method:options.method,authorization:options.headers.authorization});
   return {ok:true,status:200,async json(){return actor;}};
  }});
- client.setSessionToken('a'.repeat(43),'group_a');
+ client.setSessionToken('a'.repeat(43),'group_a',{accountId:actor.user_id});
  assert.equal(calls.length,0); // no hidden polling or automatic verifier
  const result=await client.verifyActor();
  assert.deepEqual(result,actor);
@@ -251,7 +251,7 @@ test('server actor proof rejects inactive identity, foreign workspace and non-op
   const c=Sync.createSyncClient({fetchImpl:async()=>({
    ok:true,status:200,async json(){return invalid;}
   })});
-  c.setSessionToken('a'.repeat(43),'group_a');
+  c.setSessionToken('a'.repeat(43),'group_a',{accountId:actor.user_id});
   await assert.rejects(c.verifyActor(),/SYNC_ACTOR_UNVERIFIED/);
  }
 });
@@ -263,7 +263,7 @@ test('session rotation during delayed GET cannot authorize old account checkpoin
   await gate;
   return {ok:true,status:200,async json(){return actor;}};
  }});
- c.setSessionToken('a'.repeat(43),'group_a');
+ c.setSessionToken('a'.repeat(43),'group_a',{accountId:actor.user_id});
  const inFlight=c.verifyActor();
  c.clearSession({discardPending:true});
  unblock();

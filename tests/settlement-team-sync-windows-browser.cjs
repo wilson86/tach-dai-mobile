@@ -36,7 +36,10 @@ async function main(){
   ready=false;for(let i=0;i<80;i++){ready=await ev("location.origin!=='null' && typeof window.KtsSettlementSyncClient==='object' && window.__ktsOldDocument!==true");if(ready)break;await sleep(100);}assert.equal(ready,true);
   const result=await ev(`(()=>{const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async()=>{throw Error('NO_NETWORK')}});c.setSessionToken('b'.repeat(43),'group_a',{accountId:'user_a'});return {restored:c.snapshot().drafts[0],persistence:c.snapshot().draft_persistence}})()`);
   assert.equal(result.persistence,'LOCAL_STORAGE');assert.equal(result.restored.id,first.id);assert.equal(result.restored.status,'NEEDS_RECONCILIATION');
+  const actorCheck=await ev(`(async()=>{let user='user_b';const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async()=>({ok:true,status:200,json:async()=>({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:user,role:'operator'})})});c.setSessionToken('c'.repeat(43),'group_a',{accountId:'user_a'});let rejected=false;try{await c.verifyActor()}catch(e){rejected=e.message==='SYNC_ACTOR_UNVERIFIED'}user='user_a';return {rejected,accepted:(await c.verifyActor()).user_id}})()`);
+  assert.equal(actorCheck.rejected,true);assert.equal(actorCheck.accepted,'user_a');
   console.log('PASS real Chrome localStorage: invalid scope denied; valid intent restored and quarantined');
+  console.log('PASS real Chrome actor check: foreign same-workspace user denied');
   await call('Browser.close');
  }finally{
   if(ws)ws.close();if(child){await waitExit(child,5000);if(!exited(child)){child.kill();await waitExit(child,3000);}if(!exited(child))throw Error('CHROME_NOT_CLOSED');}
