@@ -414,6 +414,8 @@ async function cutGroup(frame,selectedOnly){
  cutInFlight=true;
  copy.disabled=true;select.disabled=true;
  for(const f of frames){f.button.disabled=true;f.cut.disabled=true;f.cutSelected.disabled=true}
+ $('undoQuytCut').disabled=true;
+ message('ĐANG COPY ĐỂ CẮT: giữ nguyên nguồn và hệ số tới khi có biên nhận.',false);
  try{if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');await navigator.clipboard.writeText(payload)}
  catch(_){
   cutInFlight=false;
@@ -434,7 +436,7 @@ async function cutGroup(frame,selectedOnly){
 }
 $('undoQuytCut').addEventListener('click',()=>{if(!activeBase||!cutUndo.length)return;if(cutInFlight){message('HOLD: đang Copy để Cắt, chưa được Undo.',true);return}const prior=cutUndo.pop();try{QuytCutLedger.derive(activeBase,new Set(prior));cutKeys=new Set(prior);renderCut(activeBase);saveCuts();message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false)}catch(e){cutUndo.push(prior);message('HOLD: Hoàn tác bị chặn: '+String(e.message||e),true)}});
 for(const frame of frames){
- frame.choices.addEventListener('change',()=>{frame.cutSelected.disabled=!currentValid()||!frame.choices.querySelector('input:checked')});
+ frame.choices.addEventListener('change',()=>{frame.cutSelected.disabled=cutInFlight||!currentValid()||!frame.choices.querySelector('input:checked')});
  frame.cut.addEventListener('click',()=>cutGroup(frame,false));
  frame.cutSelected.addEventListener('click',()=>cutGroup(frame,true));
 }
@@ -451,6 +453,9 @@ for(const frame of frames){
    if(ticket!==current||!currentValid()||section.text!==frame.field.value){message('HOLD: clipboard có thể chứa tin cũ, hãy Copy lại.',true);return}
    message('ĐÃ COPY nhóm '+frame.kind.toUpperCase()+' ('+formatVi(section.total)+'). Không tự gửi Telegram/Router.',false);
   }catch(_){
+   if(ticket!==current||!currentValid()||cutInFlight||section.text!==frame.field.value){
+    message('HOLD_COPY_STALE: nguồn hoặc hệ số đổi khi Copy nhóm. Clipboard có thể chứa tin CŨ; KHÔNG Copy dự phòng, đối chiếu rồi Copy lại.',true);return;
+   }
    frame.field.focus();frame.field.select();let ok=false;
    try{ok=document.execCommand('copy')}catch(_e){}
    message(ok?'ĐÃ COPY nhóm '+frame.kind.toUpperCase()+'.':'Chưa được cấp quyền Copy. Nội dung nhóm đã được chọn để Copy thủ công.',!ok);
@@ -461,7 +466,11 @@ copy.addEventListener('click',async()=>{
  const ticket=current;
  if(!current||current.raw!==raw.value||current.customer!==customer.value||current.market!==market.value||current.tick!==tick.checked||current.rate!==rate.value||current.pretty!==out.value||copy.disabled){message('HOLD: nguồn/trạng thái đã thay đổi. Không Copy kết quả cũ.',true);redraw();return}
  try{if(!navigator.clipboard?.writeText)throw Error('Clipboard API không có');await navigator.clipboard.writeText(ticket.pretty);if(ticket!==current||!currentValid()){message('HOLD: clipboard có thể chứa tin cũ, hãy Copy lại.',true);return}message('ĐÃ COPY chính xác nội dung theo checkbox hiện tại. Không tự gửi Telegram/Router.',false)}
- catch(_){out.focus();out.select();let ok=false;try{ok=document.execCommand('copy')}catch(_e){}message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok)}
+ catch(_){
+  if(ticket!==current||!currentValid()||cutInFlight){
+   message('HOLD_COPY_STALE: nguồn hoặc hệ số đổi khi Copy. Clipboard có thể chứa tin CŨ; KHÔNG Copy dự phòng, đối chiếu rồi Copy lại.',true);return;
+  }
+  out.focus();out.select();let ok=false;try{ok=document.execCommand('copy')}catch(_e){}message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok)}
 });
 loadGuard();redraw(true);
 })();
