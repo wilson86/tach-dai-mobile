@@ -62,7 +62,7 @@ async function main(){
   assert.deepEqual(collision,{denied:true,original:'original',otherCount:0});
   // Two genuinely separate browser page targets share the origin's localStorage
   // and native Web Locks. The second page restores a quarantine, not a retry.
-  const initClient=`(()=>{window.__posts=0;window.__client=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async(url,options)=>{if(url==='/v1/session')return {ok:true,status:200,json:async()=>({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:'user_multitab',role:'operator'})};if(url==='/v1/scopes/drafts'){window.__posts++;return {ok:true,status:200,json:async()=>({sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-11-05:mn',event_id:'event_one',replayed:false,feed_seq:1,new_revision:1})}}throw Error('UNEXPECTED')}});window.__client.setSessionToken('k'.repeat(43),'group_a',{accountId:'user_multitab'});return true})()`;
+  const initClient=`(()=>{window.__posts=0;window.__client=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async(url,options)=>{if(url==='/v1/session')return {ok:true,status:200,json:async()=>({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:'user_multitab',role:'operator'})};if(url==='/v1/scopes/drafts'){window.__posts++;await new Promise(resolve=>window.__releasePost=resolve);return {ok:true,status:200,json:async()=>({sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-11-05:mn',event_id:'event_one',replayed:false,feed_seq:1,new_revision:1})}}throw Error('UNEXPECTED')}});window.__client.setSessionToken('k'.repeat(43),'group_a',{accountId:'user_multitab'});return true})()`;
   assert.equal(await ev(initClient),true);
   const draftId=await ev(`window.__client.queueDraft({workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-11-05',region:'mn'},{synthetic:true}).id`);
   const second=await (await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(origin+'/')}`,{method:'PUT'})).json();
@@ -76,7 +76,14 @@ async function main(){
   let secondReady=false;for(let i=0;i<80;i++){secondReady=await ev2("typeof window.KtsSettlementSyncClient==='object'");if(secondReady)break;await sleep(100);}assert.equal(secondReady,true);
   assert.equal(await ev2(initClient),true);
   assert.equal(await ev2('window.__client.snapshot().drafts[0].status'),'NEEDS_RECONCILIATION');
-  const [firstSend,secondSend]=await Promise.all([ev(`window.__client.syncDraft(${JSON.stringify(draftId)})`),ev2(`window.__client.syncDraft(${JSON.stringify(draftId)})`)]);
+  const firstPending=ev(`window.__client.syncDraft(${JSON.stringify(draftId)})`);
+  let firstBlocked=false;for(let i=0;i<60;i++){firstBlocked=await ev("window.__posts===1 && typeof window.__releasePost==='function'");if(firstBlocked)break;await sleep(50);}assert.equal(firstBlocked,true);
+  const secondSend=await ev2(`window.__client.syncDraft(${JSON.stringify(draftId)})`);
+  assert.equal(await ev('window.__posts'),1);assert.equal(await ev2('window.__posts'),0);
+  assert.equal(await ev("typeof window.__releasePost==='function'"),true);
+  console.log('PASS second tab finished while first fake POST was held');
+  await ev('window.__releasePost();delete window.__releasePost');
+  const firstSend=await firstPending;
   assert.equal(firstSend.status,'SYNCED');assert.equal(secondSend.status,'NEEDS_RECONCILIATION');
   assert.equal(await ev('window.__posts'),1);assert.equal(await ev2('window.__posts'),0);
   console.log('PASS real Chrome two tabs: restored intent quarantined and only one fake POST');
