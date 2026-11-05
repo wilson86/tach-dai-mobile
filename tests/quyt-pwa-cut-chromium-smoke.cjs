@@ -43,6 +43,27 @@ try{
  assert('switching back to MB restores valid result',visible()==='b');
  set('raw','');
  assert('clearing input hides all groups and copy',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&[...document.querySelectorAll('.bet-section')].every(x=>x.hidden));
+ // Financial UI race: rejected clipboard writes must not copy a new ticket through legacy fallback.
+ set('raw','hn 21 b10n dd5n');
+ const safeWrite=navigator.clipboard.writeText, safeExec=document.execCommand;
+ let rejectedWrite, legacyCalls=0;
+ document.execCommand=()=>{legacyCalls++;return true};
+ navigator.clipboard.writeText=()=>new Promise((_ok,no)=>{rejectedWrite=no});
+ section('b').querySelector('.section-copy').click();
+ assert('group Copy has a pending clipboard write',typeof rejectedWrite==='function');
+ set('raw','hn 22 b20n dd5n');
+ rejectedWrite(new Error('DENIED'));await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('stale group Copy never falls back to a different ticket',legacyCalls===0);
+ assert('stale group Copy keeps HOLD warning',$('status').textContent.includes('HOLD'));
+ set('raw','hn 21 b10n dd5n');
+ rejectedWrite=undefined;
+ $('copy').click();
+ assert('combined Copy has a pending clipboard write',typeof rejectedWrite==='function');
+ set('raw','hn 22 b20n dd5n');
+ rejectedWrite(new Error('DENIED'));await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('stale combined Copy never falls back to a different ticket',legacyCalls===0);
+ assert('stale combined Copy keeps HOLD warning',$('status').textContent.includes('HOLD'));
+ navigator.clipboard.writeText=safeWrite;document.execCommand=safeExec;
  set('raw','hn 21 b10n dd5n. 21 22 da20n.');
  assert('six group and select Cut controls',document.querySelectorAll('.section-cut').length===6&&document.querySelectorAll('.section-cut-selected').length===6);
  assert('before Cut total 35n',$('after').textContent==='35n');
