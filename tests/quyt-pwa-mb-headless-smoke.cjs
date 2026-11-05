@@ -62,6 +62,11 @@ try{
  assert('DD remains unmultiplied while B scales once',
   el('after').textContent==='21n'&&!el('copy').disabled);
  assert('B+DD shows only populated groups in order',!document.querySelector('[data-bet-kind="b"]').hidden&&!document.querySelector('[data-bet-kind="dd"]').hidden&&['da','xc','dau','dui'].every(k=>document.querySelector('[data-bet-kind="'+k+'"]').hidden)&&[...document.querySelectorAll('#betSections .bet-section:not([hidden])')].map(x=>x.dataset.betKind).join(',')==='b,dd');
+ set('raw','hn 21 21 b10n');
+ assert('MB repeated number single clause blocks entire ticket',el('copy').disabled&&el('result').value===''&&el('status').textContent.includes('số lặp')&&el('groupedResultsCard').hidden);
+ set('raw','hn 21 b10n b20n');
+ assert('MB repeated selector without new number HOLD, not silent sum',el('copy').disabled&&el('result').value===''&&el('status').textContent.includes('lặp loại cược')&&el('groupedResultsCard').hidden);
+ set('raw','hn 21 b10n dd10n');
  set('customer','hien','change');
  assert('switching off Quyt clears tick and returns original stake',
   el('tick').checked===false&&el('tick').disabled&&el('after').textContent==='20n');
