@@ -26,7 +26,8 @@
 
   const FEED_EVENT_ID=/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/;
   function verifiedFeedItems(items, workspaceId, limit, afterSequence = null, rememberedIds = null) {
-    if (!Array.isArray(items) || items.length>limit) return false;
+    if (typeof workspaceId!=='string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(workspaceId) ||
+        !Array.isArray(items) || items.length>limit) return false;
     // Immutable event IDs must not repeat within a page or the recent session
     // memory; a duplicate could otherwise consume a valid cursor invisibly.
     const pageIds=new Set();
@@ -618,7 +619,7 @@
     }
 
     async function pullChanges(limit = 100) {
-      if (!sessionToken) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED', items: [] };
+      if (!sessionToken || workspaceId===null) return { status: STATUS.BLOCKED, error: 'AUTH_SESSION_REQUIRED', items: [] };
       if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500)
         return { status: STATUS.BLOCKED, error: 'SYNC_LIMIT_INVALID', items: [] };
       const epoch = sessionEpoch;
