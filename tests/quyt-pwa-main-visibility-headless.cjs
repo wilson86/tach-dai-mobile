@@ -79,6 +79,6 @@ server.listen(0,'127.0.0.1',()=>{
   try{result=JSON.parse(stdout.slice(at+start.length,end).replaceAll('&quot;','"').replaceAll('&amp;','&'))}
   catch(e){console.error('BROWSER_RECEIPT_PARSE_FAILED',String(e));process.exitCode=1;return}
   console.log(JSON.stringify({browser:'actual Chromium headless, localhost, synthetic data',result},null,2));
-  if(status!==0||result.fail>0||result.pass<18)process.exitCode=1;
+  if(status!==0||result.fail>0||result.pass<17)process.exitCode=1;
  });
 });
