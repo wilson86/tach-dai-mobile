@@ -24,6 +24,15 @@ try{
   assert('F5 restored raw source',$('raw').value==='hn 21 b10n dd5n');
   assert('F5 restored Quyt multiplier toggle',$('tick').checked===true);
   assert('F5 keeps B cut, only DD remains',$('result').value.includes('dd5n')&&!$('result').value.includes('b11n')&&$('after').textContent==='5n'&&frame('b').hidden);
+  set('raw','hn 21 b12n dd5n');
+  assert('editing after Cut must HOLD and disable all Copy',$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HOLD'));
+  assert('editing after Cut requires explicit new-batch acknowledgement',!$('startNewBatch').hidden);
+  set('raw','hn 21 b10n dd5n');
+  assert('restoring exact source retains prior B cut',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
+  set('rate','1.050');
+  assert('rate change after Cut must HOLD',$('copy').disabled&&$('result').value==='');
+  set('rate','1.067');
+  assert('restoring exact factor retains prior B cut',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
   assert('F5 still allows Undo',!$('undoQuytCut').disabled);
   $('undoQuytCut').click();
   assert('Undo after F5 returns full 16n',$('after').textContent==='16n'&&$('result').value.includes('b11n'));
@@ -90,6 +99,6 @@ server.listen(0,'127.0.0.1',()=>{
   try{result=JSON.parse(stdout.slice(at+start.length,end).replaceAll('&quot;','"').replaceAll('&amp;','&'))}
   catch(e){console.error('BROWSER_RECEIPT_PARSE_FAILED',String(e));process.exitCode=1;return}
   console.log(JSON.stringify({browser:'actual Chromium headless, localhost, synthetic data',result},null,2));
-  if(status!==0||result.fail>0||result.pass<12)process.exitCode=1;
+  if(status!==0||result.fail>0||result.pass<18)process.exitCode=1;
  });
 });
