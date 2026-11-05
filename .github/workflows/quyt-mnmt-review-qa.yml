@@ -5,6 +5,7 @@ on:
       - 'quyt-pwa/mn-mt-review.html'
       - 'tests/quyt-pwa-mn-mt-*.test.js'
       - 'tests/quyt-pwa-headless-smoke.cjs'
+      - 'tests/quyt-pwa-mnmt-result-visibility.test.cjs'
       - '.github/workflows/quyt-mnmt-review-qa.yml'
 permissions:
   contents: read
@@ -17,7 +18,7 @@ jobs:
       - name: Source bound native Node
         run: |
           node --version
-          node --test tests/quyt-pwa-mn-mt-review.test.js tests/quyt-pwa-mn-mt-money-property.test.js
+          node --test tests/quyt-pwa-mn-mt-review.test.js tests/quyt-pwa-mn-mt-money-property.test.js tests/quyt-pwa-mnmt-result-visibility.test.cjs
       - name: Chrome headless end-user DOM smoke (mock clipboard, no Telegram)
         run: |
           command -v google-chrome || command -v chromium
