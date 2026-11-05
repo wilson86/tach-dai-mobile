@@ -21,7 +21,7 @@ const server=http.createServer((req,res)=>{
 });
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 async function main(){
- let child,ws;const pending=new Map();let seq=0;
+ let child,ws,ws2;const pending=new Map();let seq=0;
  try{
   await new Promise((resolve,reject)=>{server.once('error',reject);server.listen(0,'127.0.0.1',resolve);});
   const origin=`http://127.0.0.1:${server.address().port}`;
@@ -60,6 +60,27 @@ async function main(){
   assert.deepEqual(unboundFeed,{status:'BLOCKED',error:'AUTH_SESSION_REQUIRED',calls:0,cursor:null});
   const collision=await ev(`(()=>{const descriptor=Object.getOwnPropertyDescriptor(crypto,'randomUUID');Object.defineProperty(crypto,'randomUUID',{configurable:true,value:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'});try{const opts={fetchImpl:async()=>{throw Error('NO_NETWORK')}};const a=window.KtsSettlementSyncClient.createSyncClient(opts),b=window.KtsSettlementSyncClient.createSyncClient(opts);a.setSessionToken('i'.repeat(43),'group_a',{accountId:'user_collision'});b.setSessionToken('j'.repeat(43),'group_a',{accountId:'user_collision'});const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-11-05',region:'mn'};a.queueDraft(scope,{synthetic:true,memo:'original'});let denied=false;try{b.queueDraft(scope,{synthetic:true,memo:'other'})}catch(e){denied=e.message==='SYNC_DRAFT_ID_COLLISION'}return {denied,original:a.snapshot().drafts[0].payload.memo,otherCount:b.snapshot().drafts.length}}finally{if(descriptor)Object.defineProperty(crypto,'randomUUID',descriptor);else delete crypto.randomUUID}})()`);
   assert.deepEqual(collision,{denied:true,original:'original',otherCount:0});
+  // Two genuinely separate browser page targets share the origin's localStorage
+  // and native Web Locks. The second page restores a quarantine, not a retry.
+  const initClient=`(()=>{window.__posts=0;window.__client=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async(url,options)=>{if(url==='/v1/session')return {ok:true,status:200,json:async()=>({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:'user_multitab',role:'operator'})};if(url==='/v1/scopes/drafts'){window.__posts++;return {ok:true,status:200,json:async()=>({sync_status:'SYNCED',scope_key:'group_a:fake_partner_1:2026-11-05:mn',event_id:'event_one',replayed:false,feed_seq:1,new_revision:1})}}throw Error('UNEXPECTED')}});window.__client.setSessionToken('k'.repeat(43),'group_a',{accountId:'user_multitab'});return true})()`;
+  assert.equal(await ev(initClient),true);
+  const draftId=await ev(`window.__client.queueDraft({workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-11-05',region:'mn'},{synthetic:true}).id`);
+  const second=await (await fetch(`http://127.0.0.1:${port}/json/new?${encodeURIComponent(origin+'/')}`,{method:'PUT'})).json();
+  if(!second.webSocketDebuggerUrl)throw Error('SECOND_TAB_UNAVAILABLE');
+  ws2=new WebSocket(second.webSocketDebuggerUrl);
+  await new Promise((resolve,reject)=>{ws2.addEventListener('open',resolve,{once:true});ws2.addEventListener('error',reject,{once:true});});
+  const pending2=new Map();let seq2=0;
+  ws2.addEventListener('message',event=>{const m=JSON.parse(event.data);if(pending2.has(m.id)){const p=pending2.get(m.id);pending2.delete(m.id);m.error?p.reject(Error(m.error.message)):p.resolve(m.result);}});
+  const call2=(method,params={})=>new Promise((resolve,reject)=>{const id=++seq2;pending2.set(id,{resolve,reject});ws2.send(JSON.stringify({id,method,params}));setTimeout(()=>{if(pending2.delete(id))reject(Error('CDP_SECOND_TIMEOUT'));},8000).unref();});
+  const ev2=async expression=>{const r=await call2('Runtime.evaluate',{expression,returnByValue:true,awaitPromise:true});if(r.exceptionDetails)throw Error('SECOND_BROWSER_EXCEPTION');return r.result.value;};
+  let secondReady=false;for(let i=0;i<80;i++){secondReady=await ev2("typeof window.KtsSettlementSyncClient==='object'");if(secondReady)break;await sleep(100);}assert.equal(secondReady,true);
+  assert.equal(await ev2(initClient),true);
+  assert.equal(await ev2('window.__client.snapshot().drafts[0].status'),'NEEDS_RECONCILIATION');
+  const [firstSend,secondSend]=await Promise.all([ev(`window.__client.syncDraft(${JSON.stringify(draftId)})`),ev2(`window.__client.syncDraft(${JSON.stringify(draftId)})`)]);
+  assert.equal(firstSend.status,'SYNCED');assert.equal(secondSend.status,'NEEDS_RECONCILIATION');
+  assert.equal(await ev('window.__posts'),1);assert.equal(await ev2('window.__posts'),0);
+  console.log('PASS real Chrome two tabs: restored intent quarantined and only one fake POST');
+  ws2.close();ws2=null;
   console.log('PASS real Chrome localStorage: invalid scope denied; valid intent restored and quarantined');
   console.log('PASS real Chrome actor check: foreign same-workspace user denied');
   console.log('PASS real Chrome directory: wrong requested kind denied');
@@ -90,7 +111,7 @@ async function main(){
   console.log('PASS real Chrome pilot UI: directory cleared after unverified logout');
   await call('Browser.close');
  }finally{
-  if(ws)ws.close();if(child){await waitExit(child,5000);if(!exited(child)){child.kill();await waitExit(child,3000);}if(!exited(child))throw Error('CHROME_NOT_CLOSED');}
+  if(ws2)ws2.close();if(ws)ws.close();if(child){await waitExit(child,5000);if(!exited(child)){child.kill();await waitExit(child,3000);}if(!exited(child))throw Error('CHROME_NOT_CLOSED');}
   await new Promise((resolve,reject)=>server.close(e=>e?reject(e):resolve()));
   const scan=cp.spawnSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"$p=$env:KTS_OWNED_PROFILE; @(Get-CimInstance Win32_Process -Filter \"name='chrome.exe'\" | Where-Object { $_.CommandLine -and $_.CommandLine.Contains($p) }).Count"],{encoding:'utf8',timeout:10000,env:{...process.env,KTS_OWNED_PROFILE:profile}});
   if(scan.error||scan.status!==0||String(scan.stdout).trim()!=='0')throw Error('CHROME_DESCENDANTS_UNVERIFIED');
