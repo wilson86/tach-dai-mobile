@@ -286,10 +286,10 @@ const frames=[...document.querySelectorAll('#betSections .bet-section')].map(nod
  cutSelected:node.querySelector('.section-cut-selected'),
  choices:node.querySelector('.section-row-list')
 }));
-const cutStorageKey='KTS_QUYT_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null;
+const cutStorageKey='KTS_QUYT_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null,cutInFlight=false;
 function loadGuard(){
  try{const rawRecord=sessionStorage.getItem(cutGuardKey);if(!rawRecord)return;
-  const record=JSON.parse(rawRecord);if(!record||typeof record.scope!=='string'||record.phase!=='cut')throw Error('BAD_GUARD');cutGuard=record;
+  const record=JSON.parse(rawRecord);if(!record||typeof record.scope!=='string'||!['cut','pending'].includes(record.phase))throw Error('BAD_GUARD');cutGuard=record;
  }catch(_){cutGuard={scope:'CORRUPT',phase:'blocked'}}
 }
 function writeGuard(record){
@@ -387,6 +387,7 @@ confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng 
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
 $('startNewBatch').addEventListener('click',()=>{
  if(!cutGuard)return;
+ if(cutInFlight){message('HOLD: đang Cắt, chờ xác nhận kết quả trước khi đổi lượt.',true);return}
  if(!confirm('CẢNH BÁO: lượt trước đã Cắt/Copy. Chỉ mở lượt mới khi đã đối soát và xác nhận KHÔNG GỬI TRÙNG. Đây là lượt đặt ĐỘC LẬP thật sự?'))return;
  try{sessionStorage.removeItem(cutGuardKey);sessionStorage.removeItem(cutStorageKey);cutGuard=null;cutKeys=new Set();cutUndo=[];confirmedRaw=null;confirmedDaScope=null;$('startNewBatch').hidden=true;redraw();
   message('Đã xác nhận lượt mới độc lập. Kiểm tra số và tiền trước khi gửi.',false);
@@ -395,6 +396,7 @@ $('startNewBatch').addEventListener('click',()=>{
 select.addEventListener('click',()=>{if(!current)return;out.focus();out.select();message('Đã chọn toàn bộ tin gộp. Nhấn Ctrl+C (trên Windows) hoặc Sao chép (trên điện thoại).',false)});
 async function cutGroup(frame,selectedOnly){
  const ticket=current,base=activeBase;
+ if(cutInFlight){message('HOLD: một lần Cắt đang Copy, không thực hiện Cắt thứ hai.',true);return}
  if(!ticket||!base||!currentValid()||!ticket.pretty){message('HOLD: tin nguồn hoặc kết quả thay đổi; chưa Cắt.',true);return}
  const candidates=ticket.rows.filter(r=>r.kind===frame.kind).map(QuytCutLedger.key);
  const keys=selectedOnly?[...frame.choices.querySelectorAll('input:checked')].map(x=>x.value):candidates;
@@ -406,16 +408,31 @@ async function cutGroup(frame,selectedOnly){
   if(!payload)throw Error('HOLD_EMPTY_CUT_PAYLOAD');
   QuytCutLedger.derive(base,new Set([...cutKeys,...keys]));
  }catch(e){message('HOLD: không xác minh được sổ Cắt. '+String(e.message||e),true);return}
- try{preflightCutStorage()}catch(e){message('HOLD: trình duyệt không lưu được lịch sử Cắt, KHÔNG COPY. '+String(e.message||e),true);return}
+ const guardBeforeCut=cutGuard;
+ try{preflightCutStorage();writeGuard({scope:cutScope(),phase:'pending'})}
+ catch(e){message('HOLD: không lưu được biên nhận Cắt, KHÔNG COPY. '+String(e.message||e),true);return}
+ cutInFlight=true;
+ copy.disabled=true;select.disabled=true;
+ for(const f of frames){f.button.disabled=true;f.cut.disabled=true;f.cutSelected.disabled=true}
  try{if(!navigator.clipboard?.writeText)throw Error('clipboard unavailable');await navigator.clipboard.writeText(payload)}
- catch(_){message('HOLD: Copy thất bại, KHÔNG CẮT.',true);return}
- if(current!==ticket||activeBase!==base||!currentValid()||keys.some(k=>cutKeys.has(k))){message('HOLD: nguồn thay đổi trong lúc Cắt. Clipboard CÓ THỂ chứa tin cũ; chưa xóa.',true);return}
+ catch(_){
+  cutInFlight=false;
+  try{if(guardBeforeCut)writeGuard(guardBeforeCut);else{sessionStorage.removeItem(cutGuardKey);cutGuard=null}}
+  catch(e){cutGuard={scope:'CORRUPT',phase:'pending'};message('HOLD: không hoàn tác được biên nhận clipboard, KHÔNG XUẤT. '+String(e.message||e),true);return}
+  redraw(Boolean(cutGuard));
+  message('HOLD: Copy thất bại, KHÔNG CẮT.',true);return;
+ }
+ if(current!==ticket||activeBase!==base||!currentValid()||keys.some(k=>cutKeys.has(k))){
+  cutInFlight=false;redraw(true);
+  message('HOLD_CUT_REPLAY: clipboard có thể chứa tin CŨ. Lượt Cắt chưa xác minh; phải đối soát rồi xác nhận lượt mới.',true);return;
+ }
  cutUndo.push([...cutKeys]);if(cutUndo.length>30)cutUndo.shift();
  for(const k of keys)cutKeys.add(k);
  try{saveCuts();writeGuard({scope:cutScope(),phase:'cut'});renderCut(base);message('ĐÃ CẮT '+keys.length+' số/cặp nhóm '+frame.kind.toUpperCase()+' và Copy. Các khung và tin cuối đồng bộ ngay; nguồn không đổi.',false)}
- catch(e){current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();message('HOLD: clipboard có thể đã Copy nhưng trạng thái Cắt chưa xác nhận. KHÔNG GỬI LẠI. '+String(e.message||e),true)}
+ catch(e){current=null;activeBase=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();message('HOLD: clipboard đã có thể chứa cược cũ nhưng sổ Cắt chưa xác minh. KHÔNG COPY LẠI. '+String(e.message||e),true)}
+ finally{cutInFlight=false}
 }
-$('undoQuytCut').addEventListener('click',()=>{if(!activeBase||!cutUndo.length)return;const prior=cutUndo.pop();try{QuytCutLedger.derive(activeBase,new Set(prior));cutKeys=new Set(prior);renderCut(activeBase);saveCuts();message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false)}catch(e){cutUndo.push(prior);message('HOLD: Hoàn tác bị chặn: '+String(e.message||e),true)}});
+$('undoQuytCut').addEventListener('click',()=>{if(!activeBase||!cutUndo.length)return;if(cutInFlight){message('HOLD: đang Copy để Cắt, chưa được Undo.',true);return}const prior=cutUndo.pop();try{QuytCutLedger.derive(activeBase,new Set(prior));cutKeys=new Set(prior);renderCut(activeBase);saveCuts();message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false)}catch(e){cutUndo.push(prior);message('HOLD: Hoàn tác bị chặn: '+String(e.message||e),true)}});
 for(const frame of frames){
  frame.choices.addEventListener('change',()=>{frame.cutSelected.disabled=!currentValid()||!frame.choices.querySelector('input:checked')});
  frame.cut.addEventListener('click',()=>cutGroup(frame,false));
