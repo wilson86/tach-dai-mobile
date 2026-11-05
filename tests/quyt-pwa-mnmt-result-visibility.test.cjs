@@ -13,7 +13,7 @@ assert.ok(engine,'review-only engine must exist');
 const app=vm.runInNewContext(calendar+'\n'+engine[0]+';OfflineKTS;');
 const options={customer:'quyt',market:'mn',businessDate:'2026-11-04',rate:'1.067',tick:false};
 const frameOrder=[...html.matchAll(/<section class="bet-section(?: pending)?" data-bet-kind="([^"]+)"/gu)].map(m=>m[1]);
-const visible=res=>res.sections.filter(s=>s.supported&&Boolean(s.text)).map(s=>s.kind);
+const visible=res=>Array.from(res.sections.filter(s=>s.supported&&Boolean(s.text)),s=>s.kind);
 test('results cards start hidden, reset hides each section and full Copy',()=>{
  assert.match(html,/id="groupedResultsCard" hidden/u);
  assert.match(html,/id="combinedResultsCard" hidden/u);
