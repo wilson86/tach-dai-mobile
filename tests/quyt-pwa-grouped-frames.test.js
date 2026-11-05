@@ -50,7 +50,7 @@ test('no group output may be emitted on ambiguous or unsupported source',()=>{
 });
 test('HTML has six scoped frames, hidden empty groups and v10 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];
- assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','xc','dd','dau','dui']);
+ assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','dd','xc','dau','dui']);
  assert.match(html,/id="betSections"/u);
  assert.deepEqual([...html.matchAll(/<section class="bet-section(?: pending)?" data-bet-kind="([a-z]+)">/gu)].map(x=>x[1]),['b','da','dd','xc','dau','dui']);
  assert.match(html,/id="groupedResultsCard" hidden/u);

@@ -282,6 +282,7 @@ const OfflineKTS=(()=>{
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),status=$('status'),copy=$('copy'),select=$('select'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
 const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null;
 const frames=[...document.querySelectorAll('#betSections .bet-section')].map(node=>({
+ node,
  kind:node.getAttribute('data-bet-kind'),
  field:node.querySelector('.section-text'),
  total:node.querySelector('.section-total'),
@@ -289,7 +290,7 @@ const frames=[...document.querySelectorAll('#betSections .bet-section')].map(nod
 }));
 function resetFrames(){
  $('groupedResultsCard').hidden=true;$('combinedResultsCard').hidden=true;
- for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.field.closest('.bet-section').hidden=true;}
+ for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.node.hidden=true;}
 }
 function currentValid(){
  return current&&current.raw===raw.value&&current.customer===customer.value&&current.market===market.value&&
@@ -315,7 +316,7 @@ function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=t
    const section=res.sections.find(g=>g.kind===frame.kind);
    if(!section)throw Error('HOLD: thiếu phân nhóm '+frame.kind);
    frame.field.value=section.text;
-   frame.field.closest('.bet-section').hidden=!(section.supported&&section.text);
+   frame.node.hidden=!(section.supported&&section.text);
    if(section.supported&&section.text)visibleGroups++;
    frame.total.textContent=section.text?formatVi(section.total):(section.supported?'0n':'HOLD XC');
    frame.button.disabled=!section.supported||!section.text;
