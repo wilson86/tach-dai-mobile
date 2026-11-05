@@ -1241,7 +1241,7 @@ test('logging in during an unresolved remote logout is refused without new HTTP'
  assert.equal((await old).authenticated,false);
 });
 
-test('synthetic-pilot pending draft survives reload with its exact immutable transport',async()=>{
+test('synthetic-pilot pending draft survives reload but is quarantined from automatic retry',async()=>{
   const saved=storage(); const seen=[];
   const scope={workspace_id:'group_a',partner_id:'fake_partner_1',business_date:'2026-10-15',region:'mn'};
   const fetchImpl=async(url,options)=>{
@@ -1266,14 +1266,10 @@ test('synthetic-pilot pending draft survives reload with its exact immutable tra
   await reloaded.login('synthetic_operator_a','synthetic-password','group_a');
   assert.equal(reloaded.snapshot().drafts.length,1);
   assert.equal(reloaded.snapshot().drafts[0].id,draft.id);
-  assert.equal((await reloaded.syncDraft(draft.id)).status,'SYNCED');
-  const write=seen.find(x=>x.url.endsWith('/v1/scopes/drafts'));
-  const sent=JSON.parse(write.options.body);
-  assert.equal(sent.idempotency_key,draft.id);
-  assert.equal(sent.expected_revision,3);
-  assert.deepEqual(sent.payload,{synthetic:true,amount:7});
+  assert.equal((await reloaded.syncDraft(draft.id)).status,'NEEDS_RECONCILIATION');
+  assert.equal(seen.some(x=>x.url.endsWith('/v1/scopes/drafts')),false);
   assert.equal(persistedRows(saved).length,1); // Intent retained for stale-tab reconciliation.
-  assert.ok([...saved.data.keys()].some(key=>key.endsWith(':dispatched')));
+  assert.equal([...saved.data.keys()].some(key=>key.endsWith(':dispatched')),false);
 });
 
 test('pending persistence fails closed for lost acknowledgements, storage failure and corrupted rows',async()=>{

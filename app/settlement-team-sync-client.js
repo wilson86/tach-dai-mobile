@@ -426,7 +426,11 @@
           !Number.isSafeInteger(baseRevision + 1)) throw new Error('SYNC_REVISION_INVALID');
       if (workspaceId !== null && scope.workspace_id !== workspaceId)
         throw new Error('SYNC_WORKSPACE_MISMATCH');
-      if (!validBusinessDate(scope.business_date))
+      // Match the durable restore contract before creating an intent. An
+      // invalid record must not make the next reload report corrupt storage.
+      if (typeof scope.partner_id !== 'string' ||
+          !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(scope.partner_id) ||
+          !['mn','mt','mb'].includes(scope.region) || !validBusinessDate(scope.business_date))
         throw new Error('SYNC_SCOPE_INVALID');
       const id = newDraftId();
       const item = { id, scope: clone(scope), payload: clone(payload), base_revision: baseRevision, status: STATUS.PENDING, created_at:new Date().toISOString() };
