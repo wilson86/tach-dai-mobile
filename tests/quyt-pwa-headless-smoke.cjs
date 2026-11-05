@@ -85,11 +85,14 @@ try{
  assert('change region recomputes 2đ for MN, always resets Copy',$('copy').disabled&&$('result').value.includes('ct 21 b11n.')&&!$('result').value.includes('kh 21 b11n.'));
  acknowledge();assert('re-acknowledge new region and date',!$('copy').disabled);
  set('raw','dn 52 b15n');
- assert('HOLD mismatch: no final text and no Copy',$('copy').disabled&&$('result').value===''&&$('after').textContent==='—'&&$('roundingAudit').textContent.includes('17n')&&$('status').textContent.includes('HOLD_CHENH_LECH_LAM_TRON'));
+ assert('HOLD mismatch: no final text and no Copy',$('copy').disabled&&$('result').value===''&&$('after').textContent==='16n'&&$('roundingAudit').textContent.includes('17n')&&$('status').textContent.includes('HOLD_CHENH_LECH_LAM_TRON'));
+ set('raw','dn 52 b75n');
+ assert('75n uses owner HALF_UP preview 80n but never Copy before receiving Router parity',$('after').textContent==='80n'&&$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HOLD_CHENH_LECH_LAM_TRON'));
+ set('raw','dn 52 b15n');
  assert('CEIL mismatch always resets last approval',!$('ackMoney').checked);
  acknowledge();assert('cannot bypass unresolved money policy by checking box',$('copy').disabled&&$('ackMoney').disabled&&[...document.querySelectorAll('.section-copy')].every(x=>x.disabled));
  set('raw','dn 52 b15n dd5.2n');
- assert('CEIL comparison never applies to DD even on HOLD',$('after').textContent==='—'&&$('roundingAudit').textContent.includes('22n')&&$('status').textContent.includes('HOLD'));
+ assert('CEIL comparison never applies to DD even on HOLD',$('after').textContent==='21n'&&$('roundingAudit').textContent.includes('22n')&&$('status').textContent.includes('HOLD'));
  set('raw','dn 52 xc10n');
  assert('HOLD disables acknowledgment and every Copy',$('ackMoney').disabled&&$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
  set('raw','dn 21 b10n');

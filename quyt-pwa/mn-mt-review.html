@@ -435,9 +435,10 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
   if(res.roundingDiffRows>0){
    $('sourceTotal').textContent=formatVi(res.sourceTotal);
    $('before').textContent=formatVi(res.original);
-   $('factorReceipt').textContent='HOLD_CHENH_LECH_LAM_TRON: chưa có quy tắc tiền nhận thống nhất, KHÔNG xuất cược.';
+   $('after').textContent=formatVi(res.total); // preview only, integer n per owner; Copy still HOLD
+   $('factorReceipt').textContent='Đã duyệt làm tròn số nguyên HALF_UP cho Quýt. HOLD_ROUTER_PARITY: Router vẫn dùng CEIL, không xuất cược.';
    $('roundingAudit').textContent=res.roundingDiffRows+' khoản BAO/LÔ có kết quả khác nhau. HALF_UP tham chiếu '+formatVi(res.total)+'; CEIL tham chiếu '+formatVi(res.ceilReference)+'. Không cho Copy cho đến khi phía nhận duyệt quy tắc.';
-   message('HOLD_CHENH_LECH_LAM_TRON: tiền theo HALF_UP khác CEIL, không xuất tin và không thể xác nhận bỏ qua.',true);
+   message('HOLD_CHENH_LECH_LAM_TRON: đã làm tròn số nguyên theo xác nhận của chủ, nhưng Router CEIL không khớp. Chỉ xem tổng, KHÔNG COPY/CHUYỂN.',true);
    return;
   }
   current={...res,raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;ack.disabled=false;
