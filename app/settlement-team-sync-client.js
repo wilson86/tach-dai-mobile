@@ -507,7 +507,13 @@
         throw Error('SYNC_REVIEW_ACTION_INVALID');
       if(!sessionToken || workspaceId===null)
         throw Error('AUTH_SESSION_REQUIRED');
-      if(!scope || scope.workspace_id!==workspaceId ||
+      if(!scope || typeof scope!=='object' || Array.isArray(scope))
+        throw Error('SYNC_SCOPE_INVALID');
+      // Snapshot before validation, so both the durable marker and request
+      // use exactly the same values after authentication or lock awaits.
+      scope=Object.freeze({workspace_id:scope.workspace_id,partner_id:scope.partner_id,
+        business_date:scope.business_date,region:scope.region});
+      if(scope.workspace_id!==workspaceId ||
           typeof scope.partner_id!=='string' ||
           !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(scope.partner_id) ||
           typeof scope.business_date!=='string' ||
