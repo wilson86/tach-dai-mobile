@@ -8,6 +8,7 @@
 const crypto = require('node:crypto');
 const C = require('./core-contract.cjs');
 const { stable } = require('./ledger-api-contract.cjs');
+const {normalizedFeedSeq,encodeCursor,decodeCursor}=require('./feed-cursor.cjs');
 
 // Do not advertise a financial draft as SYNCED merely because SQL/HTTP
 // returned successfully. The durable draft SQL function issues these exact
@@ -171,10 +172,33 @@ function createServerLedgerApi({
     });
   }
 
-  async function getChanges(sessionToken, options) {
+  async function getChanges(sessionToken, options={}) {
+    if(!options||typeof options!=='object'||Array.isArray(options))throw Error('TEAM_LIMIT_INVALID');
+    const limit=options.limit===undefined?100:options.limit;
+    const cursor=options.cursor===undefined?null:options.cursor;
+    if(!Number.isSafeInteger(limit)||limit<1||limit>500)throw Error('TEAM_LIMIT_INVALID');
     return withSessionActor(sessionToken,async trustedActor=>{
     if (typeof repository.getChanges !== 'function') throw new Error('TEAM_ROUTE_NOT_ENABLED');
-    return repository.getChanges(trustedActor, options);
+    const previousCursor=decodeCursor(cursor,trustedActor.workspace_id);
+    const page=await repository.getChanges(trustedActor,{cursor,limit});
+    if(!page||typeof page!=='object'||Array.isArray(page)||page.sync_status!=='SYNCED'||
+       !Array.isArray(page.items)||page.items.length>limit||typeof page.has_more!=='boolean'||
+       (page.has_more&&page.items.length!==limit))throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+    let previous=BigInt(previousCursor.feed_seq);const ids=new Set();
+    for(const row of page.items){
+      if(!row||typeof row!=='object'||Array.isArray(row)||row.workspace_id!==trustedActor.workspace_id||
+         typeof row.event_id!=='string'||!EVENT_ID_RE.test(row.event_id)||ids.has(row.event_id))
+        throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+      ids.add(row.event_id);
+      let sequence;try{sequence=BigInt(normalizedFeedSeq(row.feed_seq));}
+      catch(_){throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');}
+      if(sequence!==previous+1n)throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+      previous=sequence;
+    }
+    if(page.items.length===0 ? page.next_cursor!==null :
+       page.next_cursor!==encodeCursor(previous,trustedActor.workspace_id))
+      throw Error('TEAM_FEED_RESPONSE_UNVERIFIED');
+    return page;
     });
   }
 

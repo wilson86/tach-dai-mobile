@@ -15,7 +15,7 @@ for(const action of ['scope','changes','counterparties'])test(`${action} retains
   const auth=createPostgresAuthService({db,clock:()=>1000});
   const check=()=>{assert.equal(authOpen,true,'auth transaction closed before read');called=true;};
   const repository={appendDraft:async()=>{},getScope:async()=>{check();return {...scope};},
-    getChanges:async()=>{check();return {events:[]};},listCounterparties:async()=>{check();return [];}};
+    getChanges:async()=>{check();return {items:[],next_cursor:null,has_more:false,sync_status:'SYNCED'};},listCounterparties:async()=>{check();return [];}};
   const api=createServerLedgerApi({auth,repository,requireSessionLockForWrites:true});const token='R'.repeat(43);
   if(action==='scope')await api.getScope(token,scope);
   if(action==='changes')await api.getChanges(token,{});
