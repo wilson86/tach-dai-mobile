@@ -841,6 +841,12 @@
         throw Error('AUTH_SESSION_REQUIRED');
       if(!Array.isArray(quarantined)||quarantined.length<1||quarantined.length>30)
         throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED');
+      // Keep the serialized request and response verification bound to the
+      // same immutable-by-caller snapshot across the network await.
+      try { quarantined=clone(quarantined); }
+      catch (_) { throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED'); }
+      if(!Array.isArray(quarantined)||quarantined.length<1||quarantined.length>30)
+        throw Error('TEAM_RECOVERY_QUARANTINE_REQUIRED');
       const ids=new Set();
       for(const x of quarantined){
         if(!x||typeof x!=='object'||Array.isArray(x)||
