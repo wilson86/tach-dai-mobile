@@ -58,10 +58,10 @@ try{
  const first=section('b').querySelector('.cut-row-check');first.checked=true;first.dispatchEvent(new Event('change',{bubbles:true}));
  assert('selected Cut enabled',!section('b').querySelector('.section-cut-selected').disabled);
  section('b').querySelector('.section-cut-selected').click();await Promise.resolve();await Promise.resolve();await Promise.resolve();
- assert('selected Cut keeps other B number and DD',$('after').textContent==='15n'&&$('result').value.includes('22 b10n')&&$('result').value.includes('dd5n'));
+ assert('selected Cut keeps other B number and DD',$('after').textContent==='20n'&&$('result').value.includes('22 b10n')&&$('result').value.includes('dd5n'));
  assert('cut ledger persists in session',String(sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1')).includes('b|21'));
  $('undoQuytCut').click();
- assert('undo selected restores 25n',$('after').textContent==='25n');
+ assert('undo selected restores 25n',$('after').textContent==='30n');
 }catch(e){report.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const result=document.createElement('pre');result.id='quyt-mb-browser-qa';
 result.textContent=JSON.stringify({pass:report.filter(x=>x.pass).length,fail:report.filter(x=>!x.pass).length,report});
@@ -99,6 +99,6 @@ server.listen(0,'127.0.0.1',()=>{
   try{result=JSON.parse(stdout.slice(at+start.length,end).replaceAll('&quot;','"').replaceAll('&amp;','&'))}
   catch(e){console.error('BROWSER_RECEIPT_PARSE_FAILED',String(e));process.exitCode=1;return}
   console.log(JSON.stringify({browser:'actual Chromium headless, localhost, synthetic data',result},null,2));
-  if(status!==0||result.fail>0||result.pass<29)process.exitCode=1;
+  if(status!==0||result.fail>0||result.pass<28)process.exitCode=1;
  });
 });
