@@ -49,14 +49,19 @@ try{
   navigator.clipboard.writeText=()=>Promise.reject(new Error('DENIED'));
   frame('b').querySelector('.section-cut').click();await flush();
   assert('clipboard denied means no cut',$('after').textContent==='16n'&&$('result').value.includes('b11n')&&$('raw').value===orig);
-  let resolveCut;
-  navigator.clipboard.writeText=()=>new Promise(done=>{resolveCut=done});
+  let resolveCut,copyCalls=0;
+  navigator.clipboard.writeText=()=>{copyCalls++;return new Promise(done=>{resolveCut=done})};
   frame('b').querySelector('.section-cut').click();
   assert('async Cut in progress',typeof resolveCut==='function');
+  frame('b').querySelector('.section-cut').click();
+  assert('second rapid Cut does not copy twice',copyCalls===1);
   set('raw','hn 21 b12n dd5n');
+  assert('editing while Cut is in flight holds all output',$('copy').disabled&&$('result').value==='');
   resolveCut();await flush();
-  assert('stale async Cut preserves changed ticket',$('result').value.includes('b13n')&&$('after').textContent==='18n');
+  assert('stale async Cut stays HOLD with pending receipt',$('copy').disabled&&$('result').value===''&&JSON.parse(sessionStorage.getItem('KTS_QUYT_CUT_REPLAY_GUARD_V1')).phase==='pending');
   navigator.clipboard.writeText=write;
+  const confirmPrevious=window.confirm;window.confirm=()=>true;$('startNewBatch').click();window.confirm=confirmPrevious;
+  assert('operator manual new-batch confirmation opens changed source',$('result').value.includes('b13n')&&$('after').textContent==='18n');
   set('raw','hn 21 b10n dd5n');
   frame('b').querySelector('.section-cut').click();await flush();
   assert('normal Cut B after clipboard works',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
@@ -101,6 +106,6 @@ server.listen(0,'127.0.0.1',()=>{
   try{result=JSON.parse(stdout.slice(at+start.length,end).replaceAll('&quot;','"').replaceAll('&amp;','&'))}
   catch(e){console.error('BROWSER_RECEIPT_PARSE_FAILED',String(e));process.exitCode=1;return}
   console.log(JSON.stringify({browser:'actual Chromium headless, localhost, synthetic data',result},null,2));
-  if(status!==0||result.fail>0||result.pass<18)process.exitCode=1;
+  if(status!==0||result.fail>0||result.pass<21)process.exitCode=1;
  });
 });
