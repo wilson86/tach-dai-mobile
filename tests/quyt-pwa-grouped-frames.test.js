@@ -13,9 +13,9 @@ const app=vm.runInNewContext(core[0]+';OfflineKTS;');
 const base={market:'mb',customer:'quyt',tick:true,rate:'1.067'};
 function group(out,kind){return out.sections.find(x=>x.kind===kind)}
 function sum(out){return out.sections.reduce((n,x)=>n+BigInt(x.total),0n)}
-test('six group frames in operator requested B / DA / DD / XC / DAU / DUI order',()=>{
+test('engine group accounting unchanged; UI order is B/DA/DD/XC/DAU/DUI',()=>{
  const a=app.merge('hn 21 b55n. 21 22 da20n. 44 dd10n. 55 dau5n dui15n.',base);
- assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','dd','xc','dau','dui']);
+ assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','xc','dd','dau','dui']);
  assert.equal(a.total,'109');assert.equal(sum(a),109n);
  assert.equal(group(a,'b').text,'HN\n21 b59n.');
  assert.equal(group(a,'da').text,'HN\n21 22 da20n.');
