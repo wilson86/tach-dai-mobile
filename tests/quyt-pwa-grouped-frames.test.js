@@ -13,9 +13,9 @@ const app=vm.runInNewContext(core[0]+';OfflineKTS;');
 const base={market:'mb',customer:'quyt',tick:true,rate:'1.067'};
 function group(out,kind){return out.sections.find(x=>x.kind===kind)}
 function sum(out){return out.sections.reduce((n,x)=>n+BigInt(x.total),0n)}
-test('six group frames in operator requested B / DA / XC / DD / DAU / DUI order',()=>{
+test('six group frames in operator requested B / DA / DD / XC / DAU / DUI order',()=>{
  const a=app.merge('hn 21 b55n. 21 22 da20n. 44 dd10n. 55 dau5n dui15n.',base);
- assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','xc','dd','dau','dui']);
+ assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','dd','xc','dau','dui']);
  assert.equal(a.total,'109');assert.equal(sum(a),109n);
  assert.equal(group(a,'b').text,'HN\n21 b59n.');
  assert.equal(group(a,'da').text,'HN\n21 22 da20n.');
@@ -48,12 +48,16 @@ test('no group output may be emitted on ambiguous or unsupported source',()=>{
  assert.throws(()=>app.merge('hn 21 22 da 20',base),/THIEU_N_CAN_XAC_NHAN/u);
  assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/chỉ nghiệm thu.*MB/u);
 });
-test('HTML has six separate readonly frames, unique scoped Copy buttons and v5 cache',()=>{
+test('HTML has six separate readonly frames, unique scoped Copy buttons and v6 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];
- assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','xc','dd','dau','dui']);
+ assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','dd','xc','dau','dui']);
  assert.match(html,/id="betSections"/u);
+ assert.match(html,/id="groupedResultsCard" hidden/u);
+ assert.match(html,/id="combinedResultsCard" hidden/u);
+ assert.match(html,/\[hidden\]\{display:none!important\}/u);
+ assert.match(html,/frame\.field\.closest\('\.bet-section'\)\.hidden=!\(section\.supported&&section\.text\)/u);
  assert.match(html,/class="section-copy" disabled/u);
  assert.match(html,/class="section-text" readonly/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261104-v5-grouped-frames/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261105-v6-conditional-groups/u);
 });
