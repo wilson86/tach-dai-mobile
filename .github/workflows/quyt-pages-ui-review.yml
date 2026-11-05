@@ -1,0 +1,24 @@
+name: Quyt existing GitHub Pages UI-only grouped-result visibility (public free)
+on:
+  pull_request:
+    paths:
+      - 'quyt-pwa/index.html'
+      - 'quyt-pwa/sw.js'
+      - 'tests/quyt-pwa-grouped-frames.test.js'
+      - 'tests/quyt-pwa-main-visibility-headless.cjs'
+      - '.github/workflows/quyt-pages-ui-review.yml'
+permissions:
+  contents: read
+jobs:
+  visibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Node source/amount fixture (synthetic)
+        run: |
+          node --test tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-missing-unit.test.js tests/quyt-pwa-telegram-envelope.test.js
+      - name: Actual Chromium browser DOM lifecycle with synthetic bets
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-pwa-main-visibility-headless.cjs
