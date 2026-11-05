@@ -3,8 +3,10 @@ on:
   pull_request:
     paths:
       - 'quyt-pwa/mn-mt-review.html'
+      - 'quyt-pwa/gop-chung.html'
       - 'tests/quyt-pwa-mn-mt-*.test.js'
       - 'tests/quyt-pwa-headless-smoke.cjs'
+      - 'tests/quyt-pwa-three-region-headless-smoke.cjs'
       - 'tests/quyt-pwa-mnmt-result-visibility.test.cjs'
       - '.github/workflows/quyt-mnmt-review-qa.yml'
 permissions:
@@ -23,3 +25,4 @@ jobs:
         run: |
           command -v google-chrome || command -v chromium
           node tests/quyt-pwa-headless-smoke.cjs
+          node tests/quyt-pwa-three-region-headless-smoke.cjs
