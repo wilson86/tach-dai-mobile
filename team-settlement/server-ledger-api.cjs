@@ -159,6 +159,7 @@ function createServerLedgerApi({
     if(!Array.isArray(result))throw Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
     for(const row of result){
       if(!row||typeof row!=='object'||Array.isArray(row)||
+         Object.keys(row).some(k=>!['workspace_id','partner_id','partner_kind','display_name'].includes(k))||
          row.workspace_id!==trustedActor.workspace_id||
          !EVENT_ID_RE.test(row.partner_id)||
          !['customer','owner'].includes(row.partner_kind)||

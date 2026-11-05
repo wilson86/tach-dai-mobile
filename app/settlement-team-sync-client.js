@@ -741,6 +741,7 @@
         const ids=new Set(),items=[];
         for(const row of result.body){
           if(!row||typeof row!=='object'||Array.isArray(row)||
+             Object.keys(row).some(k=>!['workspace_id','partner_id','partner_kind','display_name'].includes(k))||
              row.workspace_id!==workspaceId||typeof row.partner_id!=='string'||
              !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(row.partner_id)||
              ids.has(row.partner_id)||!['customer','owner'].includes(row.partner_kind)||

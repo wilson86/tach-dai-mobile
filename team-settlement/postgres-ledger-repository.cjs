@@ -340,6 +340,7 @@ function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic =
         throw new Error('TEAM_DB_RESULT_INVALID');
       return Object.freeze(result.rows.map(row=>{
         if(!row||typeof row!=='object'||Array.isArray(row)||
+           Object.keys(row).some(k=>!['workspace_id','partner_id','partner_kind','display_name'].includes(k))||
            row.workspace_id!==trustedActor.workspace_id||
            !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(row.partner_id)||
            !['customer','owner'].includes(row.partner_kind)||
