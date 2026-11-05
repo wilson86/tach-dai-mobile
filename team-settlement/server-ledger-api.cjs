@@ -162,6 +162,7 @@ function createServerLedgerApi({
          row.workspace_id!==trustedActor.workspace_id||
          !EVENT_ID_RE.test(row.partner_id)||
          !['customer','owner'].includes(row.partner_kind)||
+         (options?.kind != null && row.partner_kind!==options.kind)||
          typeof row.display_name!=='string'||row.display_name.length<1||row.display_name.length>160)
         throw Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
     }

@@ -38,8 +38,11 @@ async function main(){
   assert.equal(result.persistence,'LOCAL_STORAGE');assert.equal(result.restored.id,first.id);assert.equal(result.restored.status,'NEEDS_RECONCILIATION');
   const actorCheck=await ev(`(async()=>{let user='user_b';const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async()=>({ok:true,status:200,json:async()=>({server_verified:true,membership_active:true,workspace_id:'group_a',user_id:user,role:'operator'})})});c.setSessionToken('c'.repeat(43),'group_a',{accountId:'user_a'});let rejected=false;try{await c.verifyActor()}catch(e){rejected=e.message==='SYNC_ACTOR_UNVERIFIED'}user='user_a';return {rejected,accepted:(await c.verifyActor()).user_id}})()`);
   assert.equal(actorCheck.rejected,true);assert.equal(actorCheck.accepted,'user_a');
+  const filterCheck=await ev(`(async()=>{let kind='owner';const c=window.KtsSettlementSyncClient.createSyncClient({fetchImpl:async()=>({ok:true,status:200,json:async()=>[{workspace_id:'group_a',partner_id:'fake_partner_1',partner_kind:kind,display_name:'Synthetic'}]})});c.setSessionToken('d'.repeat(43),'group_a',{accountId:'user_a'});const rejected=(await c.listCounterparties({kind:'customer'})).status;kind='customer';const accepted=(await c.listCounterparties({kind:'customer'})).status;return {rejected,accepted}})()`);
+  assert.deepEqual(filterCheck,{rejected:'BLOCKED',accepted:'SYNCED'});
   console.log('PASS real Chrome localStorage: invalid scope denied; valid intent restored and quarantined');
   console.log('PASS real Chrome actor check: foreign same-workspace user denied');
+  console.log('PASS real Chrome directory: wrong requested kind denied');
   await call('Browser.close');
  }finally{
   if(ws)ws.close();if(child){await waitExit(child,5000);if(!exited(child)){child.kill();await waitExit(child,3000);}if(!exited(child))throw Error('CHROME_NOT_CLOSED');}

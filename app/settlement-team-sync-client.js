@@ -744,6 +744,7 @@
              row.workspace_id!==workspaceId||typeof row.partner_id!=='string'||
              !/^(?:fake|demo|synthetic)_[a-z0-9_-]{1,64}$/.test(row.partner_id)||
              ids.has(row.partner_id)||!['customer','owner'].includes(row.partner_kind)||
+             (kind!==null && row.partner_kind!==kind)||
              typeof row.display_name!=='string'||row.display_name.length<1||row.display_name.length>160)
             return {status:STATUS.BLOCKED,error:'SYNC_COUNTERPARTY_UNVERIFIED',items:[]};
           ids.add(row.partner_id);items.push(Object.freeze({...row}));

@@ -343,6 +343,7 @@ function createPostgresLedgerRepository({ db, syntheticAuthorizationDiagnostic =
            row.workspace_id!==trustedActor.workspace_id||
            !/^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(row.partner_id)||
            !['customer','owner'].includes(row.partner_kind)||
+           (kind!==null && row.partner_kind!==kind)||
            typeof row.display_name!=='string'||row.display_name.length<1||
            row.display_name.length>160)
           throw new Error('TEAM_COUNTERPARTY_RESPONSE_UNVERIFIED');
