@@ -109,6 +109,21 @@ try{
  assert('cut ledger persists in session',String(sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1')).includes('b|21'));
  $('undoQuytCut').click();
  assert('undo selected restores 25n',$('after').textContent==='30n');
+ // Force storage quota failure at Undo after a separate synthetic Cut.
+ // The UI must be HOLD, not leave previously-Cut numbers Copy-able.
+ section('b').querySelector('.section-cut').click();
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('storage-failure Undo test has active Cut',!$('undoQuytCut').disabled);
+ const originalStorageSet=Storage.prototype.setItem;
+ Storage.prototype.setItem=function(key,value){
+  if(key==='KTS_QUYT_SCOPED_CUT_V1')throw Error('SIMULATED_UNDO_QUOTA');
+  return originalStorageSet.call(this,key,value);
+ };
+ try{$('undoQuytCut').click()}finally{Storage.prototype.setItem=originalStorageSet}
+ assert('Undo persistence failure locks all Copy and clears results',
+  $('copy').disabled&&$('result').value===''&&$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&
+  [...document.querySelectorAll('.section-copy,.section-cut,.section-cut-selected')].every(b=>b.disabled)&&
+  $('status').textContent.includes('HOLD_UNDO_SAVE_FAILED'));
 }catch(e){report.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const result=document.createElement('pre');result.id='quyt-mb-browser-qa';
 result.textContent=JSON.stringify({pass:report.filter(x=>x.pass).length,fail:report.filter(x=>!x.pass).length,report});
