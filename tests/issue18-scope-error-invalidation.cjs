@@ -14,10 +14,11 @@ assert.match(handlers,/dateEl\.addEventListener\("change",/u);
 assert.match(handlers,/todayEl\.addEventListener\("change",updateUIAfterScopeChange\)/u);
 const fn=new Function("'use strict';const events={};"+
 "const outputEl={value:'PHÁT HIỆN TIN SAI: đài thuộc MN'};"+
-"const state={input:'86 lo75n',cut:'KEEP_ORIGINAL_CUT_RECEIPT',undo:'KEEP_UNDO',persistWrites:0,parseCalls:0,redraws:0,status:''};"+
+"const state={input:'86 lo75n',cut:'KEEP_ORIGINAL_CUT_RECEIPT',undo:'KEEP_UNDO',approval:'OLD_DRAW_APPROVED',approvalClearCount:0,persistWrites:0,parseCalls:0,redraws:0,status:''};"+
 "const resetOutputRecords=()=>{state.redraws++};"+
 "const setStatus=s=>{state.status=s};"+
 "const updateUI=()=>{state.scheduleCalls=(state.scheduleCalls||0)+1};"+
+"const clearDuplicateConfirmation=()=>{state.approval=null;state.approvalClearCount++};"+
 "const regionEl={addEventListener:(k,cb)=>events.region=cb};"+
 "const dateEl={addEventListener:(k,cb)=>events.date=cb};"+
 "const todayEl={checked:true,addEventListener:(k,cb)=>events.today=cb};"+
@@ -39,6 +40,8 @@ assert.equal(result.state.cut,'KEEP_ORIGINAL_CUT_RECEIPT','persisted Cut untouch
 assert.equal(result.state.undo,'KEEP_UNDO','undo retained');
 assert.equal(result.state.persistWrites,0,'scope invalidation writes no persistent storage');
 assert.equal(result.state.parseCalls,0,'scope change does not run wager parser automatically');
+assert.equal(result.state.approval,null,'old day duplicate approval must be revoked');
+assert.equal(result.state.approvalClearCount,3,'region, date and today must each revoke stale duplicate approval');
 const resetStart=source.indexOf('function resetOutputRecords(){');
 const resetEnd=source.indexOf('function renderOutputRecords(){',resetStart);
 assert.ok(resetStart>=0&&resetEnd>resetStart,'reset source anchors');
