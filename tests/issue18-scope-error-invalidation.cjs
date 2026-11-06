@@ -14,6 +14,7 @@ assert.match(handlers,/dateEl\.addEventListener\("change",/u);
 assert.match(handlers,/todayEl\.addEventListener\("change",updateUIAfterScopeChange\)/u);
 const fn=new Function("'use strict';const events={};"+
 "const outputEl={value:'PHÁT HIỆN TIN SAI: đài thuộc MN'};"+
+"let inputSyncTimer=null;const clearTimeout=()=>{};"+
 "let scopeRevision=0;"+
 "const state={input:'86 lo75n',cut:'KEEP_ORIGINAL_CUT_RECEIPT',undo:'KEEP_UNDO',approval:'OLD_DRAW_APPROVED',approvalClearCount:0,persistWrites:0,parseCalls:0,redraws:0,status:''};"+
 "const resetOutputRecords=()=>{state.redraws++};"+
