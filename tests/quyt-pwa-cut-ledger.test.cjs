@@ -75,3 +75,31 @@ test('F5 initial use without cut guard does not falsely HOLD',()=>{
 test('F5 malformed stored Cut must HOLD',()=>{
  assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope},'{oops'),/HOLD_SAVED_CUT_CORRUPT/u);
 });
+
+// Source-bound orphaned Cut receipt gate: test the actual HTML code on F5.
+const guardStart=html.indexOf('function loadGuard(){');
+const guardEnd=html.indexOf('function writeGuard(',guardStart);
+assert.ok(guardStart>=0&&guardEnd>guardStart,'guard source anchors');
+const readGuard=new Function('guardText','ledgerText',
+ "'use strict';const cutGuardKey='QA_G',cutStorageKey='QA_L';let cutGuard=null;"+
+ "const sessionStorage={getItem:key=>key===cutGuardKey?guardText:key===cutStorageKey?ledgerText:null};"+
+ html.slice(guardStart,guardEnd)+';loadGuard();return cutGuard');
+const sourceCutReceipt=JSON.stringify({scope:'SYNTHETIC',keys:['b|21'],undo:[[]]});
+test('F5 missing replay guard with Cut receipt must HOLD, never uncut',()=>{
+ assert.deepEqual(readGuard(null,sourceCutReceipt),{scope:'ORPHANED',phase:'blocked'});
+});
+test('F5 malformed Cut receipt with missing replay guard must HOLD',()=>{
+ assert.deepEqual(readGuard(null,'{bad'),{scope:'CORRUPT',phase:'blocked'});
+});
+test('F5 missing replay guard but prior Undo history must HOLD',()=>{
+ assert.deepEqual(readGuard(null,JSON.stringify({scope:'SYNTHETIC',keys:[],undo:[[]]})),
+  {scope:'ORPHANED',phase:'blocked'});
+});
+test('F5 first use and empty untouched ledger remain eligible',()=>{
+ assert.equal(readGuard(null,null),null);
+ assert.equal(readGuard(null,JSON.stringify({scope:'SYNTHETIC',keys:[],undo:[]})),null);
+});
+test('F5 valid completed Cut replay guard is preserved',()=>{
+ assert.deepEqual(readGuard(JSON.stringify({scope:'SYNTHETIC',phase:'cut'}),sourceCutReceipt),
+  {scope:'SYNTHETIC',phase:'cut'});
+});
