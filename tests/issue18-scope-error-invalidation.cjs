@@ -107,3 +107,38 @@ const crossDraw=reviewReconcile(false,false);
 assert.equal(crossDraw.rehydrated,0,'cross-draw ledger never auto-runs');
 assert.equal(crossDraw.cleared,1,'cross-draw ledger mismatch preserves HOLD');
 console.log('ISSUE18_NO_AUTO_REHYDRATE=PASS 7 checks; COLD_BOOT_RECEIPT=PASS');
+
+/** Real source-extracted debounce race: a queued async parser callback must
+ * never export rows for another lottery region/day, even when cancellation
+ * races with an already-queued event-loop callback. */
+const debounceBegin=source.indexOf('function scheduleFullInputSync(){');
+const debounceEnd=source.indexOf('function syncAfterAnyInputEdit(){',debounceBegin);
+const scopeBegin=source.indexOf('function updateUIAfterScopeChange(){');
+const scopeEnd=source.indexOf('regionEl.addEventListener("change",updateUIAfterScopeChange);',scopeBegin);
+assert.ok(debounceBegin>=0&&debounceEnd>debounceBegin&&scopeBegin>=0&&scopeEnd>scopeBegin,
+ 'source-bound timer and scope-change functions exist');
+const debounceSource=source.slice(debounceBegin,debounceEnd);
+const scopeChangeSource=source.slice(scopeBegin,scopeEnd);
+const evalDebounce=new Function('changeScope','queueNewAfterChange',
+ "'use strict';let inputSyncTimer=null,scopeRevision=0,parseRuns=0,canceled=0,renderClears=0;"+
+ "const queued=[],inputEl={value:'hn 21 b10n'},outputEl={value:'OLD_DRAW'},setTimeout=fn=>{queued.push(fn);return queued.length},"+
+ "clearTimeout=()=>{canceled++},run=()=>{parseRuns++;outputEl.value='AUTO_REPLAYED_OLD_BET'},"+
+ "resetOutputRecords=()=>{},setStatus=()=>{},clearDuplicateConfirmation=()=>{},"+
+ "invalidateDisplayedResultForScopeChange=()=>{renderClears++;outputEl.value=''},"+
+ "updateUI=()=>{};"+
+ debounceSource+scopeChangeSource+
+ ";scheduleFullInputSync();const oldCallback=queued[0];if(changeScope)updateUIAfterScopeChange();"+
+ "if(queueNewAfterChange)scheduleFullInputSync();const newHandle=inputSyncTimer;"+
+ "oldCallback();const handleAfterStale=inputSyncTimer;"+
+ "if(queueNewAfterChange)queued[1]();return {parseRuns,canceled,renderClears,output:outputEl.value,newHandle,handleAfterStale};");
+const afterSwitch=evalDebounce(true,false);
+assert.equal(afterSwitch.parseRuns,0,'scope switch invalidates pending parser even if callback fires after cancellation');
+assert.equal(afterSwitch.output,'','scope switch keeps displayed result empty');
+assert.equal(afterSwitch.canceled,1,'scope switch cancels pending timer');
+assert.equal(afterSwitch.renderClears,1,'scope switch clears displayed results once');
+const normal=evalDebounce(false,false);
+assert.equal(normal.parseRuns,1,'same-scope input debounce still runs');
+const newDrawTimer=evalDebounce(true,true);
+assert.equal(newDrawTimer.handleAfterStale,newDrawTimer.newHandle,'stale callback must not wipe new draw timer');
+assert.equal(newDrawTimer.parseRuns,1,'new scope input edit may run after new input debounce');
+console.log('ISSUE18_SCOPE_DEBOUNCE_REPLAY=PASS 7 checks; NORMAL_INPUT_SYNC=PASS');
