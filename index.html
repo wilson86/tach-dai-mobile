@@ -2094,9 +2094,21 @@ $("undoBtn").addEventListener("click",()=>{
   undoStack.pop();
   announceWorkingSource();
 });
-regionEl.addEventListener("change",updateUI);
-dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
-todayEl.addEventListener("change",updateUI);
+// Scope changes invalidate only the DISPLAYED (potentially stale) result.
+// Do not delete or mutate raw source, undo history, or persisted Cut receipts.
+// Revalidation is explicit: never re-run a wager under another region silently.
+function invalidateDisplayedResultForScopeChange(){
+  outputEl.value="";
+  resetOutputRecords();
+  setStatus("Đã đổi miền/ngày: kết quả cũ đã ẩn. Nhấn Kiểm tra + Tách để xác nhận theo lịch mới.","");
+}
+function updateUIAfterScopeChange(){
+  invalidateDisplayedResultForScopeChange();
+  updateUI();
+}
+regionEl.addEventListener("change",updateUIAfterScopeChange);
+dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUIAfterScopeChange();});
+todayEl.addEventListener("change",updateUIAfterScopeChange);
 
 // v2.0.5: mọi kiểu sửa/xóa Input đều đồng bộ Kết quả.
 // "input" bắt Backspace, Delete, Cut, paste, bàn phím mobile và native undo/redo.
