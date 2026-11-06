@@ -424,7 +424,7 @@ confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng 
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
 $('startNewBatch').addEventListener('click',()=>{
  if(!cutGuard)return;
- if(cutInFlight){message('HOLD: đang Cắt, chờ xác nhận kết quả trước khi đổi lượt.',true);return}
+ if(cutInFlight||copyInFlight){message('HOLD_COPY_BUSY: đang Copy/Cắt, KHÔNG mở lượt mới khi Clipboard chưa hoàn tất.',true);return}
  if(!confirm('CẢNH BÁO: lượt trước đã Cắt/Copy. Chỉ mở lượt mới khi đã đối soát và xác nhận KHÔNG GỬI TRÙNG. Đây là lượt đặt ĐỘC LẬP thật sự?'))return;
  try{sessionStorage.removeItem(cutGuardKey);sessionStorage.removeItem(cutStorageKey);cutGuard=null;cutKeys=new Set();cutUndo=[];confirmedRaw=null;confirmedDaScope=null;$('startNewBatch').hidden=true;redraw();
   message('Đã xác nhận lượt mới độc lập. Kiểm tra số và tiền trước khi gửi.',false);
