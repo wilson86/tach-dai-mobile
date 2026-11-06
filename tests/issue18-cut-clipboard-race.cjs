@@ -14,9 +14,9 @@ const sourceSource=between('async function cutSelectedSourceLines(){','async fun
 assert.match(src,/let cutInFlight=false;/u,'must use shared Cut lock');
 const simulate=new Function('which','scenario',
  "'use strict';let cutInFlight=false,scopeRevision=0,copyCalls=0,snapshots=0,writes=0,redraws=0,parses=0,announcements=0;let resolveClipboard;"+
- "const notices=[],EXACT_OUTPUT_LEDGER_PREFIX='[[LEDGER]]',groupedResultReady=true,outputRecords=[{text:'21 b10n',alive:true}];"+
- "const inputEl={value:'21 b10n\\n22 b5n',selectionStart:0,selectionEnd:7},outputEl={value:'21 b10n'},"+
- "const undoStack=[],checkedResultRecordIndexes=new Set(),lastOutputSelection={start:0,end:0};let lastSourceLines=[],workingLedger=null;"+
+ "const notices=[],EXACT_OUTPUT_LEDGER_PREFIX='[[LEDGER]]',groupedResultReady=true;let outputRecords=[{text:'21 b10n',alive:true}];"+
+ "const inputEl={value:'21 b10n\\n22 b5n',selectionStart:0,selectionEnd:7},outputEl={value:'21 b10n'};"+
+ "const undoStack=[],checkedResultRecordIndexes=new Set();let lastOutputSelection={start:0,end:0},lastSourceLines=[],workingLedger=null;"+
  "const holdIfBusinessEngineStale=()=>false,rememberOutputSelection=()=>{},checkedAliveRecordIndexes=()=>[0],"+
  "selectedAliveRecordIndexes=()=>[0],setStatus=(message)=>{notices.push(message)},"+
  "writeClipboardText=()=>{copyCalls++;return new Promise(done=>resolveClipboard=done)},"+
