@@ -320,7 +320,13 @@ function cutScope(){return JSON.stringify([raw.value,customer.value,market.value
 function saveCuts(){const receipt=JSON.stringify({scope:cutScope(),keys:[...cutKeys],undo:cutUndo});sessionStorage.setItem(cutStorageKey,receipt);if(sessionStorage.getItem(cutStorageKey)!==receipt)throw Error('HOLD_LEDGER_SAVE_FAILED')}
 function restoreCuts(){
  cutKeys=new Set();cutUndo=[];
- try{const x=JSON.parse(sessionStorage.getItem(cutStorageKey)||'null');
+ try{const rawCutReceipt=sessionStorage.getItem(cutStorageKey);
+  // Match the EXACT Cut ledger bytes to the separately persisted guard.
+  // A same-scope ledger with missing/deleted rows must never replay a Cut.
+  if(cutGuard&&cutGuard.phase==='cut'&&cutGuard.scope===cutScope()&&
+     (typeof cutGuard.receipt!=='string'||cutGuard.receipt!==rawCutReceipt))
+    throw Error('HOLD_SAVED_CUT_RECEIPT_CHANGED');
+  const x=JSON.parse(rawCutReceipt||'null');
   if(!x||x.scope!==cutScope()){
     // After a completed Cut, missing/mismatched saved rows must HOLD;
     // otherwise a reload could resurrect already copied numbers.
@@ -467,7 +473,7 @@ async function cutGroup(frame,selectedOnly){
  }
  cutUndo.push([...cutKeys]);if(cutUndo.length>30)cutUndo.shift();
  for(const k of keys)cutKeys.add(k);
- try{saveCuts();writeGuard({scope:cutScope(),phase:'cut'});renderCut(base);message('ĐÃ CẮT '+keys.length+' số/cặp nhóm '+frame.kind.toUpperCase()+' và Copy. Các khung và tin cuối đồng bộ ngay; nguồn không đổi.',false)}
+ try{saveCuts();writeGuard({scope:cutScope(),phase:'cut',receipt:sessionStorage.getItem(cutStorageKey)});renderCut(base);message('ĐÃ CẮT '+keys.length+' số/cặp nhóm '+frame.kind.toUpperCase()+' và Copy. Các khung và tin cuối đồng bộ ngay; nguồn không đổi.',false)}
  catch(e){current=null;activeBase=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();message('HOLD: clipboard đã có thể chứa cược cũ nhưng sổ Cắt chưa xác minh. KHÔNG COPY LẠI. '+String(e.message||e),true)}
  finally{cutInFlight=false}
 }
@@ -480,6 +486,7 @@ $('undoQuytCut').addEventListener('click',()=>{
   cutKeys=new Set(prior);cutUndo.pop();
   // Commit durable Cut history BEFORE rendering an uncut Copy result.
   saveCuts();
+  writeGuard({scope:cutScope(),phase:'cut',receipt:sessionStorage.getItem(cutStorageKey)});
   renderCut(activeBase);
   message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false);
  }catch(e){
