@@ -69,7 +69,7 @@ test('REPLAY HOLD: Cut ledger from another scope cannot resurrect removed rows',
 });
 test('REPLAY KEEP: valid scoped Cut receipt restores removed keys and Undo history',()=>{
  const valid=JSON.stringify({scope:cutScopeForTest,keys:['b|21'],undo:[[]]});
- const state=restored({phase:'cut',scope:cutScopeForTest},valid);
+ const state=restored({phase:'cut',scope:cutScopeForTest,receipt:valid},valid);
  assert.deepEqual(state.keys,['b|21']);assert.deepEqual(state.undo,[[]]);
 });
 test('FIRST USE: no Cut guard and no stored ledger is allowed to start empty',()=>{
@@ -108,4 +108,23 @@ test('first use without Cut history can proceed; empty ledger alone is not a Cut
 test('valid source-bound replay guard remains in completed-Cut phase',()=>{
  assert.deepEqual(evaluateGuard(JSON.stringify({scope:'SYNTHETIC',phase:'cut'}),syntheticReceipt),
   {scope:'SYNTHETIC',phase:'cut'});
+});
+
+test('REPLAY HOLD: same-scope Cut ledger deleting a previously-Cut number is rejected',()=>{
+ const signed=JSON.stringify({scope:cutScopeForTest,keys:['b|21'],undo:[[]]});
+ const modified=JSON.stringify({scope:cutScopeForTest,keys:[],undo:[]});
+ assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest,receipt:signed},modified),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('REPLAY HOLD: same-scope Cut ledger with forged number is rejected',()=>{
+ const signed=JSON.stringify({scope:cutScopeForTest,keys:['b|21'],undo:[[]]});
+ const modified=JSON.stringify({scope:cutScopeForTest,keys:['b|99'],undo:[[]]});
+ assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest,receipt:signed},modified),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('REPLAY HOLD: historical unbound Cut guard needs manual review (not silent replay)',()=>{
+ const signed=JSON.stringify({scope:cutScopeForTest,keys:['b|21'],undo:[[]]});
+ assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest},signed),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('REPLAY KEEP: independently reconciled Undo receipt binds to empty Cut set',()=>{
+ const afterUndo=JSON.stringify({scope:cutScopeForTest,keys:[],undo:[]});
+ assert.deepEqual(restored({phase:'cut',scope:cutScopeForTest,receipt:afterUndo},afterUndo),{keys:[],undo:[]});
 });
