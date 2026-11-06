@@ -1,0 +1,22 @@
+name: Quyt v9 isolated preview — Android-like Chromium acceptance ($0)
+on:
+  pull_request:
+    paths:
+      - 'quyt-cut-review/**'
+      - 'tests/quyt-cut-review-*.cjs'
+      - '.github/workflows/quyt-cut-preview-review.yml'
+permissions:
+  contents: read
+jobs:
+  review-only-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Contract — no production cache or route overlap
+        run: node --test tests/quyt-cut-review-contract.cjs
+      - name: Actual Chromium preview Copy, Cut, Undo, F5 and clipboard races
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-cut-review-chromium-smoke.cjs
+          node tests/quyt-cut-review-f5-headless.cjs
