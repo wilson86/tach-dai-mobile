@@ -18,7 +18,7 @@ const fn=new Function("'use strict';const events={};"+
 "const state={input:'86 lo75n',cut:'KEEP_ORIGINAL_CUT_RECEIPT',undo:'KEEP_UNDO',approval:'OLD_DRAW_APPROVED',approvalClearCount:0,persistWrites:0,parseCalls:0,redraws:0,status:''};"+
 "const resetOutputRecords=()=>{state.redraws++};"+
 "const setStatus=s=>{state.status=s};"+
-"const updateUI=()=>{state.scheduleCalls=(state.scheduleCalls||0)+1};"+
+"const updateUI=(allowScopeRehydrate=true)=>{state.scheduleCalls=(state.scheduleCalls||0)+1;(state.rehydrateFlags||=[]).push(allowScopeRehydrate)};"+
 "const clearDuplicateConfirmation=()=>{state.approval=null;state.approvalClearCount++};"+
 "const regionEl={addEventListener:(k,cb)=>events.region=cb};"+
 "const dateEl={addEventListener:(k,cb)=>events.date=cb};"+
@@ -44,6 +44,7 @@ assert.equal(result.state.parseCalls,0,'scope change does not run wager parser a
 assert.equal(result.state.approval,null,'old day duplicate approval must be revoked');
 assert.equal(result.state.approvalClearCount,3,'region, date and today must each revoke stale duplicate approval');
 assert.equal(result.state.scopeRevision,3,'each scope change invalidates previous Undo scope revision');
+assert.deepEqual(result.state.rehydrateFlags,[false,false,false], 'scope change must NOT auto-rehydrate old Cut ledger');
 const resetStart=source.indexOf('function resetOutputRecords(){');
 const resetEnd=source.indexOf('function renderOutputRecords(){',resetStart);
 assert.ok(resetStart>=0&&resetEnd>resetStart,'reset source anchors');
@@ -80,3 +81,29 @@ assert.match(source,/undoStack\.push\(\{\s*scopeRevision,/u,'new Undo snapshot m
 assert.match(source,/undoStack\.push\(\{\.\.\.cloneLedger\(exactLedger\.undoReceipt\),scopeRevision\}\)/u,
  'validated F5 durable receipt must bind to current scope');
 console.log('ISSUE18_UNDO_CROSS_SCOPE_HOLD=PASS 5 checks; VALID_UNDO=PASS 3 checks');
+
+const reconcileStart=source.indexOf('function reconcileStoredLedgerScope(');
+const reconcileEnd=source.indexOf('function saveSettings(){',reconcileStart);
+assert.ok(reconcileStart>=0&&reconcileEnd>reconcileStart,'actual ledger scope reconciliation anchors');
+const reconcileSource=source.slice(reconcileStart,reconcileEnd);
+const reviewReconcile=new Function('allowRehydrate','sameScope',
+ "'use strict';let pendingIncompatibleLedger=true,rehydrated=0,cleared=0;"+
+ "const EXACT_OUTPUT_LEDGER_STORAGE_KEY='REVIEW_KEY',EXACT_OUTPUT_LEDGER_PREFIX='[[LEDGER]]',INCOMPATIBLE_LEDGER_WARNING='HOLD';"+
+ "const inputEl={value:'SIGNED_LEDGER'},outputEl={value:''},"+
+ "localStorage={getItem:()=> 'SIGNED_LEDGER'},parseExactOutputLedger=()=>sameScope,"+
+ "resetOutputRecords=()=>{cleared++},setStatus=()=>{},"+
+ "run=()=>{rehydrated++;outputEl.value='OLD_DRAW_CUT_OUTPUT'};"+
+ reconcileSource+
+ ";reconcileStoredLedgerScope(allowRehydrate);"+
+ "return {rehydrated,cleared,output:outputEl.value,pending:pendingIncompatibleLedger};");
+const switchedBack=reviewReconcile(false,true);
+assert.equal(switchedBack.rehydrated,0,'draw switch must never rehydrate stored Cut output automatically');
+assert.equal(switchedBack.output,'','draw switch keeps results hidden even if stored ledger matches selected draw');
+assert.equal(switchedBack.pending,true,'manual recheck remains required after scope switch');
+const startup=reviewReconcile(true,true);
+assert.equal(startup.rehydrated,1,'boot restore of previously verified same-scope ledger remains supported');
+assert.equal(startup.pending,false,'validated boot restore clears hold');
+const crossDraw=reviewReconcile(false,false);
+assert.equal(crossDraw.rehydrated,0,'cross-draw ledger never auto-runs');
+assert.equal(crossDraw.cleared,1,'cross-draw ledger mismatch preserves HOLD');
+console.log('ISSUE18_NO_AUTO_REHYDRATE=PASS 7 checks; COLD_BOOT_RECEIPT=PASS');
