@@ -96,6 +96,21 @@ try{
  assert('Undo restores full amount',$('undoQuytCut').disabled===false);
  $('undoQuytCut').click();
  assert('Undo source-amount restore',$('after').textContent==='35n'&&$('result').value.includes('b10n'));
+ // Pending Copy of previous ticket blocks consent to a different batch.
+ let completePendingCopy;
+ const pendingCopyWrite=navigator.clipboard.writeText;
+ navigator.clipboard.writeText=()=>new Promise(resolve=>{completePendingCopy=resolve});
+ section('b').querySelector('.section-copy').click();
+ assert('previous batch has pending Copy',typeof completePendingCopy==='function');
+ set('raw','hn 21 22 b10n dd5n');
+ let unsafeConfirms=0;const savedPendingConfirm=window.confirm;
+ window.confirm=()=>{unsafeConfirms++;return true};
+ $('startNewBatch').click();window.confirm=savedPendingConfirm;
+ assert('new batch is HOLD until the old Copy completes',
+  unsafeConfirms===0&&$('copy').disabled&&!$('startNewBatch').hidden&&
+  $('status').textContent.includes('HOLD_COPY_BUSY'));
+ completePendingCopy();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ navigator.clipboard.writeText=pendingCopyWrite;
  set('raw','hn 21 22 b10n dd5n');
  assert('edit after earlier Cut forces HOLD and manual reset',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
  $('checkMerge').click();
