@@ -67,7 +67,7 @@ test('F5 HOLD: a completed Cut with another scope never replays numbers',()=>{
 });
 test('F5 valid scoped Cut: restored keys exclude already Cut numbers',()=>{
  const receipt=JSON.stringify({scope:syntheticCutScope,keys:['b|21'],undo:[[]]});
- assert.deepEqual(recover({phase:'cut',scope:syntheticCutScope},receipt),{keys:['b|21'],undo:[[]]});
+ assert.deepEqual(recover({phase:'cut',scope:syntheticCutScope,receipt},receipt),{keys:['b|21'],undo:[[]]});
 });
 test('F5 initial use without cut guard does not falsely HOLD',()=>{
  assert.deepEqual(recover(null,null),{keys:[],undo:[]});
@@ -102,4 +102,23 @@ test('F5 first use and empty untouched ledger remain eligible',()=>{
 test('F5 valid completed Cut replay guard is preserved',()=>{
  assert.deepEqual(readGuard(JSON.stringify({scope:'SYNTHETIC',phase:'cut'}),sourceCutReceipt),
   {scope:'SYNTHETIC',phase:'cut'});
+});
+
+test('F5 HOLD: same-scope Cut ledger deleting a previously-Cut number is rejected',()=>{
+ const signed=JSON.stringify({scope:syntheticCutScope,keys:['b|21'],undo:[[]]});
+ const modified=JSON.stringify({scope:syntheticCutScope,keys:[],undo:[]});
+ assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope,receipt:signed},modified),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('F5 HOLD: same-scope Cut ledger with forged number is rejected',()=>{
+ const signed=JSON.stringify({scope:syntheticCutScope,keys:['b|21'],undo:[[]]});
+ const modified=JSON.stringify({scope:syntheticCutScope,keys:['b|99'],undo:[[]]});
+ assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope,receipt:signed},modified),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('F5 HOLD: historical unbound Cut guard needs manual review (not silent replay)',()=>{
+ const signed=JSON.stringify({scope:syntheticCutScope,keys:['b|21'],undo:[[]]});
+ assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope},signed),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('F5 KEEP: independently reconciled Undo receipt binds to empty Cut set',()=>{
+ const afterUndo=JSON.stringify({scope:syntheticCutScope,keys:[],undo:[]});
+ assert.deepEqual(recover({phase:'cut',scope:syntheticCutScope,receipt:afterUndo},afterUndo),{keys:[],undo:[]});
 });
