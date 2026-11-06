@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KTS Quýt — V9 CẮT/UNDO BẢN XEM TRƯỚC</title>
+<title>KTS Quýt — V10 CẮT/UNDO BẢN XEM TRƯỚC</title>
 <meta name="theme-color" content="#153c5b">
 <meta name="description" content="BẢN XEM TRƯỚC V9 Cắt/Undo. Không dùng để chuyển cược hoặc tiền thật.">
 <link rel="manifest" href="./manifest.webmanifest">
@@ -48,7 +48,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </style>
 </head>
 <body><main class="wrap">
-<section class="card" id="reviewOnlyBanner" role="alert" style="border:3px solid #b7371d;background:#fff0e8"><strong style="color:#8d341b;font-size:18px">⚠ BẢN KIỂM TRA V9 — CHƯA DÙNG TIỀN THẬT</strong><p>Cắt nhóm, Cắt từng số, Copy và Hoàn tác chỉ để thử trên dữ liệu giả. KHÔNG gửi cược hoặc số tiền thật cho khách/chủ. Bản v8 chính thức vẫn độc lập.</p><p><a href="../quyt-pwa/?v=8">Mở lại PWA v8 hiện hành</a></p></section>
+<section class="card" id="reviewOnlyBanner" role="alert" style="border:3px solid #b7371d;background:#fff0e8"><strong style="color:#8d341b;font-size:18px">⚠ BẢN KIỂM TRA V10 — CHƯA DÙNG TIỀN THẬT</strong><p>Cắt nhóm, Cắt từng số, Copy và Hoàn tác chỉ để thử trên dữ liệu giả. KHÔNG gửi cược hoặc số tiền thật cho khách/chủ. Bản v8 chính thức vẫn độc lập; dữ liệu, hệ số và sổ Cắt bản kiểm tra được tách khỏi v8.</p><p><a href="../quyt-pwa/?v=8">Mở lại PWA v8 hiện hành</a></p></section>
 <header><h1>KTS — GỘP TIN QUÝT <span class="tag">PWA / OFFLINE</span></h1>
 <p>Dán nhiều tin → tự gộp → tick Quýt tự nhân → Copy. Không cần server, không gửi Telegram, không kết nối Router.</p></header>
 <div class="card">
@@ -278,7 +278,7 @@ const OfflineKTS=(()=>{
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),status=$('status'),copy=$('copy'),select=$('select'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
-const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null,restoredTick=false;
+const storageKey='KTS_QUYT_REVIEW_V10_DRAFT_V1',ratesKey='KTS_QUYT_REVIEW_V10_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null,restoredTick=false;
 const frames=[...document.querySelectorAll('#betSections .bet-section')].map(node=>({
  kind:node.getAttribute('data-bet-kind'),
  field:node.querySelector('.section-text'),
@@ -288,7 +288,7 @@ const frames=[...document.querySelectorAll('#betSections .bet-section')].map(nod
  cutSelected:node.querySelector('.section-cut-selected'),
  choices:node.querySelector('.section-row-list')
 }));
-const cutStorageKey='KTS_QUYT_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null,cutInFlight=false,copyInFlight=false;
+const cutStorageKey='KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_REVIEW_V10_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null,cutInFlight=false,copyInFlight=false;
 function loadGuard(){
  try{const rawRecord=sessionStorage.getItem(cutGuardKey);if(!rawRecord)return;
   const record=JSON.parse(rawRecord);if(!record||typeof record.scope!=='string'||!['cut','pending'].includes(record.phase))throw Error('BAD_GUARD');cutGuard=record;

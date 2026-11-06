@@ -9,6 +9,12 @@ const root=path.resolve(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'quyt-cut-review/index.html'),'utf8');
 const bootstrap=String.raw`<script>
 Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:s=>{window.__qaClipboard=String(s);return Promise.resolve()}}});
+window.__qaLiveRates='{"quyt":"1.999","hien":"1.000","khac":"1.000"}';
+window.__qaLiveDraft='{"raw":"PRODUCTION_SENTINEL","customer":"quyt","market":"mb","tick":true}';
+window.__qaLiveCut='{"scope":"PRODUCTION_SENTINEL","keys":["b|99"]}';
+localStorage.setItem('KTS_OFFLINE_QUYT_RATES_V1',window.__qaLiveRates);
+sessionStorage.setItem('KTS_OFFLINE_QUYT_DRAFT_V1',window.__qaLiveDraft);
+sessionStorage.setItem('KTS_QUYT_SCOPED_CUT_V1',window.__qaLiveCut);
 </script>`;
 const checks=String.raw`<script>
 (async()=>{
@@ -22,6 +28,8 @@ try{
   assert('first-phase receipt available',Array.isArray(first));
   if(Array.isArray(first))report.push(...first);
   assert('F5 restored raw source',$('raw').value==='hn 21 b10n dd5n');
+  assert('F5 does not mutate live draft',sessionStorage.getItem('KTS_OFFLINE_QUYT_DRAFT_V1')===window.__qaLiveDraft);
+  assert('F5 does not mutate live rate',localStorage.getItem('KTS_OFFLINE_QUYT_RATES_V1')===window.__qaLiveRates);
   assert('F5 restored Quyt multiplier toggle',$('tick').checked===true);
   assert('F5 keeps B cut, only DD remains',$('result').value.includes('dd5n')&&!$('result').value.includes('b11n')&&$('after').textContent==='5n'&&frame('b').hidden);
   set('raw','hn 21 b12n dd5n');
@@ -61,14 +69,14 @@ try{
   set('raw','hn 21 b12n dd5n');
   assert('editing while Cut is in flight holds all output',$('copy').disabled&&$('result').value==='');
   resolveCut();await flush();
-  assert('stale async Cut stays HOLD with pending receipt',$('copy').disabled&&$('result').value===''&&JSON.parse(sessionStorage.getItem('KTS_QUYT_CUT_REPLAY_GUARD_V1')).phase==='pending');
+  assert('stale async Cut stays HOLD with pending receipt',$('copy').disabled&&$('result').value===''&&JSON.parse(sessionStorage.getItem('KTS_QUYT_REVIEW_V10_CUT_REPLAY_GUARD_V1')).phase==='pending');
   navigator.clipboard.writeText=write;
   const confirmPrevious=window.confirm;window.confirm=()=>true;$('startNewBatch').click();window.confirm=confirmPrevious;
   assert('operator manual new-batch confirmation opens changed source',$('result').value.includes('b13n')&&$('after').textContent==='18n');
   set('raw','hn 21 b10n dd5n');
   frame('b').querySelector('.section-cut').click();await flush();
   assert('normal Cut B after clipboard works',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
-  assert('local ledger persisted for reload',sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1').includes('b|21'));
+  assert('local ledger persisted for reload',sessionStorage.getItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1').includes('b|21'));
   sessionStorage.setItem('QA_QUYT_CUT_FIRST_PHASE',JSON.stringify(report));
   sessionStorage.setItem('QA_QUYT_CUT_REFRESH_STAGE','after');
   window.location.reload();return;
