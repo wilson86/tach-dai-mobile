@@ -24,7 +24,13 @@ try{
  assert('empty source leaves full Copy card hidden',$('combinedResultsCard').hidden);
  assert('no placeholder panels visible',[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
  assert('global Copy disabled on empty',$('copy').disabled);
+ assert('manual Kiểm tra và gộp control visible',$('checkMerge')&&$('checkMerge').getBoundingClientRect().width>0&&!$('checkMerge').disabled);
+ $('checkMerge').click();
+ assert('manual action on empty source stays HOLD',$('copy').disabled&&$('groupedResultsCard').hidden);
  set('raw','hn 21 b10n');
+ $('checkMerge').click();
+ assert('manual action preserves B-only total and copy readiness',$('after').textContent==='10n'&&!$('copy').disabled);
+
  assert('B-only shows exactly B',visible()==='b');
  assert('B-only reveals group card and full Copy card',!$('groupedResultsCard').hidden&&!$('combinedResultsCard').hidden);
  assert('B-only number unchanged',$('after').textContent==='10n'&&$('result').value.includes('21 b10n'));
@@ -34,6 +40,8 @@ try{
  set('raw','hn 21 22 da20n');
  assert('DA only reveals DA pane',visible()==='da');
  set('raw','hn 21 xc10n');
+ $('checkMerge').click();
+ assert('manual action never bypasses XC HOLD',$('copy').disabled&&$('groupedResultsCard').hidden);
  assert('XC HOLD clears all group and full cards',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&visible()==='');
  assert('XC HOLD disables all Copy',$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(x=>x.disabled));
  set('raw','hn 21 b10n');
