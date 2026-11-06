@@ -290,7 +290,21 @@ const frames=[...document.querySelectorAll('#betSections .bet-section')].map(nod
 }));
 const cutStorageKey='KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1',cutGuardKey='KTS_QUYT_REVIEW_V10_CUT_REPLAY_GUARD_V1';let activeBase=null,cutKeys=new Set(),cutUndo=[],cutGuard=null,cutInFlight=false,copyInFlight=false;
 function loadGuard(){
- try{const rawRecord=sessionStorage.getItem(cutGuardKey);if(!rawRecord)return;
+ try{const rawRecord=sessionStorage.getItem(cutGuardKey);
+  if(!rawRecord){
+   // A Cut ledger without its replay guard may represent a previously copied
+   // wager. Do not silently clear it on input edits or restore it after F5.
+   const ledgerText=sessionStorage.getItem(cutStorageKey);
+   if(!ledgerText)return;
+   const ledger=JSON.parse(ledgerText);
+   if(!ledger||typeof ledger.scope!=='string'||!Array.isArray(ledger.keys)||
+      !Array.isArray(ledger.undo)||ledger.keys.length>5000||ledger.undo.length>30||
+      ledger.keys.some(k=>typeof k!=='string')||
+      ledger.undo.some(a=>!Array.isArray(a)||a.length>5000||a.some(k=>typeof k!=='string')))
+     throw Error('BAD_ORPHAN_CUT_LEDGER');
+   if(ledger.keys.length||ledger.undo.length)cutGuard={scope:'ORPHANED',phase:'blocked'};
+   return;
+  }
   const record=JSON.parse(rawRecord);if(!record||typeof record.scope!=='string'||!['cut','pending'].includes(record.phase))throw Error('BAD_GUARD');cutGuard=record;
  }catch(_){cutGuard={scope:'CORRUPT',phase:'blocked'}}
 }
