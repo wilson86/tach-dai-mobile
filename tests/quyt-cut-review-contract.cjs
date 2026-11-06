@@ -78,3 +78,34 @@ test('FIRST USE: no Cut guard and no stored ledger is allowed to start empty',()
 test('REPLAY HOLD: malformed Cut ledger still fails closed',()=>{
  assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest},'{invalid'),/HOLD_SAVED_CUT_CORRUPT/u);
 });
+
+// The actual HTML loadGuard function must recover a missing replay guard
+// conservatively: an orphaned Cut ledger is a HOLD, never a new batch.
+const guardHtml=read('quyt-cut-review/index.html');
+const guardStart=guardHtml.indexOf('function loadGuard(){');
+const guardEnd=guardHtml.indexOf('function writeGuard(',guardStart);
+assert.ok(guardStart>=0&&guardEnd>guardStart,'loadGuard source anchors');
+const evaluateGuard=new Function('guardText','ledgerText',
+  "'use strict';const cutGuardKey='QA_GUARD',cutStorageKey='QA_LEDGER';let cutGuard=null;"+
+  "const sessionStorage={getItem:key=>key===cutGuardKey?guardText:key===cutStorageKey?ledgerText:null};"+
+  guardHtml.slice(guardStart,guardEnd)+';loadGuard();return cutGuard');
+const syntheticReceipt=JSON.stringify({scope:'SYNTHETIC',keys:['b|21'],undo:[[]]});
+test('missing replay guard with remaining Cut receipt must HOLD, not export cut numbers',()=>{
+ const found=evaluateGuard(null,syntheticReceipt);
+ assert.deepEqual(found,{scope:'ORPHANED',phase:'blocked'});
+});
+test('missing replay guard with malformed Cut receipt must HOLD',()=>{
+ assert.deepEqual(evaluateGuard(null,'{bad'),{scope:'CORRUPT',phase:'blocked'});
+});
+test('missing replay guard with partial undo history must HOLD',()=>{
+ assert.deepEqual(evaluateGuard(null,JSON.stringify({scope:'SYNTHETIC',keys:[],undo:[[]]})),
+  {scope:'ORPHANED',phase:'blocked'});
+});
+test('first use without Cut history can proceed; empty ledger alone is not a Cut',()=>{
+ assert.equal(evaluateGuard(null,null),null);
+ assert.equal(evaluateGuard(null,JSON.stringify({scope:'SYNTHETIC',keys:[],undo:[]})),null);
+});
+test('valid source-bound replay guard remains in completed-Cut phase',()=>{
+ assert.deepEqual(evaluateGuard(JSON.stringify({scope:'SYNTHETIC',phase:'cut'}),syntheticReceipt),
+  {scope:'SYNTHETIC',phase:'cut'});
+});
