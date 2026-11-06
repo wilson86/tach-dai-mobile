@@ -44,3 +44,37 @@ test('Preview has no production Quyt session/local storage key collisions',()=>{
  assert.equal(new Set(Object.values(review)).size,4);
  for(const key of Object.values(prod))assert.ok(!Object.values(review).includes(key));
 });
+
+ 
+// Cut ledger replay-safety: the source under test is the exact inline HTML
+// function, not a copied implementation. No browser, production state or IO.
+const restoreSource=read('quyt-cut-review/index.html');
+const restoreStart=restoreSource.indexOf('function restoreCuts(){');
+const restoreEnd=restoreSource.indexOf('function resetFrames(){',restoreStart);
+assert.ok(restoreStart>=0&&restoreEnd>restoreStart,'restoreCuts source anchors');
+const restoreCutsUnderTest=new Function('cutGuard','cutScope','sessionStorage','cutStorageKey',
+  "'use strict';let cutKeys=new Set(),cutUndo=[];"+restoreSource.slice(restoreStart,restoreEnd)+
+  ';restoreCuts();return {keys:[...cutKeys],undo:cutUndo}');
+const cutScopeForTest=JSON.stringify(['hn 21 b10n dd5n','quyt','mb',true,'1.067']);
+const restored=(guard,receipt)=>restoreCutsUnderTest(guard,()=>cutScopeForTest,{
+  getItem:key=>key==='SYNTHETIC_LEDGER'?receipt:null
+},'SYNTHETIC_LEDGER');
+
+test('REPLAY HOLD: missing stored ledger must never resurrect a completed Cut on F5',()=>{
+ assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest},null),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('REPLAY HOLD: Cut ledger from another scope cannot resurrect removed rows',()=>{
+ const wrong=JSON.stringify({scope:'DIFFERENT_SOURCE',keys:['b|21'],undo:[[]]});
+ assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest},wrong),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('REPLAY KEEP: valid scoped Cut receipt restores removed keys and Undo history',()=>{
+ const valid=JSON.stringify({scope:cutScopeForTest,keys:['b|21'],undo:[[]]});
+ const state=restored({phase:'cut',scope:cutScopeForTest},valid);
+ assert.deepEqual(state.keys,['b|21']);assert.deepEqual(state.undo,[[]]);
+});
+test('FIRST USE: no Cut guard and no stored ledger is allowed to start empty',()=>{
+ const state=restored(null,null);assert.deepEqual(state.keys,[]);assert.deepEqual(state.undo,[]);
+});
+test('REPLAY HOLD: malformed Cut ledger still fails closed',()=>{
+ assert.throws(()=>restored({phase:'cut',scope:cutScopeForTest},'{invalid'),/HOLD_SAVED_CUT_CORRUPT/u);
+});
