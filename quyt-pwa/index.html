@@ -59,6 +59,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <p class="muted tiny">Dán <b>nguyên văn Telegram</b>, mỗi tin riêng trên một dòng; nhận cả <b>[11/4/2026 6:06 PM] Cô Quýt: Hn ...</b> hoặc <b>Hn ...</b>. Tên khách trong header phải khớp dropdown; không xóa giờ/tên khỏi ô gốc. Hai tin giống nhau cần xác nhận là hai lượt đặt riêng. Nhãn HN không quyết định miền.</p>
  <label class="field" for="raw" style="margin:10px 0 7px">Tin nguồn (không bị sửa)</label>
  <textarea id="raw" placeholder="hn 21 b10n dd5n. 12 13 da20n.&#10;hn 21 b5n dd10n." spellcheck="false"></textarea>
+ <div class="actions"><button id="checkMerge" type="button" aria-controls="status groupedResultsCard combinedResultsCard">KIỂM TRA VÀ GỘP</button></div>
  <div id="status" class="notice hold" role="status">Dán tin vào ô trên để bắt đầu.</div>
  <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
@@ -324,6 +325,8 @@ raw.addEventListener('input',()=>{confirmedRaw=null;confirmedDaScope=null;redraw
 customer.addEventListener('change',()=>{rate.value=rates[customer.value]||'1.000';confirmedRaw=null;confirmedDaScope=null;redraw()});
 rate.addEventListener('input',()=>{rates[customer.value]=rate.value;redraw()});
 tick.addEventListener('change',redraw);
+// Manual validation goes through the same fail-closed canonical merge as auto-input.
+$('checkMerge').addEventListener('click',()=>{redraw();if(!raw.value.trim())raw.focus()});
 daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.value);if(!candidates.length)return;const examples=candidates.slice(0,3).map(x=>x.exact+' → '+x.assumed).join('; ');if(!confirm('Xác nhận tất cả '+candidates.length+' chỗ thiếu n là tiền theo đơn vị n?\n'+examples+'\nKhông sửa tin gốc; chỉ tính bản xem trước.'))return;confirmedDaScope=daScope();redraw()});
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
