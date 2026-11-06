@@ -24,7 +24,13 @@ try{
  assert('empty source leaves full Copy card hidden',$('combinedResultsCard').hidden);
  assert('no placeholder panels visible',[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
  assert('global Copy disabled on empty',$('copy').disabled);
+ assert('manual check-merge exists',$('checkMerge')&&$('checkMerge').getBoundingClientRect().width>0);
+ $('checkMerge').click();
+ assert('manual check-merge stays HOLD for blank source',$('copy').disabled);
  set('raw','hn 21 b10n');
+ $('checkMerge').click();
+ assert('manual check-merge preserves B-only money',$('after').textContent==='10n');
+
  assert('B-only shows exactly B',visible()==='b');
  assert('B-only reveals group card and full Copy card',!$('groupedResultsCard').hidden&&!$('combinedResultsCard').hidden);
  assert('B-only number unchanged',$('after').textContent==='10n'&&$('result').value.includes('21 b10n'));
@@ -92,6 +98,8 @@ try{
  assert('Undo source-amount restore',$('after').textContent==='35n'&&$('result').value.includes('b10n'));
  set('raw','hn 21 22 b10n dd5n');
  assert('edit after earlier Cut forces HOLD and manual reset',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
+ $('checkMerge').click();
+ assert('manual check-merge cannot bypass prior Cut replay HOLD',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
  const originalConfirm=window.confirm;window.confirm=()=>true;$('startNewBatch').click();window.confirm=originalConfirm;
  assert('new independent source after explicit confirmation provides two B rows',section('b').querySelectorAll('.cut-row-check').length===2);
  const first=section('b').querySelector('.cut-row-check');first.checked=true;first.dispatchEvent(new Event('change',{bubbles:true}));
