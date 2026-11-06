@@ -1624,8 +1624,9 @@ function scheduleFullInputSync(){
   // Reject even a queued/racing timeout callback from a previous draw scope.
   const scheduledScopeRevision=scopeRevision;
   inputSyncTimer=setTimeout(()=>{
-    inputSyncTimer=null;
+    // Old callbacks must not erase a new scope's timer handle, either.
     if(scheduledScopeRevision!==scopeRevision)return;
+    inputSyncTimer=null;
     if(inputEl.value.trim()){
       run({preserveInputSelection:true});
     }else{
