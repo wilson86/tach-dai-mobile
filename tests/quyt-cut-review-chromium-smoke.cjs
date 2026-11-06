@@ -9,6 +9,12 @@ const root=path.resolve(__dirname,'..');
 const source=fs.readFileSync(path.join(root,'quyt-cut-review/index.html'),'utf8');
 const bootstrap=String.raw`<script>
 Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:s=>{window.__qaClipboard=String(s);return Promise.resolve()}}});
+window.__qaLiveRates='{"quyt":"1.999","hien":"1.000","khac":"1.000"}';
+window.__qaLiveDraft='{"raw":"PRODUCTION_SENTINEL","customer":"quyt","market":"mb","tick":true}';
+window.__qaLiveCut='{"scope":"PRODUCTION_SENTINEL","keys":["b|99"]}';
+localStorage.setItem('KTS_OFFLINE_QUYT_RATES_V1',window.__qaLiveRates);
+sessionStorage.setItem('KTS_OFFLINE_QUYT_DRAFT_V1',window.__qaLiveDraft);
+sessionStorage.setItem('KTS_QUYT_SCOPED_CUT_V1',window.__qaLiveCut);
 </script>`;
 const checks=String.raw`<script>
 (async()=>{
@@ -20,6 +26,8 @@ const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent
 try{
  assert('original 3-region selector preserved',[...$('market').options].map(x=>x.value).join(',')==='mb,mn,mt');
  assert('original customer selector preserved',$('customer').value==='quyt');
+ assert('review never imports live draft',$('raw').value==='');
+ assert('review never imports live rates',$('rate').value==='1.067');
  assert('empty source leaves group card hidden',$('groupedResultsCard').hidden);
  assert('empty source leaves full Copy card hidden',$('combinedResultsCard').hidden);
  assert('no placeholder panels visible',[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
@@ -106,9 +114,11 @@ try{
  assert('selected Cut enabled',!section('b').querySelector('.section-cut-selected').disabled);
  section('b').querySelector('.section-cut-selected').click();await Promise.resolve();await Promise.resolve();await Promise.resolve();
  assert('selected Cut keeps other B number and DD',$('after').textContent==='20n'&&$('result').value.includes('22 b10n')&&$('result').value.includes('dd5n'));
- assert('cut ledger persists in session',String(sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1')).includes('b|21'));
+ assert('cut ledger persists in session',String(sessionStorage.getItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1')).includes('b|21'));
  $('undoQuytCut').click();
  assert('undo selected restores 25n',$('after').textContent==='30n');
+ assert('live production rate untouched',localStorage.getItem('KTS_OFFLINE_QUYT_RATES_V1')===window.__qaLiveRates);
+ assert('live production session unchanged',sessionStorage.getItem('KTS_OFFLINE_QUYT_DRAFT_V1')===window.__qaLiveDraft&&sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1')===window.__qaLiveCut);
 }catch(e){report.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const result=document.createElement('pre');result.id='quyt-mb-browser-qa';
 result.textContent=JSON.stringify({pass:report.filter(x=>x.pass).length,fail:report.filter(x=>!x.pass).length,report});

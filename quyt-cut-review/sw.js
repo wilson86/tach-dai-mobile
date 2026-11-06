@@ -1,6 +1,6 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-standalone-review-only-20261106-v9';
+const CACHE='kts-quyt-standalone-review-only-20261106-v10-storage-isolation';
 const ASSETS=['./','./index.html','./quyt-cut-ledger.js','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
