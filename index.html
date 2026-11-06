@@ -1620,9 +1620,12 @@ function syncPureInputDeletionNow(){
 }
 
 function scheduleFullInputSync(){
-  if(inputSyncTimer && typeof clearTimeout==="function") clearTimeout(inputSyncTimer);
+  if(inputSyncTimer!==null && typeof clearTimeout==="function") clearTimeout(inputSyncTimer);
+  // Reject even a queued/racing timeout callback from a previous draw scope.
+  const scheduledScopeRevision=scopeRevision;
   inputSyncTimer=setTimeout(()=>{
     inputSyncTimer=null;
+    if(scheduledScopeRevision!==scopeRevision)return;
     if(inputEl.value.trim()){
       run({preserveInputSelection:true});
     }else{
@@ -2110,6 +2113,12 @@ function invalidateDisplayedResultForScopeChange(){
   setStatus("Đã đổi miền/ngày: kết quả cũ đã ẩn. Nhấn Kiểm tra + Tách để xác nhận theo lịch mới.","");
 }
 function updateUIAfterScopeChange(){
+  // A pending edit debounce belongs to the old date/region. Even if a timer
+  // callback is already queued, scheduleFullInputSync's revision gate HOLDs it.
+  if(inputSyncTimer!==null){
+    if(typeof clearTimeout==="function")clearTimeout(inputSyncTimer);
+    inputSyncTimer=null;
+  }
   // Invalidate all prior Undo snapshots, without deleting them or their receipts.
   scopeRevision++;
   // The approval was bound to the previous region/day. Today-mode may
