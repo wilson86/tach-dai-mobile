@@ -46,3 +46,32 @@ test('unknown cut and tampered base fail closed without materializing money',()=
  const corrupted={...b,total:'9999'};
  assert.throws(()=>cut(corrupted,['b|21']),/HOLD_LEDGER_MONEY_CONSERVATION/u);
 });
+
+ 
+// F5 replay gate regression: execute the actual inline restoreCuts() source.
+// Test data is synthetic and no Clipboard, Router or Telegram is touched.
+const savedCutBegin=html.indexOf('function restoreCuts(){');
+const savedCutEnd=html.indexOf('function resetFrames(){',savedCutBegin);
+assert.ok(savedCutBegin>=0&&savedCutEnd>savedCutBegin,'Cut recovery source anchors');
+const runRestore=new Function('cutGuard','cutScope','sessionStorage','cutStorageKey',
+ "'use strict';let cutKeys=new Set(),cutUndo=[];"+html.slice(savedCutBegin,savedCutEnd)+
+ ';restoreCuts();return {keys:[...cutKeys],undo:cutUndo}');
+const syntheticCutScope=JSON.stringify(['hn 21 b10n dd5n','quyt','mb',true,'1.067']);
+const recover=(guard,record)=>runRestore(guard,()=>syntheticCutScope,{getItem:()=>record},'SYNTHETIC_CUT');
+test('F5 HOLD: a completed Cut with missing saved ledger never replays numbers',()=>{
+ assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope},null),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('F5 HOLD: a completed Cut with another scope never replays numbers',()=>{
+ const mismatched=JSON.stringify({scope:'OTHER',keys:['b|21'],undo:[[]]});
+ assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope},mismatched),/HOLD_SAVED_CUT_CORRUPT/u);
+});
+test('F5 valid scoped Cut: restored keys exclude already Cut numbers',()=>{
+ const receipt=JSON.stringify({scope:syntheticCutScope,keys:['b|21'],undo:[[]]});
+ assert.deepEqual(recover({phase:'cut',scope:syntheticCutScope},receipt),{keys:['b|21'],undo:[[]]});
+});
+test('F5 initial use without cut guard does not falsely HOLD',()=>{
+ assert.deepEqual(recover(null,null),{keys:[],undo:[]});
+});
+test('F5 malformed stored Cut must HOLD',()=>{
+ assert.throws(()=>recover({phase:'cut',scope:syntheticCutScope},'{oops'),/HOLD_SAVED_CUT_CORRUPT/u);
+});
