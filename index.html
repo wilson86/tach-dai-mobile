@@ -196,6 +196,10 @@ const inputEl=$("input"), outputEl=$("output"), runBtn=$("runBtn"), statusEl=$("
 const resultCard=$("resultCard");
 
 let undoStack=[];
+// In-memory scope generation fences Undo snapshots across region/day changes.
+let scopeRevision=0;
+// One in-flight Cut at a time, across source and result panes.
+let cutInFlight=false;
 let outputRecords=[]; // [{id,sourceLine,text,alive}]
 let lastOutputSelection={start:0,end:0};
 // A partial derived result is not always a valid customer message. Keep an
@@ -353,7 +357,7 @@ function stationInfo([alias,name],i){
   const role=i<2?"chính":"phụ";
   return oneWord(name)?`${name} (${role})`:`${alias.toUpperCase()} (${name}, ${role})`;
 }
-function updateUI(){
+function updateUI(allowScopeRehydrate=true){
   if(todayEl.checked){
     dateEl.value=localDateISO();
     dateEl.disabled=true;
@@ -371,13 +375,13 @@ function updateUI(){
     `<span class="pill">${weekdayVN(d.getDay())} ${formatDateVN(d)}</span><br>`+
     stations.map(stationInfo).join(" - ");
   saveSettings();
-  reconcileStoredLedgerScope();
+  reconcileStoredLedgerScope(allowScopeRehydrate);
 }
 
 // Change of station/day while showing Cut results must not keep rows from
 // the old scope visible as if they belonged to the new draw. The authoritative
 // local receipt is immutable; never delete or re-split it on a scope change.
-function reconcileStoredLedgerScope(){
+function reconcileStoredLedgerScope(allowScopeRehydrate=true){
   let saved;
   try{saved=localStorage.getItem(EXACT_OUTPUT_LEDGER_STORAGE_KEY);}
   catch(_){
@@ -396,7 +400,7 @@ function reconcileStoredLedgerScope(){
     setStatus(INCOMPATIBLE_LEDGER_WARNING,"err");
     return;
   }
-  if(pendingIncompatibleLedger){
+  if(pendingIncompatibleLedger&&allowScopeRehydrate){
     pendingIncompatibleLedger=false;
     inputEl.value=saved;
     run();
@@ -1266,6 +1270,7 @@ function validateBatch(text,region,stations){
 }
 function snapshot(){
   undoStack.push({
+    scopeRevision,
     input:inputEl.value,
     output:outputEl.value,
     status:statusEl.textContent,
@@ -1417,6 +1422,7 @@ async function copySourceView(){
   setStatus(ok?"Đã copy tin nguồn":"Copy tin nguồn thất bại.",ok?"ok":"err");
 }
 async function cutSelectedSourceLines(){
+  if(cutInFlight){setStatus('HOLD_CUT_BUSY: đang chờ Copy/Cắt lượt trước hoàn tất.','err');return;}
   if(holdIfBusinessEngineStale())return;
   if(inputEl.value.startsWith(EXACT_OUTPUT_LEDGER_PREFIX)){
     await cutSelectedOutput();renderLedgerWork();return;
@@ -1433,7 +1439,14 @@ async function cutSelectedSourceLines(){
   let remaining=text.slice(0,start)+text.slice(next);
   if(!remaining.trim())remaining="";
   if(!picked.trim()){setStatus("Chỉ chọn dòng cược có nội dung để Cắt.","err");return;}
+  const cutRevision=scopeRevision;
+  cutInFlight=true;
+  try{
   if(!(await writeClipboardText(picked))){setStatus("Không thể copy dòng nguồn; chưa Cắt.","err");return;}
+  if(cutRevision!==scopeRevision||inputEl.value!==text){
+    setStatus('HOLD_CUT_STALE_COPY: Clipboard chứa tin nguồn từ trước khi đổi miền/ngày hoặc sửa tin. KHÔNG CẮT.','err');
+    return;
+  }
   snapshot();
   const receipt=undoStack[undoStack.length-1];
   inputEl.value=remaining;
@@ -1445,6 +1458,7 @@ async function cutSelectedSourceLines(){
   if(remaining.trim())run();
   else{outputEl.value="";resetOutputRecords();setStatus("Đã cắt toàn bộ dòng nguồn","ok");}
   announceWorkingSource();
+  }finally{cutInFlight=false;}
 }
 
 async function copyLedgerWork(){
@@ -1617,8 +1631,12 @@ function syncPureInputDeletionNow(){
 }
 
 function scheduleFullInputSync(){
-  if(inputSyncTimer && typeof clearTimeout==="function") clearTimeout(inputSyncTimer);
+  if(inputSyncTimer!==null && typeof clearTimeout==="function") clearTimeout(inputSyncTimer);
+  // Reject even a queued/racing timeout callback from a previous draw scope.
+  const scheduledScopeRevision=scopeRevision;
   inputSyncTimer=setTimeout(()=>{
+    // Old callbacks must not erase a new scope's timer handle, either.
+    if(scheduledScopeRevision!==scopeRevision)return;
     inputSyncTimer=null;
     if(inputEl.value.trim()){
       run({preserveInputSelection:true});
@@ -1824,6 +1842,7 @@ function restoreCutDraft(receipt){
 }
 
 async function cutSelectedOutput(){
+  if(cutInFlight){setStatus('HOLD_CUT_BUSY: đang chờ Copy/Cắt lượt trước hoàn tất.','err');return;}
   if(holdIfBusinessEngineStale())return;
   rememberOutputSelection();
   const indexes=groupedResultReady?checkedAliveRecordIndexes():selectedAliveRecordIndexes();
@@ -1833,9 +1852,19 @@ async function cutSelectedOutput(){
   }
 
   const selectedText=indexes.map(i=>outputRecords[i].text).join("\n");
+  const cutRevision=scopeRevision,cutSource=inputEl.value,cutRows=outputRecords;
+  cutInFlight=true;
+  try{
   // Clipboard failure must be a true no-op, not a transient hidden mutation.
   if(!(await writeClipboardText(selectedText))){
     setStatus("Không thể ghi phần đã cắt vào bộ nhớ tạm. Tin chưa bị xóa.","err");
+    return;
+  }
+  // Clipboard may already contain the old wager. Never mutate a new draw's
+  // ledger after a delayed Copy, even when Copy itself returned success.
+  if(cutRevision!==scopeRevision||cutSource!==inputEl.value||cutRows!==outputRecords||
+     indexes.some(i=>!outputRecords[i]||!outputRecords[i].alive)){
+    setStatus('HOLD_CUT_STALE_COPY: Clipboard có thể chứa cược cũ; KHÔNG CẮT. Kiểm tra và đối soát trước khi Copy lại.','err');
     return;
   }
   snapshot();
@@ -1866,6 +1895,7 @@ async function cutSelectedOutput(){
   }else{
     setStatus(`Đã cắt ${indexes.length} dòng • đã copy • tin gốc giữ đến khi cắt hết kết quả của tin đó`,"ok");
   }
+  }finally{cutInFlight=false;}
 }
 
 function resolveExplicitSourceRegion(text){
@@ -1904,7 +1934,7 @@ function run(options={}){
     outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
     lastSourceLines=[];renderOutputRecords();
     // Only on a fresh session, rehydrate one checked Cut snapshot for Undo.
-    if(!undoStack.length&&exactLedger.undoReceipt)undoStack.push(cloneLedger(exactLedger.undoReceipt));
+    if(!undoStack.length&&exactLedger.undoReceipt)undoStack.push({...cloneLedger(exactLedger.undoReceipt),scopeRevision});
     setStatus(outputRecords.length?`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`:"Đã Cắt hết kết quả; tin gốc được giữ để đối chiếu.",outputRecords.length?"ok":"");
     return;
   }
@@ -2054,6 +2084,10 @@ $("clearBtn").addEventListener("click",()=>{
 $("undoBtn").addEventListener("click",()=>{
   if(holdIfBusinessEngineStale())return;
   const s=undoStack[undoStack.length-1]; if(!s)return;
+  if(s.scopeRevision!==scopeRevision){
+    setStatus('HOLD_UNDO_SCOPE_CHANGED: miền hoặc ngày đã đổi. KHÔNG Hoàn tác kết quả cược của kỳ trước; kiểm tra lại tin theo kỳ đang chọn.','err');
+    return;
+  }
   // Undo must be durable before it becomes visible. A failed storage write
   // must not make a Cut appear undone only until the next reload.
   const before={
@@ -2094,9 +2128,33 @@ $("undoBtn").addEventListener("click",()=>{
   undoStack.pop();
   announceWorkingSource();
 });
-regionEl.addEventListener("change",updateUI);
-dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUI();});
-todayEl.addEventListener("change",updateUI);
+// Scope changes invalidate only the DISPLAYED (potentially stale) result.
+// Do not delete or mutate raw source, undo history, or persisted Cut receipts.
+// Revalidation is explicit: never re-run a wager under another region silently.
+function invalidateDisplayedResultForScopeChange(){
+  outputEl.value="";
+  resetOutputRecords();
+  setStatus("Đã đổi miền/ngày: kết quả cũ đã ẩn. Nhấn Kiểm tra + Tách để xác nhận theo lịch mới.","");
+}
+function updateUIAfterScopeChange(){
+  // A pending edit debounce belongs to the old date/region. Even if a timer
+  // callback is already queued, scheduleFullInputSync's revision gate HOLDs it.
+  if(inputSyncTimer!==null){
+    if(typeof clearTimeout==="function")clearTimeout(inputSyncTimer);
+    inputSyncTimer=null;
+  }
+  // Invalidate all prior Undo snapshots, without deleting them or their receipts.
+  scopeRevision++;
+  // The approval was bound to the previous region/day. Today-mode may
+  // silently update the date, so it must clear approval just like manual date.
+  clearDuplicateConfirmation();
+  invalidateDisplayedResultForScopeChange();
+  // No auto-rehydration under a user-changed draw scope; require manual check.
+  updateUI(false);
+}
+regionEl.addEventListener("change",updateUIAfterScopeChange);
+dateEl.addEventListener("change",()=>{todayEl.checked=false;updateUIAfterScopeChange();});
+todayEl.addEventListener("change",updateUIAfterScopeChange);
 
 // v2.0.5: mọi kiểu sửa/xóa Input đều đồng bộ Kết quả.
 // "input" bắt Backspace, Delete, Cut, paste, bàn phím mobile và native undo/redo.
