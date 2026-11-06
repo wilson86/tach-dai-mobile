@@ -306,7 +306,11 @@ function saveCuts(){const receipt=JSON.stringify({scope:cutScope(),keys:[...cutK
 function restoreCuts(){
  cutKeys=new Set();cutUndo=[];
  try{const x=JSON.parse(sessionStorage.getItem(cutStorageKey)||'null');
-  if(!x||x.scope!==cutScope())return;
+  if(!x||x.scope!==cutScope()){
+   // Preserve the replay gate when a completed Cut's saved ledger is lost.
+   if(cutGuard&&cutGuard.phase==='cut'&&cutGuard.scope===cutScope())throw Error('HOLD_SAVED_CUT_RECEIPT_MISSING');
+   return;
+  }
   if(!Array.isArray(x.keys)||x.keys.length>5000||!Array.isArray(x.undo)||x.undo.length>30||x.undo.some(a=>!Array.isArray(a)||a.length>5000))throw Error('HOLD_SAVED_CUT_CORRUPT');
   cutKeys=new Set(x.keys);cutUndo=x.undo.map(a=>a.slice());
  }catch(e){throw Error('HOLD_SAVED_CUT_CORRUPT')}
