@@ -2103,6 +2103,9 @@ function invalidateDisplayedResultForScopeChange(){
   setStatus("Đã đổi miền/ngày: kết quả cũ đã ẩn. Nhấn Kiểm tra + Tách để xác nhận theo lịch mới.","");
 }
 function updateUIAfterScopeChange(){
+  // The approval was bound to the previous region/day. Today-mode may
+  // silently update the date, so it must clear approval just like manual date.
+  clearDuplicateConfirmation();
   invalidateDisplayedResultForScopeChange();
   updateUI();
 }
