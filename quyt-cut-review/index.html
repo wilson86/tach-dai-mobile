@@ -471,7 +471,23 @@ async function cutGroup(frame,selectedOnly){
  catch(e){current=null;activeBase=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();message('HOLD: clipboard đã có thể chứa cược cũ nhưng sổ Cắt chưa xác minh. KHÔNG COPY LẠI. '+String(e.message||e),true)}
  finally{cutInFlight=false}
 }
-$('undoQuytCut').addEventListener('click',()=>{if(!activeBase||!cutUndo.length)return;if(cutInFlight||copyInFlight){message('HOLD_COPY_BUSY: Clipboard đang xử lý, chưa Undo.',true);return}const prior=cutUndo.pop();try{QuytCutLedger.derive(activeBase,new Set(prior));cutKeys=new Set(prior);renderCut(activeBase);saveCuts();message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false)}catch(e){cutUndo.push(prior);message('HOLD: Hoàn tác bị chặn: '+String(e.message||e),true)}});
+$('undoQuytCut').addEventListener('click',()=>{
+ if(!activeBase||!cutUndo.length)return;
+ if(cutInFlight||copyInFlight){message('HOLD_COPY_BUSY: Clipboard đang xử lý, chưa Undo.',true);return}
+ const oldKeys=cutKeys,oldUndo=cutUndo.slice(),prior=cutUndo.at(-1);
+ try{
+  QuytCutLedger.derive(activeBase,new Set(prior));
+  cutKeys=new Set(prior);cutUndo.pop();
+  // Commit durable Cut history BEFORE rendering an uncut Copy result.
+  saveCuts();
+  renderCut(activeBase);
+  message('Đã Hoàn tác Cắt; khôi phục kết quả mà không nhân lại hệ số.',false);
+ }catch(e){
+  cutKeys=oldKeys;cutUndo=oldUndo;
+  current=null;activeBase=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();
+  message('HOLD_UNDO_SAVE_FAILED: không xác minh được sổ Hoàn tác. KHÔNG COPY; tải lại và đối chiếu sổ Cắt. '+String(e.message||e),true);
+ }
+});
 for(const frame of frames){
  frame.choices.addEventListener('change',()=>{frame.cutSelected.disabled=(cutInFlight||copyInFlight)||!currentValid()||!frame.choices.querySelector('input:checked')});
  frame.cut.addEventListener('click',()=>cutGroup(frame,false));
