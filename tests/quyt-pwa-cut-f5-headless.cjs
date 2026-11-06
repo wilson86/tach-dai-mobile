@@ -24,6 +24,20 @@ try{
   assert('F5 restored raw source',$('raw').value==='hn 21 b10n dd5n');
   assert('F5 restored Quyt multiplier toggle',$('tick').checked===true);
   assert('F5 keeps B cut, only DD remains',$('result').value.includes('dd5n')&&!$('result').value.includes('b11n')&&$('after').textContent==='5n'&&frame('b').hidden);
+  // Mutating the SAME-scope Cut ledger must not resurrect previously-Cut B rows.
+  const signedCut=sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1');
+  const alteredCut=JSON.parse(signedCut);alteredCut.keys=[];alteredCut.undo=[];
+  sessionStorage.setItem('KTS_QUYT_SCOPED_CUT_V1',JSON.stringify(alteredCut));
+  $('checkMerge').click();
+  assert('corrupt same-scope Cut receipt holds with Copy locked',
+   $('copy').disabled&&$('result').value===''&&
+   $('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&
+   $('status').textContent.includes('HOLD'));
+  sessionStorage.setItem('KTS_QUYT_SCOPED_CUT_V1',signedCut);
+  $('checkMerge').click();
+  assert('restoring exact signed Cut receipt keeps B removed',
+   $('after').textContent==='5n'&&!$('result').value.includes('b11n'));
+
   set('raw','hn 21 b12n dd5n');
   assert('editing after Cut must HOLD and disable all Copy',$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HOLD'));
   assert('editing after Cut requires explicit new-batch acknowledgement',!$('startNewBatch').hidden);
