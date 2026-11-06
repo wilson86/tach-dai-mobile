@@ -196,6 +196,8 @@ const inputEl=$("input"), outputEl=$("output"), runBtn=$("runBtn"), statusEl=$("
 const resultCard=$("resultCard");
 
 let undoStack=[];
+// In-memory scope generation fences Undo snapshots across region/day changes.
+let scopeRevision=0;
 let outputRecords=[]; // [{id,sourceLine,text,alive}]
 let lastOutputSelection={start:0,end:0};
 // A partial derived result is not always a valid customer message. Keep an
@@ -1266,6 +1268,7 @@ function validateBatch(text,region,stations){
 }
 function snapshot(){
   undoStack.push({
+    scopeRevision,
     input:inputEl.value,
     output:outputEl.value,
     status:statusEl.textContent,
@@ -1904,7 +1907,7 @@ function run(options={}){
     outputRecords=exactLedger.rows.map(r=>({...r,alive:true}));
     lastSourceLines=[];renderOutputRecords();
     // Only on a fresh session, rehydrate one checked Cut snapshot for Undo.
-    if(!undoStack.length&&exactLedger.undoReceipt)undoStack.push(cloneLedger(exactLedger.undoReceipt));
+    if(!undoStack.length&&exactLedger.undoReceipt)undoStack.push({...cloneLedger(exactLedger.undoReceipt),scopeRevision});
     setStatus(outputRecords.length?`Đã khôi phục ${outputRecords.length} kết quả chính xác từ ledger cục bộ`:"Đã Cắt hết kết quả; tin gốc được giữ để đối chiếu.",outputRecords.length?"ok":"");
     return;
   }
@@ -2054,6 +2057,10 @@ $("clearBtn").addEventListener("click",()=>{
 $("undoBtn").addEventListener("click",()=>{
   if(holdIfBusinessEngineStale())return;
   const s=undoStack[undoStack.length-1]; if(!s)return;
+  if(s.scopeRevision!==scopeRevision){
+    setStatus('HOLD_UNDO_SCOPE_CHANGED: miền hoặc ngày đã đổi. KHÔNG Hoàn tác kết quả cược của kỳ trước; kiểm tra lại tin theo kỳ đang chọn.','err');
+    return;
+  }
   // Undo must be durable before it becomes visible. A failed storage write
   // must not make a Cut appear undone only until the next reload.
   const before={
@@ -2103,6 +2110,8 @@ function invalidateDisplayedResultForScopeChange(){
   setStatus("Đã đổi miền/ngày: kết quả cũ đã ẩn. Nhấn Kiểm tra + Tách để xác nhận theo lịch mới.","");
 }
 function updateUIAfterScopeChange(){
+  // Invalidate all prior Undo snapshots, without deleting them or their receipts.
+  scopeRevision++;
   // The approval was bound to the previous region/day. Today-mode may
   // silently update the date, so it must clear approval just like manual date.
   clearDuplicateConfirmation();
