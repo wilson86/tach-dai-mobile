@@ -123,6 +123,10 @@ const OfflineKTS=(()=>{
  const T={b:'b',bao:'b','bao lo':'b',lo:'b','lô':'b',blo:'b',bl:'b',dd:'dd','đđ':'dd',da:'da','đá':'da',dau:'dau','đầu':'dau',dui:'dui',duoi:'dui','đui':'dui','đuôi':'dui',xc:'xc'};
  const kindRe=/^(?:bao\s+lo|đầu|đuôi|duoi|đui|dau|dui|đá|đđ|bao|blo|bl|lô|lo|dd|da|b|xc)(?![\p{L}])/iu;
  const stakeRe=/^(\d+(?:[.,]\d{1,3})?)n(?![\p{L}\p{N}])/iu;
+ // Customer-approved MB shorthand: digits immediately AFTER a wager selector
+ // are whole n amounts even when the terminal "n" is omitted.
+ // Never treat free-standing 2-digit wager numbers as amounts.
+ const bareStakeRe=/^\d+(?![\d.,\p{L}])/u;
  const numberRe=/^\d{2}(?!\d)/u;
  const rank={b:0,da:1,dd:2,dau:3,dui:4,xc:5};
  // Unapproved missing-n DA amounts are NOT automatically money. Explicit
@@ -147,11 +151,17 @@ const OfflineKTS=(()=>{
  function fmt(v,scale){const neg=v<0n?'-':'';let value=v<0n?-v:v;
   const whole=value/scale;let frac=(value%scale).toString().padStart(scale.toString().length-1,'0').replace(/0+$/u,'');
   return neg+whole.toString()+(frac?'.'+frac:'')}
- function lex(line,index){const list=[];let i=0;
+ function lex(line,index){const list=[];let i=0,afterSelector=false;
   while(i<line.length){const tail=line.slice(i);if(/^[\s,.;:]+/u.test(tail)){i+=/^[\s,.;:]+/u.exec(tail)[0].length;continue}
-   let match=stakeRe.exec(tail),type='stake';
-   if(!match){match=kindRe.exec(tail);type='kind'}
-   if(!match){match=numberRe.exec(tail);type='num'}
+   let match,type;
+   if(afterSelector){
+    // Bare amount is legal ONLY here; malformed/decimal-without-n stays HOLD.
+    match=stakeRe.exec(tail)||bareStakeRe.exec(tail);type='stake';afterSelector=false;
+   }else{
+    match=kindRe.exec(tail);type='kind';
+    if(match)afterSelector=true;
+    else{match=numberRe.exec(tail);type='num'}
+   }
    if(!match)fail('Cú pháp chưa rõ, đã HOLD, không bỏ qua cược',`tin ${index+1}, vị trí ${i+1}: ${tail.slice(0,24)}`);
    list.push({type,raw:match[0],offset:i});i+=match[0].length;
    if(list.length>2000)fail('Tin vượt giới hạn',`tin ${index+1}`);
@@ -172,10 +182,10 @@ const OfflineKTS=(()=>{
    if(!selector)fail('Loại cược chưa được duyệt',token.raw);
    const nums=pending.length?pending.slice():previous.slice();
    if(!nums.length)fail('Loại cược không có số',`tin ${index+1}: ${token.raw}`);
-   if(!tokens[i+1]||tokens[i+1].type!=='stake')fail('Thiếu tiền hoặc thiếu n',`tin ${index+1}: ${token.raw}`);
+   if(!tokens[i+1]||tokens[i+1].type!=='stake')fail('Thiếu số tiền sau loại cược',`tin ${index+1}: ${token.raw}`);
    if(selector==='xc')fail('XC chưa có quy tắc tiền được duyệt',`tin ${index+1}`);
    if(selector==='da'&&(nums.length!==2||nums[0]===nums[1]))fail('ĐÁ phải có đúng hai số khác nhau; ĐÁ vòng chưa được duyệt',`tin ${index+1}`);
-   const money=decimal(tokens[i+1].raw.slice(0,-1));if(money<=0n)fail('Số tiền phải lớn hơn 0',`tin ${index+1}`);
+   const money=decimal(tokens[i+1].raw.replace(/n$/iu,''));if(money<=0n)fail('Số tiền phải lớn hơn 0',`tin ${index+1}`);
    if(selector==='da'){bets.push({kind:'da',number:nums.slice().sort().join('-'),money,source:index})}
    else for(const number of nums)bets.push({kind:selector,number,money,source:index});
    previous=nums;pending=[];i+=2;
@@ -188,11 +198,9 @@ const OfflineKTS=(()=>{
   if(typeof raw!=='string'||!raw.trim())fail('Chưa có tin nguồn');
   if(!['mb','mn','mt'].includes(opts.market))fail('Chưa chọn miền hợp lệ');
   if(opts.market!=='mb')fail('Bản offline cấp tốc chỉ nghiệm thu gộp HN theo miền Bắc (MB); MN/MT cần xác minh đài/ngày ở KTS chính');
-  const candidates=missingDaN(raw);
-  if(candidates.length&&!opts.confirmMissingDaN)
-   fail('THIEU_N_CAN_XAC_NHAN',candidates.length+' đoạn thiếu n; ví dụ '+candidates[0].exact+' → '+candidates[0].assumed);
-  const sourceAfterApproval=candidates.length?applyMissingDaN(raw):raw;
-  const lines=sourceAfterApproval.split(/\r?\n/u).filter(x=>x.trim());
+  // This accepted shorthand does not rewrite the user's Telegram/source text.
+  // The lexer recognizes the optional trailing n only after a known selector.
+  const lines=raw.split(/\r?\n/u).filter(x=>x.trim());
   if(lines.length>100)fail('Tối đa 100 tin mỗi lần');
   // Treat the Telegram date/time and sender ONLY as a verified envelope, never as a wager.
   // Keep raw unchanged in the textarea. Each physical line is an independent message.
