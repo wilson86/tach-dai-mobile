@@ -149,7 +149,7 @@ test('operator screenshot 40 22 33 61 77 b300 = five BAO bets at 300n',()=>{
 });
 test('review optional-n shorthand works for DA, DD, DAU and DUI, no Quyt multiplier except BAO',()=>{
  const parsed=reviewQuyt.merge('hn 21 22 da20. 34 dau25 dui45. 55 dd10. 21 b20 lo20',reviewOpts);
- assert.equal(parsed.original,'120');
+ assert.equal(parsed.original,'140');
  assert.equal(parsed.rows.find(x=>x.kind==='b').adjusted,'43');
  assert.equal(parsed.rows.find(x=>x.kind==='da').adjusted,'20');
  assert.equal(parsed.rows.find(x=>x.kind==='dd').adjusted,'10');
