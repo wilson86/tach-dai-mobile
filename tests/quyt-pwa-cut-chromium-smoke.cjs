@@ -32,12 +32,12 @@ try{
  $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
  set('raw','40 22 33 61 77 b300');
  $('checkMerge').click();
- assert('bare b300 = five 300n original bets',$('before').textContent==='1500n');
- assert('Quyt scales BAO once and rounds each number',$('after').textContent==='1600n'&&$('result').value.includes('40 22 33 61 77 b320n.'));
+ assert('bare b300 = five 300n original bets',$('before').textContent==='1.500n');
+ assert('Quyt scales BAO once and rounds each number',$('after').textContent==='1.600n'&&$('result').value.includes('40 22 33 61 77 b320n.'));
  assert('original screenshot raw remains immutable',$('raw').value==='40 22 33 61 77 b300');
  assert('no obsolete missing-n confirmation',$('confirmMissingDaN')===null);
  set('raw','40 22 33 61 77 b300n');
- assert('b300n and b300 money parity',$('before').textContent==='1500n'&&$('after').textContent==='1600n'&&$('result').value.includes('b320n'));
+ assert('b300n and b300 money parity',$('before').textContent==='1.500n'&&$('after').textContent==='1.600n'&&$('result').value.includes('b320n'));
  $('tick').checked=originalTick;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
  set('raw','hn 21 b10n');
  $('checkMerge').click();
