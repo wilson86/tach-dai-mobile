@@ -158,7 +158,7 @@ test('review optional-n shorthand works for DA, DD, DAU and DUI, no Quyt multipl
 });
 test('review optional-n still HOLDs malformed money, unknown XC, unsupported region and ambiguous DA',()=>{
  for(const raw of ['hn 21 b','hn 21 b300.5','hn 21 b300x','hn 21 xc20','hn 83 da20']){
-  assert.throws(()=>reviewQuyt.merge(raw,reviewOpts),/Cú pháp|XC chưa có|ĐÁ phải có/u,raw);
+  assert.throws(()=>reviewQuyt.merge(raw,reviewOpts),/Cú pháp|Thiếu|XC chưa có|ĐÁ phải có/u,raw);
  }
  assert.throws(()=>reviewQuyt.merge('40 22 b300',{...reviewOpts,market:'mn'}),/chỉ nghiệm thu.*MB/u);
 });
