@@ -35,6 +35,18 @@ try{
  assert('manual check-merge exists',$('checkMerge')&&$('checkMerge').getBoundingClientRect().width>0);
  $('checkMerge').click();
  assert('manual check-merge stays HOLD for blank source',$('copy').disabled);
+ // Operator's exact screenshot: whole-n amount directly after wager selector.
+ const originalTick=$('tick').checked;
+ $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
+ set('raw','40 22 33 61 77 b300');
+ $('checkMerge').click();
+ assert('bare b300 = five 300n original bets',$('before').textContent==='1.500n');
+ assert('Quyt scales BAO once and rounds each number',$('after').textContent==='1.600n'&&$('result').value.includes('40 22 33 61 77 b320n.'));
+ assert('original screenshot raw remains immutable',$('raw').value==='40 22 33 61 77 b300');
+ assert('no obsolete missing-n confirmation',$('confirmMissingDaN')===null);
+ set('raw','40 22 33 61 77 b300n');
+ assert('b300n and b300 money parity',$('before').textContent==='1.500n'&&$('after').textContent==='1.600n'&&$('result').value.includes('b320n'));
+ $('tick').checked=originalTick;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
  set('raw','hn 21 b10n');
  $('checkMerge').click();
  assert('manual check-merge preserves B-only money',$('after').textContent==='10n');
@@ -104,6 +116,23 @@ try{
  assert('Undo restores full amount',$('undoQuytCut').disabled===false);
  $('undoQuytCut').click();
  assert('Undo source-amount restore',$('after').textContent==='35n'&&$('result').value.includes('b10n'));
+ // A pending Copy started for the prior ticket must block new-batch consent.
+ let completePendingCopy;
+ const pendingCopyWrite=navigator.clipboard.writeText;
+ navigator.clipboard.writeText=()=>new Promise(resolve=>{completePendingCopy=resolve});
+ section('b').querySelector('.section-copy').click();
+ assert('pending Copy for old Cut batch started',typeof completePendingCopy==='function');
+ set('raw','hn 21 22 b10n dd5n');
+ let newBatchConfirmCalls=0;
+ const originalConfirmPending=window.confirm;
+ window.confirm=()=>{newBatchConfirmCalls++;return true};
+ $('startNewBatch').click();
+ window.confirm=originalConfirmPending;
+ assert('new batch refused while clipboard Copy remains pending',
+  newBatchConfirmCalls===0&&$('copy').disabled&&!$('startNewBatch').hidden&&
+  $('status').textContent.includes('HOLD_COPY_BUSY'));
+ completePendingCopy();await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ navigator.clipboard.writeText=pendingCopyWrite;
  set('raw','hn 21 22 b10n dd5n');
  assert('edit after earlier Cut forces HOLD and manual reset',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
  $('checkMerge').click();
@@ -117,6 +146,21 @@ try{
  assert('cut ledger persists in session',String(sessionStorage.getItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1')).includes('b|21'));
  $('undoQuytCut').click();
  assert('undo selected restores 25n',$('after').textContent==='30n');
+ // After another synthetic Cut, simulate browser storage becoming unavailable
+ // exactly at Undo. A HOLD warning alone is insufficient: ALL Copy must lock.
+ section('b').querySelector('.section-cut').click();
+ await Promise.resolve();await Promise.resolve();await Promise.resolve();
+ assert('storage-failure Undo test has an active Cut',!$('undoQuytCut').disabled);
+ const originalStorageSet=Storage.prototype.setItem;
+ Storage.prototype.setItem=function(key,value){
+  if(key==='KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1')throw Error('SIMULATED_UNDO_QUOTA');
+  return originalStorageSet.call(this,key,value);
+ };
+ try{$('undoQuytCut').click()}finally{Storage.prototype.setItem=originalStorageSet}
+ assert('Undo save failure blocks all Copy and clears stale money',
+  $('copy').disabled&&$('result').value===''&&$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&
+  [...document.querySelectorAll('.section-copy,.section-cut,.section-cut-selected')].every(b=>b.disabled)&&
+  $('status').textContent.includes('HOLD_UNDO_SAVE_FAILED'));
  assert('live production rate untouched',localStorage.getItem('KTS_OFFLINE_QUYT_RATES_V1')===window.__qaLiveRates);
  assert('live production session unchanged',sessionStorage.getItem('KTS_OFFLINE_QUYT_DRAFT_V1')===window.__qaLiveDraft&&sessionStorage.getItem('KTS_QUYT_SCOPED_CUT_V1')===window.__qaLiveCut);
 }catch(e){report.push({name:'EXCEPTION',pass:false,error:String(e)})}
