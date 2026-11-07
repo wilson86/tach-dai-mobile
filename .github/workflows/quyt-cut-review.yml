@@ -1,0 +1,29 @@
+name: Quyt review Cut/Undo offline QA (public free)
+on:
+  pull_request:
+    paths:
+      - 'quyt-pwa/index.html'
+      - 'quyt-pwa/quyt-cut-ledger.js'
+      - 'quyt-pwa/sw.js'
+      - 'tests/quyt-pwa-cut-ledger.test.cjs'
+      - 'tests/quyt-pwa-owner-canonical-oracle.test.cjs'
+      - 'tests/quyt-pwa-cut-chromium-smoke.cjs'
+      - 'tests/quyt-pwa-cut-f5-headless.cjs'
+      - 'tests/quyt-pwa-sw-route-boundary.test.cjs'
+      - '.github/workflows/quyt-cut-review.yml'
+permissions:
+  contents: read
+jobs:
+  bounded-cut-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Native Node regression — synthetic, no money writes
+        run: |
+          node --test tests/quyt-pwa-owner-canonical-oracle.test.cjs tests/quyt-pwa-cut-ledger.test.cjs tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-missing-unit.test.js tests/quyt-pwa-telegram-envelope.test.js tests/quyt-pwa-sw-route-boundary.test.cjs
+      - name: Actual Chromium Cut and Undo — clipboard mock
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-pwa-cut-chromium-smoke.cjs
+          node tests/quyt-pwa-cut-f5-headless.cjs

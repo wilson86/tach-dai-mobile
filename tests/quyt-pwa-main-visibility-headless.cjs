@@ -64,7 +64,8 @@ const server=http.createServer((req,res)=>{
  if(requested.pathname==='/quyt-pwa/index.html'){
   res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});
   res.end(rendered);
- }else{res.writeHead(404,{'Content-Type':'text/plain'});res.end('NOT_FOUND')}
+ }else if(requested.pathname==='/quyt-pwa/quyt-cut-ledger.js'){res.writeHead(200,{'Content-Type':'application/javascript; charset=utf-8','Cache-Control':'no-store'});res.end(fs.readFileSync(path.join(root,'quyt-pwa/quyt-cut-ledger.js'),'utf8'));}
+ else{res.writeHead(404,{'Content-Type':'text/plain'});res.end('NOT_FOUND')}
 });
 server.listen(0,'127.0.0.1',()=>{
  const chrome=process.env.CHROME_BIN||['/usr/bin/google-chrome','/usr/bin/chromium','/usr/bin/chromium-browser'].find(p=>fs.existsSync(p));
