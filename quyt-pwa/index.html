@@ -58,12 +58,13 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
   <label class="check" id="toggleWrap"><input id="tick" type="checkbox"> Quýt — nhân BAO/LÔ</label>
  </div>
  <p class="muted tiny">Dán <b>nguyên văn Telegram</b>, mỗi tin riêng trên một dòng; nhận cả <b>[11/4/2026 6:06 PM] Cô Quýt: Hn ...</b> hoặc <b>Hn ...</b>. Tên khách trong header phải khớp dropdown; không xóa giờ/tên khỏi ô gốc. Hai tin giống nhau cần xác nhận là hai lượt đặt riêng. Nhãn HN không quyết định miền.</p>
+ <p class="muted tiny"><b>Quy tắc tiền:</b> sau ký hiệu cược B/BAO/LÔ, ĐÁ, DD, ĐẦU, ĐUÔI, số tiền có thể ghi <b>300</b> hoặc <b>300n</b> (đều là 300n cho mỗi số). Ví dụ <b>40 22 33 61 77 b300</b> = 5 số × 300n. Kết quả vẫn ghi n; tin gốc không bị sửa. XC và cú pháp chưa rõ vẫn HOLD.</p>
  <label class="field" for="raw" style="margin:10px 0 7px">Tin nguồn (không bị sửa)</label>
- <textarea id="raw" placeholder="hn 21 b10n dd5n. 12 13 da20n.&#10;hn 21 b5n dd10n." spellcheck="false"></textarea>
+ <textarea id="raw" placeholder="40 22 33 61 77 b300&#10;hn 21 b10 dd5. 12 13 da20." spellcheck="false"></textarea>
  <div class="actions"><button id="checkMerge" type="button" aria-controls="status groupedResultsCard combinedResultsCard">KIỂM TRA VÀ GỘP</button></div>
  <div id="status" class="notice hold" role="status">Dán tin vào ô trên để bắt đầu.</div>
- <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button><button type="button" id="startNewBatch" hidden style="background:#924b14">XÁC NHẬN LƯỢT MỚI (KHÔNG GỬI TRÙNG)</button></div>
- <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
+ <div class="actions"><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button><button type="button" id="startNewBatch" hidden style="background:#924b14">XÁC NHẬN LƯỢT MỚI (KHÔNG GỬI TRÙNG)</button></div>
+
 </div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Tổng tiền đã gộp</h2>
@@ -284,8 +285,8 @@ const OfflineKTS=(()=>{
 <script src="./quyt-cut-ledger.js"></script>
 <script>
 (()=>{'use strict';
-const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),status=$('status'),copy=$('copy'),select=$('select'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
-const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,confirmedDaScope=null,current=null,restoredTick=false;
+const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),status=$('status'),copy=$('copy'),select=$('select'),confirmBtn=$('confirmDuplicates');
+const storageKey='KTS_OFFLINE_QUYT_DRAFT_V1',ratesKey='KTS_OFFLINE_QUYT_RATES_V1';let confirmedRaw=null,current=null,restoredTick=false;
 const frames=[...document.querySelectorAll('#betSections .bet-section')].map(node=>({
  kind:node.getAttribute('data-bet-kind'),
  field:node.querySelector('.section-text'),
@@ -397,9 +398,8 @@ rate.value=rates[customer.value];tick.checked=restoredTick;
 function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked}))}catch(_){}try{localStorage.setItem(ratesKey,JSON.stringify(rates))}catch(_){}}
 function formatVi(x){const [whole,fraction]=String(x).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+(fraction?','+fraction:'')+'n'}
 function message(text,isHold){status.textContent=text;status.classList.toggle('hold',Boolean(isHold))}
-function daScope(){return JSON.stringify([raw.value,customer.value,market.value])}
 function redraw(restore=false){
- activeBase=null;current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
+ activeBase=null;current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
  if(cutGuard&&(cutGuard.scope!==cutScope()||cutGuard.phase!=='cut')){
@@ -412,33 +412,31 @@ function redraw(restore=false){
 
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{
-  const result=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+  const result=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value});
   if(restore||cutGuard)restoreCuts();
   activeBase=result;renderCut(result);
   message('ĐÃ GỘP '+result.sourceCount+' tin. '+(cutKeys.size?'Còn lại '+current.rows.length+' số/cặp chưa Cắt.':'Chọn số để Cắt hoặc Cắt toàn nhóm.')+' Nguồn gốc giữ nguyên.',false);
  }catch(e){
   const reason=String(e.message||e);current=null;activeBase=null;out.value='';copy.disabled=true;resetFrames();
-  if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu đúng là tiền n, hãy xác nhận.',true)}
-  else if(reason==='TIN_TRÙNG_CHƯA_XAC_NHAN'||reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: tin trùng; phải xác nhận đây là hai lần đặt riêng.',true)}
+  if(reason==='TIN_TRÙNG_CHƯA_XAC_NHAN'||reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: tin trùng; phải xác nhận đây là hai lần đặt riêng.',true)}
   else message('HOLD: '+reason+'. Không Cắt hoặc xuất tin.',true);
  }
 }
 
-raw.addEventListener('input',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});market.addEventListener('change',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});
-customer.addEventListener('change',()=>{rate.value=rates[customer.value]||'1.000';confirmedRaw=null;confirmedDaScope=null;redraw()});
+raw.addEventListener('input',()=>{confirmedRaw=null;redraw()});market.addEventListener('change',()=>{confirmedRaw=null;redraw()});
+customer.addEventListener('change',()=>{rate.value=rates[customer.value]||'1.000';confirmedRaw=null;redraw()});
 rate.addEventListener('input',()=>{rates[customer.value]=rate.value;redraw()});
 tick.addEventListener('change',redraw);
 // Explicit operator action uses the existing canonical validation, cut-replay
 // fence and HOLD path. It does not bypass input/source/clipboard guards.
 $('checkMerge').addEventListener('click',()=>{redraw();if(!raw.value.trim())raw.focus()});
-daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.value);if(!candidates.length)return;const examples=candidates.slice(0,3).map(x=>x.exact+' → '+x.assumed).join('; ');if(!confirm('Xác nhận tất cả '+candidates.length+' chỗ thiếu n là tiền theo đơn vị n?\n'+examples+'\nKhông sửa tin gốc; chỉ tính bản xem trước.'))return;confirmedDaScope=daScope();redraw()});
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
-$('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
+$('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;tick.checked=false;redraw();raw.focus()}});
 $('startNewBatch').addEventListener('click',()=>{
  if(!cutGuard)return;
  if(cutInFlight||copyInFlight){message('HOLD_COPY_BUSY: đang Copy/Cắt, KHÔNG mở lượt mới khi Clipboard chưa hoàn tất.',true);return}
  if(!confirm('CẢNH BÁO: lượt trước đã Cắt/Copy. Chỉ mở lượt mới khi đã đối soát và xác nhận KHÔNG GỬI TRÙNG. Đây là lượt đặt ĐỘC LẬP thật sự?'))return;
- try{sessionStorage.removeItem(cutGuardKey);sessionStorage.removeItem(cutStorageKey);cutGuard=null;cutKeys=new Set();cutUndo=[];confirmedRaw=null;confirmedDaScope=null;$('startNewBatch').hidden=true;redraw();
+ try{sessionStorage.removeItem(cutGuardKey);sessionStorage.removeItem(cutStorageKey);cutGuard=null;cutKeys=new Set();cutUndo=[];confirmedRaw=null;$('startNewBatch').hidden=true;redraw();
   message('Đã xác nhận lượt mới độc lập. Kiểm tra số và tiền trước khi gửi.',false);
  }catch(e){message('HOLD: không thể bắt đầu lượt mới an toàn: '+String(e.message||e),true)}
 });
