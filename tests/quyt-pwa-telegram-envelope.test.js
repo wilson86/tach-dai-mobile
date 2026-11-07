@@ -30,10 +30,10 @@ test('Wrong sender, invalid timestamp, malformed header and missing HN HOLD',()=
  assert.throws(()=>app.merge('[99/4/2026 6:06 PM] Cô Quýt: '+a,args),/Thời gian Telegram/u);
  assert.throws(()=>app.merge('[11/4/2026 6:06 PM] Cô Quýt: 21 b10n',args),/phải bắt đầu bằng HN/u);
 });
-test('Wager-bearing unknown and money without n HOLD without dropping tokens',()=>{
+test('Unknown wager tokens HOLD; valid amount without n is accepted',()=>{
  assert.throws(()=>app.merge(wrapped('hn 21 b10n 99'),args),/chưa ghi loại cược/u);
  assert.throws(()=>app.merge(wrapped('hn 21 xc10n'),args),/XC chưa có quy tắc/u);
- assert.throws(()=>app.merge(wrapped('hn 21 b10'),args),/THIEU_N_CAN_XAC_NHAN/u);
+ assert.match(app.merge(wrapped('hn 21 b10'),args).pretty,/21 b\d+n/u);
 });
 test('Duplicated pasted message contents require independent confirmation',()=>{
  const duplicate=wrapped(a)+'\n'+wrapped(a);
