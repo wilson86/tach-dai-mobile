@@ -127,7 +127,7 @@ const OfflineKTS=(()=>{
  // Customer-approved MB shorthand: digits immediately AFTER a wager selector
  // are whole n amounts even when the terminal "n" is omitted.
  // Never treat free-standing 2-digit wager numbers as amounts.
- const bareStakeRe=/^\d+(?![\d.,\p{L}])/u;
+ const bareStakeRe=/^\d+(?![\d\p{L}]|[.,]\d)/u;
  const numberRe=/^\d{2}(?!\d)/u;
  const rank={b:0,da:1,dd:2,dau:3,dui:4,xc:5};
  // Unapproved missing-n DA amounts are NOT automatically money. Explicit
