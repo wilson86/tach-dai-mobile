@@ -128,3 +128,42 @@ test('REPLAY KEEP: independently reconciled Undo receipt binds to empty Cut set'
  const afterUndo=JSON.stringify({scope:cutScopeForTest,keys:[],undo:[]});
  assert.deepEqual(restored({phase:'cut',scope:cutScopeForTest,receipt:afterUndo},afterUndo),{keys:[],undo:[]});
 });
+
+const previewHtml=read('quyt-cut-review/index.html');
+const previewEngine=previewHtml.match(/const OfflineKTS=\(\(\)=>\{[\s\S]*?\}\)\(\);/u);
+assert.ok(previewEngine,'Quyt review must test exact source engine');
+const reviewQuyt=new Function("'use strict';"+previewEngine[0]+";return OfflineKTS")();
+const reviewOpts={market:'mb',customer:'quyt',rate:'1.067',tick:true};
+test('operator screenshot 40 22 33 61 77 b300 = five BAO bets at 300n',()=>{
+ const raw='40 22 33 61 77 b300',unchanged=raw;
+ const actual=reviewQuyt.merge(raw,reviewOpts);
+ assert.equal(raw,unchanged);
+ assert.equal(actual.sourceCount,1);
+ assert.equal(actual.rows.length,5);
+ assert.equal(actual.original,'1500');
+ assert.equal(actual.total,'1600');
+ assert.equal(actual.pretty,'40 22 33 61 77 b320n.');
+ assert.ok(actual.rows.every(x=>x.raw==='300'&&x.beforeRounding==='320.1'&&x.adjusted==='320'));
+ assert.equal(reviewQuyt.merge(raw+'n',reviewOpts).pretty,actual.pretty);
+ assert.equal(reviewQuyt.merge(raw+'.',reviewOpts).pretty,actual.pretty);
+});
+test('review optional-n shorthand works for DA, DD, DAU and DUI, no Quyt multiplier except BAO',()=>{
+ const parsed=reviewQuyt.merge('hn 21 22 da20. 34 dau25 dui45. 55 dd10. 21 b20 lo20',reviewOpts);
+ assert.equal(parsed.original,'120');
+ assert.equal(parsed.rows.find(x=>x.kind==='b').adjusted,'43');
+ assert.equal(parsed.rows.find(x=>x.kind==='da').adjusted,'20');
+ assert.equal(parsed.rows.find(x=>x.kind==='dd').adjusted,'10');
+ assert.equal(parsed.rows.find(x=>x.kind==='dau').adjusted,'25');
+ assert.equal(parsed.rows.find(x=>x.kind==='dui').adjusted,'45');
+});
+test('review optional-n still HOLDs malformed money, unknown XC, unsupported region and ambiguous DA',()=>{
+ for(const raw of ['hn 21 b','hn 21 b300.5','hn 21 b300x','hn 21 xc20','hn 83 da20']){
+  assert.throws(()=>reviewQuyt.merge(raw,reviewOpts),/Cú pháp|XC chưa có|ĐÁ phải có/u,raw);
+ }
+ assert.throws(()=>reviewQuyt.merge('40 22 b300',{...reviewOpts,market:'mn'}),/chỉ nghiệm thu.*MB/u);
+});
+test('review optional-n UI explains the 300n shorthand; no dead confirmation button',()=>{
+ assert.match(previewHtml,/40 22 33 61 77 b300/u);
+ assert.match(previewHtml,/số tiền có thể ghi/u);
+ assert.doesNotMatch(previewHtml,/id="confirmMissingDaN"/u);
+});
