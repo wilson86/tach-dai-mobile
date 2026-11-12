@@ -48,7 +48,7 @@ test('UI exposes only two canonical summary amounts, keeps audits and receipt ac
 });
 test('receiver market scope HOLD runs before materializing MN/MT ticket or receipt',()=>{
  const guard=html.indexOf('if(!receiverMarketApproved()){');
- const start=html.indexOf('const res=OfflineKTS.merge(');
+ const start=html.indexOf('const res=QuytLiveCutUI.review(OfflineKTS,raw.value');
  const materialize=html.indexOf('current={...res');
  assert.ok(start>=0&&guard>start&&materialize>guard);
  const branch=html.slice(guard,materialize);
