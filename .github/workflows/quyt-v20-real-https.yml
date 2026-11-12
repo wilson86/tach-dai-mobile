@@ -1,0 +1,16 @@
+name: Quyt v20 public HTTPS evidence (read only $0)
+on:
+  pull_request:
+    paths:
+      - 'tests/quyt-v20-real-https.cjs'
+      - '.github/workflows/quyt-v20-real-https.yml'
+permissions:
+  contents: read
+jobs:
+  proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: HTTPS 200 and Git source hash for exact live Quyt v20 official and preview
+        run: node tests/quyt-v20-real-https.cjs
