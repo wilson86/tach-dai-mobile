@@ -73,14 +73,15 @@ test('exactly two result buckets have only full-box Cut and Undo; no duplicated 
  assert.match(html,/CẮT TOÀN BỘ KHUNG ĐÃ NHÂN/u);
  assert.match(html,/CẮT TOÀN BỘ KHUNG GIỮ NGUYÊN/u);
  assert.match(html,/<script src="\.\/quyt-source-cut-ledger\.js"><\/script>/u);
- assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js"><\/script>/u);
+ assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111301"><\/script>/u);
+ assert.match(html,/HOLD_PWA_ASSET_VERSION_MISMATCH/u);
  assert.match(html,/QuytLiveCutUI\.review\(OfflineKTS,raw\.value/u);
  assert.match(html,/QuytLiveCutUI\.reset\(\)/u);
  assert.match(html,/QuytLiveCutUI\.init\(redraw\);redraw\(\)/u);
  assert.match(html,/copyScaled'\)\.disabled=true/u);
  assert.doesNotMatch(html,/Telegram\.send|sendBeacon|XMLHttpRequest/u);
  const sw=read('quyt-pwa/sw.js');
- for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js'])assert.ok(sw.includes("'"+asset+"'"));
+ for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111301'])assert.ok(sw.includes("'"+asset+"'"));
  assert.equal(read('quyt-pwa/thu-nghiem/index.html'),html);
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-live-cut-ui.js'),read('quyt-pwa/quyt-live-cut-ui.js'));
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-source-cut-ledger.js'),ledgerSource);

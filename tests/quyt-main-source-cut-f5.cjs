@@ -13,6 +13,7 @@ const checks=String.raw`<script>
  const input='60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n';
  const stage=sessionStorage.getItem('QA_QUYT_LIVE_CUT_STAGE');
  try{
+  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_01');
   assert('only two result money panels',document.querySelectorAll('.total').length===2);
   assert('no repeated raw-message Cut card',!document.getElementById('sourceCutCard')&&!document.getElementById('cutSourceList'));
   assert('no individual wager checkbox lists',!document.querySelector('.bucket-cut-entry')&&!document.querySelector('.bucket-cut-check'));
