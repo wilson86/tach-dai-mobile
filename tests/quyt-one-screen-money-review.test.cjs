@@ -122,12 +122,12 @@ test('V4 DD/Đầu/Đui/Đuôi 3-digit wager numbers are INVALID, regardless of 
  }
  assert.throws(()=>app.merge('tn 531 dd15n',opts),/HOLD_3_CHU_SO_KHONG_HOP_LE/u);
  assert.throws(()=>app.merge('tn 641 dau15n',opts),/HOLD_3_CHU_SO_KHONG_HOP_LE/u);
- assert.throws(()=>app.merge('hn 21 b10n.\n531 dd15n',{...opts,market:'mb'}),/HOLD_3_CHU_SO_KHONG_HOP_LE.*tin 2/u);
+ assert.throws(()=>app.merge('hn 21 b10n.\nhn 531 dd15n',{...opts,market:'mb'}),/HOLD_3_CHU_SO_KHONG_HOP_LE.*tin 2/u);
 });
 test('V4 valid two-digit DD/Đầu/Đui aliases and 3-digit BAO/LO retain exact semantics',()=>{
  const r=app.merge('hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 đui15n.',{...opts,market:'mb'});
  assert.equal(r.total,'69');
- const parts=r.rows.filter(x=>x.factorApplied).map(x=>x.adjusted);
+ const parts=Array.from(r.rows.filter(x=>x.factorApplied),x=>x.adjusted);
  assert.deepEqual(parts.sort(),['11','16','16','16'].sort());
  assert.equal(r.rows.find(x=>x.number==='321').factorApplied,false);
  const single=app.merge('hn 321 b75n. 021 lo10n',{...opts,market:'mb'});
