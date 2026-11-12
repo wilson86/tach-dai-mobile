@@ -25,7 +25,7 @@ button{border:0;background:#14649c;color:white;border-radius:8px;padding:12px 16
 button.secondary{background:#dcebf5;color:#153c5b}button:disabled{background:#aab7c3;color:#f7f7f7;cursor:not-allowed}
 .actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.notice{background:#e9f8ec;border-left:4px solid #167b38;padding:10px 12px;border-radius:5px;margin:11px 0;white-space:pre-wrap}
 .notice.hold{background:#fff0e8;border-color:#b7371d}.totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
-.total{padding:12px;background:#edf3f6;border-radius:8px}.total strong{display:block;font-size:21px;margin-top:4px}
+.total{padding:12px;background:#edf3f6;border-radius:8px;min-width:0}.total strong{display:block;font-size:21px;margin-top:4px}.review-lines{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0;border-top:1px solid #cad9e5;padding-top:8px;color:#263f50;max-height:310px;overflow:auto}
 .tiny{font-size:13px;color:#526172}.muted{color:#566674}.tag{display:inline-block;padding:4px 8px;background:#e5edf4;border-radius:6px;font-weight:700;font-size:12px}
 summary{cursor:pointer;font-weight:650}table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:7px 6px;border-bottom:1px solid #dde5eb;text-align:left}th{background:#edf3f6}.table-scroll{overflow:auto}
 footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-weight:650}
@@ -43,19 +43,19 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 [hidden]{display:none!important}
 @media(max-width:600px){.bet-section-grid{grid-template-columns:1fr;gap:9px}.bet-section textarea{min-height:90px}}
 
-@media(max-width:600px){.wrap{padding:8px 8px 28px}.card{padding:11px}.field{flex-basis:135px}h1{font-size:20px}.totals{gap:5px}.total{padding:9px}.total strong{font-size:17px}#raw{min-height:240px}#result{min-height:270px}}
+@media(max-width:600px){.wrap{padding:8px 8px 28px}.card{padding:11px}.field{flex-basis:135px}h1{font-size:20px}.totals{grid-template-columns:1fr;gap:9px}.total{padding:9px}.total strong{font-size:17px}#raw{min-height:240px}#result{min-height:270px}}
 </style>
 <meta name="quyt-release-candidate" content="one-screen-20261112-review-only">
 </head>
 <body><main class="wrap">
 <header><h1>KTS — GỘP TIN QUÝT MB / MN / MT <span class="tag">XEM TRƯỚC ONLINE</span></h1>
-<p>Một màn hình: chọn MB, MN hoặc MT. MB nhận HN; MN/MT chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA QUÝT V3 — CHỈ NHÂN SỐ 2 CHỮ SỐ, 3 CHỮ SỐ GIỮ GỐC; KHÔNG COPY KHI TÍCH HỆ SỐ:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
+<p>Một màn hình: chọn MB, MN hoặc MT. MB nhận HN; MN/MT chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA QUÝT V4 — DD/ĐẦU/ĐUÔI CHỈ 2 CHỮ SỐ; 3 CHỮ SỐ HOLD; CHIA HAI KHUNG NHÂN/GIỮ GỐC:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
 <div class="card">
  <div class="bar">
   <label class="field">Khách hàng<select id="customer"><option value="quyt">Quýt</option><option value="hien">Hiền</option><option value="khac">Khách khác (tiền gốc)</option></select></label>
   <label class="field">Miền đang chọn<select id="market"><option value="mb">MB / HN</option><option value="mn">MN</option><option value="mt">MT</option></select></label>
   <label class="field">Hệ số khách<input id="rate" type="text" inputmode="decimal" maxlength="7" value="1.067" aria-label="Hệ số Quýt"></label>
-  <label class="check" id="toggleWrap"><input id="tick" type="checkbox"> Quýt — nhân BAO/LÔ + DD + ĐẦU + ĐUÔI (chỉ số 2 chữ số)</label>
+  <label class="check" id="toggleWrap"><input id="tick" type="checkbox"> Quýt — nhân BAO/LÔ + DD + ĐẦU + ĐUÔI (2 chữ số); Bao/Lô 3 chữ số giữ nguyên</label>
  </div>
  <div id="regionScope" style="display:none;padding:11px;border:1px solid #c7ddec;border-radius:8px;background:#f4f8ff;margin:10px 0">
   <label class="field" style="max-width:260px">Ngày xổ số (MN/MT bắt buộc)<input id="businessDate" type="date" aria-label="Ngày xổ số"></label>
@@ -71,7 +71,16 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Kết quả đã gộp</h2>
- <div class="totals" aria-label="Bảng kết quả tiền Quýt, hai khoản"><div class="total"><span id="baoLabel">BAO/LÔ 2 SỐ SAU HỆ SỐ; 3 SỐ GỐC</span><strong id="baoTotal">—</strong></div><div class="total"><span id="otherLabel">DD / ĐẦU / ĐUÔI 2 SỐ SAU HỆ SỐ; 3 SỐ / ĐÁ GỐC</span><strong id="otherTotal">—</strong></div></div>
+ <div class="totals" aria-label="Hai khung kết quả Quýt phân theo hệ số">
+  <section class="total" aria-label="Khung đã nhân hệ số">
+   <b id="baoLabel">ĐÃ NHÂN HỆ SỐ QUÝT</b><strong id="baoTotal">—</strong>
+   <pre id="scaledItems" class="review-lines" aria-label="Các khoản đã nhân" aria-live="polite"></pre>
+  </section>
+  <section class="total" aria-label="Khung giữ nguyên hệ số">
+   <b id="otherLabel">KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN</b><strong id="otherTotal">—</strong>
+   <pre id="unscaledItems" class="review-lines" aria-label="Các khoản không nhân" aria-live="polite"></pre>
+  </section>
+ </div>
  <p id="factorReceipt" class="warn tiny" aria-live="polite">Chưa có kết quả để đối soát.</p>
  <p id="roundingAudit" class="warn tiny" aria-live="polite"></p>
  <label class="check" id="moneyAcknowledgment" style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
@@ -118,7 +127,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <div class="actions"><button id="copy" type="button" disabled>COPY TIN GỘP</button><button id="select" class="secondary" type="button" disabled>Chọn toàn bộ để Copy thủ công</button></div>
  <p class="muted tiny">Có thể Copy cả tin ở trên hoặc Copy riêng từng khung bên dưới.</p>
  <details><summary>Xem bảng đối soát từng số / từng cặp</summary><div class="table-scroll"><table><thead><tr><th>Loại</th><th>Số/cặp</th><th>Gốc (n)</th><th>Sau nhân, chưa tròn (n)</th><th>Xuất, đã tròn (n)</th></tr></thead><tbody id="details"></tbody></table></div></details>
- <p class="warn tiny">Quy tắc xem trước Quýt V3: gộp mỗi số/đài trước, nhân BAO/LÔ + DD + ĐẦU + ĐUÔI một lần CHỈ khi số cược có 2 chữ số nếu tick Quýt; số cược 3 chữ số và ĐÁ giữ tiền gốc; làm tròn từng số/cặp đến n nguyên (phần lẻ &lt; 0.5n xuống, ≥ 0.5n lên). Tổng xuất cộng chính các số đã làm tròn, không làm tròn lại tổng. Bảng đối soát giữ nguyên số chưa làm tròn. Khoản dương bị tròn thành 0n sẽ HOLD. Chỉ Copy văn bản; không tự gửi Router/Telegram.</p>
+ <p class="warn tiny">Quy tắc xem trước Quýt V4: chỉ Bao/Lô chấp nhận cả 2 và 3 chữ số (3 chữ số không nhân); DD/Đầu/Đui/Đuôi chỉ chấp nhận 2 chữ số, gặp số 3 chữ số sẽ HOLD toàn bộ. Quýt nhân BAO/LÔ, DD, ĐẦU, ĐUÔI 2 chữ số đúng một lần sau gộp; ĐÁ không nhân; làm tròn từng số/cặp đến n nguyên (phần lẻ &lt; 0.5n xuống, ≥ 0.5n lên). Tổng xuất cộng chính các số đã làm tròn, không làm tròn lại tổng. Bảng đối soát giữ nguyên số chưa làm tròn. Khoản dương bị tròn thành 0n sẽ HOLD. Chỉ Copy văn bản; không tự gửi Router/Telegram.</p>
 </div>
 <footer><b>BẢN XEM TRƯỚC CHUNG MB/MN/MT — CHỈ ĐỐI CHIẾU</b>. Không phải bản nghiệm thu tiền thực và không thay thế bản KTS production. Dữ liệu không gửi ra Internet. Bản nháp chỉ lưu trong phiên/tab trình duyệt nếu trình duyệt cho phép. Chỉ kết quả xuất mới làm tròn theo quy tắc bạn đã chọn; tin nguồn và sổ đối soát chính xác không bị sửa.</footer>
 </main>
@@ -237,6 +246,9 @@ const quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\d{2}$/u.test(row
    if(!tokens[i+1]||tokens[i+1].type!=='stake')fail('Thiếu tiền hoặc thiếu n',`tin ${index+1}: ${token.raw}`);
    if(selector==='xc')fail('XC chưa có quy tắc tiền được duyệt',`tin ${index+1}`);
    if(selector==='da'&&(nums.length!==2||nums[0]===nums[1]))fail('ĐÁ phải có đúng hai số khác nhau; ĐÁ vòng chưa được duyệt',`tin ${index+1}`);
+// DD, ĐẦU, ĐUÔI/ĐUI never admit 3-digit wager numbers, even when Quýt unchecked.
+if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
+ fail('HOLD_3_CHU_SO_KHONG_HOP_LE: DD/ĐẦU/ĐUÔI chỉ nhận số cược 2 chữ số',`tin ${index+1}: ${nums.filter(n=>n.length!==2).join(' ')}`);
    // Repeated number in a single clause has no separate source/order identity.
    // Never silently double its stake; distinct clauses/messages still aggregate.
    if(selector!=='da'&&new Set(nums).size!==nums.length)
@@ -345,7 +357,8 @@ const quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\d{2}$/u.test(row
   // BigInt half-up: < 0.5n DOWN; >= 0.5n UP. Never round the grand total
   // independently: its value must equal the sum of printed stake amounts.
   for(const row of sorted){
-   row.exact=row.amount*(opts.tick&&quytFactorEligible(row)?multiplier:D);
+   row.factorApplied=Boolean(opts.tick&&quytFactorEligible(row));
+   row.exact=row.amount*(row.factorApplied?multiplier:D);
    row.rounded=((row.exact+M/2n)/M)*M;
    if(row.exact>0n&&row.rounded===0n)fail('HOLD: tiền dương làm tròn thành 0n; cần quyết định khách',row.number+' '+row.kind);
    original+=row.amount;adjusted+=row.rounded;
@@ -384,7 +397,7 @@ const quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\d{2}$/u.test(row
    fail('HOLD: tổng từng khung khác tổng đã gộp');
   return {pretty,sections,sourceTotal:fmt(sourceStake,D),original:fmt(original,D),total:fmt(adjusted,M),
    ceilReference:fmt(ceilReference,M),roundingDiffRows,
-   rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M)})),
+   rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M),factorApplied:r.factorApplied})),
    sourceCount:lines.length,businessDate:opts.businessDate||'',rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
  return Object.freeze({merge,fmt,decimal,missingDaN,schedule});
@@ -448,18 +461,40 @@ function renderSchedule(){
  }catch(e){scheduleLabel.textContent=String(e.message||e)}
 }
 function showTwoTotals(result){
- if(!Array.isArray(result.sections))throw Error('HOLD_SUMMARY_SECTION_INVALID');
- const bao=result.sections.find(section=>section.kind==='b');
- if(!bao)throw Error('HOLD_SUMMARY_BAO_SECTION_MISSING');
- const baoTotal=BigInt(bao.total);
- const rest=result.sections.filter(section=>section.kind!=='b').reduce((sum,section)=>sum+BigInt(section.total),0n);
- if(baoTotal<0n||rest<0n||baoTotal+rest!==BigInt(result.total))throw Error('HOLD_SUMMARY_MONEY_MISMATCH');
- $('baoTotal').textContent=formatVi(baoTotal.toString());
- $('otherTotal').textContent=formatVi(rest.toString());
- $('baoLabel').textContent=customer.value==='quyt'&&tick.checked?'BAO/LÔ 2 SỐ ×'+rate.value+'; 3 SỐ GỐC':'BAO/LÔ CHƯA NHÂN';
- $('otherLabel').textContent=customer.value==='quyt'&&tick.checked?'DD / ĐẦU / ĐUÔI 2 SỐ ×'+rate.value+'; 3 SỐ / ĐÁ GỐC':'DD / ĐẦU / ĐUÔI / ĐÁ CHƯA NHÂN';
+ // The old DOM ids remain for backward test compatibility, but represent
+ // MULTIPLIED versus UNMULTIPLIED amounts, NOT Bao versus other bet types.
+ if(!Array.isArray(result.sections)||!Array.isArray(result.rows))
+  throw Error('HOLD_SUMMARY_SECTION_INVALID');
+ const sectionSum=result.sections.reduce((n,g)=>n+BigInt(g.total),0n);
+ let scaled=0n,unscaled=0n;
+ const scaledLines=[],unscaledLines=[];
+ const name={b:'BAO/LÔ',dd:'DD',dau:'ĐẦU',dui:'ĐUÔI',da:'ĐÁ',xc:'XC'};
+ for(const item of result.rows){
+  if(typeof item.factorApplied!=='boolean'||!/^\d+$/u.test(item.adjusted))
+   throw Error('HOLD_SUMMARY_ROW_INVALID');
+  const amount=BigInt(item.adjusted),kind=name[item.kind];
+  if(!kind||amount<0n)throw Error('HOLD_SUMMARY_ROW_INVALID');
+  const location=item.station?item.station+' / ':'';
+  const label=kind+' · '+location+item.number;
+  if(item.factorApplied){
+   scaled+=amount;
+   scaledLines.push(label+' · '+item.raw+'n → '+item.adjusted+'n');
+  }else{
+   unscaled+=amount;
+   unscaledLines.push(label+' · '+item.adjusted+'n (không nhân)');
+  }
+ }
+ if(scaled<0n||unscaled<0n||scaled+unscaled!==BigInt(result.total)||sectionSum!==scaled+unscaled)
+  throw Error('HOLD_SUMMARY_MONEY_MISMATCH');
+ $('baoTotal').textContent=formatVi(scaled.toString());
+ $('otherTotal').textContent=formatVi(unscaled.toString());
+ $('baoLabel').textContent=customer.value==='quyt'&&tick.checked
+  ?'ĐÃ NHÂN ×'+rate.value+' — CÁC CƯỢC 2 CHỮ SỐ':'ĐÃ NHÂN HỆ SỐ — KHÔNG CÓ';
+ $('otherLabel').textContent='KHÔNG NHÂN — BAO/LÔ 3 CHỮ SỐ, ĐÁ VÀ KHOẢN GỐC';
+ $('scaledItems').textContent=scaledLines.join('\n')||'Không có khoản nhân hệ số';
+ $('unscaledItems').textContent=unscaledLines.join('\n')||'Không có khoản giữ nguyên';
 }
-function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();ack.checked=false;ack.disabled=true;$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='BAO/LÔ 2 SỐ SAU HỆ SỐ; 3 SỐ GỐC';$('otherLabel').textContent='DD / ĐẦU / ĐUÔI SAU HỆ SỐ; ĐÁ GỐC';$('factorReceipt').textContent='Chưa có kết quả để đối soát.';$('roundingAudit').textContent='';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
+function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();ack.checked=false;ack.disabled=true;$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='ĐÃ NHÂN HỆ SỐ QUÝT';$('otherLabel').textContent='KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN';$('scaledItems').textContent='';$('unscaledItems').textContent='';$('factorReceipt').textContent='Chưa có kết quả để đối soát.';$('roundingAudit').textContent='';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
