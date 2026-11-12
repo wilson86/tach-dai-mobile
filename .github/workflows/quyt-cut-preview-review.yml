@@ -14,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Contract — no production cache or route overlap
-        run: node --test tests/quyt-cut-review-contract.cjs
+        run: node --test tests/quyt-two-amounts-summary.test.cjs tests/quyt-cut-review-contract.cjs
       - name: Actual Chromium preview Copy, Cut, Undo, F5 and clipboard races
         run: |
           command -v google-chrome || command -v chromium

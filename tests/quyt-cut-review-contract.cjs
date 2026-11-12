@@ -7,7 +7,7 @@ test('Review preview banner is prominent and live app remains independent',()=>{
  assert.match(index,/<section class="card" id="reviewOnlyBanner" role="alert"/u);
  assert.match(index,/CHƯA DÙNG TIỀN THẬT/u);
  assert.match(index,/KHÔNG gửi cược hoặc số tiền thật/u);
- assert.match(index,/href="\.\.\/quyt-pwa\/\?v=8"/u);
+ assert.match(index,/href="\.\.\/quyt-pwa\/\?v=9"/u);
  assert.match(index,/<script src="\.\/quyt-cut-ledger\.js"><\/script>/u);
  assert.match(index,/KIỂM TRA VÀ GỘP/u);
  assert.match(index,/HOLD_CUT_REPLAY/u);
@@ -15,12 +15,12 @@ test('Review preview banner is prominent and live app remains independent',()=>{
 test('Review service worker cannot evict live PWA production cache',()=>{
  const preview=read('quyt-cut-review/sw.js');
  const live=read('quyt-pwa/sw.js');
- assert.match(preview,/kts-quyt-standalone-review-only-20261106-v10-storage-isolation/u);
+ assert.match(preview,/kts-quyt-standalone-review-only-20261112-v11-two-amount-summary/u);
  assert.match(preview,/k\.startsWith\('kts-quyt-standalone-review-only-'\)/u);
  assert.doesNotMatch(preview,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
  assert.match(preview,/HOLD_OFFLINE_ROUTE_UNAVAILABLE/u);
  assert.match(preview,/\.\/quyt-cut-ledger\.js/u);
- assert.match(live,/kts-quyt-standalone-pwa-20261106-v8-route-boundary-hold/u);
+ assert.match(live,/kts-quyt-standalone-pwa-20261112-v10-regional-handoff/u);
 });
 test('Preview PWA install scope is itself, not main',()=>{
  const manifest=JSON.parse(read('quyt-cut-review/manifest.webmanifest'));

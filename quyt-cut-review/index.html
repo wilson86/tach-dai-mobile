@@ -48,7 +48,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </style>
 </head>
 <body><main class="wrap">
-<section class="card" id="reviewOnlyBanner" role="alert" style="border:3px solid #b7371d;background:#fff0e8"><strong style="color:#8d341b;font-size:18px">⚠ BẢN KIỂM TRA V10 — CHƯA DÙNG TIỀN THẬT</strong><p>Cắt nhóm, Cắt từng số, Copy và Hoàn tác chỉ để thử trên dữ liệu giả. KHÔNG gửi cược hoặc số tiền thật cho khách/chủ. Bản v8 chính thức vẫn độc lập; dữ liệu, hệ số và sổ Cắt bản kiểm tra được tách khỏi v8.</p><p><a href="../quyt-pwa/?v=8">Mở lại PWA v8 hiện hành</a></p></section>
+<section class="card" id="reviewOnlyBanner" role="alert" style="border:3px solid #b7371d;background:#fff0e8"><strong style="color:#8d341b;font-size:18px">⚠ BẢN KIỂM TRA V10 — CHƯA DÙNG TIỀN THẬT</strong><p>Cắt nhóm, Cắt từng số, Copy và Hoàn tác chỉ để thử trên dữ liệu giả. KHÔNG gửi cược hoặc số tiền thật cho khách/chủ. Bản v8 chính thức vẫn độc lập; dữ liệu, hệ số và sổ Cắt bản kiểm tra được tách khỏi v8.</p><p><a href="../quyt-pwa/?v=9">Mở lại PWA v8 hiện hành</a></p></section>
 <header><h1>KTS — GỘP TIN QUÝT <span class="tag">PWA / OFFLINE</span></h1>
 <p>Dán nhiều tin → tự gộp → tick Quýt tự nhân → Copy. Không cần server, không gửi Telegram, không kết nối Router.</p></header>
 <div class="card">
@@ -68,8 +68,8 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 
 </div>
 <div class="card">
- <h2 style="font-size:19px;margin:0 0 8px">Tổng tiền đã gộp</h2>
- <div class="totals"><div class="total">TỔNG GỐC (CHƯA LÀM TRÒN)<strong id="before">—</strong></div><div class="total">TỔNG CÒN LẠI (ĐÃ LÀM TRÒN)<strong id="after">—</strong></div></div>
+ <h2 style="font-size:19px;margin:0 0 8px">Kết quả tiền sau gộp</h2>
+ <div class="totals" aria-label="Kết quả tiền: hai khoản"><div class="total"><span id="baoLabel">BAO/LÔ SAU HỆ SỐ (NẾU BẬT)</span><strong id="baoTotal">—</strong></div><div class="total">PHẦN CÒN LẠI (KHÔNG NHÂN)<strong id="otherTotal">—</strong></div></div>
  <div class="actions"><button id="undoQuytCut" class="secondary" type="button" disabled>HOÀN TÁC CẮT</button><span class="tiny" id="cutReceipt" role="status">Chưa cắt; giữ nguyên tin gốc.</span></div>
 </div>
 <div class="card" id="groupedResultsCard" hidden>
@@ -351,8 +351,19 @@ function resetFrames(){
  for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.cut.disabled=true;frame.cutSelected.disabled=true;frame.choices.replaceChildren();frame.field.closest('.bet-section').hidden=true;}
  $('undoQuytCut').disabled=true;$('cutReceipt').textContent='Chưa cắt; giữ nguyên tin gốc.';
 }
+function showTwoTotals(result){
+ const bao=result.sections.find(group=>group.kind==='b');
+ if(!bao)throw Error('HOLD_MONEY_SUMMARY_BAO_MISSING');
+ const baoTotal=BigInt(bao.total);
+ const otherTotal=result.sections.filter(group=>group.kind!=='b').reduce((sum,group)=>sum+BigInt(group.total),0n);
+ if(baoTotal<0n||otherTotal<0n||baoTotal+otherTotal!==BigInt(result.total))throw Error('HOLD_MONEY_SUMMARY_MISMATCH');
+ $('baoTotal').textContent=formatVi(baoTotal.toString());
+ $('otherTotal').textContent=formatVi(otherTotal.toString());
+ $('baoLabel').textContent=customer.value==='quyt'&&tick.checked?'BAO/LÔ ĐÃ NHÂN ×'+rate.value:'BAO/LÔ KHÔNG NHÂN';
+}
 function renderCut(base){
  const v=QuytCutLedger.derive(base,cutKeys);
+  showTwoTotals(v);
  current={...v,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=v.pretty;copy.disabled=copyInFlight||!v.pretty;select.disabled=copy.disabled;
  let visibleGroups=0;
  for(const frame of frames){
@@ -369,7 +380,7 @@ function renderCut(base){
   }
  }
  $('groupedResultsCard').hidden=visibleGroups===0;$('combinedResultsCard').hidden=!v.pretty;
- $('before').textContent=formatVi(base.original);$('after').textContent=formatVi(v.total);
+ 
  $('cutReceipt').textContent=v.cutCount?'Đã Cắt '+v.cutCount+' số/cặp ('+formatVi(v.cutTotal)+'). Còn '+formatVi(v.total)+'. Nguồn gốc giữ nguyên.':'Chưa Cắt; nguồn gốc giữ nguyên.';
  $('undoQuytCut').disabled=copyInFlight||cutUndo.length===0;
  $('details').replaceChildren();
@@ -401,7 +412,7 @@ function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw
 function formatVi(x){const [whole,fraction]=String(x).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+(fraction?','+fraction:'')+'n'}
 function message(text,isHold){status.textContent=text;status.classList.toggle('hold',Boolean(isHold))}
 function redraw(restore=false){
- activeBase=null;current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';
+ activeBase=null;current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='BAO/LÔ SAU HỆ SỐ (NẾU BẬT)';$('details').replaceChildren();confirmBtn.style.display='none';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
  if(cutGuard&&(cutGuard.scope!==cutScope()||cutGuard.phase!=='cut')){
