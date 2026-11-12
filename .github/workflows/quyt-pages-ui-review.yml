@@ -4,6 +4,7 @@ on:
     paths:
       - 'quyt-pwa/index.html'
       - 'quyt-pwa/sw.js'
+      - 'quyt-pwa/station_calendar.generated.js'
       - 'quyt-pwa/manifest.webmanifest'
       - 'tests/quyt-pwa-grouped-frames.test.js'
       - 'tests/quyt-one-screen-money-review.test.cjs'

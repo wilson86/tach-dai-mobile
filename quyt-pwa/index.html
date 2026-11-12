@@ -122,7 +122,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </div>
 <footer><b>BẢN XEM TRƯỚC CHUNG MB/MN/MT — CHỈ ĐỐI CHIẾU</b>. Không phải bản nghiệm thu tiền thực và không thay thế bản KTS production. Dữ liệu không gửi ra Internet. Bản nháp chỉ lưu trong phiên/tab trình duyệt nếu trình duyệt cho phép. Chỉ kết quả xuất mới làm tròn theo quy tắc bạn đã chọn; tin nguồn và sổ đối soát chính xác không bị sửa.</footer>
 </main>
-<script src="../station_calendar.generated.js"></script>
+<script src="./station_calendar.generated.js"></script>
 <script>
 'use strict';
 const OfflineKTS=(()=>{
@@ -551,6 +551,10 @@ copy.addEventListener('click',async()=>{
 });
 redraw();
 })();
+// HTTPS PWA registration: one scope and byte-identical station authority.
+if('serviceWorker' in navigator && location.protocol==='https:'){
+ addEventListener('load',()=>navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(()=>{}));
+}
 </script>
 
 </body></html>

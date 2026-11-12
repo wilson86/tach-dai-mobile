@@ -7,6 +7,19 @@ const fs=require('node:fs');
 const path=require('node:path');
 const vm=require('node:vm');
 const sw=fs.readFileSync(path.join(__dirname,'../quyt-pwa/sw.js'),'utf8');
+const calendar=fs.readFileSync(path.join(__dirname,'../station_calendar.generated.js'));
+const scopedCalendar=fs.readFileSync(path.join(__dirname,'../quyt-pwa/station_calendar.generated.js'));
+const index=fs.readFileSync(path.join(__dirname,'../quyt-pwa/index.html'),'utf8');
+test('same-scope calendar is BYTE IDENTICAL to canonical generated schedule',()=>{
+ assert.deepEqual(scopedCalendar,calendar);
+ assert.match(index,/<script src="\.\/station_calendar\.generated\.js"><\/script>/u);
+ assert.match(index,/navigator\.serviceWorker\.register\('\.\/sw\.js',\{scope:'\.\/'\}\)/u);
+ assert.doesNotMatch(index,/src="\.\.\/station_calendar\.generated\.js"/u);
+ const scope=new URL('https://wilson86.github.io/tach-dai-mobile/quyt-pwa/');
+ const cachePath=new URL('./station_calendar.generated.js',scope).pathname;
+ assert.ok(cachePath.startsWith(scope.pathname));
+});
+
 function harness({online=false,hasCachedIndex=true}={}){
  const handlers={},lookups=[];
  const origin='https://example.invalid',scope=origin+'/tach-dai-mobile/quyt-pwa/';
@@ -35,8 +48,8 @@ test('PWA caches pinned canonical station calendar atomically with one-screen HT
  assert.ok(installAssets);
  const assets=vm.runInNewContext(installAssets[1]);
  assert.ok(assets.includes('./index.html'));
- assert.ok(assets.includes('../station_calendar.generated.js'));
- assert.equal(assets.filter(x=>x==='../station_calendar.generated.js').length,1);
+ assert.ok(assets.includes('./station_calendar.generated.js'));
+ assert.equal(assets.filter(x=>x==='./station_calendar.generated.js').length,1);
 });
 test('offline app root can fall back to its exact cached one-screen entry',async()=>{
  const h=harness();
