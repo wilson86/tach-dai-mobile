@@ -26,7 +26,7 @@ const ack=()=>{$('ackMoney').checked=true;$('ackMoney').dispatchEvent(new Event(
 const closed=()=> $('copy').disabled&&$('select').disabled&&
  [...document.querySelectorAll('.section-copy')].every(b=>b.disabled)&&
  $('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&$('result').value==='';
-const money=id=>BigInt($(id).textContent.replaceAll('.','').replace('n',''));
+const money=id=>{const v=$(id).textContent.replaceAll('.','').replace('n','');return /^\d+$/u.test(v)?BigInt(v):null;};
 try{
  assert('one-screen MB/MN/MT with exactly TWO distinct result frames',
   ['mb','mn','mt'].every(id=>[...$('market').options].some(x=>x.value===id))&&
@@ -82,6 +82,7 @@ try{
  market('mn');set('raw','tn 21 b10n. 321 b10n. 41 dd15n.');
  assert('MN without date HOLDs and clears both buckets',closed()&&$('baoTotal').textContent==='—');
  set('businessDate','2026-11-12');
+ assert('MN Thursday acceptance status: '+$('status').textContent.slice(0,100),$('baoTotal').textContent!=='—');
  assert('MN correct station uses 2-digit factor bucket vs 3-digit raw bucket',
   money('baoTotal')===27n&&money('otherTotal')===10n&&closed());
  set('businessDate','2026-11-13');
