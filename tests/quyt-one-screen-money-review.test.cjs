@@ -60,10 +60,37 @@ test('receiver market scope HOLD runs before materializing MN/MT ticket or recei
  assert.match(html,/const can=Boolean\(receiverMarketApproved\(\)&&currentValid\(\)/u);
  assert.match(html,/function copyTicketValid\(ticket\)\{return Boolean\(receiverMarketApproved\(\)/u);
 });
-test('factor is applied to Bao/Lô ONLY, never DD, preserving integer n',()=>{
- const out=app.merge('tn 42 bl10n dd5n',opts);
- assert.equal(out.total,'16');
- assert.equal(out.roundingDiffRows,0);
+test('Quýt V2 performs per-customer per-type aggregate BEFORE one multiplier, never per message',()=>{
+ const optsMB={...opts,market:'mb'};
+ const raw='hn 21 dd5n dau5n dui5n\nhn 21 dd5n dau5n dui5n';
+ const out=app.merge(raw,{...optsMB,duplicateConfirmed:true});
+ for(const k of ['dd','dau','dui'])assert.equal(out.sections.find(s=>s.kind===k).total,'11');
+ assert.equal(out.total,'33'); // 3 canonical groups: (5+5)*1.067 -> 11 each
+ const plain=app.merge(raw,{...optsMB,tick:false,duplicateConfirmed:true});
+ assert.equal(plain.total,'30');
+ assert.equal(raw,'hn 21 dd5n dau5n dui5n\nhn 21 dd5n dau5n dui5n');
+});
+test('Quýt v2 Đui/Đuôi aliases are equivalent and DA remains not multiplied',()=>{
+ const base={...opts,market:'mb'};
+ const x=app.merge('hn 21 đui10n. 22 đuôi10n. 23 dui10n. 24 duoi10n. 25 26 da10n.',base);
+ assert.equal(x.sections.find(s=>s.kind==='dui').total,'44');
+ assert.equal(x.sections.find(s=>s.kind==='da').total,'10');
+ assert.equal(x.total,'54');
+ const y=app.merge('hn 21 dd15n.',base);
+ assert.equal(y.total,'16');assert.equal(y.roundingDiffRows,1);
+ assert.match(html,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
+ assert.match(html,/receiverMarketApproved\(\)\{return market\.value==='mb'&&!\(customer\.value==='quyt'&&tick\.checked\)\}/u);
+});
+test('Quýt V2 applies factor to Bao/Lô, DD, Đầu, Đuôi while leaving Đá unscaled',()=>{
+ const out=app.merge('tn 42 bl10n dd15n dau10n dui10n',opts);
+ assert.equal(out.total,'49');
  assert.equal(out.sections.find(x=>x.kind==='b').total,'11');
- assert.equal(out.sections.find(x=>x.kind==='dd').total,'5');
+ assert.equal(out.sections.find(x=>x.kind==='dd').total,'16');
+ assert.equal(out.sections.find(x=>x.kind==='dau').total,'11');
+ assert.equal(out.sections.find(x=>x.kind==='dui').total,'11');
+ assert.equal(out.sections.find(x=>x.kind==='da').total,'0');
+ assert.equal(out.sections.reduce((sum,s)=>sum+BigInt(s.total),0n),BigInt(out.total));
+ const original=app.merge('tn 42 bl10n dd15n dau10n dui10n',{...opts,tick:false});
+ assert.equal(original.total,'45');
+ assert.equal(original.sections.find(x=>x.kind==='dd').total,'15');
 });

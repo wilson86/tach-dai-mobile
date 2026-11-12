@@ -30,11 +30,11 @@ test('10n ×1.067 →11n; HALF_UP 10.500→11, 10.490→10',()=>{
  assert.equal(mb.merge('hn 21 b10n',{...o,rate:'1.050'}).total,'11');
  assert.equal(mb.merge('hn 21 b10n',{...o,rate:'1.049'}).total,'10');
 });
-test('merge distinct placements BEFORE factor once; DD remains unchanged',()=>{
+test('merge distinct placements BEFORE factor once; DD also scales and rounds',()=>{
  const a=mb.merge('hn 21 b75n dd5n\nhn 21 b75n dd5n',{...o,duplicateConfirmed:true});
- assert.equal(a.total,'170'); // 150*1.067 = 160.05 => 160 + DD 10
+ assert.equal(a.total,'171'); // Bao 150*1.067→160 plus DD 10*1.067→11
  assert.equal(a.sections.find(s=>s.kind==='b').total,'160');
- assert.equal(a.sections.find(s=>s.kind==='dd').total,'10');
+ assert.equal(a.sections.find(s=>s.kind==='dd').total,'11');
  assert.equal(mb.merge('hn 21 bao75n',{...o,tick:false}).total,'75');
 });
 test('final wager text always uses whole n, audit retains decimals',()=>{

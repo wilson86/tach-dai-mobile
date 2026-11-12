@@ -27,11 +27,11 @@ test('half-up boundary: 0.499 down, 0.500 and 0.501 up', () => {
  assert.match(a.pretty, /23 22 b2n/u); // pre-existing descending stake sort order
  printedStakesHaveNoFraction(a);
 });
-test('Quýt only scales BAO/LO then rounds each canonical number', () => {
+test('Quýt scales BAO/LO, DD, DAU and DUI then rounds each canonical number', () => {
  const a = merge('21 b55n. 22 b5n. 23 b100n. 34 dd10n.',{tick:true});
- assert.equal(a.original,'170');assert.equal(a.total,'181');
+ assert.equal(a.original,'170');assert.equal(a.total,'182');
  assert.match(a.pretty, /23 b107n/u); assert.match(a.pretty,/21 b59n/u);
- assert.match(a.pretty, /22 b5n/u);assert.match(a.pretty,/34 dd10n/u);
+ assert.match(a.pretty, /22 b5n/u);assert.match(a.pretty,/34 dd11n/u);
  const row=a.rows.find(x=>x.number==='21');
  assert.equal(row.beforeRounding,'58.685');
  assert.equal(row.adjusted,'59');
@@ -51,11 +51,11 @@ test('never round grand total instead of per-number amounts', () => {
  assert.equal(a.rows.reduce((sum,row)=>sum+Number(row.adjusted),0),10);
  printedStakesHaveNoFraction(a);
 });
-test('DA / DD / DAU / DUI are rounded to integers without Quýt multiplier', () => {
+test('DA stays unscaled; DD/DAU/DUI scale and round HALF_UP', () => {
  const a=merge('21 22 da5.5n. 44 dd3.51n. 45 dau5.499n dui2.5n.',{tick:true});
- assert.equal(a.total,'18');assert.equal(a.original,'17.009');
+ assert.equal(a.total,'19');assert.equal(a.original,'17.009');
  assert.match(a.pretty,/21 22 da6n/u);assert.match(a.pretty,/44 dd4n/u);
- assert.match(a.pretty,/45 dau5n dui3n/u);
+ assert.match(a.pretty,/45 dau6n dui3n/u);
  printedStakesHaveNoFraction(a);
 });
 test('positive money that would round to zero HOLDs rather than dropping a wager', () => {

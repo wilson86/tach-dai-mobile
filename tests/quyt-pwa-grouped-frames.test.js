@@ -16,14 +16,14 @@ function sum(out){return out.sections.reduce((n,x)=>n+BigInt(x.total),0n)}
 test('engine group accounting unchanged; UI order is B/DA/DD/XC/DAU/DUI',()=>{
  const a=app.merge('hn 21 b55n. 21 22 da20n. 44 dd10n. 55 dau5n dui15n.',base);
  assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','xc','dd','dau','dui']);
- assert.equal(a.total,'109');assert.equal(sum(a),109n);
+ assert.equal(a.total,'111');assert.equal(sum(a),111n);
  assert.equal(group(a,'b').text,'HN\n21 b59n.');
  assert.equal(group(a,'da').text,'HN\n21 22 da20n.');
- assert.equal(group(a,'dd').text,'HN\n44 dd10n.');
+ assert.equal(group(a,'dd').text,'HN\n44 dd11n.');
  assert.equal(group(a,'dau').text,'HN\n55 dau5n.');
- assert.equal(group(a,'dui').text,'HN\n55 dui15n.');
+ assert.equal(group(a,'dui').text,'HN\n55 dui16n.');
  assert.equal(group(a,'xc').text,'');assert.equal(group(a,'xc').supported,false);
- assert.match(a.pretty,/55 dau5n dui15n/u); // Preserve previously verified full-copy format
+ assert.match(a.pretty,/55 dau5n dui16n/u); // Preserve previously verified full-copy format
 });
 test('BO/LO aliases combine only with same canonical number; other groups never mingle',()=>{
  const a=app.merge('hn 21 lo5n. 21 b5n. 21 dd3n. 21 22 da5n.',base);
@@ -36,10 +36,10 @@ test('each frame and full Copy derive from same rounded amounts at 1.067 and 1.1
  const source='hn 21 b55n. 22 b5n. 44 dd10n.';
  const a=app.merge(source,base);
  const b=app.merge(source,{...base,rate:'1.10'});
- assert.equal(group(a,'b').total,'64');assert.equal(a.total,'74');
- assert.equal(group(b,'b').total,'67');assert.equal(b.total,'77');
+ assert.equal(group(a,'b').total,'64');assert.equal(a.total,'75');
+ assert.equal(group(b,'b').total,'67');assert.equal(b.total,'78');
  assert.equal(sum(a),BigInt(a.total));assert.equal(sum(b),BigInt(b.total));
- assert.equal(group(a,'dd').text,group(b,'dd').text);
+ assert.equal(group(a,'dd').total,'11');assert.equal(group(b,'dd').total,'11'); // 10n both round to 11n at 1.067 and 1.10
  const off=app.merge(source,{...base,tick:false});
  assert.equal(group(off,'b').total,'60');assert.equal(off.total,'70');
 });

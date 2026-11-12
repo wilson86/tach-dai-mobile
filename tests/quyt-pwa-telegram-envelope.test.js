@@ -18,7 +18,7 @@ test('Telegram headers for two distinct messages with same timestamp are accepte
  assert.equal(t.total,'17');assert.equal(t.sourceCount,2);assert.equal(t.pretty,bare.pretty);
  assert.match(t.pretty,/21 b15n/u);assert.match(t.pretty,/21 dd2n/u);
 });
-test('Only Quýt BAO/LO is multiplied once, including decimal amount',()=>{
+test('Quýt BAO/LO plus DD are multiplied once after aggregation',()=>{
  const r=app.merge(wrapped(a)+'\n'+wrapped(b),{...args,tick:true});
  assert.equal(r.total,'18');assert.match(r.pretty,/21 b16n/u);assert.match(r.pretty,/21 dd2n/u);
  assert.equal(app.merge(wrapped(a)+'\n'+wrapped(b),{...args,rate:'invalid',tick:false}).total,'17');
