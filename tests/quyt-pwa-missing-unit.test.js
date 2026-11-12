@@ -46,7 +46,7 @@ test('no text alteration by merge, no unapproved decimal or XC admission',()=>{
 });
 test('no orphan DA pair, no unsupported regions even after confirmation',()=>{
  hold('21 da 20',/ĐÁ phải có đúng hai số/u,{confirmMissingDaN:true});
- hold('21 22 da 20',/chỉ nghiệm thu.*MB/u,{market:'mn',confirmMissingDaN:true});
+ hold('21 22 da 20',/MN\/MT phải chọn ngày xổ số hợp lệ/u,{market:'mn',confirmMissingDaN:true});
 });
 test('already-valid exact source remains byte-compatible',()=>{
  const raw='hn 21 22 da20n. 34 dau25n dui45n. 21 b10n.';
@@ -54,8 +54,8 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v8',()=>{
+test('new standalone service-worker key must be version v17',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261106-v8-route-boundary-hold/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v17-mb-optional-hn-strict-mnmt/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });

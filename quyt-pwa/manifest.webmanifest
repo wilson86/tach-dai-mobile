@@ -1,7 +1,7 @@
 {
-  "name": "KTS Gộp Tin Quýt — MB",
+  "name": "KTS Gộp Tin Quýt — MB/MN/MT",
   "short_name": "Gộp tin Quýt",
-  "description": "Tự gộp tin HN/MB, hệ số BAO LÔ theo checkbox. Chỉ xử lý nội bộ trình duyệt.",
+  "description": "Gộp tin MB/MN/MT trên một màn, lọc lịch đài và tách tiền Bao/Lô sau hệ số; không tự gửi tin.",
   "id": "./",
   "start_url": "./",
   "scope": "./",
