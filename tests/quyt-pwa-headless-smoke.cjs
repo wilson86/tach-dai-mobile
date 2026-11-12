@@ -13,6 +13,7 @@ const tests=`<script>
 (async()=>{
 const output=[]; const $=id=>document.getElementById(id);
 const assert=(name,ok)=>output.push({name,pass:Boolean(ok)});
+const sumTotals=()=>{const amount=id=>BigInt($(id).textContent.replaceAll('.','').replace('n',''));return (amount('baoTotal')+amount('otherTotal')).toLocaleString('vi-VN')+'n'};
 const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent(new Event(event,{bubbles:true}));return x};
 const select=(id,value)=>set(id,value,'change');
 const click=async id=>{ $(id).click();await Promise.resolve();await Promise.resolve();};
@@ -24,15 +25,15 @@ try{
  set('raw','mn dn 21 b10n');
  assert('missing draw date HOLD',$('copy').disabled);
  select('businessDate','2026-11-04');
- assert('valid date enables Copy',!$('copy').disabled && $('after').textContent==='10n');
+ assert('valid date enables Copy',!$('copy').disabled && sumTotals()==='10n');
  await click('copy');
  assert('full Copy actually fired',window.__qaClipboard==='MN 2026-11-04\\ndn 21 b10n.');
  await pane('b','.section-copy').click();await Promise.resolve();await Promise.resolve();
  assert('B group Copy fired',window.__qaClipboard==='MN 2026-11-04\\ndn 21 b10n.');
  $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
- assert('Quyt tick scales once',$('after').textContent==='11n'&&pane('b','.section-text').value.includes('dn 21 b11n.'));
+ assert('Quyt tick scales once',sumTotals()==='11n'&&pane('b','.section-text').value.includes('dn 21 b11n.'));
  set('raw','mn dn 21 b10n\\nmn ct 21 b10n');
- assert('stations separate and subtotal conserved',$('after').textContent==='22n'&&pane('b','.section-total').textContent==='22n');
+ assert('stations separate and subtotal conserved',sumTotals()==='22n'&&pane('b','.section-total').textContent==='22n');
  set('raw','mn dn hn 21 b10n');
  assert('nested HN always HOLD',$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HN nằm sau'));
  set('raw','mn dn 21 21 b10n');
@@ -44,13 +45,13 @@ try{
  set('raw','mn dn 21 xc10n');
  assert('XC and all sibling Copy HOLD',$('copy').disabled&&[...document.querySelectorAll('.section-copy')].every(b=>b.disabled));
  set('raw','[11/4/2026 6:06 PM] Cô Quýt: mn dn 21 b10n');
- assert('Telegram US month/day accepted',$('after').textContent==='11n'&&!$('copy').disabled);
+ assert('Telegram US month/day accepted',sumTotals()==='11n'&&!$('copy').disabled);
  select('businessDate','2026-11-05');
  assert('change date invalidates stale Copy',$('copy').disabled);
  select('market','mt');
  select('businessDate','2026-11-04');
  set('raw','mt dn 21 b10n');
- assert('MT valid station',$('after').textContent==='11n'&&!$('copy').disabled);
+ assert('MT valid station',sumTotals()==='11n'&&!$('copy').disabled);
  select('market','mn');
  assert('change region invalidates stale Copy',$('copy').disabled);
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
