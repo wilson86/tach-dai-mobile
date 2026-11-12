@@ -468,7 +468,7 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
    showTwoTotals(res);
    $('factorReceipt').textContent=market.value==='mb'?'HOLD_QUYT_V2_MONEY_CONTRACT: quy tắc mới nhân Bao/Lô, DD, Đầu, Đuôi chưa được bên nhận nghiệm thu. Chỉ xem tổng, không xuất cược.':'HOLD_RECEIVER_MARKET_UNAPPROVED: miền MN/MT và quy tắc Quýt mới chưa được bên nhận phê duyệt. Chỉ xem tổng.';
    $('roundingAudit').textContent=res.roundingDiffRows
-    ?'Ngoài phạm vi tiền nhận: HALF_UP '+formatVi(res.total)+'; CEIL '+formatVi(res.ceilReference)+'. Phải nghiệm thu phía nhận.'
+    ?'Bản xem trước HALF_UP '+formatVi(res.total)+'; giả định làm tròn lên CEIL '+formatVi(res.ceilReference)+' (KHÔNG phải oracle bên nhận). Phải nghiệm thu phía nhận.'
     :'Chưa có bằng chứng Router chấp thuận Quýt V2 cho đủ 4 nhóm và tất cả miền. Không COPY/CHUYỂN.';
    message(market.value==='mb'?'HOLD_QUYT_V2_MONEY_CONTRACT: BAO/LÔ, DD, ĐẦU, ĐUÔI đã nhân để đối chiếu. Chưa được Copy/gửi.':'HOLD_RECEIVER_MARKET_UNAPPROVED: MN/MT chỉ đối chiếu Bao/Lô, DD, Đầu, Đuôi sau hệ số; không tạo tin hoặc Copy.',true);
    return;
@@ -479,7 +479,7 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
    showTwoTotals(res); // preview only; no Copy when money policy disagrees
    $('factorReceipt').textContent='Quýt V2: BAO/LÔ + DD + ĐẦU + ĐUÔI tính HALF_UP. HOLD_RECEIVER_PARITY: chưa có oracle Router, không xuất cược.';
    $('roundingAudit').textContent=res.roundingDiffRows+' khoản Quýt V2 có kết quả khác nhau. HALF_UP tham chiếu '+formatVi(res.total)+'; CEIL tham chiếu '+formatVi(res.ceilReference)+'. Không cho Copy cho đến khi phía nhận duyệt Quýt V2.';
-   message('HOLD_CHENH_LECH_LAM_TRON: đã làm tròn số nguyên theo xác nhận của chủ, nhưng Router CEIL không khớp. Chỉ xem tổng, KHÔNG COPY/CHUYỂN.',true);
+   message('HOLD_CHENH_LECH_LAM_TRON: Quýt V2 HALF_UP khác giả định CEIL; chưa có oracle Router cho DD/ĐẦU/ĐUÔI. Chỉ xem tổng, KHÔNG COPY/CHUYỂN.',true);
    return;
   }
   showTwoTotals(res);current={...res,raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;ack.disabled=false;
@@ -497,7 +497,7 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
   $('combinedResultsCard').hidden=!res.pretty;
   // The two summary cells are derived from canonical post-rounding sections.
   $('factorReceipt').textContent=(tick.checked?'ĐÃ NHÂN BAO/LÔ, DD, ĐẦU, ĐUÔI ×'+rate.value+' (mỗi nhóm/số/đài một lần), ĐÁ GIỮ GỐC.':'CHƯA NHÂN HỆ SỐ.')+' Copy chỉ xuất số cuối cùng; KHÔNG nhân thêm ở Router hoặc phía nhận.';
-  $('roundingAudit').textContent=res.roundingDiffRows?'CẢNH BÁO ĐỐI SOÁT: '+res.roundingDiffRows+' số/đài BAO/LÔ khác quy tắc CEIL tham chiếu. Tổng theo HALF_UP PWA: '+formatVi(res.total)+'; tổng giả định làm tròn lên mọi khoản: '+formatVi(res.ceilReference)+'. Hai kết quả KHÔNG tương đương; phải thống nhất với phía nhận trước khi Copy.':'Quy tắc xuất: làm tròn HALF_UP từng số/đài. Chưa có bằng chứng quy tắc này giống Router; phải đối soát phía nhận.';
+  $('roundingAudit').textContent=res.roundingDiffRows?'CẢNH BÁO ĐỐI SOÁT: '+res.roundingDiffRows+' khoản Quýt V2 khác giả định làm tròn lên (KHÔNG phải oracle Router). Tổng theo HALF_UP PWA: '+formatVi(res.total)+'; tổng giả định làm tròn lên mọi khoản: '+formatVi(res.ceilReference)+'. Hai kết quả KHÔNG tương đương; phải thống nhất với phía nhận trước khi Copy.':'Quy tắc xuất: làm tròn HALF_UP từng số/đài. Chưa có bằng chứng quy tắc này giống Router; phải đối soát phía nhận.';
   syncCopyGate();
   for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),(row.station?row.station+' ':'')+row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
   message('XEM TRƯỚC (CHƯA COPY): cần đánh dấu xác nhận đối soát để mở Copy. ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'BAO/LÔ, DD, ĐẦU, ĐUÔI cùng nhân ×'+rate.value+'; ĐÁ giữ gốc.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Đã làm tròn từng số/cặp xuống nếu lẻ <0.5n, lên nếu ≥0.5n; tổng xuất bằng tổng các khoản đã làm tròn. Tin sẵn để Copy.',false);

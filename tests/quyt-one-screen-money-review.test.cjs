@@ -79,6 +79,8 @@ test('Quýt v2 Đui/Đuôi aliases are equivalent and DA remains not multiplied'
  const y=app.merge('hn 21 dd15n.',base);
  assert.equal(y.total,'16');assert.equal(y.roundingDiffRows,1);
  assert.match(html,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
+ assert.match(html,/giả định làm tròn lên CEIL/u);
+ assert.match(html,/KHÔNG phải oracle bên nhận/u);
  assert.match(html,/receiverMarketApproved\(\)\{return market\.value==='mb'&&!\(customer\.value==='quyt'&&tick\.checked\)\}/u);
 });
 test('Quýt V2 applies factor to Bao/Lô, DD, Đầu, Đuôi while leaving Đá unscaled',()=>{
