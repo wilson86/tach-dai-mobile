@@ -350,7 +350,7 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
   const multiplier=opts.tick?decimal(String(opts.rate??'1.067')):D;
   if(multiplier<=0n||multiplier>3000n)fail('Hệ số phải > 0 và ≤ 3');
   if(opts.tick&&opts.customer!=='quyt')fail('Hệ số Quýt không được áp dụng cho khách khác');
-  const rows=new Map();let seq=0,placement=0,displayHN=false,sourceStake=0n;
+  const rows=new Map(),sourceEntries=[];const excluded=new Set(opts.excludeBetIds||[]);let seq=0,placement=0,displayHN=false,sourceStake=0n;
   for(let j=0;j<lines.length;j++){
    const scoped=opts.market==='mb'?{station:'',text:messages[j].text}:
     stationScope(messages[j].text,opts.market,opts.businessDate,active,physicalLines[j]-1);
@@ -359,17 +359,24 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
    const parsed=parseMessage(scoped.text,physicalLines[j]-1);displayHN ||= parsed.hasHN;
    if(opts.market!=='mb'&&parsed.bets.some(b=>b.kind==='da'||b.kind==='dx'))
     fail('MN/MT ĐÁ/DX liên đài chưa có oracle cho PWA gộp; HOLD',`tin ${physicalLines[j]}`);
-   for(const bet of parsed.bets){
+   for(let betIndex=0;betIndex<parsed.bets.length;betIndex++){
+    const bet=parsed.bets[betIndex],id=physicalLines[j]+':'+betIndex,stations=(scoped.stations||['']).slice();
+    // One ID per source wager atom; 2d/3d allocates across stations, not IDs.
+    // Original Telegram line is immutable and always available for audit.
+    sourceEntries.push({id,line:physicalLines[j],text:raw.split(/\r?\n/u)[physicalLines[j]-1],
+      kind:bet.kind,number:bet.number,stake:fmt(bet.money,D),stations});
     sourceStake+=bet.money;
-    for(const station of (scoped.stations||[''])){
+    if(excluded.has(id))continue;
+    for(const station of stations){
      const key=opts.market+'|'+(opts.businessDate||'')+'|'+station+'|'+bet.kind+'|'+bet.number;
      let r=rows.get(key);
-     if(!r){r={kind:bet.kind,number:bet.number,station,amount:0n,seq:seq++,peak:0n,peakOrder:0};rows.set(key,r)}
+     if(!r){r={kind:bet.kind,number:bet.number,station,amount:0n,seq:seq++,peak:0n,peakOrder:0,sourceIds:[]};rows.set(key,r)}
      if(bet.money>r.peak){r.peak=bet.money;r.peakOrder=placement}
-     placement++;r.amount+=bet.money;
+     placement++;r.amount+=bet.money;r.sourceIds.push(id);
     }
    }
   }
+  if([...excluded].some(id=>!sourceEntries.some(e=>e.id===id)))fail('HOLD_CUT_UNKNOWN_SOURCE');
   const sorted=[...rows.values()].sort((a,b)=>rank[a.kind]-rank[b.kind]||
    (a.station===b.station?0:((active?.findIndex(x=>x[0]===a.station)??0)-(active?.findIndex(x=>x[0]===b.station)??0)))||
    (['da','dx'].includes(a.kind)?a.seq-b.seq:(a.amount===b.amount?a.peakOrder-b.peakOrder:(a.amount>b.amount?-1:1))));
@@ -418,8 +425,8 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
    fail('HOLD: tổng từng khung khác tổng đã gộp');
   return {pretty,sections,sourceTotal:fmt(sourceStake,D),original:fmt(original,D),total:fmt(adjusted,M),
    ceilReference:fmt(ceilReference,M),roundingDiffRows,
-   rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M),factorApplied:r.factorApplied})),
-   sourceCount:lines.length,businessDate:opts.businessDate||'',rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
+   rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M),factorApplied:r.factorApplied,sourceIds:r.sourceIds.slice()})),
+   sourceEntries,sourceCount:lines.length,businessDate:opts.businessDate||'',rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
  return Object.freeze({merge,fmt,decimal,missingDaN,schedule});
 })();
