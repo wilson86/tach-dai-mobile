@@ -22,18 +22,17 @@ test('two DA wagers with missing n HOLD until explicit source-bound approval',()
  assert.match(result.pretty,/21 22 da20n/u);
  assert.match(result.pretty,/21 23 da20n/u);
 });
-test('DAU missing n and DUI explicit n are reconciled only after approval',()=>{
+test('DAU bare integer is approved automatically while DUI explicit n is valid',()=>{
  const raw='34 dau 25 dui 45n';
- assert.equal(core.missingDaN(raw).length,1);
- hold(raw,/THIEU_N_CAN_XAC_NHAN/u);
- const x=core.merge(raw,{...opts,confirmMissingDaN:true});
+ assert.equal(core.missingDaN(raw).length,0);
+ const x=core.merge(raw,opts);
  assert.equal(x.total,'70');assert.match(x.pretty,/34 dau25n dui45n/u);
 });
-test('BAO/LO missing n after approval multiplies once only when ticked',()=>{
+test('BAO/LO bare integer is approved automatically; multiplier applies once',()=>{
  const raw='21 22 lo 20';
- assert.equal(core.missingDaN(raw).length,1);
- const base=core.merge(raw,{...opts,confirmMissingDaN:true});
- const adjusted=core.merge(raw,{...opts,confirmMissingDaN:true,tick:true});
+ assert.equal(core.missingDaN(raw).length,0);
+ const base=core.merge(raw,opts);
+ const adjusted=core.merge(raw,{...opts,tick:true});
  assert.equal(base.total,'40');assert.equal(adjusted.total,'42');
 });
 test('no text alteration by merge, no unapproved decimal or XC admission',()=>{
@@ -46,7 +45,7 @@ test('no text alteration by merge, no unapproved decimal or XC admission',()=>{
 });
 test('no orphan DA pair, no unsupported regions even after confirmation',()=>{
  hold('21 da 20',/ĐÁ phải có đúng hai số/u,{confirmMissingDaN:true});
- hold('21 22 da 20',/chỉ nghiệm thu.*MB/u,{market:'mn',confirmMissingDaN:true});
+ hold('21 22 da 20',/MN\/MT phải chọn ngày xổ số hợp lệ/u,{market:'mn',confirmMissingDaN:true});
 });
 test('already-valid exact source remains byte-compatible',()=>{
  const raw='hn 21 22 da20n. 34 dau25n dui45n. 21 b10n.';
@@ -54,8 +53,8 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v8',()=>{
+test('new standalone service-worker key must be version v18',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261106-v8-route-boundary-hold/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v18-two-boxes-approved-bare/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });
