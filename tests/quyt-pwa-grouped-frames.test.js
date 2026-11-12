@@ -48,7 +48,7 @@ test('no group output may be emitted on ambiguous or unsupported source',()=>{
  assert.throws(()=>app.merge('hn 21 22 da 20',base),/THIEU_N_CAN_XAC_NHAN/u);
  assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/MN\/MT phải chọn ngày xổ số hợp lệ/u);
 });
-test('HTML has six readonly wager frames, two factor bucket cards and v16 cache',()=>{
+test('HTML has six readonly wager frames, two factor bucket cards and v17 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];
  assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','dd','xc','dau','dui']);
  assert.match(html,/id="betSections"/u);
@@ -62,5 +62,5 @@ test('HTML has six readonly wager frames, two factor bucket cards and v16 cache'
  assert.match(html,/class="section-copy" disabled/u);
  assert.match(html,/class="section-text" readonly/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v16-quyt-two-frames-strict-dd/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v17-mb-optional-hn-strict-mnmt/u);
 });

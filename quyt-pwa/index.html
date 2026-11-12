@@ -49,7 +49,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </head>
 <body><main class="wrap">
 <header><h1>KTS — GỘP TIN QUÝT MB / MN / MT <span class="tag">XEM TRƯỚC ONLINE</span></h1>
-<p>Một màn hình: chọn MB, MN hoặc MT. MB nhận HN; MN/MT chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA QUÝT V4 — DD/ĐẦU/ĐUÔI CHỈ 2 CHỮ SỐ; 3 CHỮ SỐ HOLD; CHIA HAI KHUNG NHÂN/GIỮ GỐC:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
+<p>Một màn hình: chọn MB, MN hoặc MT. MB không cần ghi HN/đài; MN/MT phải chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA QUÝT V4 — DD/ĐẦU/ĐUÔI CHỈ 2 CHỮ SỐ; 3 CHỮ SỐ HOLD; CHIA HAI KHUNG NHÂN/GIỮ GỐC:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
 <div class="card">
  <div class="bar">
   <label class="field">Khách hàng<select id="customer"><option value="quyt">Quýt</option><option value="hien">Hiền</option><option value="khac">Khách khác (tiền gốc)</option></select></label>
@@ -61,9 +61,9 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
   <label class="field" style="max-width:260px">Ngày xổ số (MN/MT bắt buộc)<input id="businessDate" type="date" aria-label="Ngày xổ số"></label>
   <p id="stationSchedule" class="tiny muted" style="margin-top:8px">MN/MT: chọn ngày và ghi tên hoặc mã đài trên mỗi tin.</p>
  </div>
- <p class="muted tiny"><b>MB:</b> tin bắt đầu HN, không cần chọn đài. <b>MN/MT:</b> chọn ngày để lọc <b>đài đang mở</b>. Không cần chữ MN/MT trong tin: <code>dn 21 b10n</code>, <code>ct 21 b5n</code>, <code>2d 52 b10n</code> hoặc <code>3đ 43 dd5n</code>. <b>2d/3d</b> tự nhận hai/ba đài đầu theo lịch, <b>mỗi đài nhận nguyên tiền cược</b>. Thiếu tên/mã đài và không ghi 2d/3d hợp lệ → HOLD. Copy chỉ hiển thị tên/mã đài, không thêm MN/MT..</p>
+ <p class="muted tiny"><b>MB:</b> nhập thẳng số và loại cược, <b>không bắt buộc HN hay mã đài</b> (vẫn hiểu HN nếu tin cũ có). <b>MN/MT:</b> chọn ngày để lọc <b>đài đang mở</b>. Không cần chữ MN/MT trong tin: <code>dn 21 b10n</code>, <code>ct 21 b5n</code>, <code>2d 52 b10n</code> hoặc <code>3đ 43 dd5n</code>. <b>2d/3d</b> tự nhận hai/ba đài đầu theo lịch, <b>mỗi đài nhận nguyên tiền cược</b>. Thiếu tên/mã đài và không ghi 2d/3d hợp lệ → HOLD. Copy chỉ hiển thị tên/mã đài, không thêm MN/MT..</p>
  <label class="field" for="raw" style="margin:10px 0 7px">Tin nguồn (không bị sửa)</label>
- <textarea id="raw" placeholder="MB: hn 21 b10n dd5n.&#10;MN/MT: dn 21 b10n.&#10;MN/MT: 2d 52 b10n." spellcheck="false"></textarea>
+ <textarea id="raw" placeholder="MB: 21 b10n dd5n.&#10;MN/MT: dn 21 b10n.&#10;MN/MT: 2d 52 b10n." spellcheck="false"></textarea>
  <div class="actions"><button type="button" id="checkMerge" aria-controls="status groupedResultsCard combinedResultsCard">KIỂM TRA VÀ GỘP</button></div>
  <div id="status" class="notice hold" role="status">Dán tin vào ô trên để bắt đầu.</div>
  <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
@@ -87,7 +87,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </div>
 <div class="card" id="groupedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
- <p class="muted tiny">MB nhận HN; MN/MT tự lọc đài theo ngày. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. ĐÁ/DX/XC vẫn HOLD toàn bộ. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
+ <p class="muted tiny">MB không cần HN/đài; MN/MT bắt buộc chọn ngày và đài hợp lệ. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. ĐÁ/DX/XC vẫn HOLD toàn bộ. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
   <section class="bet-section" data-bet-kind="b">
    <header><h3>B / BAO-LÔ</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
@@ -312,16 +312,17 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
    if(!expectedName||!expectedName.test(sender))
     fail('Tên khách Telegram không khớp khách đang chọn',`tin ${physicalLine}`);
    const text=header[8];
-   if(opts.market==='mb'&&!/^\s*hn(?=\s)/iu.test(text))
-    fail('Tin MB Telegram phải bắt đầu bằng HN sau tên khách',`tin ${physicalLine}`);
+   // MB is inherently single-market: HN prefix is OPTIONAL even inside Telegram exports.
+   // Parsed money tokens must still be complete. Never auto-insert HN in raw source.
    if(opts.market!=='mb'){
     if(!possibleDates.includes(opts.businessDate))
      fail('Ngày Telegram khác ngày xổ số đã chọn; HOLD',`tin ${physicalLine}`);
    }
    return {source,text};
   });
-  if(opts.market==='mb'&&lines.length>1&&!messages.every(m=>/^\s*hn(?=\s)/iu.test(m.text)))
-   fail('Nhiều dòng MB: mỗi dòng phải là tin độc lập bắt đầu HN (có thể kèm [giờ] Cô Quýt:)');
+  // Each physical MB line is an independent ticket with or without optional HN.
+  // The lexer/parser validates every line atomically; fragments/unknown tokens HOLD.
+  // MN/MT still run stationScope() independently for EVERY physical line.
   // Compare wager contents rather than metadata: identical Telegram orders
   // must be explicitly confirmed as separate money-bearing placements.
   const fingerprints=messages.map(m=>m.text.trim().toLocaleLowerCase('vi-VN').replace(/\s+/gu,' '));

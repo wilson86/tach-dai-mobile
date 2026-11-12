@@ -148,3 +148,19 @@ test('V4 2-digit scaled stakes partition by eligibility even if rounded amount e
  assert.equal(plain.rows.filter(x=>x.factorApplied).length,0);
  assert.equal(plain.total,'20');
 });
+
+test('No station prefix required for MB, yet MN/MT station and calendar gates remain strict',()=>{
+ const mb={...opts,market:'mb'};
+ for(const raw of ['21 b10n dd5n','HN 21 b10n dd5n']){
+  const r=app.merge(raw,mb);
+  assert.equal(r.total,'16');assert.equal(r.sourceCount,1);
+  assert.equal(r.sections.find(x=>x.kind==='b').total,'11');
+ }
+ const multi=app.merge('21 b10n\n31 dd15n',mb);
+ assert.equal(multi.total,'27');assert.equal(multi.sourceCount,2);
+ assert.equal(multi.rows.filter(x=>x.factorApplied).length,2);
+ assert.throws(()=>app.merge('21 b10n',opts),/HOLD: phải ghi tên\/mã đài/u);
+ assert.throws(()=>app.merge('21 b10n',{...opts,market:'mt',businessDate:'2026-11-11'}),/HOLD: phải ghi tên\/mã đài/u);
+ assert.throws(()=>app.merge('HN 21 b10n',opts),/HN không phải tin MN\/MT/u);
+ assert.throws(()=>app.merge('21 b10n',{...opts,businessDate:''}),/MN\/MT phải chọn ngày/u);
+});

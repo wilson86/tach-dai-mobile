@@ -32,6 +32,24 @@ try{
   ['mb','mn','mt'].every(id=>[...$('market').options].some(x=>x.value===id))&&
   [...document.querySelectorAll('.total')].length===2&&Boolean($('scaledItems')&&$('unscaledItems')));
  assert('empty source keeps both result frames empty',closed()&&$('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—');
+
+ set('raw','21 b10n. 31 dd15n.');
+ assert('MB no HN/station prefix accepted, total unscaled 25n and no injected HN header',
+   money('baoTotal')===0n&&money('otherTotal')===25n&&
+   $('result').value.length>0&&!$('result').value.startsWith('HN'));
+ assert('MB no HN remains receipt-gated before Copy',
+   $('copy').disabled&&!$('ackMoney').disabled);
+ ack();assert('MB no HN can be copied after explicit receipt',!$('copy').disabled);
+ set('raw','21 b10n.\n31 dd15n.');
+ assert('MB multiline bare ticket parses both lines independently, no HN required',
+   money('baoTotal')===0n&&money('otherTotal')===25n&&
+   $('status').textContent.includes('ĐÃ GỘP 2 tin')&&!$('ackMoney').checked);
+ set('raw','HN 21 b10n.\n31 dd15n.');
+ assert('Mixed optional HN and bare MB lines remain legal and source counted',
+   money('otherTotal')===25n&&$('status').textContent.includes('ĐÃ GỘP 2 tin'));
+ set('raw','21 b10n.\n31');
+ assert('Incomplete second MB line HOLDs atomically without leftover summary',
+   closed()&&$('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—');
  set('raw','hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 dui15n.');
  assert('MB UNCHECKED amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,95),
   money('baoTotal')===0n&&money('otherTotal')===65n&&closed()===false);
