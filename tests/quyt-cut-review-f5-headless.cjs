@@ -20,6 +20,7 @@ const checks=String.raw`<script>
 (async()=>{
 const report=[],$=id=>document.getElementById(id),frame=k=>document.querySelector('[data-bet-kind="'+k+'"]');
 const assert=(name,ok)=>report.push({name,pass:Boolean(ok)});
+const sumTotals=()=>{const amount=id=>BigInt($(id).textContent.replaceAll('.','').replace('n',''));return (amount('baoTotal')+amount('otherTotal')).toLocaleString('vi-VN')+'n'};
 const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent(new Event(event,{bubbles:true}))};
 const flush=async()=>{await Promise.resolve();await Promise.resolve();await Promise.resolve()};
 try{
@@ -31,7 +32,7 @@ try{
   assert('F5 does not mutate live draft',sessionStorage.getItem('KTS_OFFLINE_QUYT_DRAFT_V1')===window.__qaLiveDraft);
   assert('F5 does not mutate live rate',localStorage.getItem('KTS_OFFLINE_QUYT_RATES_V1')===window.__qaLiveRates);
   assert('F5 restored Quyt multiplier toggle',$('tick').checked===true);
-  assert('F5 keeps B cut, only DD remains',$('result').value.includes('dd5n')&&!$('result').value.includes('b11n')&&$('after').textContent==='5n'&&frame('b').hidden);
+  assert('F5 keeps B cut, only DD remains',$('result').value.includes('dd5n')&&!$('result').value.includes('b11n')&&sumTotals()==='5n'&&frame('b').hidden);
   // Mutating the SAME-scope Cut ledger must not resurrect previously-Cut B rows.
   const signedCut=sessionStorage.getItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1');
   const alteredCut=JSON.parse(signedCut);alteredCut.keys=[];alteredCut.undo=[];
@@ -44,7 +45,7 @@ try{
   sessionStorage.setItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1',signedCut);
   $('checkMerge').click();
   assert('restoring exact signed Cut receipt keeps B removed',
-   $('after').textContent==='5n'&&!$('result').value.includes('b11n'));
+   sumTotals()==='5n'&&!$('result').value.includes('b11n'));
 
   set('raw','hn 21 b12n dd5n');
   assert('editing after Cut must HOLD and disable all Copy',$('copy').disabled&&$('result').value===''&&$('status').textContent.includes('HOLD'));
@@ -52,25 +53,25 @@ try{
   const oldConfirm=window.confirm;window.confirm=()=>false;$('startNewBatch').click();window.confirm=oldConfirm;
   assert('rejecting new-batch confirmation retains financial HOLD',$('copy').disabled&&$('result').value===''&&!$('startNewBatch').hidden);
   set('raw','hn 21 b10n dd5n');
-  assert('restoring exact source retains prior B cut',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
+  assert('restoring exact source retains prior B cut',sumTotals()==='5n'&&!$('result').value.includes('b11n'));
   set('rate','1.050');
   assert('rate change after Cut must HOLD',$('copy').disabled&&$('result').value==='');
   set('rate','1.067');
-  assert('restoring exact factor retains prior B cut',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
+  assert('restoring exact factor retains prior B cut',sumTotals()==='5n'&&!$('result').value.includes('b11n'));
   assert('F5 still allows Undo',!$('undoQuytCut').disabled);
   $('undoQuytCut').click();
-  assert('Undo after F5 returns full 16n',$('after').textContent==='16n'&&$('result').value.includes('b11n'));
+  assert('Undo after F5 returns full 16n',sumTotals()==='16n'&&$('result').value.includes('b11n'));
   sessionStorage.removeItem('QA_QUYT_CUT_REFRESH_STAGE');
   sessionStorage.removeItem('QA_QUYT_CUT_FIRST_PHASE');
  }else{
   set('raw','hn 21 b10n dd5n');
   $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
-  assert('Quyt tick base is 16n',$('after').textContent==='16n');
+  assert('Quyt tick base is 16n',sumTotals()==='16n');
   const orig=$('raw').value;
   const write=navigator.clipboard.writeText;
   navigator.clipboard.writeText=()=>Promise.reject(new Error('DENIED'));
   frame('b').querySelector('.section-cut').click();await flush();
-  assert('clipboard denied means no cut',$('after').textContent==='16n'&&$('result').value.includes('b11n')&&$('raw').value===orig);
+  assert('clipboard denied means no cut',sumTotals()==='16n'&&$('result').value.includes('b11n')&&$('raw').value===orig);
   let resolveCut,copyCalls=0;
   navigator.clipboard.writeText=()=>{copyCalls++;return new Promise(done=>{resolveCut=done})};
   frame('b').querySelector('.section-cut').click();
@@ -86,10 +87,10 @@ try{
   assert('stale async Cut stays HOLD with pending receipt',$('copy').disabled&&$('result').value===''&&JSON.parse(sessionStorage.getItem('KTS_QUYT_REVIEW_V10_CUT_REPLAY_GUARD_V1')).phase==='pending');
   navigator.clipboard.writeText=write;
   const confirmPrevious=window.confirm;window.confirm=()=>true;$('startNewBatch').click();window.confirm=confirmPrevious;
-  assert('operator manual new-batch confirmation opens changed source',$('result').value.includes('b13n')&&$('after').textContent==='18n');
+  assert('operator manual new-batch confirmation opens changed source',$('result').value.includes('b13n')&&sumTotals()==='18n');
   set('raw','hn 21 b10n dd5n');
   frame('b').querySelector('.section-cut').click();await flush();
-  assert('normal Cut B after clipboard works',$('after').textContent==='5n'&&!$('result').value.includes('b11n'));
+  assert('normal Cut B after clipboard works',sumTotals()==='5n'&&!$('result').value.includes('b11n'));
   assert('local ledger persisted for reload',sessionStorage.getItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1').includes('b|21'));
   sessionStorage.setItem('QA_QUYT_CUT_FIRST_PHASE',JSON.stringify(report));
   sessionStorage.setItem('QA_QUYT_CUT_REFRESH_STAGE','after');
