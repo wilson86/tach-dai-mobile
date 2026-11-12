@@ -38,6 +38,43 @@ try{
    ![...$('market').options].some(x=>x.value==='mb'&&x.textContent.includes('/ HN')));
  set('raw','60 b 100 dd 100 dau 100 duoi 100\\n33 61 dx 5n 526 b10n');
  checkbox(true);
+ assert('cut UI reports exact original source, all six canonical rows and two physical lines',
+   $('cutSelected')&&$('undoLocalCut')&&$('cutAuditRows').querySelectorAll('.cut-row-check').length===6&&
+   $('cutOriginalSnapshot').value==='60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n'&&
+   $('sourceReconcile').textContent.includes('2 dòng tin'));
+ const dxRow=[...$('cutAuditRows').querySelectorAll('.cut-audit-row')].find(x=>x.textContent.includes('DX 5n'));
+ assert('DX source provenance points back to physical line 2, not a guessed Telegram live feed',
+   dxRow&&dxRow.textContent.includes('Dòng nguồn 2')&&dxRow.textContent.includes('33 61 dx 5n 526 b10n'));
+ const oldConfirm=window.confirm;window.confirm=()=>true;
+ const dxBox=dxRow.querySelector('input.cut-row-check');
+ dxBox.checked=true;dxBox.dispatchEvent(new Event('change',{bubbles:true}));
+ assert('selecting one DX row enables CUT without enabling scaled wager Copy',
+   !$('cutSelected').disabled&&$('copyScaled').disabled);
+ $('cutSelected').click();
+ assert('CUT DX removes only 5n from second pane immediately, retains first 428n and exact original raw',
+   money('baoTotal')===428n&&money('otherTotal')===10n&&$('raw').value===
+   '60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n'&&
+   $('unscaledTicket').value==='526 b10n.'&&$('copyScaled').disabled&&$('copyUnscaled').disabled);
+ assert('CUT persists exact local scope before redraw and disallows Copy',
+   sessionStorage.getItem('KTS_QUYT_V21_CUT_AUDIT_SCOPE_V1')?.includes('"everCut":true')&&
+   !$('undoLocalCut').disabled&&$('status').textContent.includes('HOLD_CUT_LOCAL_REVIEW'));
+ $('undoLocalCut').click();
+ assert('UNDO restores exact two panes (428n + 15n) without changing tin gốc',
+   money('baoTotal')===428n&&money('otherTotal')===15n&&
+   $('unscaledTicket').value.includes('33 61 dx5n.')&&$('copyScaled').disabled&&$('copyUnscaled').disabled);
+ set('raw','60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n\n42 b1n');
+ assert('editing source after CUT triggers replay HOLD and clears all money, never silently resurrects',
+   $('status').textContent.includes('HOLD_CUT_REPLAY_SCOPE_MISMATCH')&&
+   $('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—'&&
+   !$('scaledTicket').value&&!$('unscaledTicket').value&&!$('startFreshCutBatch').hidden);
+ $('startFreshCutBatch').click();
+ window.confirm=oldConfirm;
+ assert('only explicit new independent batch clears CUT replay guard',
+   !sessionStorage.getItem('KTS_QUYT_V21_CUT_AUDIT_SCOPE_V1'));
+ set('raw','60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n');
+ checkbox(true);
+ assert('fresh scope after explicitly resetting cut has all wagers restored',
+   money('baoTotal')===428n&&money('otherTotal')===15n&&$('cutAuditRows').querySelectorAll('.cut-row-check').length===6);
  assert('two independent input source lines produce two money frames, 428n multiplied and 15n raw',
   money('baoTotal')===428n&&money('otherTotal')===15n&&
   $('scaledTicket').value==='60 b107n.\\n60 dd107n.\\n60 dau107n.\\n60 dui107n.'&&

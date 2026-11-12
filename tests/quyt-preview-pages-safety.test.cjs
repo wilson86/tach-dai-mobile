@@ -18,7 +18,7 @@ test('PREVIEW HTML/calendar/icon byte-for-byte match exact PR Quýt one-screen c
  assert.doesNotMatch(html,/navigator\.sendBeacon|Telegram\.send|XMLHttpRequest/u);
 });
 test('PREVIEW service worker can never purge official Quýt PWA caches',()=>{
- assert.match(sw,/const CACHE='kts-quyt-preview-20261112-v4-mb-dx-pair-two-frames'/u);
+ assert.match(sw,/const CACHE='kts-quyt-preview-20261112-v5-local-source-cut'/u);
  assert.match(sw,/k\.startsWith\('kts-quyt-preview-'\)/u);
  assert.doesNotMatch(sw,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
  assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js'\]/u);
