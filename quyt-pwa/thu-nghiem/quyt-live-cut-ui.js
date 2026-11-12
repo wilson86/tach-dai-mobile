@@ -33,7 +33,7 @@ const QuytLiveCutUI=(()=>{
  }
  function reset(){
   base=null;view=null;currentOptions=null;currentScope=null;
-  $('sourceCutCard').hidden=true;$('startNewQuytBatch').hidden=true;
+  $('sourceCutCard').hidden=false;$('startNewQuytBatch').hidden=true;$('cutSelectedQuyt').disabled=true;
   $('undoQuytCut').disabled=true;
   for(const id of ['cutBefore','cutRemoved','cutAfter','cutOriginalBefore','cutOriginalRemoved','cutOriginalAfter'])$(id).textContent='—';
   $('cutSourceList').replaceChildren();$('cutBetList').replaceChildren();
@@ -52,7 +52,7 @@ const QuytLiveCutUI=(()=>{
   const button=document.createElement('button');button.type='button';
   button.textContent=actionText;button.disabled=disabled;
   button.addEventListener('click',callback);
-  el.append(strong,p,button);parent.append(el);
+  el.append(strong,p,button);parent.append(el);return el;
  }
  function draw(v,record){
   const removed=new Set(v.removed);
@@ -65,6 +65,7 @@ const QuytLiveCutUI=(()=>{
    ' (tiền xuất); '+v.originalBefore+' = '+v.cutOriginal+' + '+v.originalAfter+' (tiền gốc). Chênh lệch 0n.';
   $('cutStatus').textContent='Đã CẮT '+removed.size+'/'+v.base.sourceEntries.length+' khoản nguồn. CẮT chỉ sửa bản xem trước, không Copy hoặc gửi.';
   $('undoQuytCut').disabled=!record.undo.length;
+  $('cutSelectedQuyt').disabled=true;
   const lines=new Map();
   for(const x of v.base.sourceEntries){if(!lines.has(x.line))lines.set(x.line,[]);lines.get(x.line).push(x)}
   for(const [line,entries] of lines){
@@ -74,9 +75,16 @@ const QuytLiveCutUI=(()=>{
   }
   for(const x of v.base.sourceEntries){
    const gone=removed.has(x.id);
-   row($('cutBetList'),'CƯỢC DÒNG '+x.line,
+   const item=row($('cutBetList'),'CƯỢC DÒNG '+x.line,
     x.number.replace('-',' ')+' '+x.kind+' '+x.stake+'n · đài '+(x.stations.filter(Boolean).join(', ')||'MB'),
     gone?'ĐÃ CẮT':'CẮT CƯỢC NÀY',gone,()=>cut([x.id]),gone);
+   const pick=document.createElement('label');pick.className='cut-pick';
+   const checked=document.createElement('input');checked.type='checkbox';checked.className='cut-bet-check';
+   checked.value=x.id;checked.disabled=gone;checked.setAttribute('aria-label','Chọn CẮT cược '+x.kind+' '+x.number+' dòng '+x.line);
+   checked.addEventListener('change',()=>{
+    $('cutSelectedQuyt').disabled=!document.querySelector('#cutBetList .cut-bet-check:checked');
+   });
+   pick.append(checked,document.createTextNode(' Chọn cược để CẮT'));item.prepend(pick);
   }
   $('cutRemovedList').textContent=v.base.sourceEntries.filter(x=>removed.has(x.id))
    .map(x=>'Dòng '+x.line+': '+x.number.replace('-',' ')+' '+x.kind+' '+x.stake+'n').join('\n')||'Chưa cắt cược.';
@@ -114,6 +122,7 @@ const QuytLiveCutUI=(()=>{
  function init(callback){
   rerender=callback;
   $('undoQuytCut').addEventListener('click',undo);
+  $('cutSelectedQuyt').addEventListener('click',()=>cut([...document.querySelectorAll('#cutBetList .cut-bet-check:checked')].map(x=>x.value)));
   $('startNewQuytBatch').addEventListener('click',()=>{
    if(!confirm('Đã đối chiếu sổ CẮT cũ và xác nhận BẮT ĐẦU LƯỢT MỚI? Cược chưa tự gửi.'))return;
    try{save({keys:[],undo:[]});rerender()}
