@@ -21,7 +21,7 @@ test('PREVIEW service worker can never purge official Quýt PWA caches',()=>{
  assert.match(sw,/const CACHE='kts-quyt-preview-20261113-v8-assets-version-pin'/u);
  assert.match(sw,/k\.startsWith\('kts-quyt-preview-'\)/u);
  assert.doesNotMatch(sw,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
- assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js','\.\/quyt-source-cut-ledger\.js','\.\/quyt-live-cut-ui\.js'\]/u);
+ assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js','\.\/quyt-source-cut-ledger\.js','\.\/quyt-live-cut-ui\.js','\.\/quyt-live-cut-ui\.js\?v=2026111301'\]/u);
  assert.match(html,/navigator\.serviceWorker\.register\('\.\/sw\.js',\{scope:'\.\/'\}\)/u);
  const scope=new URL('https://wilson86.github.io/tach-dai-mobile/quyt-pwa/thu-nghiem/');
  for(const relative of ['./sw.js','./index.html','./station_calendar.generated.js','./manifest.webmanifest'])
@@ -35,4 +35,15 @@ test('PREVIEW install label is conspicuously TEST ONLY and same-folder scoped',(
  assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
  assert.match(html,/BẢN ĐỐI CHIẾU QUÝT V4/u);
  assert.match(html,/KHÔNG COPY/u);
+});
+
+test('PWA old cache-first unversioned Cut JS cannot match pinned new script URL',()=>{
+ const fromHtml=html.match(/<script src="(\.\/quyt-live-cut-ui\.js\?v=\d+)"><\/script>/u);
+ assert.ok(fromHtml,'HTML must request a pinned versioned Cut JS');
+ assert.equal(fromHtml[1],'./quyt-live-cut-ui.js?v=2026111301');
+ assert.notEqual(new URL(fromHtml[1],'https://wilson86.github.io/tach-dai-mobile/quyt-pwa/').href,
+  new URL('./quyt-live-cut-ui.js','https://wilson86.github.io/tach-dai-mobile/quyt-pwa/').href);
+ assert.match(sw,/quyt-live-cut-ui\.js\?v=2026111301/u);
+ assert.match(html,/HOLD_PWA_ASSET_VERSION_MISMATCH/u);
+ assert.match(read(root,'quyt-live-cut-ui.js').toString('utf8'),/version:'QUYT_CUT_FULLBOX_20261113_01'/u);
 });
