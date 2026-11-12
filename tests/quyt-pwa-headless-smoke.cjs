@@ -54,6 +54,15 @@ try{
  assert('MT valid station',sumTotals()==='11n'&&!$('copy').disabled);
  select('market','mn');
  assert('change region invalidates stale Copy',$('copy').disabled);
+ select('market','mn');
+ select('businessDate','2026-11-12');
+ set('raw','Tn 42 43 bl10n');
+ assert('Thursday TN accepted, exact two-amount ledger',sumTotals()==='22n'&&
+   $('baoTotal').textContent==='22n'&&$('otherTotal').textContent==='0n'&&
+   !$('copy').disabled&&$('result').value.includes('tn 42 43 b11n.'));
+ select('businessDate','2026-11-13');
+ assert('TN on Friday is HOLD and clears stale result',$('copy').disabled&&
+   $('result').value===''&&$('baoTotal').textContent==='—');
  assert('no service worker registration on fresh review origin',!navigator.serviceWorker || (await navigator.serviceWorker.getRegistrations()).length===0);
 }catch(e){output.push({name:'EXCEPTION',pass:false,error:String(e)})}
 const el=document.createElement('pre');el.id='quyt-e2e-qa';el.textContent=JSON.stringify({pass:output.filter(x=>x.pass).length,fail:output.filter(x=>!x.pass).length,results:output});
