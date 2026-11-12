@@ -53,8 +53,8 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v19',()=>{
+test('new standalone service-worker key must be version v20',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v19-two-frame-text-copy-mb-label/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });

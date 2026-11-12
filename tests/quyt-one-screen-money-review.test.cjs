@@ -205,3 +205,39 @@ test('Invalid bare amounts and three-digit DD still HOLD atomically',()=>{
  assert.equal(a.rows.find(x=>x.number==='160').adjusted,'100');
  assert.equal(a.rows.find(x=>x.number==='60').adjusted,'107');
 });
+
+test('OWNER PHOTO: two source lines, four multiplied 2-digit kinds, MB DX pair and 526 BAO 3-digit unchanged',()=>{
+ const raw='60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n';
+ const a=app.merge(raw,{...opts,market:'mb'});
+ assert.equal(a.sourceCount,2);assert.equal(a.sourceTotal,'415');assert.equal(a.original,'415');
+ assert.equal(a.total,'443');assert.equal(a.rows.length,6);
+ const scaled=a.rows.filter(x=>x.factorApplied),rawRows=a.rows.filter(x=>!x.factorApplied);
+ assert.equal(scaled.length,4);assert.equal(rawRows.length,2);
+ assert.equal(scaled.reduce((n,r)=>n+BigInt(r.adjusted),0n),428n);
+ assert.equal(rawRows.reduce((n,r)=>n+BigInt(r.adjusted),0n),15n);
+ assert.ok(scaled.every(r=>r.number==='60'&&r.adjusted==='107'));
+ const dx=rawRows.find(r=>r.kind==='dx'),bao3=rawRows.find(r=>r.kind==='b');
+ assert.ok(dx);assert.equal(dx.number,'33-61');assert.equal(dx.raw,'5');
+ assert.equal(dx.adjusted,'5');assert.equal(dx.factorApplied,false);
+ assert.ok(bao3);assert.equal(bao3.number,'526');assert.equal(bao3.adjusted,'10');
+ assert.equal(a.sections.find(s=>s.kind==='dx').total,'5');
+ assert.match(a.pretty,/33 61 dx5n/u);assert.match(a.pretty,/526 b10n/u);
+ assert.equal(raw,'60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n');
+});
+test('MB DX pair is unordered; two independent source messages aggregate once, money stays raw',()=>{
+ const r=app.merge('33 61 dx5n\n61 33 đx7n',{...opts,market:'mb'});
+ assert.equal(r.original,'12');assert.equal(r.total,'12');assert.equal(r.sourceCount,2);
+ assert.equal(r.sections.find(s=>s.kind==='dx').total,'12');
+ assert.equal(r.rows.length,1);assert.equal(r.rows[0].number,'33-61');
+ assert.equal(r.rows[0].kind,'dx');assert.equal(r.rows[0].adjusted,'12');
+ assert.equal(r.rows[0].factorApplied,false);
+});
+test('Ambiguous DX pairs, 3-digit DX, MN/MT DX and unknown types HOLD the WHOLE input',()=>{
+ const mb={...opts,market:'mb'};
+ for(const invalid of ['33 dx5n','33 33 dx5n','333 61 dx5n','33 61 62 dx5n','33 61 dx0n'])
+   assert.throws(()=>app.merge('60 b100n\n'+invalid,mb),/HOLD_DX_CAN_DUNG_2_SO|Số tiền phải lớn hơn 0/u);
+ assert.throws(()=>app.merge('tn 33 61 dx5n',{...opts,market:'mn'}),/ĐÁ\/DX liên đài chưa có oracle/u);
+ assert.throws(()=>app.merge('dn 33 61 dx5n',{...opts,market:'mt',businessDate:'2026-11-11'}),/ĐÁ\/DX liên đài chưa có oracle/u);
+ assert.throws(()=>app.merge('33 61 xz5n',mb),/Cú pháp chưa rõ/u);
+ assert.throws(()=>app.merge('33 61 xc5n',mb),/XC chưa có quy tắc/u);
+});
