@@ -20,6 +20,12 @@ const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent
 try{
  assert('original 3-region selector preserved',[...$('market').options].map(x=>x.value).join(',')==='mb,mn,mt');
  assert('original customer selector preserved',$('customer').value==='quyt');
+ const entry=$('quyt-three-region-open');
+ assert('main official URL visibly links to same-origin Quýt 3-market TEST, without automatic money Copy',
+  Boolean(entry&&entry.getAttribute('href')==='./thu-nghiem/'&&
+  entry.getBoundingClientRect().width>0&&entry.textContent.includes('BẢN THỬ')&&
+  $('quyt-three-region-entry').textContent.includes('KHÓA COPY cược đã nhân hệ số')));
+
  assert('empty source leaves group card hidden',$('groupedResultsCard').hidden);
  assert('empty source leaves full Copy card hidden',$('combinedResultsCard').hidden);
  assert('no placeholder panels visible',[...document.querySelectorAll('#betSections .bet-section')].every(x=>x.hidden));
