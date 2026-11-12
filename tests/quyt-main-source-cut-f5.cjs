@@ -41,6 +41,8 @@ const checks=String.raw`<script>
    assert('invalid third line atomically clears both boxes',amount('baoTotal')==='—'&&amount('otherTotal')==='—');
    sessionStorage.removeItem('QA_QUYT_LIVE_CUT_STAGE');sessionStorage.removeItem('QA_QUYT_LIVE_CUT_FIRST');
   }else{
+   assert('CẮT workflow visible on initial phone screen',!$('sourceCutCard').hidden&&$('cutSelectedQuyt').disabled);
+   assert('CẮT located before two money-result frames',!!($('sourceCutCard').compareDocumentPosition($('baoTotal'))&Node.DOCUMENT_POSITION_FOLLOWING));
    set('raw',input);
    $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
    assert('two source lines sum 428 and 15',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
@@ -53,7 +55,12 @@ const checks=String.raw`<script>
    assert('source textarea byte-for-byte retained',$('raw').value===input);
    $('undoQuytCut').click();
    assert('Undo full source restores original buckets',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
-   press('cutBetList',0);
+   const firstPick=$('cutBetList').querySelector('.cut-bet-check');
+   assert('source wager checkbox exists',!!firstPick);
+   firstPick.checked=true;firstPick.dispatchEvent(new Event('change',{bubbles:true}));
+   assert('primary CẮT becomes enabled for selected atom',!$('cutSelectedQuyt').disabled);
+   $('cutSelectedQuyt').click();
+   assert('selected CẮT clears selection and disables primary action',$('cutSelectedQuyt').disabled);
    assert('Cut B 100n updates scaled bucket only',amount('baoTotal')==='321n'&&amount('otherTotal')==='15n');
    assert('Cut one wager preserves exact conservation',amount('cutBefore')==='443n'&&amount('cutRemoved')==='107n'&&amount('cutAfter')==='336n');
    assert('Cut does not enable Copy scaled',$('copyScaled').disabled);
