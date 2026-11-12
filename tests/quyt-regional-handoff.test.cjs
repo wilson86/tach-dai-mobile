@@ -37,7 +37,7 @@ test('wrong or missing date, wrong region and unsupported MB copy stay HOLD',()=
  assert.throws(()=>app.merge(synthetic,{...options,businessDate:''}),/phải chọn ngày xổ số/u);
  assert.throws(()=>app.merge(synthetic,{...options,businessDate:'2026-11-13'}),/cần mã hoặc tên đài/u);
  assert.throws(()=>app.merge(synthetic,{...options,market:'mt'}),/cần mã hoặc tên đài/u);
- assert.throws(()=>app.merge(synthetic,{...options,market:'mb'}),/bắt đầu HN|chỉ nghiệm thu|HN/u);
+ assert.throws(()=>app.merge(synthetic,{...options,market:'mb'}),/Cú pháp chưa rõ.*HOLD|bắt đầu HN|chỉ nghiệm thu/u);
  assert.match(mb,/id="regionalHelp"/u);
  assert.match(mb,/window\.location\.assign\('\.\/mn-mt-review\.html'\)/u);
 });
