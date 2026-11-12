@@ -26,6 +26,8 @@ button.secondary{background:#dcebf5;color:#153c5b}button:disabled{background:#aa
 .actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.notice{background:#e9f8ec;border-left:4px solid #167b38;padding:10px 12px;border-radius:5px;margin:11px 0;white-space:pre-wrap}
 .notice.hold{background:#fff0e8;border-color:#b7371d}.totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
 .total{padding:12px;background:#edf3f6;border-radius:8px;min-width:0}.total strong{display:block;font-size:21px;margin-top:4px}.review-lines{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0;border-top:1px solid #cad9e5;padding-top:8px;color:#263f50;max-height:310px;overflow:auto}
+/* EXACTLY two visible money-result panels; all old per-type and Copy controls inert. */
+#groupedResultsCard,#combinedResultsCard,#moneyAcknowledgment{display:none!important}
 .tiny{font-size:13px;color:#526172}.muted{color:#566674}.tag{display:inline-block;padding:4px 8px;background:#e5edf4;border-radius:6px;font-weight:700;font-size:12px}
 summary{cursor:pointer;font-weight:650}table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:7px 6px;border-bottom:1px solid #dde5eb;text-align:left}th{background:#edf3f6}.table-scroll{overflow:auto}
 footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-weight:650}
@@ -48,8 +50,8 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 <meta name="quyt-release-candidate" content="one-screen-20261112-review-only">
 </head>
 <body><main class="wrap">
-<header><h1>KTS — GỘP TIN QUÝT MB / MN / MT <span class="tag">XEM TRƯỚC ONLINE</span></h1>
-<p>Một màn hình: chọn MB, MN hoặc MT. MB không cần ghi HN/đài; MN/MT phải chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA QUÝT V4 — DD/ĐẦU/ĐUÔI CHỈ 2 CHỮ SỐ; 3 CHỮ SỐ HOLD; CHIA HAI KHUNG NHÂN/GIỮ GỐC:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
+<header><h1>KTS — GỘP TIN QUÝT MB / MN / MT <span class="tag">ĐỐI CHIẾU 2 KHUNG — KHÓA COPY</span></h1>
+<p>Một màn hình: chọn MB, MN hoặc MT. MB không cần ghi HN/đài; MN/MT phải chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN ĐỐI CHIẾU QUÝT V4 — CƯỢC 2 SỐ NHÂN, 3 SỐ BAO GIỮ GỐC; CHỈ 2 KHUNG:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
 <div class="card">
  <div class="bar">
   <label class="field">Khách hàng<select id="customer"><option value="quyt">Quýt</option><option value="hien">Hiền</option><option value="khac">Khách khác (tiền gốc)</option></select></label>
@@ -70,7 +72,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
 </div>
 <div class="card">
- <h2 style="font-size:19px;margin:0 0 8px">Kết quả đã gộp</h2>
+ <h2 style="font-size:19px;margin:0 0 8px">Kết quả gộp — CHỈ 2 KHUNG</h2>
  <div class="totals" aria-label="Hai khung kết quả Quýt phân theo hệ số">
   <section class="total" aria-label="Khung đã nhân hệ số">
    <b id="baoLabel">ĐÃ NHÂN HỆ SỐ QUÝT</b><strong id="baoTotal">—</strong>
@@ -85,7 +87,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <p id="roundingAudit" class="warn tiny" aria-live="polite"></p>
  <label class="check" id="moneyAcknowledgment" style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
 </div>
-<div class="card" id="groupedResultsCard" hidden>
+<div class="card" id="groupedResultsCard" hidden inert aria-hidden="true">
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
  <p class="muted tiny">MB không cần HN/đài; MN/MT bắt buộc chọn ngày và đài hợp lệ. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. ĐÁ/DX/XC vẫn HOLD toàn bộ. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
@@ -121,7 +123,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
   </section>
  </div>
 </div>
-<div class="card" id="combinedResultsCard" hidden>
+<div class="card" id="combinedResultsCard" hidden inert aria-hidden="true">
  <h2 style="font-size:19px;margin:0 0 8px">COPY TOÀN BỘ TIN ĐÃ GỘP</h2>
  <textarea id="result" readonly spellcheck="false" placeholder="Kết quả xuất hiện ngay khi tin hợp lệ."></textarea>
  <div class="actions"><button id="copy" type="button" disabled>COPY TIN GỘP</button><button id="select" class="secondary" type="button" disabled>Chọn toàn bộ để Copy thủ công</button></div>
@@ -129,7 +131,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <details><summary>Xem bảng đối soát từng số / từng cặp</summary><div class="table-scroll"><table><thead><tr><th>Loại</th><th>Số/cặp</th><th>Gốc (n)</th><th>Sau nhân, chưa tròn (n)</th><th>Xuất, đã tròn (n)</th></tr></thead><tbody id="details"></tbody></table></div></details>
  <p class="warn tiny">Quy tắc xem trước Quýt V4: chỉ Bao/Lô chấp nhận cả 2 và 3 chữ số (3 chữ số không nhân); DD/Đầu/Đui/Đuôi chỉ chấp nhận 2 chữ số, gặp số 3 chữ số sẽ HOLD toàn bộ. Quýt nhân BAO/LÔ, DD, ĐẦU, ĐUÔI 2 chữ số đúng một lần sau gộp; ĐÁ không nhân; làm tròn từng số/cặp đến n nguyên (phần lẻ &lt; 0.5n xuống, ≥ 0.5n lên). Tổng xuất cộng chính các số đã làm tròn, không làm tròn lại tổng. Bảng đối soát giữ nguyên số chưa làm tròn. Khoản dương bị tròn thành 0n sẽ HOLD. Chỉ Copy văn bản; không tự gửi Router/Telegram.</p>
 </div>
-<footer><b>BẢN XEM TRƯỚC CHUNG MB/MN/MT — CHỈ ĐỐI CHIẾU</b>. Không phải bản nghiệm thu tiền thực và không thay thế bản KTS production. Dữ liệu không gửi ra Internet. Bản nháp chỉ lưu trong phiên/tab trình duyệt nếu trình duyệt cho phép. Chỉ kết quả xuất mới làm tròn theo quy tắc bạn đã chọn; tin nguồn và sổ đối soát chính xác không bị sửa.</footer>
+<footer><b>BẢN ĐỐI CHIẾU CHUNG MB/MN/MT — CHỈ HIỆN HAI KHUNG</b>. Không phải bản nghiệm thu tiền thực và không thay thế bản KTS production. Dữ liệu không gửi ra Internet. Bản nháp chỉ lưu trong phiên/tab trình duyệt nếu trình duyệt cho phép. Chỉ kết quả xuất mới làm tròn theo quy tắc bạn đã chọn; tin nguồn và sổ đối soát chính xác không bị sửa.</footer>
 </main>
 <script src="./station_calendar.generated.js"></script>
 <script>
@@ -151,7 +153,11 @@ const quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\d{2}$/u.test(row
  // Only an explicit approved selector immediately followed by a bare number
  // qualifies for an operator's confirmation. XC is not authorized. There is
  // no automatic missing-unit recovery, and original source stays immutable.
- const missingDaNRe=/(?<![\p{L}\p{N}])((?:bao[ \t]+lo|đầu|đuôi|đui|duoi|dau|dui|đá|đđ|bao|blo|bl|lô|lo|dd|da|b)[ \t]*)(\d{1,3})(?![\d.,nN])(?=[ \t,.;:]|$)/giu;
+ // Approved owner syntax: integer n may omit 'n' immediately after B/LO/DD/DAU/DUI.
+// Unrecognized types still HOLD. DA missing n still needs operator confirmation.
+ const approvedBareRe=/(?<![\p{L}\p{N}])((?:bao[ \t]+lo|đầu|đuôi|đui|duoi|dau|dui|đđ|bao|blo|bl|lô|lo|dd|b)[ \t]*)(\d{1,3})(?![\d.,nN])(?=[ \t,.;:]|$)/giu;
+ function normalizeApprovedBareStakes(source){return source.replace(approvedBareRe,(_raw,k,money)=>k+money+'n')}
+ const missingDaNRe=/(?<![\p{L}\p{N}])((?:đá|da)[ \t]*)(\d{1,3})(?![\d.,nN])(?=[ \t,.;:]|$)/giu;
  function missingDaN(source){
   const matches=[];
   for(const match of String(source).matchAll(missingDaNRe)){
@@ -266,10 +272,11 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
   if(typeof raw!=='string'||!raw.trim())fail('Chưa có tin nguồn');
   if(!['mb','mn','mt'].includes(opts.market))fail('Chưa chọn miền hợp lệ');
   const active=opts.market==='mb'?null:schedule(opts.market,opts.businessDate);
-  const candidates=missingDaN(raw);
+  const normalizedApproved=normalizeApprovedBareStakes(raw); // immutable pasted source
+  const candidates=missingDaN(normalizedApproved);
   if(candidates.length&&!opts.confirmMissingDaN)
    fail('THIEU_N_CAN_XAC_NHAN',candidates.length+' đoạn thiếu n; ví dụ '+candidates[0].exact+' → '+candidates[0].assumed);
-  const sourceAfterApproval=candidates.length?applyMissingDaN(raw):raw;
+  const sourceAfterApproval=candidates.length?applyMissingDaN(normalizedApproved):normalizedApproved;
   // Keep physical source line numbers even when blank lines separate Telegram messages.
   const physicalLines=[];
   // Canonical APPROVED ingress separators are complete lines of >=3
