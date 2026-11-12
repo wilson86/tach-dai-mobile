@@ -106,7 +106,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
     <div id="cutArchiveScaled" class="cut-archive" hidden>
      <label for="cutSavedScaled">TIN ĐÃ CẮT — ĐÃ NHÂN (CHƯA ĐƯỢC ROUTER DUYỆT) (được giữ lại trong phiên)</label>
      <textarea id="cutSavedScaled" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin đã CẮT ĐÃ NHÂN (CHƯA ĐƯỢC ROUTER DUYỆT)"></textarea>
-     <button id="copySavedScaled" type="button" disabled title="Chưa có oracle Router nhận tiền đã nhân">COPY TIN ĐÃ NHÂN — CHƯA DUYỆT</button>
+     <button id="copySavedScaled" type="button" disabled title="Sao chép bản đã CẮT để dán thủ công. Kết quả nhân chưa được Router nghiệm thu.">SAO CHÉP TIN ĐÃ CẮT ×1.067 — CHƯA NGHIỆM THU ROUTER</button>
     </div>
    </div>
    <div class="actions"><button type="button" id="copyScaled" disabled title="Chưa đối soát Router bên nhận">COPY TIN ĐÃ NHÂN — CHƯA DUYỆT</button></div>
@@ -473,7 +473,7 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
 })();
 </script>
 <script src="./quyt-source-cut-ledger.js"></script>
-<script src="./quyt-live-cut-ui.js?v=2026111302"></script>
+<script src="./quyt-live-cut-ui.js?v=2026111303"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),businessDate=$('businessDate'),regionScope=$('regionScope'),scheduleLabel=$('stationSchedule'),status=$('status'),copy=$('copy'),select=$('select'),ack=$('ackMoney'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
@@ -703,7 +703,7 @@ copy.addEventListener('click',async()=>{
  }
 });
 try{
- if(typeof QuytLiveCutUI==='undefined'||QuytLiveCutUI.version!=='QUYT_CUT_FULLBOX_20261113_02')throw Error('HOLD_PWA_ASSET_VERSION_MISMATCH');
+ if(typeof QuytLiveCutUI==='undefined'||QuytLiveCutUI.version!=='QUYT_CUT_FULLBOX_20261113_03')throw Error('HOLD_PWA_ASSET_VERSION_MISMATCH');
  QuytLiveCutUI.init(redraw);redraw();
 }catch(error){
  const reason=String(error.message||error);
