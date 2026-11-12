@@ -33,12 +33,18 @@ try{
   [...document.querySelectorAll('.total')].length===2&&Boolean($('scaledItems')&&$('unscaledItems')));
  assert('empty source keeps both result frames empty',closed()&&$('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—');
 
+ assert('MB means region, not HN alias', 
+   [...$('market').options].some(x=>x.value==='mb'&&x.textContent.trim()==='MB')&&
+   ![...$('market').options].some(x=>x.value==='mb'&&x.textContent.includes('/ HN')));
  set('raw','60 b 100 dd 100 dau 100 duoi 100');
  checkbox(true);
  assert('owner screenshot 60 four bare amounts 100n -> 4 x 107n = 428n scaled, 0n raw',
   money('baoTotal')===428n&&money('otherTotal')===0n&&closed()&&
   ['BAO/LÔ · 60','DD · 60','ĐẦU · 60','ĐUÔI · 60'].every(x=>$('scaledItems').textContent.includes(x))&&
   $('scaledItems').textContent.split('→ 107n').length-1===4);
+ assert('factorized ticket now contains complete paste-ready source lines in first box',
+  $('scaledTicket').value==='60 b107n.\\n60 dd107n.\\n60 dau107n.\\n60 dui107n.'&&
+  $('unscaledTicket').value===''&&$('copyScaled').disabled&&$('copyUnscaled').disabled);
  assert('exactly two visible money-result panels and old grouped/copied boxes always hidden',
   [...document.querySelectorAll('.total')].length===2&&
   getComputedStyle($('groupedResultsCard')).display==='none'&&
@@ -49,10 +55,23 @@ try{
  assert('MB no HN/station prefix accepted, total unscaled 25n and no injected HN header',
    money('baoTotal')===0n&&money('otherTotal')===25n&&
    $('result').value.length>0&&!$('result').value.startsWith('HN'));
+ assert('MB original 2-ticket output present in second textbox and stale copy disabled before ACK',
+   $('scaledTicket').value===''&&
+   $('unscaledTicket').value==='21 b10n.\\n31 dd15n.'&&
+   $('copyUnscaled').disabled&&!$('moneyAcknowledgment').hidden);
  assert('MB no HN remains receipt-gated before Copy',
    $('copy').disabled&&!$('ackMoney').disabled);
  ack();assert('MB no HN can be copied after explicit receipt',!$('copy').disabled);
+ assert('new second-box copy is approved only for original MB after acknowledged',
+   !$('copyUnscaled').disabled&&$('copyScaled').disabled);
+ $('copyUnscaled').click();await Promise.resolve();await Promise.resolve();
+ assert('new original MB Copy uses displayed second-box text only',
+   window.__qaClipboard===$('unscaledTicket').value);
+
  set('raw','21 b10n.\\n31 dd15n.');
+ assert('changing source invalidates second box Copy immediately',
+   $('copyUnscaled').disabled&&!$('ackMoney').checked);
+
  assert('MB multiline bare ticket parses both lines independently, no HN required',
    money('baoTotal')===0n&&money('otherTotal')===25n&&
    $('status').textContent.includes('ĐÃ GỘP 2 tin')&&!$('ackMoney').checked);
@@ -89,6 +108,9 @@ try{
   money('baoTotal')===0n&&money('otherTotal')===15n&&
   $('unscaledItems').textContent.includes('BAO/LÔ · 031 · 5n')&&closed());
  set('raw','hn 531 dd15n');
+ assert('invalid money clears both result text boxes and blocks Copy',
+   !$('scaledTicket').value&&!$('unscaledTicket').value&&
+   $('copyScaled').disabled&&$('copyUnscaled').disabled);
  assert('three-digit DD is error and both result frames clear',
   closed()&&$('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—'&&
   !$('scaledItems').textContent&&!$('unscaledItems').textContent&&

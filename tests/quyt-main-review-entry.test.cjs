@@ -12,19 +12,26 @@ t('Official Quýt is EXACTLY the new two-box review app, not old Bao-only app',(
  assert.doesNotMatch(main,/MỞ GỘP CHUNG MB \/ MN \/ MT \(BẢN THỬ\)/u);
  assert.doesNotMatch(main,/TỔNG GỐC \(CHƯA LÀM TRÒN\)/u);
  assert.match(main,/normalizeApprovedBareStakes\(raw\)/u);
+ assert.match(main,/<option value="mb">MB<\/option>/u);
+ assert.doesNotMatch(main,/MB \/ HN/u);
+ for(const id of ['scaledTicket','unscaledTicket','copyScaled','copyUnscaled'])
+   assert.match(main,new RegExp('id="'+id+'"','u'));
+ assert.match(main,/id="moneyAcknowledgment" hidden/u);
+ assert.match(main,/copyUnscaled'\).addEventListener\('click'/u);
+ assert.match(main,/copyScaled'\).disabled=true/u);
  assert.match(main,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
 });
 t('Exactly two visible result frames; old grouped and Copy cards never visible or focusable',()=>{
  assert.equal([...main.matchAll(/class="total"/gu)].length,2);
- assert.match(main,/#groupedResultsCard,#combinedResultsCard,#moneyAcknowledgment\{display:none!important\}/u);
+ assert.match(main,/#groupedResultsCard,#combinedResultsCard\{display:none!important\}/u);
  assert.match(main,/id="groupedResultsCard" hidden inert aria-hidden="true"/u);
  assert.match(main,/id="combinedResultsCard" hidden inert aria-hidden="true"/u);
  assert.match(main,/function receiverMarketApproved\(\)\{return market.value==='mb'&&!\(customer.value==='quyt'&&tick.checked\)\}/u);
 });
 t('Distinct official vs preview PWA cache namespaces and byte-identical generated station calendar',()=>{
- assert.match(officialSW,/kts-quyt-standalone-pwa-20261112-v18-two-boxes-approved-bare/u);
+ assert.match(officialSW,/kts-quyt-standalone-pwa-20261112-v19-two-frame-text-copy-mb-label/u);
  assert.match(officialSW,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
- assert.match(previewSW,/kts-quyt-preview-20261112-v2-bare-money-two-boxes/u);
+ assert.match(previewSW,/kts-quyt-preview-20261112-v3-two-frame-text-copy/u);
  assert.match(previewSW,/k\.startsWith\('kts-quyt-preview-'\)/u);
  assert.doesNotMatch(previewSW,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
  assert.deepEqual(source('.','station_calendar.generated.js'),source('thu-nghiem','station_calendar.generated.js'));

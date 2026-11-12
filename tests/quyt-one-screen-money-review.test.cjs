@@ -9,7 +9,7 @@ const calendar=fs.readFileSync(path.join(root,'station_calendar.generated.js'),'
 const app=vm.runInNewContext(calendar+'\n'+source[0]+';OfflineKTS;');
 const opts={market:'mn',businessDate:'2026-11-12',customer:'quyt',tick:true,rate:'1.067'};
 test('one existing URL genuinely supports MB and MN/MT with generated station calendar',()=>{
- assert.match(html,/<option value="mb">MB \/ HN<\/option>/u);
+ assert.match(html,/<option value="mb">MB<\/option>/u);
  assert.match(html,/<option value="mn">MN<\/option>/u);
  assert.match(html,/<option value="mt">MT<\/option>/u);
  assert.match(html,/id="businessDate"/u);
@@ -183,11 +183,17 @@ test('OWNER IMAGE: bare 100 stakes B/DD/DAU/DUI each rounded to 107; only adjust
 });
 test('Main Quýt renders exactly two visible money result frames with hidden inert legacy group and copy',()=>{
  assert.equal([...html.matchAll(/class="total"/gu)].length,2);
- assert.match(html,/#groupedResultsCard,#combinedResultsCard,#moneyAcknowledgment\{display:none!important\}/u);
+ assert.match(html,/#groupedResultsCard,#combinedResultsCard\{display:none!important\}/u);
  assert.match(html,/id="groupedResultsCard" hidden inert aria-hidden="true"/u);
  assert.match(html,/id="combinedResultsCard" hidden inert aria-hidden="true"/u);
  assert.match(html,/Kết quả gộp — CHỈ 2 KHUNG/u);
  assert.match(html,/normalizeApprovedBareStakes\(raw\)/u);
+ assert.match(html,/<option value="mb">MB<\/option>/u);
+ assert.doesNotMatch(html,/<option value="mb">MB \/ HN<\/option>/u);
+ assert.match(html,/id="scaledTicket"/u);
+ assert.match(html,/id="unscaledTicket"/u);
+ assert.match(html,/id="copyScaled" disabled/u);
+ assert.match(html,/id="copyUnscaled" disabled/u);
 });
 test('Invalid bare amounts and three-digit DD still HOLD atomically',()=>{
  assert.throws(()=>app.merge('60 61 da 100',{...opts,market:'mb'}),/THIEU_N_CAN_XAC_NHAN/u);
