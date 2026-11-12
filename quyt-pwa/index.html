@@ -102,14 +102,14 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
     <div class="bucket-cut-totals" aria-label="Đối soát tiền ĐÃ NHÂN ×1.067">
      <div>Trước CẮT<b id="scaledCutBefore">—</b></div><div>Đã CẮT<b id="scaledCutRemoved">—</b></div><div>Còn lại<b id="scaledCutAfter">—</b></div>
     </div>
-    <button type="button" id="cutSelectedScaled" disabled>CẮT TOÀN BỘ KHUNG ĐÃ NHÂN ×1.067</button>
+    <button type="button" id="cutSelectedScaled" disabled>CẮT KHUNG ×1.067 — CHUYỂN VÀO BỘ NHỚ TẠM</button>
     <div id="cutArchiveScaled" class="cut-archive" hidden>
      <label for="cutSavedScaled">TIN ĐÃ CẮT — ĐÃ NHÂN (CHƯA ĐƯỢC ROUTER DUYỆT) (được giữ lại trong phiên)</label>
      <textarea id="cutSavedScaled" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin đã CẮT ĐÃ NHÂN (CHƯA ĐƯỢC ROUTER DUYỆT)"></textarea>
-     <button id="copySavedScaled" type="button" disabled title="Sao chép bản đã CẮT để dán thủ công. Kết quả nhân chưa được Router nghiệm thu.">SAO CHÉP TIN ĐÃ CẮT ×1.067 — CHƯA NGHIỆM THU ROUTER</button>
+     <button id="copySavedScaled" type="button" hidden disabled title="Sao chép bản đã CẮT để dán thủ công. Kết quả nhân chưa được Router nghiệm thu.">SAO CHÉP TIN ĐÃ CẮT ×1.067 — CHƯA NGHIỆM THU ROUTER</button>
     </div>
    </div>
-   <div class="actions"><button type="button" id="copyScaled" disabled title="Chưa đối soát Router bên nhận">COPY TIN ĐÃ NHÂN — CHƯA DUYỆT</button></div>
+   <div class="actions" hidden><button type="button" id="copyScaled" disabled title="Chưa đối soát Router bên nhận">COPY TIN ĐÃ NHÂN — CHƯA DUYỆT</button></div>
    <details><summary>Đối soát tiền đã nhân</summary><pre id="scaledItems" class="review-lines" aria-label="Các khoản đã nhân" aria-live="polite"></pre></details>
   </section>
   <section class="total" aria-label="Khung giữ nguyên hệ số">
@@ -120,14 +120,14 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
     <div class="bucket-cut-totals" aria-label="Đối soát tiền GIỮ NGUYÊN">
      <div>Trước CẮT<b id="unscaledCutBefore">—</b></div><div>Đã CẮT<b id="unscaledCutRemoved">—</b></div><div>Còn lại<b id="unscaledCutAfter">—</b></div>
     </div>
-    <button type="button" id="cutSelectedUnscaled" disabled>CẮT TOÀN BỘ KHUNG GIỮ NGUYÊN</button>
+    <button type="button" id="cutSelectedUnscaled" disabled>CẮT KHUNG GIỮ NGUYÊN — CHUYỂN VÀO BỘ NHỚ TẠM</button>
     <div id="cutArchiveUnscaled" class="cut-archive" hidden>
      <label for="cutSavedUnscaled">TIN ĐÃ CẮT — GIỮ NGUYÊN (được giữ lại trong phiên)</label>
      <textarea id="cutSavedUnscaled" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin đã CẮT GIỮ NGUYÊN"></textarea>
-     <button id="copySavedUnscaled" type="button" disabled>SAO CHÉP TIN ĐÃ CẮT — GIỮ NGUYÊN</button>
+     <button id="copySavedUnscaled" type="button" hidden disabled>SAO CHÉP TIN ĐÃ CẮT — GIỮ NGUYÊN</button>
     </div>
    </div>
-   <div class="actions"><button type="button" id="copyUnscaled" disabled>COPY TIN GIỮ NGUYÊN</button></div>
+   <div class="actions" hidden><button type="button" id="copyUnscaled" disabled>COPY TIN GIỮ NGUYÊN</button></div>
    <details><summary>Đối soát tiền giữ nguyên</summary><pre id="unscaledItems" class="review-lines" aria-label="Các khoản không nhân" aria-live="polite"></pre></details>
   </section>
  </div>
@@ -473,7 +473,7 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
 })();
 </script>
 <script src="./quyt-source-cut-ledger.js"></script>
-<script src="./quyt-live-cut-ui.js?v=2026111303"></script>
+<script src="./quyt-live-cut-ui.js?v=2026111304"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),businessDate=$('businessDate'),regionScope=$('regionScope'),scheduleLabel=$('stationSchedule'),status=$('status'),copy=$('copy'),select=$('select'),ack=$('ackMoney'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
@@ -703,7 +703,7 @@ copy.addEventListener('click',async()=>{
  }
 });
 try{
- if(typeof QuytLiveCutUI==='undefined'||QuytLiveCutUI.version!=='QUYT_CUT_FULLBOX_20261113_03')throw Error('HOLD_PWA_ASSET_VERSION_MISMATCH');
+ if(typeof QuytLiveCutUI==='undefined'||QuytLiveCutUI.version!=='QUYT_CUT_FULLBOX_20261113_04')throw Error('HOLD_PWA_ASSET_VERSION_MISMATCH');
  QuytLiveCutUI.init(redraw);redraw();
 }catch(error){
  const reason=String(error.message||error);

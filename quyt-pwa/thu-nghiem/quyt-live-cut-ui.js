@@ -7,7 +7,7 @@ const QuytLiveCutUI=(()=>{
  const emptyArchives=()=>({scaled:emptyArchive(),unscaled:emptyArchive()});
  const $=id=>document.getElementById(id);
  const vi=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+'n';
- let rerender=null,base=null,view=null,currentOptions=null,currentScope=null,available=null;
+ let rerender=null,base=null,view=null,currentOptions=null,currentScope=null,available=null,cutInProgress=false;
  function scope(raw,o){return JSON.stringify([raw,o.customer,o.market,o.businessDate,o.tick,o.rate,o.duplicateConfirmed,o.confirmMissingDaN])}
  function actualScope(){
   const o=currentOptions;if(!o)return '';
@@ -51,7 +51,7 @@ const QuytLiveCutUI=(()=>{
   for(const name of ['Scaled','Unscaled']){
    $('cutSelected'+name).disabled=true;
    $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
-   $('copy'+name).parentElement.style.display='';
+   $('copy'+name).parentElement.hidden=true;
    const bucket=name.toLowerCase();
    for(const part of ['Before','Removed','After'])$(bucket+'Cut'+part).textContent='—';
   }
@@ -62,7 +62,7 @@ const QuytLiveCutUI=(()=>{
   $('undoQuytCut').disabled=true;$('startNewQuytBatch').hidden=false;
   for(const name of ['Scaled','Unscaled']){
    $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
-   $('copy'+name).parentElement.style.display='';
+   $('copy'+name).parentElement.hidden=true;
   }
   $('cutStatus').textContent=String(error);
   $('cutConservation').textContent='HOLD: hai khung bị xóa. Khôi phục nguồn cũ hoặc xác nhận lượt mới.';
@@ -123,10 +123,10 @@ const QuytLiveCutUI=(()=>{
    const name=group==='scaled'?'Scaled':'Unscaled';
    const a=record.archives[group],present=Boolean(a.text);
    $('cutArchive'+name).hidden=!present;
-   $('copy'+name).parentElement.style.display=present?'none':'';
+   $('copy'+name).parentElement.hidden=true;
    $('cutSaved'+name).value=present?a.text:'';
    // Only archived, source-verified Cut tickets may be copied; ordinary factorized output remains HOLD.
-   $('copySaved'+name).disabled=!present;
+   $('copySaved'+name).disabled=true; // only CẮT transfers ticket into clipboard
   }
  }
  function writeClipboard(text,selectField){
@@ -218,15 +218,49 @@ const QuytLiveCutUI=(()=>{
    return false;
   }
  }
- function cutWholeBucket(name){
+ async function cutWholeBucket(name){
   const group=name==='Scaled'?'scaled':'unscaled';
-  if(!available||!Array.isArray(available[group])){problem('HOLD_CUT_BUCKET_NOT_READY');return}
-  const ids=available[group].slice(),text=ticketFromRows(view.remaining.rows,group);
+  if(cutInProgress){$('cutStatus').textContent='HOLD_CUT_PENDING: đang CẮT, không thực hiện lần hai.';return}
   const field=group==='scaled'?'scaledTicket':'unscaledTicket';
-  if(!ids.length||!text||$(field).value!==text){$('cutStatus').textContent='HOLD_CUT_TICKET_MISMATCH: không cắt vì tin xuất chưa khớp cược nguồn.';return}
-  const successful=cut(ids,{group,text,ids});
-  // Owner-requested clipboard export is only for the CUT archive, not the ordinary result or automatic send.
-  if(successful)copyArchive(group);
+  let ids,text,originalView,scoped,initialKeys,clipboardWritten=false;
+  try{
+   if(!base||!view||!available||!Array.isArray(available[group])||
+      !currentScope||currentScope!==actualScope())throw Error('HOLD_CUT_STALE_SOURCE');
+   ids=available[group].slice();
+   text=ticketFromRows(view.remaining.rows,group);
+   if(!ids.length||!text||$(field).value!==text)throw Error('HOLD_CUT_TICKET_MISMATCH');
+   const r=load();
+   if(r.scope&&r.scope!==currentScope)throw Error('HOLD_CUT_SCOPE_CHANGED');
+   if(ids.some(id=>r.keys.includes(id)))throw Error('HOLD_CUT_ALREADY_CUT');
+   QuytSourceCutLedger.calculate(base,$('raw').value,currentOptions,[...r.keys,...ids]);
+   originalView=view;scoped=currentScope;initialKeys=JSON.stringify(r.keys);
+   cutInProgress=true;
+   $('cutSelectedScaled').disabled=true;$('cutSelectedUnscaled').disabled=true;
+   $('undoQuytCut').disabled=true;
+   $('cutStatus').textContent='ĐANG CẮT: đưa tin vào bộ nhớ tạm trước khi trừ tiền khỏi khung...';
+   // Invoke clipboard while still inside the original user gesture.
+   // The Cut is NOT committed until clipboard confirms success.
+   await writeClipboard(text,field);
+   clipboardWritten=true;
+   if(view!==originalView||currentScope!==scoped||actualScope()!==scoped)
+    throw Error('HOLD_CUT_SOURCE_CHANGED_AFTER_CLIPBOARD');
+   if(JSON.stringify(load().keys)!==initialKeys)
+    throw Error('HOLD_CUT_LEDGER_CHANGED_AFTER_CLIPBOARD');
+   if(!cut(ids,{group,text,ids}))
+    throw Error('HOLD_CUT_COMMIT_FAILED_AFTER_CLIPBOARD');
+   $('cutStatus').textContent='ĐÃ CẮT TOÀN BỘ KHUNG '+(group==='scaled'?'×1.067':'GIỮ NGUYÊN')+
+    ' VÀ CHUYỂN VÀO BỘ NHỚ TẠM. Chỉ cần DÁN. Tin gốc được giữ lại, không tự gửi.';
+  }catch(e){
+   $('cutStatus').textContent=(clipboardWritten?'HOLD_CUT_COMMIT: clipboard đã có tin nhưng sổ CẮT chưa xác nhận — kiểm tra trước khi dán. ':'HOLD_CLIPBOARD: KHÔNG CẮT, tiền vẫn giữ nguyên. ')+
+     String(e.message||e);
+  }finally{
+   cutInProgress=false;
+   if(view===originalView&&available&&currentScope===scoped&&actualScope()===scoped){
+    $('cutSelectedScaled').disabled=!available.scaled.length;
+    $('cutSelectedUnscaled').disabled=!available.unscaled.length;
+    try{$('undoQuytCut').disabled=!load().undo.length}catch(_){$('undoQuytCut').disabled=true}
+   }
+  }
  }
  function undo(){
   try{
@@ -255,5 +289,5 @@ const QuytLiveCutUI=(()=>{
    catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)}
   });
  }
- return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_03',init,reset,review,problem});
+ return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_04',init,reset,review,problem});
 })();
