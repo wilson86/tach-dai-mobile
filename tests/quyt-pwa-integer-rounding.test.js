@@ -71,11 +71,13 @@ test('rate edit recomputes from source, untick gives original integer stakes', (
  assert.equal(merge(raw,{tick:true,rate:'1.10'}).total,'61');
  assert.equal(merge(raw,{tick:false,rate:'INVALID'}).total,'55');
 });
-test('ambiguous missing n must still be confirmed before rounding',()=>{
- assert.throws(()=>merge('21 b55'),/THIEU_N_CAN_XAC_NHAN/u);
- const a=merge('21 b55',{confirmMissingDaN:true,tick:true});
+test('owner-approved B money without n is accepted, but DA without n still needs explicit confirmation',()=>{
+ const a=merge('21 b55',{tick:true});
  assert.equal(a.total,'59');
  assert.match(a.pretty,/21 b59n/u);
+ assert.throws(()=>merge('21 22 da20'),/THIEU_N_CAN_XAC_NHAN/u);
+ const d=merge('21 22 da20',{confirmMissingDaN:true,tick:true});
+ assert.equal(d.total,'20');
 });
 test('unsupported XC and market still HOLD, and source is never mutated',()=>{
  assert.throws(()=>merge('21 xc5n.'),/XC chưa có quy tắc/u);

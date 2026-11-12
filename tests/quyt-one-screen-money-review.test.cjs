@@ -192,7 +192,7 @@ test('Main Quýt renders exactly two visible money result frames with hidden ine
 test('Invalid bare amounts and three-digit DD still HOLD atomically',()=>{
  assert.throws(()=>app.merge('60 61 da 100',{...opts,market:'mb'}),/THIEU_N_CAN_XAC_NHAN/u);
  assert.throws(()=>app.merge('160 dd 100',{...opts,market:'mb'}),/HOLD_3_CHU_SO_KHONG_HOP_LE/u);
- assert.throws(()=>app.merge('60 b1000',{...opts,market:'mb'}),/Cú pháp|HOLD|chưa rõ|Tiền/u);
+ assert.throws(()=>app.merge('60 b1000',{...opts,market:'mb'}),/Cú pháp|HOLD|chưa rõ|Thiếu tiền/u);
  assert.throws(()=>app.merge('60 dd100xyz',{...opts,market:'mb'}),/Cú pháp|HOLD|chưa rõ/u);
  const a=app.merge('160 b 100. 60 b 100',{...opts,market:'mb'});
  assert.equal(a.total,'207');
