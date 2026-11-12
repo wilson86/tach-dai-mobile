@@ -33,6 +33,6 @@ test('PREVIEW install label is conspicuously TEST ONLY and same-folder scoped',(
  assert.match(manifest.short_name,/TEST/u);
  assert.match(manifest.description,/không được Copy/u);
  assert.equal(manifest.start_url,'./');assert.equal(manifest.scope,'./');
- assert.match(html,/BẢN KIỂM TRA QUÝT V4/u);
+ assert.match(html,/BẢN ĐỐI CHIẾU QUÝT V4/u);
  assert.match(html,/KHÔNG COPY/u);
 });
