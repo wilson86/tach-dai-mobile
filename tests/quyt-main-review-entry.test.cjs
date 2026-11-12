@@ -29,9 +29,9 @@ t('Exactly two visible result frames; old grouped and Copy cards never visible o
  assert.match(main,/function receiverMarketApproved\(\)\{return market.value==='mb'&&!\(customer.value==='quyt'&&tick.checked\)\}/u);
 });
 t('Distinct official vs preview PWA cache namespaces and byte-identical generated station calendar',()=>{
- assert.match(officialSW,/kts-quyt-standalone-pwa-20261112-v19-two-frame-text-copy-mb-label/u);
+ assert.match(officialSW,/kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames/u);
  assert.match(officialSW,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
- assert.match(previewSW,/kts-quyt-preview-20261112-v3-two-frame-text-copy/u);
+ assert.match(previewSW,/kts-quyt-preview-20261112-v4-mb-dx-pair-two-frames/u);
  assert.match(previewSW,/k\.startsWith\('kts-quyt-preview-'\)/u);
  assert.doesNotMatch(previewSW,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
  assert.deepEqual(source('.','station_calendar.generated.js'),source('thu-nghiem','station_calendar.generated.js'));

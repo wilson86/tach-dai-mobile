@@ -15,7 +15,7 @@ function group(out,kind){return out.sections.find(x=>x.kind===kind)}
 function sum(out){return out.sections.reduce((n,x)=>n+BigInt(x.total),0n)}
 test('engine group accounting unchanged; UI order is B/DA/DD/XC/DAU/DUI',()=>{
  const a=app.merge('hn 21 b55n. 21 22 da20n. 44 dd10n. 55 dau5n dui15n.',base);
- assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','xc','dd','dau','dui']);
+ assert.deepEqual(Array.from(a.sections,x=>x.kind),['b','da','xc','dd','dau','dui','dx']);
  assert.equal(a.total,'111');assert.equal(sum(a),111n);
  assert.equal(group(a,'b').text,'HN\n21 b59n.');
  assert.equal(group(a,'da').text,'HN\n21 22 da20n.');
@@ -48,7 +48,7 @@ test('no group output may be emitted on ambiguous or unsupported source',()=>{
  assert.throws(()=>app.merge('hn 21 22 da 20',base),/THIEU_N_CAN_XAC_NHAN/u);
  assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/MN\/MT phải chọn ngày xổ số hợp lệ/u);
 });
-test('HTML has six readonly wager frames, two factor bucket cards and v19 cache',()=>{
+test('HTML has six readonly wager frames, two factor bucket cards and v20 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];
  assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','dd','xc','dau','dui']);
  assert.match(html,/id="betSections"/u);
@@ -62,5 +62,5 @@ test('HTML has six readonly wager frames, two factor bucket cards and v19 cache'
  assert.match(html,/class="section-copy" disabled/u);
  assert.match(html,/class="section-text" readonly/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v19-two-frame-text-copy-mb-label/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames/u);
 });
