@@ -97,43 +97,54 @@ test('Quýt V2 applies factor to Bao/Lô, DD, Đầu, Đuôi while leaving Đá 
  assert.equal(original.sections.find(x=>x.kind==='dd').total,'15');
 });
 
-test('V3 mixed 2-digit and 3-digit in same MB ticket: factor only 2-digit categories',()=>{
- const raw='hn 21 b10n. 321 b10n. 31 dd15n. 531 dd15n. 41 dau15n. 641 dau15n. 51 dui15n. 751 dui15n.';
- const a=app.merge(raw,{...opts,market:'mb'});
- assert.equal(a.original,'110');assert.equal(a.total,'114');
- for(const [kind,total] of [['b','21'],['dd','31'],['dau','31'],['dui','31']])
-  assert.equal(a.sections.find(g=>g.kind===kind).total,total);
- for(const [kind,number,amount] of [['b','321','10'],['dd','531','15'],['dau','641','15'],['dui','751','15']]){
-  const row=a.rows.find(r=>r.kind===kind&&r.number===number);
-  assert.ok(row);assert.equal(row.raw,amount);assert.equal(row.adjusted,amount);
+test('V4 two distinct accounting buckets: scaled eligibility vs unchanged raw, never bet-type bucketing',()=>{
+ const input='hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 dui15n. 61 62 da10n.';
+ const r=app.merge(input,{...opts,market:'mb'});
+ assert.equal(r.total,'79');assert.equal(r.original,'75');
+ const scaled=r.rows.filter(x=>x.factorApplied);
+ const untouched=r.rows.filter(x=>!x.factorApplied);
+ assert.equal(scaled.reduce((n,x)=>n+BigInt(x.adjusted),0n),59n);
+ assert.equal(untouched.reduce((n,x)=>n+BigInt(x.adjusted),0n),20n);
+ assert.equal(scaled.length,4);assert.equal(untouched.length,2);
+ assert.equal(r.rows.find(x=>x.number==='321').adjusted,'10');
+ assert.equal(r.rows.find(x=>x.kind==='da').adjusted,'10');
+ assert.equal(input,'hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 dui15n. 61 62 da10n.');
+ for(const id of ['baoTotal','otherTotal','scaledItems','unscaledItems'])assert.match(html,new RegExp('id="'+id+'"','u'));
+ assert.match(html,/KHÔNG NHÂN HỆ SỐ/u);
+ assert.match(html,/row\.factorApplied=Boolean\(opts\.tick&&quytFactorEligible\(row\)\)/u);
+});
+test('V4 DD/Đầu/Đui/Đuôi 3-digit wager numbers are INVALID, regardless of tick/market',()=>{
+ const cases=['531 dd15n','641 dau15n','751 dui15n','851 đui15n','951 đuôi15n','031 duoi15n','21 531 dd15n','21 531 dd15n'];
+ for(const clause of cases){
+  for(const tick of [false,true]){
+   assert.throws(()=>app.merge('hn '+clause,{...opts,market:'mb',tick}),/HOLD_3_CHU_SO_KHONG_HOP_LE.*tin 1/u);
+  }
  }
- assert.equal(a.rows.reduce((sum,row)=>sum+BigInt(row.adjusted),0n),BigInt(a.total));
- assert.equal(raw,'hn 21 b10n. 321 b10n. 31 dd15n. 531 dd15n. 41 dau15n. 641 dau15n. 51 dui15n. 751 dui15n.');
+ assert.throws(()=>app.merge('tn 531 dd15n',opts),/HOLD_3_CHU_SO_KHONG_HOP_LE/u);
+ assert.throws(()=>app.merge('tn 641 dau15n',opts),/HOLD_3_CHU_SO_KHONG_HOP_LE/u);
+ assert.throws(()=>app.merge('hn 21 b10n.\n531 dd15n',{...opts,market:'mb'}),/HOLD_3_CHU_SO_KHONG_HOP_LE.*tin 2/u);
 });
-test('V3 leading zero 3-digit code is not the same as 2-digit and remains unmultiplied',()=>{
- const r=app.merge('hn 21 b10n. 021 b10n.',{...opts,market:'mb'});
- assert.equal(r.original,'20');assert.equal(r.total,'21');
- assert.equal(r.rows.find(x=>x.number==='21').adjusted,'11');
- assert.equal(r.rows.find(x=>x.number==='021').adjusted,'10');
- assert.equal(app.merge('hn 21 b10n. 021 b10n.',{...opts,market:'mb',tick:false}).total,'20');
+test('V4 valid two-digit DD/Đầu/Đui aliases and 3-digit BAO/LO retain exact semantics',()=>{
+ const r=app.merge('hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 đui15n.',{...opts,market:'mb'});
+ assert.equal(r.total,'69');
+ const parts=r.rows.filter(x=>x.factorApplied).map(x=>x.adjusted);
+ assert.deepEqual(parts.sort(),['11','16','16','16'].sort());
+ assert.equal(r.rows.find(x=>x.number==='321').factorApplied,false);
+ const single=app.merge('hn 321 b75n. 021 lo10n',{...opts,market:'mb'});
+ assert.equal(single.total,'85');assert.equal(single.ceilReference,'85');assert.equal(single.roundingDiffRows,0);
+ assert.equal(single.rows.filter(x=>x.factorApplied).length,0);
 });
-test('V3 station topology 2d expands stations, never changes 3-digit wager-length rule',()=>{
- const raw='tn 21 b10n. 321 b10n. 41 dd15n. 531 dd15n';
- const r=app.merge(raw,opts);
- assert.equal(r.total,'52');assert.equal(r.sections.find(x=>x.kind==='b').total,'21');
- assert.equal(r.sections.find(x=>x.kind==='dd').total,'31');
- const x=app.merge('2d 21 b10n',opts),y=app.merge('2d 321 b10n',opts);
- assert.equal(x.total,'22');assert.equal(y.total,'20');
- assert.equal(x.rows.length,2);assert.equal(y.rows.length,2);
- assert.ok(y.rows.every(row=>row.number==='321'&&row.adjusted==='10'));
+test('V4 2d station topology is independent of wager number length',()=>{
+ const two=app.merge('2d 21 b10n',opts),three=app.merge('2d 321 b10n',opts);
+ assert.equal(two.total,'22');assert.equal(three.total,'20');assert.equal(two.rows.length,2);assert.equal(three.rows.length,2);
+ assert.ok(three.rows.every(x=>x.number==='321'&&!x.factorApplied));
+ assert.throws(()=>app.merge('2d 531 dd15n',opts),/HOLD_3_CHU_SO_KHONG_HOP_LE/u);
 });
-test('V3 3-digit money has no extra hypothetical CEIL delta, 2-digit delta still audits',()=>{
- const raw='hn 321 b75n. 531 dd75n. 641 dau75n. 751 dui75n.';
- const r=app.merge(raw,{...opts,market:'mb'});
- assert.equal(r.total,'300');assert.equal(r.original,'300');assert.equal(r.ceilReference,'300');
- assert.equal(r.roundingDiffRows,0);
- const two=app.merge('hn 21 b75n. 31 dd75n.',{...opts,market:'mb'});
- assert.equal(two.total,'160');assert.equal(two.ceilReference,'162');assert.equal(two.roundingDiffRows,2);
- assert.ok(html.includes("quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\\d{2}$/u.test(row.number)"));
- assert.match(html,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
+test('V4 2-digit scaled stakes partition by eligibility even if rounded amount equals source',()=>{
+ const r=app.merge('hn 21 b5n. 321 b5n. 31 dd5n. 41 dui5n.',{...opts,market:'mb'});
+ assert.equal(r.total,'20');assert.equal(r.rows.filter(x=>x.factorApplied).length,3);
+ assert.equal(r.rows.filter(x=>!x.factorApplied).length,1);
+ const plain=app.merge('hn 21 b5n. 321 b5n. 31 dd5n. 41 dui5n.',{...opts,market:'mb',tick:false});
+ assert.equal(plain.rows.filter(x=>x.factorApplied).length,0);
+ assert.equal(plain.total,'20');
 });

@@ -48,11 +48,14 @@ test('no group output may be emitted on ambiguous or unsupported source',()=>{
  assert.throws(()=>app.merge('hn 21 22 da 20',base),/THIEU_N_CAN_XAC_NHAN/u);
  assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/MN\/MT phải chọn ngày xổ số hợp lệ/u);
 });
-test('HTML has six separate readonly frames, unique scoped Copy buttons and v16 cache',()=>{
+test('HTML has six readonly wager frames, two factor bucket cards and v16 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];
  assert.deepEqual(Array.from(blocks,x=>x[1]),['b','da','dd','xc','dau','dui']);
  assert.match(html,/id="betSections"/u);
  assert.match(html,/id="groupedResultsCard" hidden/u);
+ assert.equal([...html.matchAll(/class="total"/gu)].length,2);
+ assert.match(html,/id="scaledItems"/u);assert.match(html,/id="unscaledItems"/u);
+ assert.match(html,/grid-template-columns:1fr/u);
  assert.match(html,/id="combinedResultsCard" hidden/u);
  assert.match(html,/\[hidden\]\{display:none!important\}/u);
  assert.match(html,/frame\.field\.closest\('\.bet-section'\)\.hidden=!\(section\.supported&&section\.text\)/u);
