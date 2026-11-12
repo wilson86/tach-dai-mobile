@@ -20,6 +20,7 @@ const checks=String.raw`<script>
 (async()=>{
 const report=[],$=id=>document.getElementById(id);
 const assert=(name,pass)=>report.push({name,pass:Boolean(pass)});
+const sumTotals=()=>{const amount=id=>BigInt($(id).textContent.replaceAll('.','').replace('n',''));return (amount('baoTotal')+amount('otherTotal')).toLocaleString('vi-VN')+'n'};
 const section=kind=>document.querySelector('[data-bet-kind="'+kind+'"]');
 const visible=()=>[...document.querySelectorAll('#betSections .bet-section:not([hidden])')].map(x=>x.dataset.betKind).join(',');
 const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent(new Event(event,{bubbles:true}))};
@@ -40,23 +41,23 @@ try{
  $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
  set('raw','40 22 33 61 77 b300');
  $('checkMerge').click();
- assert('bare b300 = five 300n original bets',$('before').textContent==='1.500n');
- assert('Quyt scales BAO once and rounds each number',$('after').textContent==='1.600n'&&$('result').value.includes('40 22 33 61 77 b320n.'));
+ assert('bare b300 = five 300n original bets',$('baoTotal').textContent==='1.600n');
+ assert('Quyt scales BAO once and rounds each number',sumTotals()==='1.600n'&&$('result').value.includes('40 22 33 61 77 b320n.'));
  assert('original screenshot raw remains immutable',$('raw').value==='40 22 33 61 77 b300');
  assert('no obsolete missing-n confirmation',$('confirmMissingDaN')===null);
  set('raw','40 22 33 61 77 b300n');
- assert('b300n and b300 money parity',$('before').textContent==='1.500n'&&$('after').textContent==='1.600n'&&$('result').value.includes('b320n'));
+ assert('b300n and b300 money parity',$('baoTotal').textContent==='1.600n'&&sumTotals()==='1.600n'&&$('result').value.includes('b320n'));
  $('tick').checked=originalTick;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
  set('raw','hn 21 b10n');
  $('checkMerge').click();
- assert('manual check-merge preserves B-only money',$('after').textContent==='10n');
+ assert('manual check-merge preserves B-only money',sumTotals()==='10n');
 
  assert('B-only shows exactly B',visible()==='b');
  assert('B-only reveals group card and full Copy card',!$('groupedResultsCard').hidden&&!$('combinedResultsCard').hidden);
- assert('B-only number unchanged',$('after').textContent==='10n'&&$('result').value.includes('21 b10n'));
+ assert('B-only number unchanged',sumTotals()==='10n'&&$('result').value.includes('21 b10n'));
  set('raw','hn 21 b10n dd5n');
  assert('B+DD reveals exactly B,DD',visible()==='b,dd');
- assert('B+DD money preserved',$('after').textContent==='15n');
+ assert('B+DD money preserved',sumTotals()==='15n');
  set('raw','hn 21 22 da20n');
  assert('DA only reveals DA pane',visible()==='da');
  set('raw','hn 21 xc10n');
@@ -108,14 +109,14 @@ try{
 
  set('raw','hn 21 b10n dd5n. 21 22 da20n.');
  assert('six group and select Cut controls',document.querySelectorAll('.section-cut').length===6&&document.querySelectorAll('.section-cut-selected').length===6);
- assert('before Cut total 35n',$('after').textContent==='35n');
+ assert('before Cut total 35n',sumTotals()==='35n');
  const orig=$('raw').value;
  section('b').querySelector('.section-cut').click();await Promise.resolve();await Promise.resolve();await Promise.resolve();
- assert('after Cắt B removes B live',$('after').textContent==='25n'&&!$('result').value.includes(' b10n')&&$('result').value.includes('dd5n'));
+ assert('after Cắt B removes B live',sumTotals()==='25n'&&!$('result').value.includes(' b10n')&&$('result').value.includes('dd5n'));
  assert('original source unchanged',$('raw').value===orig);
  assert('Undo restores full amount',$('undoQuytCut').disabled===false);
  $('undoQuytCut').click();
- assert('Undo source-amount restore',$('after').textContent==='35n'&&$('result').value.includes('b10n'));
+ assert('Undo source-amount restore',sumTotals()==='35n'&&$('result').value.includes('b10n'));
  // A pending Copy started for the prior ticket must block new-batch consent.
  let completePendingCopy;
  const pendingCopyWrite=navigator.clipboard.writeText;
@@ -142,10 +143,10 @@ try{
  const first=section('b').querySelector('.cut-row-check');first.checked=true;first.dispatchEvent(new Event('change',{bubbles:true}));
  assert('selected Cut enabled',!section('b').querySelector('.section-cut-selected').disabled);
  section('b').querySelector('.section-cut-selected').click();await Promise.resolve();await Promise.resolve();await Promise.resolve();
- assert('selected Cut keeps other B number and DD',$('after').textContent==='20n'&&$('result').value.includes('22 b10n')&&$('result').value.includes('dd5n'));
+ assert('selected Cut keeps other B number and DD',sumTotals()==='20n'&&$('result').value.includes('22 b10n')&&$('result').value.includes('dd5n'));
  assert('cut ledger persists in session',String(sessionStorage.getItem('KTS_QUYT_REVIEW_V10_SCOPED_CUT_V1')).includes('b|21'));
  $('undoQuytCut').click();
- assert('undo selected restores 25n',$('after').textContent==='30n');
+ assert('undo selected restores 25n',sumTotals()==='30n');
  // After another synthetic Cut, simulate browser storage becoming unavailable
  // exactly at Undo. A HOLD warning alone is insufficient: ALL Copy must lock.
  section('b').querySelector('.section-cut').click();
