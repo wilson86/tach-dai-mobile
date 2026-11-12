@@ -1,0 +1,16 @@
+name: KTS Quyt v19 published HTTPS read-only proof ($0)
+on:
+  pull_request:
+    paths:
+      - 'tests/quyt-v19-live-https.cjs'
+      - '.github/workflows/quyt-v19-live-https.yml'
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Public HTML and SW real HTTPS 200 plus exact Git hashes
+        run: node tests/quyt-v19-live-https.cjs
