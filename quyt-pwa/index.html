@@ -49,27 +49,14 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 
 @media(max-width:600px){.wrap{padding:8px 8px 28px}.card{padding:11px}.field{flex-basis:135px}h1{font-size:20px}.totals{grid-template-columns:1fr;gap:9px}.total{padding:9px}.total strong{font-size:17px}#raw{min-height:240px}#result{min-height:270px}}
 
-.cut-audit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}
-.cut-audit-grid>div{padding:9px;background:#edf3f6;border-radius:8px}
-.cut-audit-grid b{display:block;font-size:18px;margin-top:5px}
-.cut-row{border:1px solid #cad9e5;border-radius:8px;padding:9px;margin:7px 0;background:#f7fafc}
-.cut-row p{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 ui-monospace,monospace}
-.cut-row button{padding:8px 11px;min-height:38px}.cut-pick{display:inline-flex;gap:8px;align-items:center;margin:7px 0;font-weight:700}.cut-pick input{width:22px;height:22px}.cut-row.cut-done{background:#edf9ef;color:#285b32}
-@media(max-width:600px){.cut-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cut-row button{width:100%}}
 
+.cut-control-bar{background:#f7fafc;border:1px solid #d5e2e9;border-radius:8px;padding:9px 11px;margin:11px 0}
+.cut-control-bar .actions{margin:8px 0 0}
 .bucket-cut{margin:13px 0 7px;padding-top:11px;border-top:1px solid #bccddd}
-.bucket-cut>summary{font-weight:750;color:#153c5b;margin-bottom:8px}
 .bucket-cut-totals{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;margin:9px 0}
 .bucket-cut-totals>div{padding:8px 6px;background:white;border-radius:6px;font-size:12px;min-width:0}
 .bucket-cut-totals b{display:block;font-size:16px;overflow-wrap:anywhere}
-.bucket-cut-list{max-height:360px;overflow-y:auto;overscroll-behavior:contain;background:#fff;border:1px solid #cad9e5;border-radius:8px;margin:8px 0}
-.bucket-cut-entry{display:flex;align-items:flex-start;gap:9px;padding:9px 8px;border-bottom:1px solid #e4eaf0;font-size:14px;cursor:pointer}
-.bucket-cut-entry:last-child{border-bottom:none}
-.bucket-cut-entry input{width:21px;height:21px;flex:0 0 21px;margin:2px 0 0;accent-color:#14649c}
-.bucket-cut-entry strong{display:block;overflow-wrap:anywhere}
-.bucket-cut-entry small{display:block;font-size:11px;color:#566674;white-space:pre-wrap;overflow-wrap:anywhere;margin-top:3px;max-height:48px;overflow:auto}
-.bucket-cut-entry.cut-done{opacity:.65;cursor:default;text-decoration:line-through}
-.bucket-cut>button{width:100%;min-height:45px}
+.bucket-cut>button{width:100%;min-height:46px}
 </style>
 <meta name="quyt-release-candidate" content="one-screen-20261112-review-only">
 </head>
@@ -95,35 +82,24 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
 </div>
-<div class="card" id="sourceCutCard">
- <h2 style="font-size:19px;margin:0 0 8px">CẮT TIN / CƯỢC — ĐỐI CHIẾU TIN GỐC NGAY</h2>
- <p class="tiny muted">Chọn CẮT TIN trên từng dòng nguyên văn hoặc CẮT CƯỢC trong dòng đó. Tin gốc gồm tên khách, ngày giờ không thay đổi. Hai khung tính lại ngay từ cược còn lại. KHÔNG Copy hoặc gửi tự động.</p>
- <div class="cut-audit-grid" aria-label="Đối soát tiền sau Cắt">
-  <div>Tiền trước CẮT<b id="cutBefore">—</b></div><div>Tiền đã CẮT (chênh tiền xuất)<b id="cutRemoved">—</b></div><div>Tiền sau CẮT<b id="cutAfter">—</b></div>
-  <div>Tiền gốc ban đầu<b id="cutOriginalBefore">—</b></div><div>Tiền gốc đã CẮT<b id="cutOriginalRemoved">—</b></div><div>Tiền gốc còn lại<b id="cutOriginalAfter">—</b></div>
- </div>
- <p id="cutConservation" class="tiny" aria-live="polite">Chưa đối chiếu.</p>
- <p id="cutStatus" class="tiny" role="status">Dán tin vào ô phía trên để chọn CẮT từng cược hoặc cả tin.</p>
- <div class="actions"><button id="cutSelectedQuyt" type="button" disabled>CẮT CÁC CƯỢC ĐÃ CHỌN</button><button id="undoQuytCut" type="button" class="secondary" disabled>HOÀN TÁC CẮT</button><button id="startNewQuytBatch" type="button" hidden style="background:#a4541a">XÁC NHẬN LƯỢT MỚI — BỎ SỔ CẮT CŨ</button></div>
- <details open><summary>Tin gốc nguyên văn — CẮT cả dòng tin</summary><div id="cutSourceList"></div></details>
- <details><summary>Từng khoản cược — CẮT một khoản</summary><div id="cutBetList"></div></details>
- <details><summary>Những cược đã CẮT</summary><pre id="cutRemovedList" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
-</div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Kết quả gộp — CHỈ 2 KHUNG</h2>
+ <div class="cut-control-bar" aria-label="Hoàn tác và đối chiếu tổng tiền CẮT">
+  <p id="cutStatus" class="tiny" role="status">CẮT TOÀN BỘ từng khung sau khi gộp. Tin nguồn phía trên không bị sửa.</p>
+  <p id="cutConservation" class="tiny" aria-live="polite">Chưa có kết quả đối chiếu.</p>
+  <div class="actions"><button id="undoQuytCut" type="button" class="secondary" disabled>HOÀN TÁC CẮT</button><button id="startNewQuytBatch" type="button" hidden style="background:#a4541a">XÁC NHẬN LƯỢT MỚI — BỎ SỔ CẮT CŨ</button></div>
+ </div>
  <div class="totals" aria-label="Hai khung kết quả Quýt phân theo hệ số">
   <section class="total" aria-label="Khung đã nhân hệ số">
    <b id="baoLabel">ĐÃ NHÂN HỆ SỐ QUÝT</b><strong id="baoTotal">—</strong>
    <label class="tiny" for="scaledTicket">Tin gộp đã nhân (để kiểm tra, chưa được gửi)</label>
    <textarea id="scaledTicket" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin gộp đã nhân để đối chiếu"></textarea>
-   <details class="bucket-cut" open>
-    <summary>Chọn cược ĐÃ NHÂN ×1.067 để CẮT và đối chiếu tin gốc</summary>
-    <div class="bucket-cut-totals" aria-label="Đối soát tiền khung ĐÃ NHÂN ×1.067">
+   <div class="bucket-cut" aria-label="CẮT toàn bộ khung ĐÃ NHÂN ×1.067">
+    <div class="bucket-cut-totals" aria-label="Đối soát tiền ĐÃ NHÂN ×1.067">
      <div>Trước CẮT<b id="scaledCutBefore">—</b></div><div>Đã CẮT<b id="scaledCutRemoved">—</b></div><div>Còn lại<b id="scaledCutAfter">—</b></div>
     </div>
-    <div id="cutScaledList" class="bucket-cut-list" aria-label="Danh sách cược nguồn khung ĐÃ NHÂN ×1.067"></div>
-    <button type="button" id="cutSelectedScaled" disabled>CẮT CƯỢC ĐÃ CHỌN — ĐÃ NHÂN ×1.067</button>
-   </details>
+    <button type="button" id="cutSelectedScaled" disabled>CẮT TOÀN BỘ KHUNG ĐÃ NHÂN ×1.067</button>
+   </div>
    <div class="actions"><button type="button" id="copyScaled" disabled title="Chưa đối soát Router bên nhận">COPY TIN ĐÃ NHÂN — CHƯA DUYỆT</button></div>
    <details><summary>Đối soát tiền đã nhân</summary><pre id="scaledItems" class="review-lines" aria-label="Các khoản đã nhân" aria-live="polite"></pre></details>
   </section>
@@ -131,14 +107,12 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
    <b id="otherLabel">KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN</b><strong id="otherTotal">—</strong>
    <label class="tiny" for="unscaledTicket">Tin gộp tiền gốc</label>
    <textarea id="unscaledTicket" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin gộp không nhân hệ số"></textarea>
-   <details class="bucket-cut" open>
-    <summary>Chọn cược GIỮ NGUYÊN để CẮT và đối chiếu tin gốc</summary>
-    <div class="bucket-cut-totals" aria-label="Đối soát tiền khung GIỮ NGUYÊN">
+   <div class="bucket-cut" aria-label="CẮT toàn bộ khung GIỮ NGUYÊN">
+    <div class="bucket-cut-totals" aria-label="Đối soát tiền GIỮ NGUYÊN">
      <div>Trước CẮT<b id="unscaledCutBefore">—</b></div><div>Đã CẮT<b id="unscaledCutRemoved">—</b></div><div>Còn lại<b id="unscaledCutAfter">—</b></div>
     </div>
-    <div id="cutUnscaledList" class="bucket-cut-list" aria-label="Danh sách cược nguồn khung GIỮ NGUYÊN"></div>
-    <button type="button" id="cutSelectedUnscaled" disabled>CẮT CƯỢC ĐÃ CHỌN — GIỮ NGUYÊN</button>
-   </details>
+    <button type="button" id="cutSelectedUnscaled" disabled>CẮT TOÀN BỘ KHUNG GIỮ NGUYÊN</button>
+   </div>
    <div class="actions"><button type="button" id="copyUnscaled" disabled>COPY TIN GIỮ NGUYÊN</button></div>
    <details><summary>Đối soát tiền giữ nguyên</summary><pre id="unscaledItems" class="review-lines" aria-label="Các khoản không nhân" aria-live="polite"></pre></details>
   </section>

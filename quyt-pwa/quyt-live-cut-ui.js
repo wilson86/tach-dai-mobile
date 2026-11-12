@@ -1,199 +1,162 @@
 'use strict';
-// WILSON86 Quyt V4 source Cut/Undo UI. Synthetic-review only; never sends/copies.
-// Reuses canonical OfflineKTS.merge and the source-bound QuytSourceCutLedger.
+// Quýt money preview: one Cut action per whole result bucket, no duplicated raw input.
+// All amounts are derived from canonical OfflineKTS.merge source IDs + rounded rows.
 const QuytLiveCutUI=(()=>{
  const KEY='KTS_QUYT_MAIN_V4_SOURCE_CUT_V1';
  const $=id=>document.getElementById(id);
- let rerender=null,base=null,view=null,currentOptions=null,currentScope=null;
  const vi=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+'n';
+ let rerender=null,base=null,view=null,currentOptions=null,currentScope=null,available=null;
  function scope(raw,o){return JSON.stringify([raw,o.customer,o.market,o.businessDate,o.tick,o.rate,o.duplicateConfirmed,o.confirmMissingDaN])}
- function actualScope(){const o=currentOptions;if(!o)return '';
+ function actualScope(){
+  const o=currentOptions;if(!o)return '';
   return scope($('raw').value,{...o,customer:$('customer').value,market:$('market').value,
-   businessDate:$('businessDate').value,tick:$('tick').checked,rate:$('rate').value})}
+   businessDate:$('businessDate').value,tick:$('tick').checked,rate:$('rate').value});
+ }
  function load(){
-  let text;
-  try{text=sessionStorage.getItem(KEY)}catch(_){throw Error('HOLD_CUT_STORAGE_UNAVAILABLE')}
-  if(!text)return {scope:null,keys:[],undo:[]};
-  let r;
-  try{r=JSON.parse(text)}catch(_){throw Error('HOLD_CUT_STORAGE_CORRUPT')}
+  let t;try{t=sessionStorage.getItem(KEY)}catch(_){throw Error('HOLD_CUT_STORAGE_UNAVAILABLE')}
+  if(!t)return {scope:null,keys:[],undo:[]};
+  let r;try{r=JSON.parse(t)}catch(_){throw Error('HOLD_CUT_STORAGE_CORRUPT')}
   if(!r||typeof r.scope!=='string'||!Array.isArray(r.keys)||r.keys.length>1000||
-     new Set(r.keys).size!==r.keys.length||!Array.isArray(r.undo)||r.undo.length>30||
-     r.undo.some(x=>!Array.isArray(x)||x.length>1000||new Set(x).size!==x.length))
+    new Set(r.keys).size!==r.keys.length||!Array.isArray(r.undo)||r.undo.length>30||
+    r.undo.some(x=>!Array.isArray(x)||x.length>1000||new Set(x).size!==x.length))
    throw Error('HOLD_CUT_STORAGE_CORRUPT');
   return r;
  }
  function save(r){
   try{
-   if(r.keys.length){const text=JSON.stringify(r);sessionStorage.setItem(KEY,text);
-    if(sessionStorage.getItem(KEY)!==text)throw Error('WRITE_FAILED');
-   }else{sessionStorage.removeItem(KEY);
+   if(r.keys.length){
+    const t=JSON.stringify(r);sessionStorage.setItem(KEY,t);
+    if(sessionStorage.getItem(KEY)!==t)throw Error('WRITE_FAILED');
+   }else{
+    sessionStorage.removeItem(KEY);
     if(sessionStorage.getItem(KEY)!==null)throw Error('REMOVE_FAILED');
    }
   }catch(_){throw Error('HOLD_CUT_STORAGE_WRITE_FAILED')}
  }
  function reset(){
-  base=null;view=null;currentOptions=null;currentScope=null;
-  $('sourceCutCard').hidden=false;$('startNewQuytBatch').hidden=true;$('cutSelectedQuyt').disabled=true;
-  $('undoQuytCut').disabled=true;
-  for(const id of ['cutBefore','cutRemoved','cutAfter','cutOriginalBefore','cutOriginalRemoved','cutOriginalAfter'])$(id).textContent='—';
-  $('cutSourceList').replaceChildren();$('cutBetList').replaceChildren();
-  $('cutRemovedList').textContent='';$('cutStatus').textContent='Chưa cắt.';
-  $('cutConservation').textContent='Chưa đối chiếu.';
-  for(const bucket of ['Scaled','Unscaled']){
-   $('cut'+bucket+'List').replaceChildren();
-   $('cutSelected'+bucket).disabled=true;
-   for(const part of ['Before','Removed','After'])$(bucket.toLowerCase()+'Cut'+part).textContent='—';
+  base=null;view=null;currentOptions=null;currentScope=null;available=null;
+  $('undoQuytCut').disabled=true;$('startNewQuytBatch').hidden=true;
+  $('cutStatus').textContent='CẮT TOÀN BỘ từng khung sau khi gộp. Tin nguồn phía trên không bị sửa.';
+  $('cutConservation').textContent='Chưa có kết quả đối chiếu.';
+  for(const name of ['Scaled','Unscaled']){
+   $('cutSelected'+name).disabled=true;
+   const bucket=name.toLowerCase();
+   for(const part of ['Before','Removed','After'])$(bucket+'Cut'+part).textContent='—';
   }
  }
  function problem(error){
-  $('sourceCutCard').hidden=false;$('startNewQuytBatch').hidden=false;
+  available=null;
+  $('cutSelectedScaled').disabled=true;$('cutSelectedUnscaled').disabled=true;
+  $('undoQuytCut').disabled=true;$('startNewQuytBatch').hidden=false;
   $('cutStatus').textContent=String(error);
-  $('cutConservation').textContent='HOLD: hai khung bị xóa, không được dùng tiền cũ. Khôi phục đúng nguồn hoặc xác nhận lượt mới.';
+  $('cutConservation').textContent='HOLD: hai khung bị xóa. Khôi phục nguồn cũ hoặc xác nhận lượt mới.';
  }
- function row(parent,label,description,actionText,disabled,callback,removed){
-  const el=document.createElement('div');el.className='cut-row'+(removed?' cut-done':'');
-  const strong=document.createElement('strong');strong.textContent=label;
-  const p=document.createElement('p');p.textContent=description;
-  const button=document.createElement('button');button.type='button';
-  button.textContent=actionText;button.disabled=disabled;
-  button.addEventListener('click',callback);
-  el.append(strong,p,button);parent.append(el);return el;
- }
-
- // Allocate each original wager to exactly one result bucket by canonical
- // sourceIds and factorApplied; never subtract rounded source estimates.
- function bucketOf(rows,ids){
+ function byBucket(rows,sourceIds){
   const linked=new Map(),totals={scaled:0n,unscaled:0n};
-  for(const r of rows){
-   if(!r||typeof r.factorApplied!=='boolean'||typeof r.adjusted!=='string'||
-      !/^\d+$/u.test(r.adjusted)||!Array.isArray(r.sourceIds)||!r.sourceIds.length)
+  for(const row of rows){
+   if(!row||typeof row.factorApplied!=='boolean'||typeof row.adjusted!=='string'||
+     !/^\d+$/u.test(row.adjusted)||!Array.isArray(row.sourceIds)||!row.sourceIds.length)
     throw Error('HOLD_CUT_BUCKET_INVALID_ROW');
-   const target=r.factorApplied?'scaled':'unscaled';
-   totals[target]+=BigInt(r.adjusted);
-   for(const id of r.sourceIds){
-    if(!ids.has(id))throw Error('HOLD_CUT_BUCKET_UNKNOWN_SOURCE');
-    const previous=linked.get(id);
-    if(previous&&previous!==target)throw Error('HOLD_CUT_BUCKET_AMBIGUOUS_SOURCE');
-    linked.set(id,target);
+   const k=row.factorApplied?'scaled':'unscaled';
+   totals[k]+=BigInt(row.adjusted);
+   for(const id of row.sourceIds){
+    if(!sourceIds.has(id))throw Error('HOLD_CUT_BUCKET_UNKNOWN_SOURCE');
+    const prior=linked.get(id);
+    if(prior&&prior!==k)throw Error('HOLD_CUT_BUCKET_AMBIGUOUS_SOURCE');
+    linked.set(id,k);
    }
   }
   return {linked,totals};
  }
  function drawBuckets(v,removed){
-  const ids=new Set(v.base.sourceEntries.map(x=>x.id));
-  const before=bucketOf(v.base.rows,ids),after=bucketOf(v.remaining.rows,ids);
-  if(before.linked.size!==ids.size||
-     before.totals.scaled+before.totals.unscaled!==BigInt(v.before)||
-     after.totals.scaled+after.totals.unscaled!==BigInt(v.after))
-   throw Error('HOLD_CUT_BUCKET_CONSERVATION');
+  const known=new Set(v.base.sourceEntries.map(x=>x.id));
+  const before=byBucket(v.base.rows,known),after=byBucket(v.remaining.rows,known);
+  if(before.linked.size!==known.size||
+    before.totals.scaled+before.totals.unscaled!==BigInt(v.before)||
+    after.totals.scaled+after.totals.unscaled!==BigInt(v.after))
+    throw Error('HOLD_CUT_BUCKET_CONSERVATION');
+  const eligible={scaled:[],unscaled:[]};
   for(const entry of v.base.sourceEntries){
-   const b=before.linked.get(entry.id);
-   if(!b)throw Error('HOLD_CUT_BUCKET_MISSING_SOURCE');
+   const group=before.linked.get(entry.id);
+   if(!group)throw Error('HOLD_CUT_BUCKET_MISSING_SOURCE');
    if(removed.has(entry.id)){
     if(after.linked.has(entry.id))throw Error('HOLD_CUT_BUCKET_STALE');
-   }else if(after.linked.get(entry.id)!==b)throw Error('HOLD_CUT_BUCKET_CHANGED');
-  }
-  for(const bucket of ['scaled','unscaled']){
-   const key=bucket==='scaled'?'Scaled':'Unscaled';
-   const start=before.totals[bucket],end=after.totals[bucket],cutAmount=start-end;
-   if(cutAmount<0n||end+cutAmount!==start)throw Error('HOLD_CUT_BUCKET_NEGATIVE');
-   $(bucket+'CutBefore').textContent=vi(start);
-   $(bucket+'CutRemoved').textContent=vi(cutAmount);
-   $(bucket+'CutAfter').textContent=vi(end);
-   const list=$('cut'+key+'List');
-   $('cutSelected'+key).disabled=true;
-   for(const x of v.base.sourceEntries){
-    if(before.linked.get(x.id)!==bucket)continue;
-    const gone=removed.has(x.id),line=document.createElement('label');
-    line.className='bucket-cut-entry'+(gone?' cut-done':'');
-    const input=document.createElement('input');
-    input.type='checkbox';input.className='bucket-cut-check';input.value=x.id;input.disabled=gone;
-    input.setAttribute('aria-label','Chọn cắt cược dòng '+x.line+' '+x.kind+' '+x.number);
-    input.addEventListener('change',()=>{
-     $('cutSelected'+key).disabled=!list.querySelector('.bucket-cut-check:checked');
-    });
-    const detail=document.createElement('span'),name=document.createElement('strong'),raw=document.createElement('small');
-    name.textContent='Dòng '+x.line+' · '+x.number.replace('-',' ')+' '+x.kind+' '+x.stake+'n'+(gone?' — ĐÃ CẮT':'');
-    raw.textContent='Tin gốc: '+x.text;
-    detail.append(name,raw);line.append(input,detail);list.append(line);
+   }else{
+    if(after.linked.get(entry.id)!==group)throw Error('HOLD_CUT_BUCKET_CHANGED');
+    eligible[group].push(entry.id);
    }
   }
+  for(const group of ['scaled','unscaled']){
+   const name=group==='scaled'?'Scaled':'Unscaled';
+   const start=before.totals[group],end=after.totals[group],taken=start-end;
+   if(taken<0n||end+taken!==start)throw Error('HOLD_CUT_BUCKET_NEGATIVE');
+   $(group+'CutBefore').textContent=vi(start);
+   $(group+'CutRemoved').textContent=vi(taken);
+   $(group+'CutAfter').textContent=vi(end);
+   $('cutSelected'+name).disabled=!eligible[group].length;
+  }
+  return eligible;
  }
  function draw(v,record){
   const removed=new Set(v.removed);
-  $('sourceCutCard').hidden=false;
-  for(const [id,value] of Object.entries({
-   cutBefore:v.before,cutRemoved:v.cutOutput,cutAfter:v.after,
-   cutOriginalBefore:v.originalBefore,cutOriginalRemoved:v.cutOriginal,cutOriginalAfter:v.originalAfter
-  }))$(id).textContent=vi(value);
+  available=drawBuckets(v,removed);
   $('cutConservation').textContent='BẢO TOÀN TIỀN: '+v.before+' = '+v.cutOutput+' + '+v.after+
-   ' (tiền xuất); '+v.originalBefore+' = '+v.cutOriginal+' + '+v.originalAfter+' (tiền gốc). Chênh lệch 0n.';
-  $('cutStatus').textContent='Đã CẮT '+removed.size+'/'+v.base.sourceEntries.length+' khoản nguồn. CẮT chỉ sửa bản xem trước, không Copy hoặc gửi.';
+   ' (tiền sau nhân); '+v.originalBefore+' = '+v.cutOriginal+' + '+v.originalAfter+
+   ' (tiền gốc). Chênh lệch 0n.';
+  $('cutStatus').textContent='Đã CẮT '+removed.size+'/'+v.base.sourceEntries.length+
+   ' cược nguồn. Mỗi nút CẮT xóa toàn bộ cược còn lại trong đúng khung đó. Tin gốc không đổi.';
   $('undoQuytCut').disabled=!record.undo.length;
-  $('cutSelectedQuyt').disabled=true;
-  drawBuckets(v,removed);
-  const lines=new Map();
-  for(const x of v.base.sourceEntries){if(!lines.has(x.line))lines.set(x.line,[]);lines.get(x.line).push(x)}
-  for(const [line,entries] of lines){
-   const allowed=entries.filter(x=>!removed.has(x.id)).map(x=>x.id);
-   row($('cutSourceList'),'TIN NGUỒN — DÒNG '+line,entries[0].text,
-    allowed.length?'CẮT TIN DÒNG '+line:'ĐÃ CẮT CẢ DÒNG',!allowed.length,()=>cut(allowed),!allowed.length);
-  }
-  for(const x of v.base.sourceEntries){
-   const gone=removed.has(x.id);
-   const item=row($('cutBetList'),'CƯỢC DÒNG '+x.line,
-    x.number.replace('-',' ')+' '+x.kind+' '+x.stake+'n · đài '+(x.stations.filter(Boolean).join(', ')||'MB'),
-    gone?'ĐÃ CẮT':'CẮT CƯỢC NÀY',gone,()=>cut([x.id]),gone);
-   const pick=document.createElement('label');pick.className='cut-pick';
-   const checked=document.createElement('input');checked.type='checkbox';checked.className='cut-bet-check';
-   checked.value=x.id;checked.disabled=gone;checked.setAttribute('aria-label','Chọn CẮT cược '+x.kind+' '+x.number+' dòng '+x.line);
-   checked.addEventListener('change',()=>{
-    $('cutSelectedQuyt').disabled=!document.querySelector('#cutBetList .cut-bet-check:checked');
-   });
-   pick.append(checked,document.createTextNode(' Chọn cược để CẮT'));item.prepend(pick);
-  }
-  $('cutRemovedList').textContent=v.base.sourceEntries.filter(x=>removed.has(x.id))
-   .map(x=>'Dòng '+x.line+': '+x.number.replace('-',' ')+' '+x.kind+' '+x.stake+'n').join('\n')||'Chưa cắt cược.';
  }
  function review(engine,raw,opts){
-  const b=engine.merge(raw,opts),r=load(),scoped=scope(raw,opts);
-  if(r.scope&&r.scope!==scoped){problem('HOLD_CUT_SOURCE_CHANGED: nguồn/khách/miền/ngày/hệ số đã đổi.');throw Error('HOLD_CUT_SOURCE_CHANGED')}
-  let v;
-  try{v=QuytSourceCutLedger.calculate(b,raw,opts,r.keys)}
+  const baseline=engine.merge(raw,opts),record=load(),scoped=scope(raw,opts);
+  if(record.scope&&record.scope!==scoped){
+   problem('HOLD_CUT_SOURCE_CHANGED: nguồn/khách/miền/ngày/hệ số đã đổi.');
+   throw Error('HOLD_CUT_SOURCE_CHANGED');
+  }
+  let result;
+  try{result=QuytSourceCutLedger.calculate(baseline,raw,opts,record.keys)}
   catch(e){problem('HOLD: '+String(e.message||e));throw e}
-  base=b;view=v;currentOptions={...opts};currentScope=scoped;draw(v,r);
-  return v.remaining;
+  base=baseline;view=result;currentOptions={...opts};currentScope=scoped;
+  try{draw(result,record)}catch(e){problem('HOLD: '+String(e.message||e));throw e}
+  return result.remaining;
  }
  function cut(ids){
   try{
    if(!base||!view||currentScope!==actualScope())throw Error('HOLD_CUT_STALE_SOURCE');
-   const r=load();if(r.scope&&r.scope!==currentScope)throw Error('HOLD_CUT_SCOPE_CHANGED');
-   const keys=new Set(r.keys);
+   const record=load();
+   if(record.scope&&record.scope!==currentScope)throw Error('HOLD_CUT_SCOPE_CHANGED');
+   const keys=new Set(record.keys);
    if(!ids.length||ids.some(id=>keys.has(id)))throw Error('HOLD_CUT_DUPLICATE');
    ids.forEach(id=>keys.add(id));
    QuytSourceCutLedger.calculate(base,$('raw').value,currentOptions,keys);
-   save({scope:currentScope,keys:[...keys],undo:[...r.undo,r.keys.slice()].slice(-30)});
+   save({scope:currentScope,keys:[...keys],undo:[...record.undo,record.keys.slice()].slice(-30)});
    rerender();
-  }catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)+' — chưa cắt thêm.'}
+  }catch(e){
+   $('cutStatus').textContent='HOLD: '+String(e.message||e)+' — không CẮT thêm.';
+  }
+ }
+ function cutWholeBucket(name){
+  const group=name==='Scaled'?'scaled':'unscaled';
+  if(!available||!Array.isArray(available[group])){problem('HOLD_CUT_BUCKET_NOT_READY');return}
+  cut(available[group].slice());
  }
  function undo(){
   try{
    if(!base||!view||currentScope!==actualScope())throw Error('HOLD_CUT_STALE_SOURCE');
-   const r=load();if(r.scope!==currentScope||!r.undo.length)throw Error('HOLD_CUT_NO_UNDO');
-   const history=r.undo.slice(),prior=history.pop();
+   const r=load();
+   if(r.scope!==currentScope||!r.undo.length)throw Error('HOLD_CUT_NO_UNDO');
+   const undo=r.undo.slice(),prior=undo.pop();
    QuytSourceCutLedger.calculate(base,$('raw').value,currentOptions,prior);
-   save({scope:currentScope,keys:prior,undo:history});rerender();
+   save({scope:currentScope,keys:prior,undo});rerender();
   }catch(e){$('cutStatus').textContent='HOLD: hoàn tác không thành công: '+String(e.message||e)}
  }
  function init(callback){
   rerender=callback;
+  $('cutSelectedScaled').addEventListener('click',()=>cutWholeBucket('Scaled'));
+  $('cutSelectedUnscaled').addEventListener('click',()=>cutWholeBucket('Unscaled'));
   $('undoQuytCut').addEventListener('click',undo);
-  $('cutSelectedQuyt').addEventListener('click',()=>cut([...document.querySelectorAll('#cutBetList .cut-bet-check:checked')].map(x=>x.value)));
-  for(const bucket of ['Scaled','Unscaled']){
-   $('cutSelected'+bucket).addEventListener('click',()=>cut([...document.querySelectorAll('#cut'+bucket+'List .bucket-cut-check:checked')].map(x=>x.value)));
-  }
   $('startNewQuytBatch').addEventListener('click',()=>{
-   if(!confirm('Đã đối chiếu sổ CẮT cũ và xác nhận BẮT ĐẦU LƯỢT MỚI? Cược chưa tự gửi.'))return;
+   if(!confirm('Đã đối chiếu sổ CẮT cũ và xác nhận BẮT ĐẦU LƯỢT MỚI? Không gửi cược.'))return;
    try{save({keys:[],undo:[]});rerender()}
    catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)}
   });
