@@ -33,14 +33,14 @@ try{
   [...document.querySelectorAll('.total')].length===2&&Boolean($('scaledItems')&&$('unscaledItems')));
  assert('empty source keeps both result frames empty',closed()&&$('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—');
  set('raw','hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 dui15n.');
- assert('factor disabled: scaled bucket 0n and original bucket 65n',
+ assert('MB UNCHECKED amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,95),
   money('baoTotal')===0n&&money('otherTotal')===65n&&closed()===false);
  assert('unscaled source preview itemization lists all four kinds without ticket copy syntax',
   !$('scaledItems').textContent.includes('· 21 ·')&&$('unscaledItems').textContent.includes('BAO/LÔ'));
  assert('unchecked MB output only opens after explicit receipt', $('copy').disabled&&!$('ackMoney').disabled);
  ack();assert('unchecked MB Copy can unlock as before',!$('copy').disabled);
  checkbox(true);
- assert('checked factor creates one scaled-result frame and one unchanged-result frame',
+ assert('MB CHECKED amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,95),
   money('baoTotal')===59n&&money('otherTotal')===10n&&closed());
  assert('scaled frame contains B/DD/Đầu/Đuôi 2-digit itemization',
   $('scaledItems').textContent.includes('BAO/LÔ · 21 · 10n → 11n')&&
@@ -51,11 +51,11 @@ try{
  assert('factorized Quýt result may not be copied until receiver confirms policy',
   closed()&&$('ackMoney').disabled&&$('status').textContent.includes('HOLD_QUYT_V2_MONEY_CONTRACT'));
  set('raw','hn 21 b5n. 321 b5n. 31 dd5n. 41 dui5n.');
- assert('factor-eligible but rounded unchanged 5n still appears in scaled frame',
+ assert('MB 5N amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,75),
   money('baoTotal')===15n&&money('otherTotal')===5n&&
   $('scaledItems').textContent.includes('BAO/LÔ · 21 · 5n → 5n')&&closed());
  set('raw','hn 321 b10n. 031 lo5n.');
- assert('only three-digit Bao remains in UNCHANGED frame',
+ assert('MB B3 amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,75),
   money('baoTotal')===0n&&money('otherTotal')===15n&&
   $('unscaledItems').textContent.includes('BAO/LÔ · 031 · 5n')&&closed());
  set('raw','hn 531 dd15n');
@@ -81,14 +81,14 @@ try{
  checkbox(true);
  market('mn');set('raw','tn 21 b10n. 321 b10n. 41 dd15n.');
  assert('MN without date HOLDs and clears both buckets',closed()&&$('baoTotal').textContent==='—');
- set('businessDate','2026-11-12');
+ set('businessDate','2026-11-12','change');
  assert('MN Thursday acceptance status: '+$('status').textContent.slice(0,100),$('baoTotal').textContent!=='—');
- assert('MN correct station uses 2-digit factor bucket vs 3-digit raw bucket',
+ assert('MN THU amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,85),
   money('baoTotal')===27n&&money('otherTotal')===10n&&closed());
- set('businessDate','2026-11-13');
+ set('businessDate','2026-11-13','change');
  assert('TN wrong weekday clears both buckets and COPY',closed()&&$('baoTotal').textContent==='—');
- market('mt');set('businessDate','2026-11-11');set('raw','dn 21 dd15n.');
- assert('MT two-digit DD enters scaled bucket and Copy remains HOLD',
+ market('mt');set('businessDate','2026-11-11','change');set('raw','dn 21 dd15n.');
+ assert('MT WED amounts '+$('baoTotal').textContent+' / '+$('otherTotal').textContent+' '+$('status').textContent.slice(0,85),
   money('baoTotal')===16n&&money('otherTotal')===0n&&closed());
  set('raw','dn 531 dui15n');
  assert('MT 3-digit Đuôi invalid and clears both buckets',
