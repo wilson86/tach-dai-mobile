@@ -1,0 +1,21 @@
+name: Quyt isolated Cut Beta acceptance (free public Ubuntu)
+on:
+  pull_request:
+    paths:
+      - 'quyt-pwa/quyt-cut-beta/**'
+      - 'tests/quyt-cut-beta-review-*.cjs'
+      - '.github/workflows/quyt-cut-beta-review.yml'
+permissions:
+  contents: read
+jobs:
+  beta-review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Beta isolated money and provenance contract
+        run: node --test tests/quyt-cut-beta-review-contract.cjs
+      - name: Beta actual Chromium Cut Undo F5 and locked Copy
+        run: |
+          command -v google-chrome || command -v chromium
+          node tests/quyt-cut-beta-review-f5.cjs
