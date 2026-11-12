@@ -459,7 +459,7 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
 })();
 </script>
 <script src="./quyt-source-cut-ledger.js"></script>
-<script src="./quyt-live-cut-ui.js"></script>
+<script src="./quyt-live-cut-ui.js?v=2026111301"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),businessDate=$('businessDate'),regionScope=$('regionScope'),scheduleLabel=$('stationSchedule'),status=$('status'),copy=$('copy'),select=$('select'),ack=$('ackMoney'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
@@ -688,7 +688,17 @@ copy.addEventListener('click',async()=>{
   message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok);
  }
 });
-QuytLiveCutUI.init(redraw);redraw();
+try{
+ if(typeof QuytLiveCutUI==='undefined'||QuytLiveCutUI.version!=='QUYT_CUT_FULLBOX_20261113_01')throw Error('HOLD_PWA_ASSET_VERSION_MISMATCH');
+ QuytLiveCutUI.init(redraw);redraw();
+}catch(error){
+ const reason=String(error.message||error);
+ message('HOLD_PWA_ASSET_VERSION_MISMATCH: HTML và bộ CẮT chưa đồng bộ ('+reason+'). Kết nối mạng và mở lại link Quýt chính; không dùng kết quả cũ.',true);
+ $('scaledTicket').value='';$('unscaledTicket').value='';
+ $('baoTotal').textContent='—';$('otherTotal').textContent='—';
+ $('copyScaled').disabled=true;$('copyUnscaled').disabled=true;
+ $('cutSelectedScaled').disabled=true;$('cutSelectedUnscaled').disabled=true;
+}
 })();
 // HTTPS PWA registration: one scope and byte-identical station authority.
 if('serviceWorker' in navigator && location.protocol==='https:'){

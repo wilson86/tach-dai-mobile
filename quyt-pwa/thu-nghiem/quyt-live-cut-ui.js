@@ -161,5 +161,5 @@ const QuytLiveCutUI=(()=>{
    catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)}
   });
  }
- return Object.freeze({init,reset,review,problem});
+ return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_01',init,reset,review,problem});
 })();
