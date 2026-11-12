@@ -20,7 +20,7 @@ const checks=String.raw`<script>
  const cutClick=async id=>{$(id).click();await new Promise(resolve=>setTimeout(resolve,22));};
  const stage=sessionStorage.getItem('QA_QUYT_LIVE_CUT_STAGE');
  try{
-  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_04');
+  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_05');
   assert('only two result money panels',document.querySelectorAll('.total').length===2);
   assert('no repeated raw-message Cut card',!document.getElementById('sourceCutCard')&&!document.getElementById('cutSourceList'));
   assert('no individual wager checkbox lists',!document.querySelector('.bucket-cut-entry')&&!document.querySelector('.bucket-cut-check'));
@@ -32,10 +32,10 @@ const checks=String.raw`<script>
    assert('F5 multiplier selection preserved',$('tick').checked);
    assert('F5 entire scaled bucket stays removed',amount('baoTotal')==='0n'&&amount('otherTotal')==='15n');
    assert('F5 financial receipt after full scaled Cut',amount('scaledCutBefore')==='428n'&&amount('scaledCutRemoved')==='428n'&&amount('scaledCutAfter')==='0n');
-   assert('F5 scaled Cut snapshot remains visible',!$('cutArchiveScaled').hidden&&$('cutSavedScaled').value.includes('60 b107n.'));
+   assert('F5 keeps Cut receipt in ledger but does not show duplicate ticket',$('cutArchiveScaled').hidden&&getComputedStyle($('cutArchiveScaled')).display==='none'&&$('cutSavedScaled').value.includes('60 b107n.'));
    assert('F5 has no extra Copy button', $('copySavedScaled').hidden&&$('copySavedScaled').disabled);
    assert('F5 original unchecked Copy is hidden',$('copyScaled').parentElement.hidden);
-   assert('F5 preserved Cut archive is selectable',$('cutSavedScaled').value.includes('60 b107n.'));
+   assert('F5 retains immutable Cut archive for Undo/audit',$('cutSavedScaled').value.includes('60 b107n.'));
    assert('F5 both buttons reflect eligible buckets',$('cutSelectedScaled').disabled&&!$('cutSelectedUnscaled').disabled);
    $('undoQuytCut').click();
    assert('Undo entire scaled Cut restores two buckets',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
@@ -73,7 +73,7 @@ const checks=String.raw`<script>
    assert('unticked factor keeps pasteable raw-money ticket',originalUnscaled.includes('60 b100n.'));
    await cutClick('cutSelectedUnscaled');
    assert('unticked factor Cut removes all 415n',amount('baoTotal')==='0n'&&amount('otherTotal')==='0n');
-   assert('Cut retains complete unscaled ticket for pasting',!$('cutArchiveUnscaled').hidden&&$('cutSavedUnscaled').value===originalUnscaled);
+   assert('Cut leaves no repeated result pane and clipboard gets full ticket',$('cutArchiveUnscaled').hidden&&getComputedStyle($('cutArchiveUnscaled')).display==='none'&&$('cutSavedUnscaled').value===originalUnscaled);
    assert('Cut auto copies unscaled ticket to simulated clipboard',window.__qaClipboard===originalUnscaled);
    assert('only direct CẮT action, no re-Copy',$('copySavedUnscaled').hidden&&$('copySavedUnscaled').disabled);
    $('undoQuytCut').click();
@@ -93,14 +93,15 @@ const checks=String.raw`<script>
    await cutClick('cutSelectedUnscaled');
    assert('one tap removes entire unchanged bucket',amount('baoTotal')==='428n'&&amount('otherTotal')==='0n');
    assert('unchanged bucket receipt 15 minus 15 equals 0',amount('unscaledCutBefore')==='15n'&&amount('unscaledCutRemoved')==='15n'&&amount('unscaledCutAfter')==='0n');
-   assert('unscaled archive retained even after active result disappears',!$('cutArchiveUnscaled').hidden&&$('cutSavedUnscaled').value.includes('526 b10n.'));
+   assert('unscaled archive only in ledger, not duplicated below result',$('cutArchiveUnscaled').hidden&&$('cutSavedUnscaled').value.includes('526 b10n.'));
    assert('only one-tap CẮT remains for unchanged pane',$('copySavedUnscaled').hidden);
    assert('uncut multiplied bucket remains enabled',!$('cutSelectedScaled').disabled&&$('cutSelectedUnscaled').disabled);
    await cutClick('cutSelectedScaled');
    assert('second tap removes entire multiplied bucket',amount('baoTotal')==='0n'&&amount('otherTotal')==='0n');
-   assert('factorized Cut snapshot retained in result pane',!$('cutArchiveScaled').hidden&&$('cutSavedScaled').value.includes('60 b107n.'));
+   assert('factorized Cut text retained internally, no duplicate box',$('cutArchiveScaled').hidden&&getComputedStyle($('cutArchiveScaled')).display==='none'&&$('cutSavedScaled').value.includes('60 b107n.'));
    assert('factorized Cut requires no second Copy button',$('copySavedScaled').hidden&&$('copySavedScaled').disabled);
    assert('factorized Cut automatically copies canonical archived ticket',window.__qaClipboard===$('cutSavedScaled').value);
+   assert('Cut leaves zero result and does not show hidden duplicate ticket',amount('baoTotal')==='0n'&&$('scaledTicket').value===''&&$('cutArchiveScaled').hidden);
    assert('factorized ordinary result Copy remains locked',$('copyScaled').disabled);
    assert('old disabled Copy remains hidden',$('copyScaled').parentElement.hidden);
    assert('whole-source conservation ends at zero',amount('scaledCutRemoved')==='428n'&&amount('unscaledCutRemoved')==='15n'&&$('cutConservation').textContent.includes('443 = 443 + 0'));

@@ -122,7 +122,7 @@ const QuytLiveCutUI=(()=>{
   for(const group of ['scaled','unscaled']){
    const name=group==='scaled'?'Scaled':'Unscaled';
    const a=record.archives[group],present=Boolean(a.text);
-   $('cutArchive'+name).hidden=!present;
+   $('cutArchive'+name).hidden=true; // Cut ticket is ledger-only: never duplicate the result pane
    $('copy'+name).parentElement.hidden=true;
    $('cutSaved'+name).value=present?a.text:'';
    // Only archived, source-verified Cut tickets may be copied; ordinary factorized output remains HOLD.
@@ -134,6 +134,7 @@ const QuytLiveCutUI=(()=>{
   const fallback=()=>{
    const el=$(selectField);el.focus();el.select();
    let ok=false;try{ok=Boolean(document.execCommand('copy'))}catch(_){}
+   if(document.activeElement===el)el.blur(); // do not leave cursor in a now-empty result box
    if(!ok)throw Error('HOLD_CLIPBOARD_UNAVAILABLE');
   };
   if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function')
@@ -289,5 +290,5 @@ const QuytLiveCutUI=(()=>{
    catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)}
   });
  }
- return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_04',init,reset,review,problem});
+ return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_05',init,reset,review,problem});
 })();
