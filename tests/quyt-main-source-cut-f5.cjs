@@ -48,6 +48,12 @@ const checks=String.raw`<script>
    sessionStorage.removeItem('QA_QUYT_LIVE_CUT_STAGE');sessionStorage.removeItem('QA_QUYT_LIVE_CUT_FIRST');
   }else{
    assert('blank screen holds both Cut actions',$('cutSelectedScaled').disabled&&$('cutSelectedUnscaled').disabled);
+   $('raw').value='123 dd10n'; // simulate mobile/autofill paste with no input event
+   $('checkMerge').click();
+   assert('direct GỘP click shows invalid-source HOLD instead of initial placeholder',$('status').textContent.includes('HOLD')&&!$('status').textContent.includes('Dán tin vào ô trên'));
+   $('raw').value=input;$('tick').checked=true; // again, no input/change event
+   $('checkMerge').click();
+   assert('direct GỘP click recomputes two buckets without input event',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
    set('raw',input);$('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
    assert('owner fixture before Cut exactly 428 plus 15',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
    assert('both whole Cut buttons enabled',!$('cutSelectedScaled').disabled&&!$('cutSelectedUnscaled').disabled);
