@@ -51,6 +51,7 @@ const QuytLiveCutUI=(()=>{
   for(const name of ['Scaled','Unscaled']){
    $('cutSelected'+name).disabled=true;
    $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
+   $('copy'+name).parentElement.style.display='';
    const bucket=name.toLowerCase();
    for(const part of ['Before','Removed','After'])$(bucket+'Cut'+part).textContent='—';
   }
@@ -61,6 +62,7 @@ const QuytLiveCutUI=(()=>{
   $('undoQuytCut').disabled=true;$('startNewQuytBatch').hidden=false;
   for(const name of ['Scaled','Unscaled']){
    $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
+   $('copy'+name).parentElement.style.display='';
   }
   $('cutStatus').textContent=String(error);
   $('cutConservation').textContent='HOLD: hai khung bị xóa. Khôi phục nguồn cũ hoặc xác nhận lượt mới.';
@@ -121,9 +123,10 @@ const QuytLiveCutUI=(()=>{
    const name=group==='scaled'?'Scaled':'Unscaled';
    const a=record.archives[group],present=Boolean(a.text);
    $('cutArchive'+name).hidden=!present;
+   $('copy'+name).parentElement.style.display=present?'none':'';
    $('cutSaved'+name).value=present?a.text:'';
-   // Receiver monetary oracle has not approved factorized Quýt Copy.
-   $('copySaved'+name).disabled=!present||group==='scaled';
+   // Only archived, source-verified Cut tickets may be copied; ordinary factorized output remains HOLD.
+   $('copySaved'+name).disabled=!present;
   }
  }
  function writeClipboard(text,selectField){
@@ -137,22 +140,35 @@ const QuytLiveCutUI=(()=>{
    return navigator.clipboard.writeText(text).catch(()=>fallback());
   try{fallback();return Promise.resolve()}catch(e){return Promise.reject(e)}
  }
- function copyUnscaledArchive(){
-  const originalView=view,scoped=currentScope;
+ function copyArchive(group){
+  const originalView=view,scoped=currentScope,field=group==='scaled'?'cutSavedScaled':'cutSavedUnscaled';
   try{
-   if(!originalView||!scoped||scoped!==actualScope())throw Error('HOLD_CUT_COPY_STALE_SOURCE');
-   const r=load();
-   if(r.scope!==scoped||!r.archives.unscaled.text||!r.archives.unscaled.ids.every(id=>r.keys.includes(id)))
+   if(!['scaled','unscaled'].includes(group))throw Error('HOLD_CUT_COPY_INVALID_BUCKET');
+   if(!originalView||!base||!scoped||scoped!==actualScope())throw Error('HOLD_CUT_COPY_STALE_SOURCE');
+   const r=load(),archive=r.archives[group];
+   if(r.scope!==scoped||!archive.text||!archive.ids.length||
+      !archive.ids.every(id=>r.keys.includes(id))||
+      $(field).value!==archive.text)
     throw Error('HOLD_CUT_COPY_INVALID_ARCHIVE');
-   const text=r.archives.unscaled.text;
-   return writeClipboard(text,'cutSavedUnscaled').then(()=>{
+   // Recreate the exact PRE-CUT bucket using the immutable source before
+   // allowing clipboard export. Never trust a stale/tampered saved text alone.
+   const restoredIds=r.keys.filter(id=>!archive.ids.includes(id));
+   const prior=QuytSourceCutLedger.calculate(base,$('raw').value,currentOptions,restoredIds);
+   if(ticketFromRows(prior.remaining.rows,group)!==archive.text)
+    throw Error('HOLD_CUT_COPY_ARCHIVE_MONEY_MISMATCH');
+   return writeClipboard(archive.text,field).then(()=>{
     if(view!==originalView||currentScope!==scoped||actualScope()!==scoped)
      throw Error('HOLD_CUT_COPY_STALE_AFTER_ASYNC');
-    $('cutStatus').textContent='ĐÃ SAO CHÉP tin đã CẮT giữ nguyên vào bộ nhớ tạm. Không tự gửi.';
+    $('cutStatus').textContent=group==='scaled'
+     ?'ĐÃ SAO CHÉP bản CẮT ×1.067 vào bộ nhớ tạm — CHƯA NGHIỆM THU ROUTER, không tự gửi.'
+     :'ĐÃ SAO CHÉP bản CẮT giữ nguyên vào bộ nhớ tạm. Không tự gửi.';
    }).catch(e=>{
-    $('cutStatus').textContent='HOLD: không sao chép được ('+String(e.message||e)+'). Tin đã CẮT vẫn lưu để chọn và sao chép thủ công.';
+    $('cutStatus').textContent='HOLD_CLIPBOARD: '+String(e.message||e)+'. Tin CẮT vẫn được lưu trong ô để chọn/sao chép thủ công.';
    });
-  }catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e);return Promise.resolve()}
+  }catch(e){
+   $('cutStatus').textContent='HOLD_CLIPBOARD: '+String(e.message||e)+'. Không sao chép tin chưa đối soát.';
+   return Promise.resolve();
+  }
  }
  function draw(v,record){
   const removed=new Set(v.removed);
@@ -209,9 +225,8 @@ const QuytLiveCutUI=(()=>{
   const field=group==='scaled'?'scaledTicket':'unscaledTicket';
   if(!ids.length||!text||$(field).value!==text){$('cutStatus').textContent='HOLD_CUT_TICKET_MISMATCH: không cắt vì tin xuất chưa khớp cược nguồn.';return}
   const successful=cut(ids,{group,text,ids});
-  // Only the unchanged-money bucket is allowed to use clipboard.
-  // Factorized review-only Copy stays HOLD until the Router money oracle is accepted.
-  if(successful&&group==='unscaled')copyUnscaledArchive();
+  // Owner-requested clipboard export is only for the CUT archive, not the ordinary result or automatic send.
+  if(successful)copyArchive(group);
  }
  function undo(){
   try{
@@ -232,13 +247,13 @@ const QuytLiveCutUI=(()=>{
   $('cutSelectedScaled').addEventListener('click',()=>cutWholeBucket('Scaled'));
   $('cutSelectedUnscaled').addEventListener('click',()=>cutWholeBucket('Unscaled'));
   $('undoQuytCut').addEventListener('click',undo);
-  $('copySavedUnscaled').addEventListener('click',copyUnscaledArchive);
-  $('copySavedScaled').disabled=true;
+  $('copySavedUnscaled').addEventListener('click',()=>copyArchive('unscaled'));
+  $('copySavedScaled').addEventListener('click',()=>copyArchive('scaled'));
   $('startNewQuytBatch').addEventListener('click',()=>{
    if(!confirm('Đã đối chiếu sổ CẮT cũ và xác nhận BẮT ĐẦU LƯỢT MỚI? Không gửi cược.'))return;
    try{save({keys:[],undo:[]});rerender()}
    catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)}
   });
  }
- return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_02',init,reset,review,problem});
+ return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_03',init,reset,review,problem});
 })();

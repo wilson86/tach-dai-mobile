@@ -16,7 +16,7 @@ const checks=String.raw`<script>
  }}})}catch(_){}
  const stage=sessionStorage.getItem('QA_QUYT_LIVE_CUT_STAGE');
  try{
-  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_02');
+  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_03');
   assert('only two result money panels',document.querySelectorAll('.total').length===2);
   assert('no repeated raw-message Cut card',!document.getElementById('sourceCutCard')&&!document.getElementById('cutSourceList'));
   assert('no individual wager checkbox lists',!document.querySelector('.bucket-cut-entry')&&!document.querySelector('.bucket-cut-check'));
@@ -29,12 +29,30 @@ const checks=String.raw`<script>
    assert('F5 entire scaled bucket stays removed',amount('baoTotal')==='0n'&&amount('otherTotal')==='15n');
    assert('F5 financial receipt after full scaled Cut',amount('scaledCutBefore')==='428n'&&amount('scaledCutRemoved')==='428n'&&amount('scaledCutAfter')==='0n');
    assert('F5 scaled Cut snapshot remains visible',!$('cutArchiveScaled').hidden&&$('cutSavedScaled').value.includes('60 b107n.'));
-   assert('F5 factorized copied ticket blocked',$('copySavedScaled').disabled);
+   assert('F5 scaled archive re-Copy enabled',!$('copySavedScaled').disabled);
+   assert('F5 hides legacy disabled scaled Copy when archive exists',$('copyScaled').parentElement.style.display==='none');
+   $('copySavedScaled').click();
+   assert('F5 manual scaled re-Copy exact archived canonical ticket',window.__qaClipboard===$('cutSavedScaled').value);
+   // Prove a tampered session archive cannot be used to poison clipboard.
+   const rec=JSON.parse(sessionStorage.getItem('KTS_QUYT_MAIN_V4_SOURCE_CUT_V1'));
+   const canonical=rec.archives.scaled.text;
+   rec.archives.scaled.text=canonical+'\n999 b999n.';
+   sessionStorage.setItem('KTS_QUYT_MAIN_V4_SOURCE_CUT_V1',JSON.stringify(rec));
+   $('cutSavedScaled').value=rec.archives.scaled.text;
+   window.__qaClipboard='KEEP_CLIPBOARD';
+   $('copySavedScaled').click();
+   assert('tampered factorized archive refuses clipboard',window.__qaClipboard==='KEEP_CLIPBOARD'&&$('cutStatus').textContent.includes('HOLD_CLIPBOARD'));
+   rec.archives.scaled.text=canonical;
+   sessionStorage.setItem('KTS_QUYT_MAIN_V4_SOURCE_CUT_V1',JSON.stringify(rec));
+   $('cutSavedScaled').value=canonical;
+   $('copySavedScaled').click();
+   assert('revalidated scaled archive copies again',window.__qaClipboard===canonical);
    assert('F5 both buttons reflect eligible buckets',$('cutSelectedScaled').disabled&&!$('cutSelectedUnscaled').disabled);
    $('undoQuytCut').click();
    assert('Undo entire scaled Cut restores two buckets',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
    assert('Undo empties Cut ledger',sessionStorage.getItem('KTS_QUYT_MAIN_V4_SOURCE_CUT_V1')===null);
    assert('Undo hides old multiplied Cut snapshot',$('cutArchiveScaled').hidden&&$('cutSavedScaled').value==='');
+   assert('Undo restores legacy locked Copy visibility',$('copyScaled').parentElement.style.display==='');
    $('cutSelectedUnscaled').click();
    assert('after F5 cut unchanged bucket',$('cutSelectedUnscaled').disabled&&amount('baoTotal')==='428n'&&amount('otherTotal')==='0n');
    set('raw',input.replace('b 100','b 101'));
@@ -86,7 +104,10 @@ const checks=String.raw`<script>
    $('cutSelectedScaled').click();
    assert('second tap removes entire multiplied bucket',amount('baoTotal')==='0n'&&amount('otherTotal')==='0n');
    assert('factorized Cut snapshot retained in result pane',!$('cutArchiveScaled').hidden&&$('cutSavedScaled').value.includes('60 b107n.'));
-   assert('factorized Cut Copy stays locked',$('copySavedScaled').disabled);
+   assert('factorized Cut archive Copy is enabled on user request',!$('copySavedScaled').disabled);
+   assert('factorized Cut automatically copies canonical archived ticket',window.__qaClipboard===$('cutSavedScaled').value);
+   assert('factorized ordinary result Copy remains locked',$('copyScaled').disabled);
+   assert('no duplicate disabled original Copy button shown',$('copyScaled').parentElement.style.display==='none');
    assert('whole-source conservation ends at zero',amount('scaledCutRemoved')==='428n'&&amount('unscaledCutRemoved')==='15n'&&$('cutConservation').textContent.includes('443 = 443 + 0'));
    assert('all cut actions disabled after all removed',$('cutSelectedScaled').disabled&&$('cutSelectedUnscaled').disabled);
    assert('Cut never modifies raw source',$('raw').value===input);

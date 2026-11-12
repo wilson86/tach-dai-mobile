@@ -75,11 +75,16 @@ test('exactly two result buckets have only full-box Cut and Undo; no duplicated 
  assert.match(html,/CẮT TOÀN BỘ KHUNG GIỮ NGUYÊN/u);
  assert.match(html,/SAO CHÉP TIN ĐÃ CẮT — GIỮ NGUYÊN/u);
  const copyModule=read('quyt-pwa/quyt-live-cut-ui.js');
- assert.match(copyModule,/copyUnscaledArchive\(\)/u);
- assert.match(copyModule,/copySavedScaled'\)\.disabled=true/u);
+ assert.match(copyModule,/function copyArchive\(group\)/u);
+ assert.match(copyModule,/HOLD_CUT_COPY_ARCHIVE_MONEY_MISMATCH/u);
+ assert.match(copyModule,/if\(successful\)copyArchive\(group\)/u);
+ assert.match(copyModule,/copySavedScaled'\)\.addEventListener\('click',\(\)=>copyArchive\('scaled'\)\)/u);
+ assert.match(copyModule,/copySavedUnscaled'\)\.addEventListener\('click',\(\)=>copyArchive\('unscaled'\)\)/u);
+ assert.match(html,/SAO CHÉP TIN ĐÃ CẮT ×1\.067/u);
+ assert.match(html,/CHƯA NGHIỆM THU ROUTER/u);
  assert.match(copyModule,/KTS_QUYT_MAIN_V4_SOURCE_CUT_V1/u);
  assert.match(html,/<script src="\.\/quyt-source-cut-ledger\.js"><\/script>/u);
- assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111302"><\/script>/u);
+ assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111303"><\/script>/u);
  assert.match(html,/HOLD_PWA_ASSET_VERSION_MISMATCH/u);
  assert.match(html,/QuytLiveCutUI\.review\(OfflineKTS,raw\.value/u);
  assert.match(html,/QuytLiveCutUI\.reset\(\)/u);
@@ -87,7 +92,7 @@ test('exactly two result buckets have only full-box Cut and Undo; no duplicated 
  assert.match(html,/copyScaled'\)\.disabled=true/u);
  assert.doesNotMatch(html,/Telegram\.send|sendBeacon|XMLHttpRequest/u);
  const sw=read('quyt-pwa/sw.js');
- for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111302'])assert.ok(sw.includes("'"+asset+"'"));
+ for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111303'])assert.ok(sw.includes("'"+asset+"'"));
  assert.equal(read('quyt-pwa/thu-nghiem/index.html'),html);
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-live-cut-ui.js'),read('quyt-pwa/quyt-live-cut-ui.js'));
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-source-cut-ledger.js'),ledgerSource);
