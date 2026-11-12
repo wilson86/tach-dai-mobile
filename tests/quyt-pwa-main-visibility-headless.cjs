@@ -26,7 +26,7 @@ const ack=()=>{$('ackMoney').checked=true;$('ackMoney').dispatchEvent(new Event(
 const closed=()=> $('copy').disabled&&$('select').disabled&&
  [...document.querySelectorAll('.section-copy')].every(b=>b.disabled)&&
  $('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&$('result').value==='';
-const money=id=>{const v=$(id).textContent.replaceAll('.','').replace('n','');return /^\d+$/u.test(v)?BigInt(v):null;};
+const money=id=>{const v=$(id).textContent.replaceAll('.','').replace('n','');return /^[0-9]+$/u.test(v)?BigInt(v):null;};
 try{
  assert('one-screen MB/MN/MT with exactly TWO distinct result frames',
   ['mb','mn','mt'].every(id=>[...$('market').options].some(x=>x.value===id))&&
