@@ -1,32 +1,33 @@
 'use strict';
-// WILSON86 synthetic navigation release gate: protect original Quýt app source.
-const t=require('node:test'),assert=require('node:assert/strict');
-const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const root=path.join(__dirname,'..','quyt-pwa');
-const main=fs.readFileSync(path.join(root,'index.html'),'utf8');
-const preview=fs.readFileSync(path.join(root,'thu-nghiem','index.html'),'utf8');
-const sw=fs.readFileSync(path.join(root,'sw.js'));
-const gitBlob=source=>{const b=Buffer.from(source);return crypto.createHash('sha1').update('blob '+b.length+'\0').update(b).digest('hex')};
-const start='<!-- KTS_QUYT_LINK_ENTRY_REVIEW_START -->',end='<!-- KTS_QUYT_LINK_ENTRY_REVIEW_END -->';
-const originalBlob='f486295ede0f99cc941ecebbe1730c89a1d1277d';
-const originalSWBlob='b21e620b5a97a05a16ac369b81a6990e84123918';
-t('main Quýt source differs ONLY by isolated navigation section; all legacy business code identical',()=>{
- assert.equal(main.split(start).length,2);assert.equal(main.split(end).length,2);
- const clean=main.slice(0,main.indexOf(start))+main.slice(main.indexOf(end)+end.length+1);
- assert.equal(gitBlob(clean),originalBlob);
- assert.equal(gitBlob(sw),originalSWBlob);
+const t=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const root=path.resolve(__dirname,'..','quyt-pwa');
+const source=(folder,name)=>fs.readFileSync(path.join(root,folder,name));
+const main=source('.','index.html').toString('utf8'),preview=source('thu-nghiem','index.html').toString('utf8');
+const officialSW=source('.','sw.js').toString('utf8'),previewSW=source('thu-nghiem','sw.js').toString('utf8');
+t('Official Quýt is EXACTLY the new two-box review app, not old Bao-only app',()=>{
+ assert.equal(main,preview);
+ assert.match(main,/Kết quả gộp — CHỈ 2 KHUNG/u);
+ assert.match(main,/ĐÃ NHÂN HỆ SỐ QUÝT/u);
+ assert.match(main,/KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN/u);
+ assert.doesNotMatch(main,/MỞ GỘP CHUNG MB \/ MN \/ MT \(BẢN THỬ\)/u);
+ assert.doesNotMatch(main,/TỔNG GỐC \(CHƯA LÀM TRÒN\)/u);
+ assert.match(main,/normalizeApprovedBareStakes\(raw\)/u);
+ assert.match(main,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
 });
-t('original Quýt URL offers prominent one-click same-origin entry to 3-market review without changing app money',()=>{
- const fragment=main.slice(main.indexOf(start),main.indexOf(end)+end.length);
- assert.match(fragment,/id="quyt-three-region-open" href="\.\/thu-nghiem\/"/u);
- assert.match(fragment,/MỞ GỘP CHUNG MB \/ MN \/ MT \(BẢN THỬ\)/u);
- assert.match(fragment,/KHÓA COPY cược đã nhân hệ số/u);
- assert.match(fragment,/Không gửi tiền cược thật/u);
- assert.match(fragment,/phần cũ/u);
- assert.ok(main.indexOf(start)<main.indexOf('id="customer"'));
- assert.doesNotMatch(fragment,/<script|<iframe|<form|onclick=|fetch\(/iu);
- const url=new URL('./thu-nghiem/','https://wilson86.github.io/tach-dai-mobile/quyt-pwa/index.html');
- assert.equal(url.href,'https://wilson86.github.io/tach-dai-mobile/quyt-pwa/thu-nghiem/');
- assert.match(preview,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
- assert.match(preview,/HOLD_RECEIVER_MARKET_UNAPPROVED/u);
+t('Exactly two visible result frames; old grouped and Copy cards never visible or focusable',()=>{
+ assert.equal([...main.matchAll(/class="total"/gu)].length,2);
+ assert.match(main,/#groupedResultsCard,#combinedResultsCard,#moneyAcknowledgment\{display:none!important\}/u);
+ assert.match(main,/id="groupedResultsCard" hidden inert aria-hidden="true"/u);
+ assert.match(main,/id="combinedResultsCard" hidden inert aria-hidden="true"/u);
+ assert.match(main,/function receiverMarketApproved\(\)\{return market.value==='mb'&&!\(customer.value==='quyt'&&tick.checked\)\}/u);
+});
+t('Distinct official vs preview PWA cache namespaces and byte-identical generated station calendar',()=>{
+ assert.match(officialSW,/kts-quyt-standalone-pwa-20261112-v18-two-boxes-approved-bare/u);
+ assert.match(officialSW,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
+ assert.match(previewSW,/kts-quyt-preview-20261112-v2-bare-money-two-boxes/u);
+ assert.match(previewSW,/k\.startsWith\('kts-quyt-preview-'\)/u);
+ assert.doesNotMatch(previewSW,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
+ assert.deepEqual(source('.','station_calendar.generated.js'),source('thu-nghiem','station_calendar.generated.js'));
+ const a='https://wilson86.github.io/tach-dai-mobile/quyt-pwa/';
+ assert.notEqual(new URL('./sw.js',a).pathname,new URL('./sw.js',a+'thu-nghiem/').pathname);
 });
