@@ -18,7 +18,7 @@ async function verify(file){
    const res=await fetch(base+file+'?v=2026111203',{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
    const data=Buffer.from(await res.arrayBuffer()),body=data.toString('utf8');
    const markers=(file==='index.html'||file==='thu-nghiem/index.html')?
-     body.includes('HOLD_DX_CAN_DUNG_2_SO')&&body.includes('dx5n.')&&
+     body.includes('HOLD_DX_CAN_DUNG_2_SO')&&body.includes("dx:'dx'")&&
      body.includes('id="scaledTicket"')&&body.includes('id="unscaledTicket"')&&
      body.includes('HOLD_QUYT_V2_MONEY_CONTRACT')&&
      body.includes('id="copyScaled" disabled'):
