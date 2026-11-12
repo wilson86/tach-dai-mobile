@@ -44,7 +44,7 @@ test('Duplicated pasted message contents require independent confirmation',()=>{
 test('Offline release cache marker is updated and UI explains Telegram source',()=>{
  assert.match(html,/Tin nguồn \(không bị sửa\)/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v21-source-cut-ledger/u);
  assert.doesNotMatch(html,/\b(?:fetch|XMLHttpRequest)\s*\(/u);
 });
 
