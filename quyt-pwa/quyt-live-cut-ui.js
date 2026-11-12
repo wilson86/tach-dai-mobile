@@ -3,6 +3,8 @@
 // All amounts are derived from canonical OfflineKTS.merge source IDs + rounded rows.
 const QuytLiveCutUI=(()=>{
  const KEY='KTS_QUYT_MAIN_V4_SOURCE_CUT_V1';
+ const emptyArchive=()=>({text:'',ids:[]});
+ const emptyArchives=()=>({scaled:emptyArchive(),unscaled:emptyArchive()});
  const $=id=>document.getElementById(id);
  const vi=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+'n';
  let rerender=null,base=null,view=null,currentOptions=null,currentScope=null,available=null;
@@ -14,12 +16,20 @@ const QuytLiveCutUI=(()=>{
  }
  function load(){
   let t;try{t=sessionStorage.getItem(KEY)}catch(_){throw Error('HOLD_CUT_STORAGE_UNAVAILABLE')}
-  if(!t)return {scope:null,keys:[],undo:[]};
+  if(!t)return {scope:null,keys:[],undo:[],archives:emptyArchives()};
   let r;try{r=JSON.parse(t)}catch(_){throw Error('HOLD_CUT_STORAGE_CORRUPT')}
   if(!r||typeof r.scope!=='string'||!Array.isArray(r.keys)||r.keys.length>1000||
     new Set(r.keys).size!==r.keys.length||!Array.isArray(r.undo)||r.undo.length>30||
     r.undo.some(x=>!Array.isArray(x)||x.length>1000||new Set(x).size!==x.length))
    throw Error('HOLD_CUT_STORAGE_CORRUPT');
+  if(!r.archives)r.archives=emptyArchives(); // compatible with earlier Cut ledgers
+  for(const name of ['scaled','unscaled']){
+   const a=r.archives[name];
+   if(!a||typeof a.text!=='string'||a.text.length>60000||!Array.isArray(a.ids)||
+      a.ids.length>1000||new Set(a.ids).size!==a.ids.length||
+      a.ids.some(id=>typeof id!=='string')||(a.text&&!a.ids.length))
+    throw Error('HOLD_CUT_ARCHIVE_CORRUPT');
+  }
   return r;
  }
  function save(r){
@@ -40,6 +50,7 @@ const QuytLiveCutUI=(()=>{
   $('cutConservation').textContent='Chưa có kết quả đối chiếu.';
   for(const name of ['Scaled','Unscaled']){
    $('cutSelected'+name).disabled=true;
+   $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
    const bucket=name.toLowerCase();
    for(const part of ['Before','Removed','After'])$(bucket+'Cut'+part).textContent='—';
   }
@@ -48,6 +59,9 @@ const QuytLiveCutUI=(()=>{
   available=null;
   $('cutSelectedScaled').disabled=true;$('cutSelectedUnscaled').disabled=true;
   $('undoQuytCut').disabled=true;$('startNewQuytBatch').hidden=false;
+  for(const name of ['Scaled','Unscaled']){
+   $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
+  }
   $('cutStatus').textContent=String(error);
   $('cutConservation').textContent='HOLD: hai khung bị xóa. Khôi phục nguồn cũ hoặc xác nhận lượt mới.';
  }
@@ -97,9 +111,53 @@ const QuytLiveCutUI=(()=>{
   }
   return eligible;
  }
+
+ function ticketFromRows(rows,group){
+  return rows.filter(x=>Boolean(x.factorApplied)===(group==='scaled'))
+   .map(x=>(x.station?x.station+' ':'')+x.number.replace('-',' ')+' '+x.kind+x.adjusted+'n.').join('\n');
+ }
+ function renderArchive(record){
+  for(const group of ['scaled','unscaled']){
+   const name=group==='scaled'?'Scaled':'Unscaled';
+   const a=record.archives[group],present=Boolean(a.text);
+   $('cutArchive'+name).hidden=!present;
+   $('cutSaved'+name).value=present?a.text:'';
+   // Receiver monetary oracle has not approved factorized Quýt Copy.
+   $('copySaved'+name).disabled=!present||group==='scaled';
+  }
+ }
+ function writeClipboard(text,selectField){
+  if(!text)return Promise.reject(Error('HOLD_CUT_COPY_EMPTY'));
+  const fallback=()=>{
+   const el=$(selectField);el.focus();el.select();
+   let ok=false;try{ok=Boolean(document.execCommand('copy'))}catch(_){}
+   if(!ok)throw Error('HOLD_CLIPBOARD_UNAVAILABLE');
+  };
+  if(navigator.clipboard&&typeof navigator.clipboard.writeText==='function')
+   return navigator.clipboard.writeText(text).catch(()=>fallback());
+  try{fallback();return Promise.resolve()}catch(e){return Promise.reject(e)}
+ }
+ function copyUnscaledArchive(){
+  const originalView=view,scoped=currentScope;
+  try{
+   if(!originalView||!scoped||scoped!==actualScope())throw Error('HOLD_CUT_COPY_STALE_SOURCE');
+   const r=load();
+   if(r.scope!==scoped||!r.archives.unscaled.text||!r.archives.unscaled.ids.every(id=>r.keys.includes(id)))
+    throw Error('HOLD_CUT_COPY_INVALID_ARCHIVE');
+   const text=r.archives.unscaled.text;
+   return writeClipboard(text,'cutSavedUnscaled').then(()=>{
+    if(view!==originalView||currentScope!==scoped||actualScope()!==scoped)
+     throw Error('HOLD_CUT_COPY_STALE_AFTER_ASYNC');
+    $('cutStatus').textContent='ĐÃ SAO CHÉP tin đã CẮT giữ nguyên vào bộ nhớ tạm. Không tự gửi.';
+   }).catch(e=>{
+    $('cutStatus').textContent='HOLD: không sao chép được ('+String(e.message||e)+'). Tin đã CẮT vẫn lưu để chọn và sao chép thủ công.';
+   });
+  }catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e);return Promise.resolve()}
+ }
  function draw(v,record){
   const removed=new Set(v.removed);
   available=drawBuckets(v,removed);
+  renderArchive(record);
   $('cutConservation').textContent='BẢO TOÀN TIỀN: '+v.before+' = '+v.cutOutput+' + '+v.after+
    ' (tiền sau nhân); '+v.originalBefore+' = '+v.cutOriginal+' + '+v.originalAfter+
    ' (tiền gốc). Chênh lệch 0n.';
@@ -120,7 +178,7 @@ const QuytLiveCutUI=(()=>{
   try{draw(result,record)}catch(e){problem('HOLD: '+String(e.message||e));throw e}
   return result.remaining;
  }
- function cut(ids){
+ function cut(ids,archive){
   try{
    if(!base||!view||currentScope!==actualScope())throw Error('HOLD_CUT_STALE_SOURCE');
    const record=load();
@@ -129,16 +187,31 @@ const QuytLiveCutUI=(()=>{
    if(!ids.length||ids.some(id=>keys.has(id)))throw Error('HOLD_CUT_DUPLICATE');
    ids.forEach(id=>keys.add(id));
    QuytSourceCutLedger.calculate(base,$('raw').value,currentOptions,keys);
-   save({scope:currentScope,keys:[...keys],undo:[...record.undo,record.keys.slice()].slice(-30)});
+   const archives={...record.archives};
+   if(archive){
+    if(!['scaled','unscaled'].includes(archive.group)||typeof archive.text!=='string'||
+       !archive.text||archive.text.length>60000||!archive.ids.length||
+       archive.ids.some(x=>!ids.includes(x)))throw Error('HOLD_CUT_ARCHIVE_INVALID');
+    archives[archive.group]={text:archive.text,ids:archive.ids.slice()};
+   }
+   save({scope:currentScope,keys:[...keys],undo:[...record.undo,record.keys.slice()].slice(-30),archives});
    rerender();
+   return true;
   }catch(e){
    $('cutStatus').textContent='HOLD: '+String(e.message||e)+' — không CẮT thêm.';
+   return false;
   }
  }
  function cutWholeBucket(name){
   const group=name==='Scaled'?'scaled':'unscaled';
   if(!available||!Array.isArray(available[group])){problem('HOLD_CUT_BUCKET_NOT_READY');return}
-  cut(available[group].slice());
+  const ids=available[group].slice(),text=ticketFromRows(view.remaining.rows,group);
+  const field=group==='scaled'?'scaledTicket':'unscaledTicket';
+  if(!ids.length||!text||$(field).value!==text){$('cutStatus').textContent='HOLD_CUT_TICKET_MISMATCH: không cắt vì tin xuất chưa khớp cược nguồn.';return}
+  const successful=cut(ids,{group,text,ids});
+  // Only the unchanged-money bucket is allowed to use clipboard.
+  // Factorized review-only Copy stays HOLD until the Router money oracle is accepted.
+  if(successful&&group==='unscaled')copyUnscaledArchive();
  }
  function undo(){
   try{
@@ -147,7 +220,11 @@ const QuytLiveCutUI=(()=>{
    if(r.scope!==currentScope||!r.undo.length)throw Error('HOLD_CUT_NO_UNDO');
    const undo=r.undo.slice(),prior=undo.pop();
    QuytSourceCutLedger.calculate(base,$('raw').value,currentOptions,prior);
-   save({scope:currentScope,keys:prior,undo});rerender();
+   const archives={...r.archives};
+   for(const group of ['scaled','unscaled']){
+    if(!archives[group].ids.every(id=>prior.includes(id)))archives[group]=emptyArchive();
+   }
+   save({scope:currentScope,keys:prior,undo,archives});rerender();
   }catch(e){$('cutStatus').textContent='HOLD: hoàn tác không thành công: '+String(e.message||e)}
  }
  function init(callback){
@@ -155,11 +232,13 @@ const QuytLiveCutUI=(()=>{
   $('cutSelectedScaled').addEventListener('click',()=>cutWholeBucket('Scaled'));
   $('cutSelectedUnscaled').addEventListener('click',()=>cutWholeBucket('Unscaled'));
   $('undoQuytCut').addEventListener('click',undo);
+  $('copySavedUnscaled').addEventListener('click',copyUnscaledArchive);
+  $('copySavedScaled').disabled=true;
   $('startNewQuytBatch').addEventListener('click',()=>{
    if(!confirm('Đã đối chiếu sổ CẮT cũ và xác nhận BẮT ĐẦU LƯỢT MỚI? Không gửi cược.'))return;
    try{save({keys:[],undo:[]});rerender()}
    catch(e){$('cutStatus').textContent='HOLD: '+String(e.message||e)}
   });
  }
- return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_01',init,reset,review,problem});
+ return Object.freeze({version:'QUYT_CUT_FULLBOX_20261113_02',init,reset,review,problem});
 })();

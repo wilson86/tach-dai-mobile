@@ -11,9 +11,12 @@ const checks=String.raw`<script>
  const set=(id,value,event='input')=>{const e=$(id);e.value=value;e.dispatchEvent(new Event(event,{bubbles:true}))};
  const amount=id=>$(id).textContent;
  const input='60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n';
+ try{Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:text=>{
+   window.__qaClipboard=text;return Promise.resolve();
+ }}})}catch(_){}
  const stage=sessionStorage.getItem('QA_QUYT_LIVE_CUT_STAGE');
  try{
-  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_01');
+  assert('pinned Cut module matches HTML',QuytLiveCutUI.version==='QUYT_CUT_FULLBOX_20261113_02');
   assert('only two result money panels',document.querySelectorAll('.total').length===2);
   assert('no repeated raw-message Cut card',!document.getElementById('sourceCutCard')&&!document.getElementById('cutSourceList'));
   assert('no individual wager checkbox lists',!document.querySelector('.bucket-cut-entry')&&!document.querySelector('.bucket-cut-check'));
@@ -25,10 +28,13 @@ const checks=String.raw`<script>
    assert('F5 multiplier selection preserved',$('tick').checked);
    assert('F5 entire scaled bucket stays removed',amount('baoTotal')==='0n'&&amount('otherTotal')==='15n');
    assert('F5 financial receipt after full scaled Cut',amount('scaledCutBefore')==='428n'&&amount('scaledCutRemoved')==='428n'&&amount('scaledCutAfter')==='0n');
+   assert('F5 scaled Cut snapshot remains visible',!$('cutArchiveScaled').hidden&&$('cutSavedScaled').value.includes('60 b107n.'));
+   assert('F5 factorized copied ticket blocked',$('copySavedScaled').disabled);
    assert('F5 both buttons reflect eligible buckets',$('cutSelectedScaled').disabled&&!$('cutSelectedUnscaled').disabled);
    $('undoQuytCut').click();
    assert('Undo entire scaled Cut restores two buckets',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
    assert('Undo empties Cut ledger',sessionStorage.getItem('KTS_QUYT_MAIN_V4_SOURCE_CUT_V1')===null);
+   assert('Undo hides old multiplied Cut snapshot',$('cutArchiveScaled').hidden&&$('cutSavedScaled').value==='');
    $('cutSelectedUnscaled').click();
    assert('after F5 cut unchanged bucket',$('cutSelectedUnscaled').disabled&&amount('baoTotal')==='428n'&&amount('otherTotal')==='0n');
    set('raw',input.replace('b 100','b 101'));
@@ -54,7 +60,19 @@ const checks=String.raw`<script>
    $('raw').value=input;$('tick').checked=true; // again, no input/change event
    $('checkMerge').click();
    assert('direct GỘP click recomputes two buckets without input event',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
-   set('raw',input);$('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
+   set('raw',input);$('tick').checked=false;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
+   assert('unticked factor retains exact 415n original in unscaled bucket',amount('baoTotal')==='0n'&&amount('otherTotal')==='415n');
+   const originalUnscaled=$('unscaledTicket').value;
+   assert('unticked factor keeps pasteable raw-money ticket',originalUnscaled.includes('60 b100n.'));
+   $('cutSelectedUnscaled').click();
+   assert('unticked factor Cut removes all 415n',amount('baoTotal')==='0n'&&amount('otherTotal')==='0n');
+   assert('Cut retains complete unscaled ticket for pasting',!$('cutArchiveUnscaled').hidden&&$('cutSavedUnscaled').value===originalUnscaled);
+   assert('Cut auto copies unscaled ticket to simulated clipboard',window.__qaClipboard===originalUnscaled);
+   assert('Cut snapshot manual recopy enabled',!$('copySavedUnscaled').disabled);
+   $('undoQuytCut').click();
+   assert('Undo no-factor Cut restores original 415n',amount('baoTotal')==='0n'&&amount('otherTotal')==='415n');
+   assert('Undo no-factor Cut hides archived ticket',$('cutArchiveUnscaled').hidden);
+   $('tick').checked=true;$('tick').dispatchEvent(new Event('change',{bubbles:true}));
    assert('owner fixture before Cut exactly 428 plus 15',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
    assert('both whole Cut buttons enabled',!$('cutSelectedScaled').disabled&&!$('cutSelectedUnscaled').disabled);
    assert('bucket receipt original totals',amount('scaledCutBefore')==='428n'&&amount('unscaledCutBefore')==='15n');
@@ -62,9 +80,13 @@ const checks=String.raw`<script>
    $('cutSelectedUnscaled').click();
    assert('one tap removes entire unchanged bucket',amount('baoTotal')==='428n'&&amount('otherTotal')==='0n');
    assert('unchanged bucket receipt 15 minus 15 equals 0',amount('unscaledCutBefore')==='15n'&&amount('unscaledCutRemoved')==='15n'&&amount('unscaledCutAfter')==='0n');
+   assert('unscaled archive retained even after active result disappears',!$('cutArchiveUnscaled').hidden&&$('cutSavedUnscaled').value.includes('526 b10n.'));
+   assert('unscaled snapshot can be copied again',!$('copySavedUnscaled').disabled);
    assert('uncut multiplied bucket remains enabled',!$('cutSelectedScaled').disabled&&$('cutSelectedUnscaled').disabled);
    $('cutSelectedScaled').click();
    assert('second tap removes entire multiplied bucket',amount('baoTotal')==='0n'&&amount('otherTotal')==='0n');
+   assert('factorized Cut snapshot retained in result pane',!$('cutArchiveScaled').hidden&&$('cutSavedScaled').value.includes('60 b107n.'));
+   assert('factorized Cut Copy stays locked',$('copySavedScaled').disabled);
    assert('whole-source conservation ends at zero',amount('scaledCutRemoved')==='428n'&&amount('unscaledCutRemoved')==='15n'&&$('cutConservation').textContent.includes('443 = 443 + 0'));
    assert('all cut actions disabled after all removed',$('cutSelectedScaled').disabled&&$('cutSelectedUnscaled').disabled);
    assert('Cut never modifies raw source',$('raw').value===input);
