@@ -29,3 +29,5 @@ jobs:
         run: |
           command -v google-chrome || command -v chromium
           node tests/quyt-pwa-main-visibility-headless.cjs
+      - name: Read-only actual HTTPS published preview and unchanged official app hashes
+        run: node tests/quyt-preview-live-http.cjs
