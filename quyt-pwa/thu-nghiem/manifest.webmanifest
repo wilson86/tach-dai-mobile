@@ -1,0 +1,20 @@
+{
+  "name": "KTS QUÝT — THỬ NGHIỆM (KHÔNG GỬI)",
+  "short_name": "Quýt TEST",
+  "description": "Trang thử nghiệm MB/MN/MT trên một màn; tiền nhân hệ số chỉ đối chiếu, không được Copy khi chưa nghiệm thu bên nhận.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3f6f8",
+  "theme_color": "#153c5b",
+  "lang": "vi",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
