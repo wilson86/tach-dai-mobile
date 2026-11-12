@@ -51,6 +51,7 @@ const QuytLiveCutUI=(()=>{
   for(const name of ['Scaled','Unscaled']){
    $('cutSelected'+name).disabled=true;
    $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
+   $('copy'+name).parentElement.style.display='';
    const bucket=name.toLowerCase();
    for(const part of ['Before','Removed','After'])$(bucket+'Cut'+part).textContent='—';
   }
@@ -61,6 +62,7 @@ const QuytLiveCutUI=(()=>{
   $('undoQuytCut').disabled=true;$('startNewQuytBatch').hidden=false;
   for(const name of ['Scaled','Unscaled']){
    $('cutArchive'+name).hidden=true;$('cutSaved'+name).value='';$('copySaved'+name).disabled=true;
+   $('copy'+name).parentElement.style.display='';
   }
   $('cutStatus').textContent=String(error);
   $('cutConservation').textContent='HOLD: hai khung bị xóa. Khôi phục nguồn cũ hoặc xác nhận lượt mới.';
@@ -121,6 +123,7 @@ const QuytLiveCutUI=(()=>{
    const name=group==='scaled'?'Scaled':'Unscaled';
    const a=record.archives[group],present=Boolean(a.text);
    $('cutArchive'+name).hidden=!present;
+   $('copy'+name).parentElement.style.display=present?'none':'';
    $('cutSaved'+name).value=present?a.text:'';
    // Only archived, source-verified Cut tickets may be copied; ordinary factorized output remains HOLD.
    $('copySaved'+name).disabled=!present;
