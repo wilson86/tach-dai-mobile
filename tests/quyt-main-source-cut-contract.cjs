@@ -73,6 +73,10 @@ test('exactly 2 money output frames, inline source reconciliation, explicit Copy
  assert.match(html,/QuytLiveCutUI\.reset\(\)/u);
  assert.match(html,/QuytLiveCutUI\.init\(redraw\);redraw\(\)/u);
  assert.match(html,/copyScaled'\)\.disabled=true/u);
+ for(const id of ['cutScaledList','cutUnscaledList','cutSelectedScaled','cutSelectedUnscaled','scaledCutBefore','scaledCutRemoved','scaledCutAfter','unscaledCutBefore','unscaledCutRemoved','unscaledCutAfter'])
+  assert.match(html,new RegExp('id="'+id+'"','u'));
+ assert.ok(html.indexOf('id="cutScaledList"')<html.indexOf('id="copyScaled"'));
+ assert.ok(html.indexOf('id="cutUnscaledList"')<html.indexOf('id="copyUnscaled"'));
  assert.doesNotMatch(html,/Telegram\.send|sendBeacon|XMLHttpRequest/u);
  const sw=read('quyt-pwa/sw.js');
  for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js'])assert.ok(sw.includes("'"+asset+"'"));

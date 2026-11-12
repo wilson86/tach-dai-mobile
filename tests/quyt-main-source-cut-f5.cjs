@@ -37,8 +37,10 @@ const checks=String.raw`<script>
    set('rate','1.067');
    assert('restoring factor restores receipt',amount('cutAfter')==='336n');
    assert('scaled Copy stays locked even with audit',$('copyScaled').disabled);
+   assert('F5 retains separate bucket money receipts',amount('scaledCutBefore')==='428n'&&amount('scaledCutAfter')==='321n'&&amount('unscaledCutBefore')==='15n'&&amount('unscaledCutAfter')==='15n');
    set('raw',input+'\n160 dd10n');
    assert('invalid third line atomically clears both boxes',amount('baoTotal')==='—'&&amount('otherTotal')==='—');
+   assert('HOLD also clears and locks both bucket Cut lists',!$('cutScaledList').children.length&&!$('cutUnscaledList').children.length&&$('cutSelectedScaled').disabled&&$('cutSelectedUnscaled').disabled);
    sessionStorage.removeItem('QA_QUYT_LIVE_CUT_STAGE');sessionStorage.removeItem('QA_QUYT_LIVE_CUT_FIRST');
   }else{
    assert('CẮT workflow visible on initial phone screen',!$('sourceCutCard').hidden&&$('cutSelectedQuyt').disabled);
@@ -49,6 +51,26 @@ const checks=String.raw`<script>
    assert('Cut summary shows 443 source result',amount('cutBefore')==='443n'&&amount('cutAfter')==='443n'&&amount('cutRemoved')==='0n');
    assert('source raw visible in audit',$('cutSourceList').textContent.includes('60 b 100')&&$('cutSourceList').textContent.includes('526 b10n'));
    assert('source audit preserves all six wager atoms',$('cutBetList').querySelectorAll('button').length===6);
+   assert('each of two buckets contains its original wagers',$('cutScaledList').querySelectorAll('.bucket-cut-check').length===4&&$('cutUnscaledList').querySelectorAll('.bucket-cut-check').length===2);
+   assert('independent bucket receipts before Cut',amount('scaledCutBefore')==='428n'&&amount('unscaledCutBefore')==='15n'&&amount('scaledCutRemoved')==='0n'&&amount('unscaledCutRemoved')==='0n');
+   const u=$('cutUnscaledList').querySelector('.bucket-cut-check');
+   u.checked=true;u.dispatchEvent(new Event('change',{bubbles:true}));
+   assert('select unscaled enables unscaled Cut only',!$('cutSelectedUnscaled').disabled&&$('cutSelectedScaled').disabled);
+   $('cutSelectedUnscaled').click();
+   assert('Cut unscaled DX5 updates only unchanged frame',amount('baoTotal')==='428n'&&amount('otherTotal')==='10n');
+   assert('unscaled receipt 15 minus 5 equals 10',amount('unscaledCutBefore')==='15n'&&amount('unscaledCutRemoved')==='5n'&&amount('unscaledCutAfter')==='10n');
+   assert('scaled bucket unchanged by unscaled Cut',amount('scaledCutBefore')==='428n'&&amount('scaledCutRemoved')==='0n'&&amount('scaledCutAfter')==='428n');
+   const s=$('cutScaledList').querySelector('.bucket-cut-check');
+   s.checked=true;s.dispatchEvent(new Event('change',{bubbles:true}));
+   assert('scaled bucket now also allows selecting Cut',!$('cutSelectedScaled').disabled);
+   $('cutSelectedScaled').click();
+   assert('both buckets Cut cumulatively in real time',amount('baoTotal')==='321n'&&amount('otherTotal')==='10n');
+   assert('two separate receipt Cut values plus total balance',amount('scaledCutRemoved')==='107n'&&amount('unscaledCutRemoved')==='5n'&&amount('cutRemoved')==='112n'&&amount('cutAfter')==='331n');
+   assert('raw input still byte-identical after both cuts',$('raw').value===input);
+   $('undoQuytCut').click();
+   assert('Undo scaled Cut keeps unscaled Cut',amount('baoTotal')==='428n'&&amount('otherTotal')==='10n');
+   $('undoQuytCut').click();
+   assert('Undo unscaled Cut restores original',amount('baoTotal')==='428n'&&amount('otherTotal')==='15n');
    press('cutSourceList',1);
    assert('Cut second source removes BOTH unchanged bets',amount('baoTotal')==='428n'&&amount('otherTotal')==='0n');
    assert('Cut source2 conservation',amount('cutBefore')==='443n'&&amount('cutRemoved')==='15n'&&amount('cutAfter')==='428n');

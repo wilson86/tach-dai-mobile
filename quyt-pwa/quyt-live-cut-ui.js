@@ -39,6 +39,11 @@ const QuytLiveCutUI=(()=>{
   $('cutSourceList').replaceChildren();$('cutBetList').replaceChildren();
   $('cutRemovedList').textContent='';$('cutStatus').textContent='Chưa cắt.';
   $('cutConservation').textContent='Chưa đối chiếu.';
+  for(const bucket of ['Scaled','Unscaled']){
+   $('cut'+bucket+'List').replaceChildren();
+   $('cutSelected'+bucket).disabled=true;
+   for(const part of ['Before','Removed','After'])$(bucket.toLowerCase()+'Cut'+part).textContent='—';
+  }
  }
  function problem(error){
   $('sourceCutCard').hidden=false;$('startNewQuytBatch').hidden=false;
@@ -54,6 +59,66 @@ const QuytLiveCutUI=(()=>{
   button.addEventListener('click',callback);
   el.append(strong,p,button);parent.append(el);return el;
  }
+
+ // Allocate each original wager to exactly one result bucket by canonical
+ // sourceIds and factorApplied; never subtract rounded source estimates.
+ function bucketOf(rows,ids){
+  const linked=new Map(),totals={scaled:0n,unscaled:0n};
+  for(const r of rows){
+   if(!r||typeof r.factorApplied!=='boolean'||typeof r.adjusted!=='string'||
+      !/^\d+$/u.test(r.adjusted)||!Array.isArray(r.sourceIds)||!r.sourceIds.length)
+    throw Error('HOLD_CUT_BUCKET_INVALID_ROW');
+   const target=r.factorApplied?'scaled':'unscaled';
+   totals[target]+=BigInt(r.adjusted);
+   for(const id of r.sourceIds){
+    if(!ids.has(id))throw Error('HOLD_CUT_BUCKET_UNKNOWN_SOURCE');
+    const previous=linked.get(id);
+    if(previous&&previous!==target)throw Error('HOLD_CUT_BUCKET_AMBIGUOUS_SOURCE');
+    linked.set(id,target);
+   }
+  }
+  return {linked,totals};
+ }
+ function drawBuckets(v,removed){
+  const ids=new Set(v.base.sourceEntries.map(x=>x.id));
+  const before=bucketOf(v.base.rows,ids),after=bucketOf(v.remaining.rows,ids);
+  if(before.linked.size!==ids.size||
+     before.totals.scaled+before.totals.unscaled!==BigInt(v.before)||
+     after.totals.scaled+after.totals.unscaled!==BigInt(v.after))
+   throw Error('HOLD_CUT_BUCKET_CONSERVATION');
+  for(const entry of v.base.sourceEntries){
+   const b=before.linked.get(entry.id);
+   if(!b)throw Error('HOLD_CUT_BUCKET_MISSING_SOURCE');
+   if(removed.has(entry.id)){
+    if(after.linked.has(entry.id))throw Error('HOLD_CUT_BUCKET_STALE');
+   }else if(after.linked.get(entry.id)!==b)throw Error('HOLD_CUT_BUCKET_CHANGED');
+  }
+  for(const bucket of ['scaled','unscaled']){
+   const key=bucket==='scaled'?'Scaled':'Unscaled';
+   const start=before.totals[bucket],end=after.totals[bucket],cutAmount=start-end;
+   if(cutAmount<0n||end+cutAmount!==start)throw Error('HOLD_CUT_BUCKET_NEGATIVE');
+   $(bucket+'CutBefore').textContent=vi(start);
+   $(bucket+'CutRemoved').textContent=vi(cutAmount);
+   $(bucket+'CutAfter').textContent=vi(end);
+   const list=$('cut'+key+'List');
+   $('cutSelected'+key).disabled=true;
+   for(const x of v.base.sourceEntries){
+    if(before.linked.get(x.id)!==bucket)continue;
+    const gone=removed.has(x.id),line=document.createElement('label');
+    line.className='bucket-cut-entry'+(gone?' cut-done':'');
+    const input=document.createElement('input');
+    input.type='checkbox';input.className='bucket-cut-check';input.value=x.id;input.disabled=gone;
+    input.setAttribute('aria-label','Chọn cắt cược dòng '+x.line+' '+x.kind+' '+x.number);
+    input.addEventListener('change',()=>{
+     $('cutSelected'+key).disabled=!list.querySelector('.bucket-cut-check:checked');
+    });
+    const detail=document.createElement('span'),name=document.createElement('strong'),raw=document.createElement('small');
+    name.textContent='Dòng '+x.line+' · '+x.number.replace('-',' ')+' '+x.kind+' '+x.stake+'n'+(gone?' — ĐÃ CẮT':'');
+    raw.textContent='Tin gốc: '+x.text;
+    detail.append(name,raw);line.append(input,detail);list.append(line);
+   }
+  }
+ }
  function draw(v,record){
   const removed=new Set(v.removed);
   $('sourceCutCard').hidden=false;
@@ -66,6 +131,7 @@ const QuytLiveCutUI=(()=>{
   $('cutStatus').textContent='Đã CẮT '+removed.size+'/'+v.base.sourceEntries.length+' khoản nguồn. CẮT chỉ sửa bản xem trước, không Copy hoặc gửi.';
   $('undoQuytCut').disabled=!record.undo.length;
   $('cutSelectedQuyt').disabled=true;
+  drawBuckets(v,removed);
   const lines=new Map();
   for(const x of v.base.sourceEntries){if(!lines.has(x.line))lines.set(x.line,[]);lines.get(x.line).push(x)}
   for(const [line,entries] of lines){
@@ -123,6 +189,9 @@ const QuytLiveCutUI=(()=>{
   rerender=callback;
   $('undoQuytCut').addEventListener('click',undo);
   $('cutSelectedQuyt').addEventListener('click',()=>cut([...document.querySelectorAll('#cutBetList .cut-bet-check:checked')].map(x=>x.value)));
+  for(const bucket of ['Scaled','Unscaled']){
+   $('cutSelected'+bucket).addEventListener('click',()=>cut([...document.querySelectorAll('#cut'+bucket+'List .bucket-cut-check:checked')].map(x=>x.value)));
+  }
   $('startNewQuytBatch').addEventListener('click',()=>{
    if(!confirm('Đã đối chiếu sổ CẮT cũ và xác nhận BẮT ĐẦU LƯỢT MỚI? Cược chưa tự gửi.'))return;
    try{save({keys:[],undo:[]});rerender()}
