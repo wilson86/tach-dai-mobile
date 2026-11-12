@@ -89,5 +89,7 @@ test('v9 service worker retains v4 money contract and adds group frames',()=>{
  assert.match(sw,/kts-quyt-standalone-pwa-20261112-v9-two-amount-summary/u);
  assert.match(html,/Sau nhân, chưa tròn/u);
  assert.match(html,/Xuất, đã tròn/u);
- assert.match(html,/TỔNG XUẤT \(ĐÃ LÀM TRÒN\)/u);
+ assert.match(html,/id="baoTotal"/u);
+  assert.match(html,/id="otherTotal"/u);
+  assert.match(html,/PHẦN CÒN LẠI \(KHÔNG NHÂN\)/u);
 });
