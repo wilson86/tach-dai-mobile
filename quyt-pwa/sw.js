@@ -22,7 +22,7 @@ self.addEventListener('fetch',event=>{
     (key==='v'&&/^\d{1,12}$/u.test(value))||
     (/^utm_(?:source|medium|campaign|term|content)$/u.test(key)&&value.length<=128));
   const oneScreenEntry=(requested.pathname===root||requested.pathname===entry)&&allowedQuery;
-  const hold=()=>new Response('<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KTS — HOLD OFFLINE</title><main style="font-family:system-ui;padding:24px"><h1>HOLD_OFFLINE_ROUTE_UNAVAILABLE</h1><p>Đường dẫn hoặc miền yêu cầu chưa được xác minh khi offline. Kết nối mạng rồi mở lại đúng trang; không dùng kết quả MB thay cho MN/MT và không chuyển tin.</p></main>',{status:503,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
+  const hold=()=>new Response('<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KTS — HOLD OFFLINE</title><main style="font-family:system-ui;padding:24px"><h1>HOLD_OFFLINE_ROUTE_UNAVAILABLE</h1><p>Đường dẫn hoặc miền yêu cầu chưa được xác minh khi offline. Kết nối mạng rồi mở lại đúng trang; không dùng kết quả sai miền, ngày hoặc đài và không chuyển tin.</p></main>',{status:503,headers:{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'}});
   event.respondWith(fetch(req).catch(()=>oneScreenEntry?caches.match('./index.html').then(cached=>cached||hold()).catch(hold):hold()));
   return;
  }
