@@ -63,20 +63,21 @@ test('fail-closed invalid 3-digit DD and unknown Cut references, no partial outp
  assert.throws(()=>kts.merge('60 b100n\n123 dd10n',{...opts,excludeBetIds:['2:0']}),/HOLD_3_CHU_SO/u);
  assert.throws(()=>kts.merge('60 b100n\n33 61 xc5n',{...opts,excludeBetIds:['2:0']}),/XC chưa/u);
 });
-test('exactly 2 money output frames, inline source reconciliation, explicit Copy scaled HOLD',()=>{
+test('exactly two result buckets have only full-box Cut and Undo; no duplicated source UI',()=>{
  assert.equal([...html.matchAll(/class="total"/gu)].length,2);
- for(const id of ['sourceCutCard','cutBefore','cutRemoved','cutAfter','cutOriginalBefore','cutOriginalRemoved','cutOriginalAfter','cutSourceList','cutBetList','cutRemovedList','undoQuytCut','startNewQuytBatch'])
+ for(const id of ['cutSelectedScaled','cutSelectedUnscaled','scaledCutBefore','scaledCutRemoved','scaledCutAfter',
+  'unscaledCutBefore','unscaledCutRemoved','unscaledCutAfter','undoQuytCut','startNewQuytBatch','cutStatus','cutConservation'])
   assert.match(html,new RegExp('id="'+id+'"','u'));
+ for(const removed of ['sourceCutCard','cutSourceList','cutBetList','cutRemovedList','cutScaledList','cutUnscaledList','cutSelectedQuyt'])
+  assert.doesNotMatch(html,new RegExp('id="'+removed+'"','u'));
+ assert.match(html,/CẮT TOÀN BỘ KHUNG ĐÃ NHÂN/u);
+ assert.match(html,/CẮT TOÀN BỘ KHUNG GIỮ NGUYÊN/u);
  assert.match(html,/<script src="\.\/quyt-source-cut-ledger\.js"><\/script>/u);
  assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js"><\/script>/u);
  assert.match(html,/QuytLiveCutUI\.review\(OfflineKTS,raw\.value/u);
  assert.match(html,/QuytLiveCutUI\.reset\(\)/u);
  assert.match(html,/QuytLiveCutUI\.init\(redraw\);redraw\(\)/u);
  assert.match(html,/copyScaled'\)\.disabled=true/u);
- for(const id of ['cutScaledList','cutUnscaledList','cutSelectedScaled','cutSelectedUnscaled','scaledCutBefore','scaledCutRemoved','scaledCutAfter','unscaledCutBefore','unscaledCutRemoved','unscaledCutAfter'])
-  assert.match(html,new RegExp('id="'+id+'"','u'));
- assert.ok(html.indexOf('id="cutScaledList"')<html.indexOf('id="copyScaled"'));
- assert.ok(html.indexOf('id="cutUnscaledList"')<html.indexOf('id="copyUnscaled"'));
  assert.doesNotMatch(html,/Telegram\.send|sendBeacon|XMLHttpRequest/u);
  const sw=read('quyt-pwa/sw.js');
  for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js'])assert.ok(sw.includes("'"+asset+"'"));
