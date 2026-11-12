@@ -46,6 +46,20 @@ test('UI exposes only two canonical summary amounts, keeps audits and receipt ac
  assert.match(html,/KTS_OFFLINE_QUYT_RATES_V1/u);
  assert.doesNotMatch(html,/navigator\.sendBeacon|XMLHttpRequest|Telegram\.send/u);
 });
+test('receiver market scope HOLD runs before materializing MN/MT ticket or receipt',()=>{
+ const guard=html.indexOf('if(!receiverMarketApproved()){');
+ const start=html.indexOf('const res=OfflineKTS.merge(');
+ const materialize=html.indexOf('current={...res');
+ assert.ok(start>=0&&guard>start&&materialize>guard);
+ const branch=html.slice(guard,materialize);
+ assert.match(branch,/showTwoTotals\(res\)/u);
+ assert.match(branch,/HOLD_RECEIVER_MARKET_UNAPPROVED/u);
+ assert.match(branch,/message\(/u);
+ assert.match(branch,/return;/u);
+ assert.doesNotMatch(branch,/out\.value=res\.pretty/u);
+ assert.match(html,/const can=Boolean\(receiverMarketApproved\(\)&&currentValid\(\)/u);
+ assert.match(html,/function copyTicketValid\(ticket\)\{return Boolean\(receiverMarketApproved\(\)/u);
+});
 test('factor is applied to Bao/Lô ONLY, never DD, preserving integer n',()=>{
  const out=app.merge('tn 42 bl10n dd5n',opts);
  assert.equal(out.total,'16');
