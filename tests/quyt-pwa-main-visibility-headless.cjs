@@ -14,6 +14,7 @@ const checks=String.raw`<script>
 (async()=>{
 const report=[],$=id=>document.getElementById(id);
 const assert=(name,pass)=>report.push({name,pass:Boolean(pass)});
+const sumTotals=()=>{const amount=id=>BigInt($(id).textContent.replaceAll('.','').replace('n',''));return (amount('baoTotal')+amount('otherTotal')).toLocaleString('vi-VN')+'n'};
 const section=kind=>document.querySelector('[data-bet-kind="'+kind+'"]');
 const visible=()=>[...document.querySelectorAll('#betSections .bet-section:not([hidden])')].map(x=>x.dataset.betKind).join(',');
 const set=(id,value,event='input')=>{const x=$(id);x.value=value;x.dispatchEvent(new Event(event,{bubbles:true}))};
@@ -29,14 +30,14 @@ try{
  assert('manual action on empty source stays HOLD',$('copy').disabled&&$('groupedResultsCard').hidden);
  set('raw','hn 21 b10n');
  $('checkMerge').click();
- assert('manual action preserves B-only total and copy readiness',$('after').textContent==='10n'&&!$('copy').disabled);
+ assert('manual action preserves B-only total and copy readiness',sumTotals()==='10n'&&!$('copy').disabled);
 
  assert('B-only shows exactly B',visible()==='b');
  assert('B-only reveals group card and full Copy card',!$('groupedResultsCard').hidden&&!$('combinedResultsCard').hidden);
- assert('B-only number unchanged',$('after').textContent==='10n'&&$('result').value.includes('21 b10n'));
+ assert('B-only number unchanged',sumTotals()==='10n'&&$('result').value.includes('21 b10n'));
  set('raw','hn 21 b10n dd5n');
  assert('B+DD reveals exactly B,DD',visible()==='b,dd');
- assert('B+DD money preserved',$('after').textContent==='15n');
+ assert('B+DD money preserved',sumTotals()==='15n');
  set('raw','hn 21 22 da20n');
  assert('DA only reveals DA pane',visible()==='da');
  set('raw','hn 21 xc10n');
