@@ -40,14 +40,14 @@ try{
  assert('MB no HN remains receipt-gated before Copy',
    $('copy').disabled&&!$('ackMoney').disabled);
  ack();assert('MB no HN can be copied after explicit receipt',!$('copy').disabled);
- set('raw','21 b10n.\n31 dd15n.');
+ set('raw','21 b10n.\\n31 dd15n.');
  assert('MB multiline bare ticket parses both lines independently, no HN required',
    money('baoTotal')===0n&&money('otherTotal')===25n&&
    $('status').textContent.includes('ĐÃ GỘP 2 tin')&&!$('ackMoney').checked);
- set('raw','HN 21 b10n.\n31 dd15n.');
+ set('raw','HN 21 b10n.\\n31 dd15n.');
  assert('Mixed optional HN and bare MB lines remain legal and source counted',
    money('otherTotal')===25n&&$('status').textContent.includes('ĐÃ GỘP 2 tin'));
- set('raw','21 b10n.\n31');
+ set('raw','21 b10n.\\n31');
  assert('Incomplete second MB line HOLDs atomically without leftover summary',
    closed()&&$('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—');
  set('raw','hn 21 b10n. 321 b10n. 31 dd15n. 41 dau15n. 51 dui15n.');
