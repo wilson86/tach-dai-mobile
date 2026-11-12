@@ -79,7 +79,7 @@ test('ambiguous missing n must still be confirmed before rounding',()=>{
 });
 test('unsupported XC and market still HOLD, and source is never mutated',()=>{
  assert.throws(()=>merge('21 xc5n.'),/XC chưa có quy tắc/u);
- assert.throws(()=>merge('21 b55n.',{market:'mn'}),/chỉ nghiệm thu.*MB/u);
+ assert.throws(()=>merge('21 b55n.',{market:'mn'}),/MN\/MT phải chọn ngày xổ số hợp lệ/u);
  const s='hn 21 b55n.';const copy=s;
  const a=app.merge(s,{...base,tick:true});
  assert.equal(s,copy);assert.equal(a.total,'59');

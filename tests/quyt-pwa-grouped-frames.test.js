@@ -46,7 +46,7 @@ test('each frame and full Copy derive from same rounded amounts at 1.067 and 1.1
 test('no group output may be emitted on ambiguous or unsupported source',()=>{
  assert.throws(()=>app.merge('hn 21 xc5n.',base),/XC chưa có quy tắc/u);
  assert.throws(()=>app.merge('hn 21 22 da 20',base),/THIEU_N_CAN_XAC_NHAN/u);
- assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/chỉ nghiệm thu.*MB/u);
+ assert.throws(()=>app.merge('hn 21 b55n.',{...base,market:'mn'}),/MN\/MT phải chọn ngày xổ số hợp lệ/u);
 });
 test('HTML has six separate readonly frames, unique scoped Copy buttons and v11 cache',()=>{
  const blocks=[...html.matchAll(/<section class="bet-section[^"]*" data-bet-kind="([a-z]+)">/gu)];

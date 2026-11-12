@@ -46,7 +46,7 @@ test('no text alteration by merge, no unapproved decimal or XC admission',()=>{
 });
 test('no orphan DA pair, no unsupported regions even after confirmation',()=>{
  hold('21 da 20',/ĐÁ phải có đúng hai số/u,{confirmMissingDaN:true});
- hold('21 22 da 20',/chỉ nghiệm thu.*MB/u,{market:'mn',confirmMissingDaN:true});
+ hold('21 22 da 20',/MN\/MT phải chọn ngày xổ số hợp lệ/u,{market:'mn',confirmMissingDaN:true});
 });
 test('already-valid exact source remains byte-compatible',()=>{
  const raw='hn 21 22 da20n. 34 dau25n dui45n. 21 b10n.';
