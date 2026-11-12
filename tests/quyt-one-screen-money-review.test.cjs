@@ -96,3 +96,44 @@ test('Quýt V2 applies factor to Bao/Lô, DD, Đầu, Đuôi while leaving Đá 
  assert.equal(original.total,'45');
  assert.equal(original.sections.find(x=>x.kind==='dd').total,'15');
 });
+
+test('V3 mixed 2-digit and 3-digit in same MB ticket: factor only 2-digit categories',()=>{
+ const raw='hn 21 b10n. 321 b10n. 31 dd15n. 531 dd15n. 41 dau15n. 641 dau15n. 51 dui15n. 751 dui15n.';
+ const a=app.merge(raw,{...opts,market:'mb'});
+ assert.equal(a.original,'110');assert.equal(a.total,'114');
+ for(const [kind,total] of [['b','21'],['dd','31'],['dau','31'],['dui','31']])
+  assert.equal(a.sections.find(g=>g.kind===kind).total,total);
+ for(const [kind,number,amount] of [['b','321','10'],['dd','531','15'],['dau','641','15'],['dui','751','15']]){
+  const row=a.rows.find(r=>r.kind===kind&&r.number===number);
+  assert.ok(row);assert.equal(row.raw,amount);assert.equal(row.adjusted,amount);
+ }
+ assert.equal(a.rows.reduce((sum,row)=>sum+BigInt(row.adjusted),0n),BigInt(a.total));
+ assert.equal(raw,'hn 21 b10n. 321 b10n. 31 dd15n. 531 dd15n. 41 dau15n. 641 dau15n. 51 dui15n. 751 dui15n.');
+});
+test('V3 leading zero 3-digit code is not the same as 2-digit and remains unmultiplied',()=>{
+ const r=app.merge('hn 21 b10n. 021 b10n.',{...opts,market:'mb'});
+ assert.equal(r.original,'20');assert.equal(r.total,'21');
+ assert.equal(r.rows.find(x=>x.number==='21').adjusted,'11');
+ assert.equal(r.rows.find(x=>x.number==='021').adjusted,'10');
+ assert.equal(app.merge('hn 21 b10n. 021 b10n.',{...opts,market:'mb',tick:false}).total,'20');
+});
+test('V3 station topology 2d expands stations, never changes 3-digit wager-length rule',()=>{
+ const raw='tn 21 b10n. 321 b10n. 41 dd15n. 531 dd15n';
+ const r=app.merge(raw,opts);
+ assert.equal(r.total,'52');assert.equal(r.sections.find(x=>x.kind==='b').total,'21');
+ assert.equal(r.sections.find(x=>x.kind==='dd').total,'31');
+ const x=app.merge('2d 21 b10n',opts),y=app.merge('2d 321 b10n',opts);
+ assert.equal(x.total,'22');assert.equal(y.total,'20');
+ assert.equal(x.rows.length,2);assert.equal(y.rows.length,2);
+ assert.ok(y.rows.every(row=>row.number==='321'&&row.adjusted==='10'));
+});
+test('V3 3-digit money has no extra hypothetical CEIL delta, 2-digit delta still audits',()=>{
+ const raw='hn 321 b75n. 531 dd75n. 641 dau75n. 751 dui75n.';
+ const r=app.merge(raw,{...opts,market:'mb'});
+ assert.equal(r.total,'300');assert.equal(r.original,'300');assert.equal(r.ceilReference,'300');
+ assert.equal(r.roundingDiffRows,0);
+ const two=app.merge('hn 21 b75n. 31 dd75n.',{...opts,market:'mb'});
+ assert.equal(two.total,'160');assert.equal(two.ceilReference,'162');assert.equal(two.roundingDiffRows,2);
+ assert.ok(html.includes("quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\\d{2}$/u.test(row.number)"));
+ assert.match(html,/HOLD_QUYT_V2_MONEY_CONTRACT/u);
+});

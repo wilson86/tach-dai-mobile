@@ -60,6 +60,14 @@ try{
  set('raw','hn 21 đui10n. 22 đuôi10n. 23 dui10n. 24 duoi10n.');
  assert('All Đui/Đuôi spelling aliases scale consistently to 44n',
   $('otherTotal').textContent==='44n'&&closed());
+ set('raw','hn 21 b10n. 321 b10n. 31 dd15n. 531 dd15n. 41 dau15n. 641 dau15n. 51 dui15n. 751 dui15n.');
+ assert('Quýt mixed 2/3-digit B+DD+DAU+DUI factor only two-digit, sum conserved',
+  $('baoTotal').textContent==='21n'&&$('otherTotal').textContent==='93n'&&sum()===114n&&closed());
+ assert('Two cards show 3-digit original-stake exemption',
+  $('baoLabel').textContent.includes('3 SỐ GỐC')&&$('otherLabel').textContent.includes('3 SỐ / ĐÁ GỐC'));
+ set('raw','hn 321 b10n. 531 dd15n. 641 dau15n. 751 dui15n.');
+ assert('Only three-digit wagers keep original amount with Quýt checked',
+  $('baoTotal').textContent==='10n'&&$('otherTotal').textContent==='45n'&&sum()===55n&&closed());
  set('raw','hn 21 21 dd10n');
  assert('Single clause duplicate number still HOLDS instead of double counting',
   $('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—'&&closed());
