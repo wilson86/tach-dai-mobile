@@ -55,7 +55,7 @@ test('already-valid exact source remains byte-compatible',()=>{
 });
 test('new standalone service-worker key must be version v20',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261113-v26-factor-cut-clipboard/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261113-v27-atomic-cut-to-clipboard/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });
 
