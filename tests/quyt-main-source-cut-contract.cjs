@@ -59,7 +59,7 @@ test('rounding after aggregate is recomputed, not subtraction of individually mu
 });
 test('fail-closed invalid 3-digit DD and unknown Cut references, no partial output',()=>{
  assert.throws(()=>ledger.calculate(baseline,text,opts,['3:0']),/HOLD_CUT_UNKNOWN_SOURCE/u);
- assert.throws(()=>ledger.calculate(baseline,text,opts,['1:0','1:0']),/HOLD_CUT_UNKNOWN_SOURCE|/u);
+ assert.equal(ledger.calculate(baseline,text,opts,['1:0','1:0']).removed.length,1); // idempotent ledger; UI prevents duplicate Cut
  assert.throws(()=>kts.merge('60 b100n\n123 dd10n',{...opts,excludeBetIds:['2:0']}),/HOLD_3_CHU_SO/u);
  assert.throws(()=>kts.merge('60 b100n\n33 61 xc5n',{...opts,excludeBetIds:['2:0']}),/XC chưa/u);
 });
