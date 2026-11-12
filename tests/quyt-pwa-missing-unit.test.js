@@ -53,8 +53,19 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v19',()=>{
+test('new standalone service-worker key must be version v20',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v19-two-frame-text-copy-mb-label/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames/u);
  assert.match(html,/id="confirmMissingDaN"/u);
+});
+
+test('A bare approved wager amount at physical end-of-line is n; next line stays independent',()=>{
+ const raw='60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n';
+ const r=core.merge(raw,{...opts,tick:true});
+ assert.equal(r.sourceCount,2);
+ assert.equal(r.total,'443');
+ assert.equal(r.rows.find(x=>x.kind==='dui').adjusted,'107');
+ assert.equal(r.rows.find(x=>x.kind==='dx').adjusted,'5');
+ assert.equal(r.rows.find(x=>x.number==='526').adjusted,'10');
+ assert.equal(raw,'60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n');
 });

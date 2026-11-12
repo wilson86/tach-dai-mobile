@@ -1,6 +1,6 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-preview-20261112-v3-two-frame-text-copy';
+const CACHE='kts-quyt-preview-20261112-v4-mb-dx-pair-two-frames';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./station_calendar.generated.js'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
