@@ -54,7 +54,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 .cut-audit-grid b{display:block;font-size:18px;margin-top:5px}
 .cut-row{border:1px solid #cad9e5;border-radius:8px;padding:9px;margin:7px 0;background:#f7fafc}
 .cut-row p{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 ui-monospace,monospace}
-.cut-row button{padding:8px 11px;min-height:38px}.cut-row.cut-done{background:#edf9ef;color:#285b32}
+.cut-row button{padding:8px 11px;min-height:38px}.cut-pick{display:inline-flex;gap:8px;align-items:center;margin:7px 0;font-weight:700}.cut-pick input{width:22px;height:22px}.cut-row.cut-done{background:#edf9ef;color:#285b32}
 @media(max-width:600px){.cut-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cut-row button{width:100%}}
 </style>
 <meta name="quyt-release-candidate" content="one-screen-20261112-review-only">
@@ -81,6 +81,20 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <div class="actions"><button id="confirmMissingDaN" type="button" style="display:none;background:#a85e13">XÁC NHẬN: tiền thiếu n là đơn vị n (chỉ bản gộp)</button><button id="confirmDuplicates" type="button" style="display:none;background:#a85e13">Xác nhận: các tin trùng là lượt đặt riêng</button><button id="clear" class="secondary" type="button">Xóa ô nhập</button></div>
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
 </div>
+<div class="card" id="sourceCutCard">
+ <h2 style="font-size:19px;margin:0 0 8px">CẮT TIN / CƯỢC — ĐỐI CHIẾU TIN GỐC NGAY</h2>
+ <p class="tiny muted">Chọn CẮT TIN trên từng dòng nguyên văn hoặc CẮT CƯỢC trong dòng đó. Tin gốc gồm tên khách, ngày giờ không thay đổi. Hai khung tính lại ngay từ cược còn lại. KHÔNG Copy hoặc gửi tự động.</p>
+ <div class="cut-audit-grid" aria-label="Đối soát tiền sau Cắt">
+  <div>Tiền trước CẮT<b id="cutBefore">—</b></div><div>Tiền đã CẮT (chênh tiền xuất)<b id="cutRemoved">—</b></div><div>Tiền sau CẮT<b id="cutAfter">—</b></div>
+  <div>Tiền gốc ban đầu<b id="cutOriginalBefore">—</b></div><div>Tiền gốc đã CẮT<b id="cutOriginalRemoved">—</b></div><div>Tiền gốc còn lại<b id="cutOriginalAfter">—</b></div>
+ </div>
+ <p id="cutConservation" class="tiny" aria-live="polite">Chưa đối chiếu.</p>
+ <p id="cutStatus" class="tiny" role="status">Dán tin vào ô phía trên để chọn CẮT từng cược hoặc cả tin.</p>
+ <div class="actions"><button id="cutSelectedQuyt" type="button" disabled>CẮT CÁC CƯỢC ĐÃ CHỌN</button><button id="undoQuytCut" type="button" class="secondary" disabled>HOÀN TÁC CẮT</button><button id="startNewQuytBatch" type="button" hidden style="background:#a4541a">XÁC NHẬN LƯỢT MỚI — BỎ SỔ CẮT CŨ</button></div>
+ <details open><summary>Tin gốc nguyên văn — CẮT cả dòng tin</summary><div id="cutSourceList"></div></details>
+ <details><summary>Từng khoản cược — CẮT một khoản</summary><div id="cutBetList"></div></details>
+ <details><summary>Những cược đã CẮT</summary><pre id="cutRemovedList" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
+</div>
 <div class="card">
  <h2 style="font-size:19px;margin:0 0 8px">Kết quả gộp — CHỈ 2 KHUNG</h2>
  <div class="totals" aria-label="Hai khung kết quả Quýt phân theo hệ số">
@@ -104,20 +118,6 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <label class="check" id="moneyAcknowledgment" hidden style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
 </div>
 
-<div class="card" id="sourceCutCard" hidden>
- <h2 style="font-size:19px;margin:0 0 8px">CẮT & đối chiếu tin gốc theo thời gian thực</h2>
- <p class="tiny muted">Chọn CẮT TIN trên từng dòng nguyên văn hoặc CẮT CƯỢC trong dòng đó. Tin gốc gồm tên khách, ngày giờ không thay đổi. Hai khung tính lại ngay từ cược còn lại. KHÔNG Copy hoặc gửi tự động.</p>
- <div class="cut-audit-grid" aria-label="Đối soát tiền sau Cắt">
-  <div>Tiền trước CẮT<b id="cutBefore">—</b></div><div>Tiền đã CẮT (chênh tiền xuất)<b id="cutRemoved">—</b></div><div>Tiền sau CẮT<b id="cutAfter">—</b></div>
-  <div>Tiền gốc ban đầu<b id="cutOriginalBefore">—</b></div><div>Tiền gốc đã CẮT<b id="cutOriginalRemoved">—</b></div><div>Tiền gốc còn lại<b id="cutOriginalAfter">—</b></div>
- </div>
- <p id="cutConservation" class="tiny" aria-live="polite">Chưa đối chiếu.</p>
- <p id="cutStatus" class="tiny" role="status">Chưa cắt.</p>
- <div class="actions"><button id="undoQuytCut" type="button" class="secondary" disabled>HOÀN TÁC CẮT</button><button id="startNewQuytBatch" type="button" hidden style="background:#a4541a">XÁC NHẬN LƯỢT MỚI — BỎ SỔ CẮT CŨ</button></div>
- <details open><summary>Tin gốc nguyên văn — CẮT cả dòng tin</summary><div id="cutSourceList"></div></details>
- <details><summary>Từng khoản cược — CẮT một khoản</summary><div id="cutBetList"></div></details>
- <details><summary>Những cược đã CẮT</summary><pre id="cutRemovedList" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
-</div>
 <div class="card" id="groupedResultsCard" hidden inert aria-hidden="true">
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
  <p class="muted tiny">MB không cần HN/đài; MN/MT bắt buộc chọn ngày và đài hợp lệ. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. MB DX cặp đúng hai số giữ nguyên tiền; MN/MT DX, XC và tin mơ hồ vẫn HOLD. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
