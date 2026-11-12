@@ -50,6 +50,12 @@ try{
  assert('switching to unsupported region clears prior groups',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&$('copy').disabled);
  set('market','mb','change');
  assert('switching back to MB restores valid result',visible()==='b');
+ set('raw','Tn 42 43 bl10n');
+ assert('TN station is shown as MN rather than silently parsed as MB',
+   !$('regionalHelp').hidden&&$('regionalHint').textContent.includes('Tây Ninh')&&
+   $('copy').disabled&&$('raw').value==='Tn 42 43 bl10n'&&
+   $('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—');
+ assert('regional review button is visible',$('openRegional').getBoundingClientRect().width>0);
  set('raw','');
  assert('clearing input hides all groups and copy',$('groupedResultsCard').hidden&&$('combinedResultsCard').hidden&&[...document.querySelectorAll('.bet-section')].every(x=>x.hidden));
 }catch(e){report.push({name:'EXCEPTION',pass:false,error:String(e)})}
