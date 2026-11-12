@@ -163,9 +163,9 @@ const quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\d{2}$/u.test(row
  // no automatic missing-unit recovery, and original source stays immutable.
  // Approved owner syntax: integer n may omit 'n' immediately after B/LO/DD/DAU/DUI.
 // Unrecognized types still HOLD. DA missing n still needs operator confirmation.
- const approvedBareRe=/(?<![\p{L}\p{N}])((?:bao[ \t]+lo|đầu|đuôi|đui|duoi|dau|dui|đđ|bao|blo|bl|lô|lo|dd|b)[ \t]*)(\d{1,3})(?![\dnN]|[.,]\d)(?=[ \t,.;:]|$)/giu;
+ const approvedBareRe=/(?<![\p{L}\p{N}])((?:bao[ \t]+lo|đầu|đuôi|đui|duoi|dau|dui|đđ|bao|blo|bl|lô|lo|dd|b)[ \t]*)(\d{1,3})(?![\dnN]|[.,]\d)(?=[ \t,.;:\r\n]|$)/giu;
  function normalizeApprovedBareStakes(source){return source.replace(approvedBareRe,(_raw,k,money)=>k+money+'n')}
- const missingDaNRe=/(?<![\p{L}\p{N}])((?:đá|da)[ \t]*)(\d{1,3})(?![\dnN]|[.,]\d)(?=[ \t,.;:]|$)/giu;
+ const missingDaNRe=/(?<![\p{L}\p{N}])((?:đá|da)[ \t]*)(\d{1,3})(?![\dnN]|[.,]\d)(?=[ \t,.;:\r\n]|$)/giu;
  function missingDaN(source){
   const matches=[];
   for(const match of String(source).matchAll(missingDaNRe)){
