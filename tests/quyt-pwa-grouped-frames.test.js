@@ -62,5 +62,5 @@ test('HTML has six readonly wager frames, two factor bucket cards and v20 cache'
  assert.match(html,/class="section-copy" disabled/u);
  assert.match(html,/class="section-text" readonly/u);
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261113-v24-assets-version-pin/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261113-v25-cut-archive-clipboard/u);
 });

@@ -66,14 +66,20 @@ test('fail-closed invalid 3-digit DD and unknown Cut references, no partial outp
 test('exactly two result buckets have only full-box Cut and Undo; no duplicated source UI',()=>{
  assert.equal([...html.matchAll(/class="total"/gu)].length,2);
  for(const id of ['cutSelectedScaled','cutSelectedUnscaled','scaledCutBefore','scaledCutRemoved','scaledCutAfter',
-  'unscaledCutBefore','unscaledCutRemoved','unscaledCutAfter','undoQuytCut','startNewQuytBatch','cutStatus','cutConservation'])
+  'unscaledCutBefore','unscaledCutRemoved','unscaledCutAfter','undoQuytCut','startNewQuytBatch','cutStatus','cutConservation',
+  'cutArchiveScaled','cutSavedScaled','copySavedScaled','cutArchiveUnscaled','cutSavedUnscaled','copySavedUnscaled'])
   assert.match(html,new RegExp('id="'+id+'"','u'));
  for(const removed of ['sourceCutCard','cutSourceList','cutBetList','cutRemovedList','cutScaledList','cutUnscaledList','cutSelectedQuyt'])
   assert.doesNotMatch(html,new RegExp('id="'+removed+'"','u'));
  assert.match(html,/CẮT TOÀN BỘ KHUNG ĐÃ NHÂN/u);
  assert.match(html,/CẮT TOÀN BỘ KHUNG GIỮ NGUYÊN/u);
+ assert.match(html,/SAO CHÉP TIN ĐÃ CẮT — GIỮ NGUYÊN/u);
+ const copyModule=read('quyt-pwa/quyt-live-cut-ui.js');
+ assert.match(copyModule,/copyUnscaledArchive\(\)/u);
+ assert.match(copyModule,/copySavedScaled'\)\.disabled=true/u);
+ assert.match(copyModule,/KTS_QUYT_MAIN_V4_SOURCE_CUT_V1/u);
  assert.match(html,/<script src="\.\/quyt-source-cut-ledger\.js"><\/script>/u);
- assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111301"><\/script>/u);
+ assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111302"><\/script>/u);
  assert.match(html,/HOLD_PWA_ASSET_VERSION_MISMATCH/u);
  assert.match(html,/QuytLiveCutUI\.review\(OfflineKTS,raw\.value/u);
  assert.match(html,/QuytLiveCutUI\.reset\(\)/u);
@@ -81,8 +87,16 @@ test('exactly two result buckets have only full-box Cut and Undo; no duplicated 
  assert.match(html,/copyScaled'\)\.disabled=true/u);
  assert.doesNotMatch(html,/Telegram\.send|sendBeacon|XMLHttpRequest/u);
  const sw=read('quyt-pwa/sw.js');
- for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111301'])assert.ok(sw.includes("'"+asset+"'"));
+ for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111302'])assert.ok(sw.includes("'"+asset+"'"));
  assert.equal(read('quyt-pwa/thu-nghiem/index.html'),html);
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-live-cut-ui.js'),read('quyt-pwa/quyt-live-cut-ui.js'));
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-source-cut-ledger.js'),ledgerSource);
+});
+test('unchecked Quýt factor retains full original amount and no adjusted-bucket entries',()=>{
+ const plain=kts.merge(text,{...opts,tick:false});
+ assert.equal(plain.sourceTotal,'415');assert.equal(plain.total,'415');
+ assert.ok(plain.rows.every(x=>x.factorApplied===false));
+ assert.equal(plain.rows.reduce((sum,row)=>sum+BigInt(row.adjusted),0n),415n);
+ const whole=ledger.calculate(plain,text,{...opts,tick:false},plain.sourceEntries.map(x=>x.id));
+ assert.equal(whole.before,'415');assert.equal(whole.cutOutput,'415');assert.equal(whole.after,'0');
 });
