@@ -26,8 +26,10 @@ button.secondary{background:#dcebf5;color:#153c5b}button:disabled{background:#aa
 .actions{display:flex;gap:9px;flex-wrap:wrap;margin:12px 0}.notice{background:#e9f8ec;border-left:4px solid #167b38;padding:10px 12px;border-radius:5px;margin:11px 0;white-space:pre-wrap}
 .notice.hold{background:#fff0e8;border-color:#b7371d}.totals{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:14px 0}
 .total{padding:12px;background:#edf3f6;border-radius:8px;min-width:0}.total strong{display:block;font-size:21px;margin-top:4px}.review-lines{font:12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;overflow-wrap:anywhere;margin:9px 0 0;border-top:1px solid #cad9e5;padding-top:8px;color:#263f50;max-height:310px;overflow:auto}
-/* EXACTLY two visible money-result panels; all old per-type and Copy controls inert. */
-#groupedResultsCard,#combinedResultsCard,#moneyAcknowledgment{display:none!important}
+/* EXACTLY two visible money-result panels; old per-type and combined Copy controls inert. */
+#groupedResultsCard,#combinedResultsCard{display:none!important}
+.review-ticket{display:block;min-height:124px;margin-top:8px;background:#fff;font-size:15px;white-space:pre-wrap}
+.total .actions{margin:9px 0 0}.total button{width:100%;font-size:14px;min-height:45px}
 .tiny{font-size:13px;color:#526172}.muted{color:#566674}.tag{display:inline-block;padding:4px 8px;background:#e5edf4;border-radius:6px;font-weight:700;font-size:12px}
 summary{cursor:pointer;font-weight:650}table{width:100%;border-collapse:collapse;font-size:14px}td,th{padding:7px 6px;border-bottom:1px solid #dde5eb;text-align:left}th{background:#edf3f6}.table-scroll{overflow:auto}
 footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-weight:650}
@@ -51,11 +53,11 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </head>
 <body><main class="wrap">
 <header><h1>KTS — GỘP TIN QUÝT MB / MN / MT <span class="tag">ĐỐI CHIẾU 2 KHUNG — KHÓA COPY</span></h1>
-<p>Một màn hình: chọn MB, MN hoặc MT. MB không cần ghi HN/đài; MN/MT phải chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN ĐỐI CHIẾU QUÝT V4 — CƯỢC 2 SỐ NHÂN, 3 SỐ BAO GIỮ GỐC; CHỈ 2 KHUNG:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
+<p>Một màn hình: MB là Miền Bắc (HN chỉ là tiền tố tin cũ, không phải tên miền); MN/MT phải ghi đài và chọn ngày. Hai khung có sẵn văn bản gộp để kiểm tra.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN ĐỐI CHIẾU QUÝT V4 — CƯỢC 2 SỐ NHÂN, 3 SỐ BAO GIỮ GỐC; CHỈ 2 KHUNG:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
 <div class="card">
  <div class="bar">
   <label class="field">Khách hàng<select id="customer"><option value="quyt">Quýt</option><option value="hien">Hiền</option><option value="khac">Khách khác (tiền gốc)</option></select></label>
-  <label class="field">Miền đang chọn<select id="market"><option value="mb">MB / HN</option><option value="mn">MN</option><option value="mt">MT</option></select></label>
+  <label class="field">Miền đang chọn<select id="market"><option value="mb">MB</option><option value="mn">MN</option><option value="mt">MT</option></select></label>
   <label class="field">Hệ số khách<input id="rate" type="text" inputmode="decimal" maxlength="7" value="1.067" aria-label="Hệ số Quýt"></label>
   <label class="check" id="toggleWrap"><input id="tick" type="checkbox"> Quýt — nhân BAO/LÔ + DD + ĐẦU + ĐUÔI (2 chữ số); Bao/Lô 3 chữ số giữ nguyên</label>
  </div>
@@ -76,16 +78,22 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <div class="totals" aria-label="Hai khung kết quả Quýt phân theo hệ số">
   <section class="total" aria-label="Khung đã nhân hệ số">
    <b id="baoLabel">ĐÃ NHÂN HỆ SỐ QUÝT</b><strong id="baoTotal">—</strong>
-   <pre id="scaledItems" class="review-lines" aria-label="Các khoản đã nhân" aria-live="polite"></pre>
+   <label class="tiny" for="scaledTicket">Tin gộp đã nhân (để kiểm tra, chưa được gửi)</label>
+   <textarea id="scaledTicket" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin gộp đã nhân để đối chiếu"></textarea>
+   <div class="actions"><button type="button" id="copyScaled" disabled title="Chưa đối soát Router bên nhận">COPY TIN ĐÃ NHÂN — CHƯA DUYỆT</button></div>
+   <details><summary>Đối soát tiền đã nhân</summary><pre id="scaledItems" class="review-lines" aria-label="Các khoản đã nhân" aria-live="polite"></pre></details>
   </section>
   <section class="total" aria-label="Khung giữ nguyên hệ số">
    <b id="otherLabel">KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN</b><strong id="otherTotal">—</strong>
-   <pre id="unscaledItems" class="review-lines" aria-label="Các khoản không nhân" aria-live="polite"></pre>
+   <label class="tiny" for="unscaledTicket">Tin gộp tiền gốc</label>
+   <textarea id="unscaledTicket" class="review-ticket" readonly spellcheck="false" rows="5" aria-label="Tin gộp không nhân hệ số"></textarea>
+   <div class="actions"><button type="button" id="copyUnscaled" disabled>COPY TIN GIỮ NGUYÊN</button></div>
+   <details><summary>Đối soát tiền giữ nguyên</summary><pre id="unscaledItems" class="review-lines" aria-label="Các khoản không nhân" aria-live="polite"></pre></details>
   </section>
  </div>
  <p id="factorReceipt" class="warn tiny" aria-live="polite">Chưa có kết quả để đối soát.</p>
  <p id="roundingAudit" class="warn tiny" aria-live="polite"></p>
- <label class="check" id="moneyAcknowledgment" style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
+ <label class="check" id="moneyAcknowledgment" hidden style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
 </div>
 <div class="card" id="groupedResultsCard" hidden inert aria-hidden="true">
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
@@ -429,6 +437,11 @@ function resetFrames(){
 function receiverMarketApproved(){return market.value==='mb'&&!(customer.value==='quyt'&&tick.checked)}
 function syncCopyGate(){
  const can=Boolean(receiverMarketApproved()&&currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled);
+ // New two-pane Copy: only a receiver-authorized, unchanged MB ticket may be copied.
+ // Any factorized Quýt / MN / MT output remains HOLD; never enable the factor button.
+ $('copyScaled').disabled=true;
+ $('copyUnscaled').disabled=!(can&&current.scaledReview===''&&current.unscaledReview&&
+   $('scaledTicket').value===current.scaledReview&&$('unscaledTicket').value===current.unscaledReview);
  copy.disabled=!can;select.disabled=!can;
  for(const frame of frames){
   const section=current?.sections?.find(x=>x.kind===frame.kind);
@@ -437,7 +450,8 @@ function syncCopyGate(){
 }
 function currentValid(){
  return current&&current.raw===raw.value&&current.customer===customer.value&&current.market===market.value&&current.businessDate===businessDate.value&&
-  current.tick===tick.checked&&current.rate===rate.value&&current.pretty===out.value;
+  current.tick===tick.checked&&current.rate===rate.value&&current.pretty===out.value&&
+  current.scaledReview===$('scaledTicket').value&&current.unscaledReview===$('unscaledTicket').value;
 }
 
 let rates={quyt:'1.067',hien:'1.000',khac:'1.000'};
@@ -475,7 +489,7 @@ function showTwoTotals(result){
   throw Error('HOLD_SUMMARY_SECTION_INVALID');
  const sectionSum=result.sections.reduce((n,g)=>n+BigInt(g.total),0n);
  let scaled=0n,unscaled=0n;
- const scaledLines=[],unscaledLines=[];
+ const scaledLines=[],unscaledLines=[],scaledTicketLines=[],unscaledTicketLines=[];
  const name={b:'BAO/LÔ',dd:'DD',dau:'ĐẦU',dui:'ĐUÔI',da:'ĐÁ',xc:'XC'};
  for(const item of result.rows){
   if(typeof item.factorApplied!=='boolean'||!/^\d+$/u.test(item.adjusted))
@@ -484,12 +498,17 @@ function showTwoTotals(result){
   if(!kind||amount<0n)throw Error('HOLD_SUMMARY_ROW_INVALID');
   const location=item.station?item.station+' / ':'';
   const label=kind+' · '+location+item.number;
+  // Reconstruct only from canonical aggregated, rounded rows. No money transform here.
+  const ticketLine=(item.station?item.station+' ':'')+
+    item.number.replace('-',' ')+' '+item.kind+item.adjusted+'n.';
   if(item.factorApplied){
    scaled+=amount;
    scaledLines.push(label+' · '+item.raw+'n → '+item.adjusted+'n');
+   scaledTicketLines.push(ticketLine);
   }else{
    unscaled+=amount;
    unscaledLines.push(label+' · '+item.adjusted+'n (không nhân)');
+   unscaledTicketLines.push(ticketLine);
   }
  }
  if(scaled<0n||unscaled<0n||scaled+unscaled!==BigInt(result.total)||sectionSum!==scaled+unscaled)
@@ -501,8 +520,10 @@ function showTwoTotals(result){
  $('otherLabel').textContent='KHÔNG NHÂN — BAO/LÔ 3 CHỮ SỐ, ĐÁ VÀ KHOẢN GỐC';
  $('scaledItems').textContent=scaledLines.join('\n')||'Không có khoản nhân hệ số';
  $('unscaledItems').textContent=unscaledLines.join('\n')||'Không có khoản giữ nguyên';
+ $('scaledTicket').value=scaledTicketLines.join('\n');
+ $('unscaledTicket').value=unscaledTicketLines.join('\n');
 }
-function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();ack.checked=false;ack.disabled=true;$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='ĐÃ NHÂN HỆ SỐ QUÝT';$('otherLabel').textContent='KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN';$('scaledItems').textContent='';$('unscaledItems').textContent='';$('factorReceipt').textContent='Chưa có kết quả để đối soát.';$('roundingAudit').textContent='';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
+function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();ack.checked=false;ack.disabled=true;$('moneyAcknowledgment').hidden=true;$('scaledTicket').value='';$('unscaledTicket').value='';$('copyScaled').disabled=true;$('copyUnscaled').disabled=true;$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='ĐÃ NHÂN HỆ SỐ QUÝT';$('otherLabel').textContent='KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN';$('scaledItems').textContent='';$('unscaledItems').textContent='';$('factorReceipt').textContent='Chưa có kết quả để đối soát.';$('roundingAudit').textContent='';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
@@ -516,7 +537,7 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
    $('roundingAudit').textContent=res.roundingDiffRows
     ?'Bản xem trước HALF_UP '+formatVi(res.total)+'; giả định làm tròn lên CEIL '+formatVi(res.ceilReference)+' (KHÔNG phải oracle bên nhận). Phải nghiệm thu phía nhận.'
     :'Chưa có bằng chứng Router chấp thuận Quýt V2 cho đủ 4 nhóm và tất cả miền. Không COPY/CHUYỂN.';
-   message(market.value==='mb'?'HOLD_QUYT_V2_MONEY_CONTRACT: chỉ số 2 chữ số BAO/LÔ, DD, ĐẦU, ĐUÔI nhân; 3 chữ số giữ gốc. Chưa được Copy/gửi.':'HOLD_RECEIVER_MARKET_UNAPPROVED: MN/MT chỉ đối chiếu Bao/Lô, DD, Đầu, Đuôi sau hệ số; không tạo tin hoặc Copy.',true);
+   message(market.value==='mb'?'HOLD_QUYT_V2_MONEY_CONTRACT: tin đã nhân được hiển thị để đối chiếu; chưa mở COPY/GỬI khi Router chưa nghiệm thu.':'HOLD_RECEIVER_MARKET_UNAPPROVED: MN/MT chỉ đối chiếu Bao/Lô, DD, Đầu, Đuôi sau hệ số; không tạo tin hoặc Copy.',true);
    return;
   }
   // Fail closed when two known money contracts disagree; a checkbox cannot
@@ -528,7 +549,9 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
    message('HOLD_CHENH_LECH_LAM_TRON: Quýt V2 HALF_UP khác giả định CEIL; chưa có oracle Router cho DD/ĐẦU/ĐUÔI. Chỉ xem tổng, KHÔNG COPY/CHUYỂN.',true);
    return;
   }
-  showTwoTotals(res);current={...res,raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;ack.disabled=false;
+  showTwoTotals(res);current={...res,raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,rate:rate.value,
+   scaledReview:$('scaledTicket').value,unscaledReview:$('unscaledTicket').value};out.value=res.pretty;ack.disabled=false;
+  $('moneyAcknowledgment').hidden=false;
   let visibleGroups=0;
   for(const frame of frames){
    const section=res.sections.find(g=>g.kind===frame.kind);
@@ -555,6 +578,28 @@ customer.addEventListener('change',()=>{rate.value=rates[customer.value]||'1.000
 rate.addEventListener('input',()=>{rates[customer.value]=rate.value;redraw()});
 tick.addEventListener('change',redraw);
 ack.addEventListener('change',syncCopyGate);
+$('copyUnscaled').addEventListener('click',async()=>{
+ const ticket=current,body=$('unscaledTicket').value;
+ if(!ticket||!currentValid()||!receiverMarketApproved()||ticket.roundingDiffRows!==0||
+    !ack.checked||ack.disabled||ticket.scaledReview!==''||ticket.unscaledReview!==body||
+    !body||$('copyUnscaled').disabled){
+  message('HOLD: nguồn, đối soát hoặc bản tin giữ nguyên không còn hợp lệ. Không Copy.',true);
+  return;
+ }
+ try{
+  if(!navigator.clipboard?.writeText)throw Error('Clipboard API không khả dụng');
+  await navigator.clipboard.writeText(body);
+  if(!currentValid()||ticket!==current||!receiverMarketApproved()||
+     !ack.checked||ticket.unscaledReview!==$('unscaledTicket').value){staleCopyWarning();return}
+  message('ĐÃ COPY tin giữ nguyên tiền gốc MB sau xác nhận. Không tự gửi Telegram.',false);
+ }catch(_){
+  if(!currentValid()||ticket!==current||!receiverMarketApproved()||!ack.checked){staleCopyWarning();return}
+  $('unscaledTicket').focus();$('unscaledTicket').select();let copied=false;
+  try{copied=document.execCommand('copy')}catch(_e){}
+  message(copied?'ĐÃ COPY tiền gốc MB.':'Chọn toàn bộ tin giữ nguyên, dùng Sao chép trên điện thoại.',!copied);
+ }
+});
+
 daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.value);if(!candidates.length)return;const examples=candidates.slice(0,3).map(x=>x.exact+' → '+x.assumed).join('; ');if(!confirm('Xác nhận tất cả '+candidates.length+' chỗ thiếu n là tiền theo đơn vị n?\n'+examples+'\nKhông sửa tin gốc; chỉ tính bản xem trước.'))return;confirmedDaScope=daScope();redraw()});
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
