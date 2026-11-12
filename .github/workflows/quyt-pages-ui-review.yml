@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: Native Node source/amount fixture (synthetic)
         run: |
-          node --test tests/quyt-pwa-sw-route-boundary.test.cjs tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-missing-unit.test.js tests/quyt-pwa-telegram-envelope.test.js
+          node --test tests/quyt-two-amounts-summary.test.cjs tests/quyt-pwa-sw-route-boundary.test.cjs tests/quyt-pwa-grouped-frames.test.js tests/quyt-pwa-integer-rounding.test.js tests/quyt-pwa-missing-unit.test.js tests/quyt-pwa-telegram-envelope.test.js
       - name: Actual Chromium browser DOM lifecycle with synthetic bets
         run: |
           command -v google-chrome || command -v chromium
