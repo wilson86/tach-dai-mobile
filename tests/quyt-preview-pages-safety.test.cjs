@@ -18,10 +18,10 @@ test('PREVIEW HTML/calendar/icon byte-for-byte match exact PR Quýt one-screen c
  assert.doesNotMatch(html,/navigator\.sendBeacon|Telegram\.send|XMLHttpRequest/u);
 });
 test('PREVIEW service worker can never purge official Quýt PWA caches',()=>{
- assert.match(sw,/const CACHE='kts-quyt-preview-20261113-v9-cut-archive-clipboard'/u);
+ assert.match(sw,/const CACHE='kts-quyt-preview-20261113-v10-factor-cut-clipboard'/u);
  assert.match(sw,/k\.startsWith\('kts-quyt-preview-'\)/u);
  assert.doesNotMatch(sw,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
- assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js','\.\/quyt-source-cut-ledger\.js','\.\/quyt-live-cut-ui\.js','\.\/quyt-live-cut-ui\.js\?v=2026111302'\]/u);
+ assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js','\.\/quyt-source-cut-ledger\.js','\.\/quyt-live-cut-ui\.js','\.\/quyt-live-cut-ui\.js\?v=2026111303'\]/u);
  assert.match(html,/navigator\.serviceWorker\.register\('\.\/sw\.js',\{scope:'\.\/'\}\)/u);
  const scope=new URL('https://wilson86.github.io/tach-dai-mobile/quyt-pwa/thu-nghiem/');
  for(const relative of ['./sw.js','./index.html','./station_calendar.generated.js','./manifest.webmanifest'])
@@ -40,10 +40,10 @@ test('PREVIEW install label is conspicuously TEST ONLY and same-folder scoped',(
 test('PWA old cache-first unversioned Cut JS cannot match pinned new script URL',()=>{
  const fromHtml=html.match(/<script src="(\.\/quyt-live-cut-ui\.js\?v=\d+)"><\/script>/u);
  assert.ok(fromHtml,'HTML must request a pinned versioned Cut JS');
- assert.equal(fromHtml[1],'./quyt-live-cut-ui.js?v=2026111302');
+ assert.equal(fromHtml[1],'./quyt-live-cut-ui.js?v=2026111303');
  assert.notEqual(new URL(fromHtml[1],'https://wilson86.github.io/tach-dai-mobile/quyt-pwa/').href,
   new URL('./quyt-live-cut-ui.js','https://wilson86.github.io/tach-dai-mobile/quyt-pwa/').href);
- assert.match(sw,/quyt-live-cut-ui\.js\?v=2026111302/u);
+ assert.match(sw,/quyt-live-cut-ui\.js\?v=2026111303/u);
  assert.match(html,/HOLD_PWA_ASSET_VERSION_MISMATCH/u);
- assert.match(read(root,'quyt-live-cut-ui.js').toString('utf8'),/version:'QUYT_CUT_FULLBOX_20261113_02'/u);
+ assert.match(read(root,'quyt-live-cut-ui.js').toString('utf8'),/version:'QUYT_CUT_FULLBOX_20261113_03'/u);
 });
