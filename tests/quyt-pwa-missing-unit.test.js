@@ -54,8 +54,8 @@ test('already-valid exact source remains byte-compatible',()=>{
  const a=core.merge(raw,opts);const b=core.merge(raw,{...opts,confirmMissingDaN:true});
  assert.equal(a.pretty,b.pretty);assert.equal(a.total,'100');
 });
-test('new standalone service-worker key must be version v13',()=>{
+test('new standalone service-worker key must be version v14',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v13-scoped-calendar-refresh/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v14-quyt-four-kinds-review/u);
  assert.match(html,/id="confirmMissingDaN"/u);
 });
