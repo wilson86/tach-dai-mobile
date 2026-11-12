@@ -1,7 +1,7 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-standalone-pwa-20261113-v26-factor-cut-clipboard';
-const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./station_calendar.generated.js','./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111303'];
+const CACHE='kts-quyt-standalone-pwa-20261113-v27-atomic-cut-to-clipboard';
+const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./station_calendar.generated.js','./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111304'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });
