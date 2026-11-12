@@ -18,13 +18,14 @@ test('one existing URL genuinely supports MB and MN/MT with generated station ca
  assert.ok(app.schedule('mn','2026-11-12').some(x=>x[0]==='tn'));
 });
 test('TN correct date gives 320n Bao and 0n others, but Router CEIL is 322n so Copy must HOLD',()=>{
- const input='tn 42 43 bl150n';
+ const input='Tn 42 43 bl 150n';
  const out=app.merge(input,opts);
  assert.equal(out.total,'320');assert.equal(out.roundingDiffRows,2);
  assert.equal(out.ceilReference,'322');
  assert.equal(out.sections.find(x=>x.kind==='b').total,'320');
+ assert.equal(out.rows.length,2); // synthetic two-number source, case and spaces preserved
  assert.equal(out.sections.filter(x=>x.kind!=='b').reduce((n,s)=>n+BigInt(s.total),0n),0n);
- assert.equal(input,'tn 42 43 bl150n');
+ assert.equal(input,'Tn 42 43 bl 150n');
  assert.match(html,/if\(res\.roundingDiffRows>0\)/u);
  assert.match(html,/HOLD_CHENH_LECH_LAM_TRON/u);
  assert.match(html,/ack\.disabled=true/u);
