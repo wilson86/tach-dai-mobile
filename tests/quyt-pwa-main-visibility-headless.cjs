@@ -202,7 +202,7 @@ server.listen(0,'127.0.0.1',()=>{
  proc.on('close',status=>{
   clearTimeout(timeout);server.close();
   const open='<pre id="quyt-e2e-qa">',at=stdout.indexOf(open),end=stdout.indexOf('</pre>',at);
-  if(at<0||end<0){console.error('NO_BROWSER_QA_RECEIPT',stderr.slice(-1500));process.exitCode=1;return}
+  if(at<0||end<0){console.error('NO_BROWSER_QA_RECEIPT',JSON.stringify({exitStatus:status,stdoutBytes:stdout.length,stdoutFirst:stdout.slice(0,500),stderrLast:stderr.slice(-4500)}));process.exitCode=1;return}
   const raw=stdout.slice(at+open.length,end);
   let result;
   try{result=JSON.parse(raw.replaceAll('&quot;','"').replaceAll('&amp;','&'))}
