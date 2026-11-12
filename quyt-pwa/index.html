@@ -49,7 +49,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 </head>
 <body><main class="wrap">
 <header><h1>KTS — GỘP TIN QUÝT MB / MN / MT <span class="tag">XEM TRƯỚC ONLINE</span></h1>
-<p>Một màn hình: chọn MB, MN hoặc MT. MB nhận HN; MN/MT chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA — CHƯA DUYỆT GỬI TIỀN THẬT:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Chỉ dùng online; không phải PWA offline.</p></header>
+<p>Một màn hình: chọn MB, MN hoặc MT. MB nhận HN; MN/MT chọn ngày và đài. Chỉ hiện khung nhóm khi có kết quả gộp hợp lệ.</p><p style="background:#fff3d1;color:#6d3d00;border-radius:8px;padding:9px;margin-top:10px"><strong>BẢN KIỂM TRA — MN/MT CHỈ XEM HAI KHOẢN, KHÔNG COPY:</strong> 2d/3d mở đủ tiền trên từng đài; ĐÁ/DX/XC và tin mơ hồ HOLD. Quy tắc PWA Quýt làm tròn gần nhất khác quy tắc làm tròn lên của một số luồng Router. Phải đối soát bên nhận trước khi chuyển cược; không nhân lần hai. Chưa nghiệm thu Samsung/ứng dụng Tính tiền nhận. Không tự gửi Telegram; cần kết nối và kiểm tra đúng lịch đài trước khi sử dụng.</p></header>
 <div class="card">
  <div class="bar">
   <label class="field">Khách hàng<select id="customer"><option value="quyt">Quýt</option><option value="hien">Hiền</option><option value="khac">Khách khác (tiền gốc)</option></select></label>
@@ -398,8 +398,10 @@ function resetFrames(){
  $('groupedResultsCard').hidden=true;$('combinedResultsCard').hidden=true;
  for(const frame of frames){frame.field.value='';frame.total.textContent='—';frame.button.disabled=true;frame.field.closest('.bet-section').hidden=true;}
 }
+// The canonical private Quýt money contract currently authorizes MB only.
+function receiverMarketApproved(){return market.value==='mb'}
 function syncCopyGate(){
- const can=Boolean(currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled);
+ const can=Boolean(receiverMarketApproved()&&currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled);
  copy.disabled=!can;select.disabled=!can;
  for(const frame of frames){
   const section=current?.sections?.find(x=>x.kind===frame.kind);
@@ -455,6 +457,18 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,businessDate:businessDate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+  // No public mobile-source result may be copied for a market whose
+  // private receiver money contract has not been independently approved.
+  // Keep only the two review totals; no ticket, group text or Copy/ACK.
+  if(!receiverMarketApproved()){
+   showTwoTotals(res);
+   $('factorReceipt').textContent='HOLD_RECEIVER_MARKET_UNAPPROVED: Quýt MN/MT chưa có hợp đồng tiền nhận được phê duyệt. Chỉ xem Bao/Lô và phần còn lại; không xuất cược.';
+   $('roundingAudit').textContent=res.roundingDiffRows
+    ?'Ngoài phạm vi tiền nhận: HALF_UP '+formatVi(res.total)+'; CEIL '+formatVi(res.ceilReference)+'. Phải nghiệm thu phía nhận.'
+    :'Chưa có bằng chứng Router đã chấp thuận quy tắc Quýt cho MN/MT. Không COPY/CHUYỂN.';
+   message('HOLD_RECEIVER_MARKET_UNAPPROVED: MN/MT đang ở chế độ chỉ đối chiếu. Không tạo tin xuất, không Copy hoặc gửi.',true);
+   return;
+  }
   // Fail closed when two known money contracts disagree; a checkbox cannot
   // substitute for an independently accepted receiving-money oracle.
   if(res.roundingDiffRows>0){
@@ -495,7 +509,7 @@ daBtn.addEventListener('click',()=>{const candidates=OfflineKTS.missingDaN(raw.v
 confirmBtn.addEventListener('click',()=>{if(!confirm('Xác nhận những dòng tin giống hệt này là các lần khách đặt riêng, được cộng tiền đầy đủ?'))return;confirmedRaw=raw.value;redraw()});
 $('clear').addEventListener('click',()=>{if(!raw.value.trim()||confirm('Xóa toàn bộ nội dung đang dán?')){raw.value='';confirmedRaw=null;confirmedDaScope=null;tick.checked=false;redraw();raw.focus()}});
 select.addEventListener('click',()=>{if(!currentValid()||current.roundingDiffRows!==0||!ack.checked||ack.disabled||select.disabled)return;out.focus();out.select();message('Đã chọn toàn bộ tin gộp. Nhấn Ctrl+C (trên Windows) hoặc Sao chép (trên điện thoại).',false)});
-function copyTicketValid(ticket){return Boolean(current===ticket&&currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled)}
+function copyTicketValid(ticket){return Boolean(receiverMarketApproved()&&current===ticket&&currentValid()&&current.roundingDiffRows===0&&ack.checked&&!ack.disabled)}
 function staleCopyWarning(){
  message('HOLD: nguồn hoặc xác nhận đã thay đổi trong khi Copy. Clipboard CÓ THỂ chứa tin CŨ; không sử dụng, kiểm tra và Copy lại.',true);
 }
