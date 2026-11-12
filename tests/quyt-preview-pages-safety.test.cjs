@@ -21,7 +21,7 @@ test('PREVIEW service worker can never purge official Quýt PWA caches',()=>{
  assert.match(sw,/const CACHE='kts-quyt-preview-20261112-v5-local-source-cut'/u);
  assert.match(sw,/k\.startsWith\('kts-quyt-preview-'\)/u);
  assert.doesNotMatch(sw,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
- assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js'\]/u);
+ assert.match(sw,/const ASSETS=\['\.\/','\.\/index\.html','\.\/manifest\.webmanifest','\.\/icon\.svg','\.\/station_calendar\.generated\.js','\.\/quyt-cut-audit\.js','\.\/quyt-local-cut-ui\.js'\]/u);
  assert.match(html,/navigator\.serviceWorker\.register\('\.\/sw\.js',\{scope:'\.\/'\}\)/u);
  const scope=new URL('https://wilson86.github.io/tach-dai-mobile/quyt-pwa/thu-nghiem/');
  for(const relative of ['./sw.js','./index.html','./station_calendar.generated.js','./manifest.webmanifest'])
