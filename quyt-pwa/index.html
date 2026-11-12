@@ -65,8 +65,8 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <details id="missingUnitAudit" style="display:none;margin-top:10px"><summary>Kiểm tra từng chỗ thiếu n trước khi xác nhận</summary><pre id="missingUnitAuditBody" style="white-space:pre-wrap;overflow:auto;max-height:250px;font:13px/1.45 ui-monospace,monospace"></pre></details>
 </div>
 <div class="card">
- <h2 style="font-size:19px;margin:0 0 8px">Tổng tiền đã gộp</h2>
- <div class="totals"><div class="total">TỔNG GỐC (CHƯA LÀM TRÒN)<strong id="before">—</strong></div><div class="total">TỔNG XUẤT (ĐÃ LÀM TRÒN)<strong id="after">—</strong></div></div>
+ <h2 style="font-size:19px;margin:0 0 8px">Kết quả tiền sau gộp</h2>
+ <div class="totals" aria-label="Kết quả tiền: hai khoản"><div class="total"><span id="baoLabel">BAO/LÔ SAU HỆ SỐ (NẾU BẬT)</span><strong id="baoTotal">—</strong></div><div class="total">PHẦN CÒN LẠI (KHÔNG NHÂN)<strong id="otherTotal">—</strong></div></div>
 </div>
 <div class="card" id="groupedResultsCard" hidden>
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
@@ -298,12 +298,22 @@ function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw
 function formatVi(x){const [whole,fraction]=String(x).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+(fraction?','+fraction:'')+'n'}
 function message(text,isHold){status.textContent=text;status.classList.toggle('hold',Boolean(isHold))}
 function daScope(){return JSON.stringify([raw.value,customer.value,market.value])}
-function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('before').textContent='—';$('after').textContent='—';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
+function showTwoTotals(result){
+ const bao=result.sections.find(group=>group.kind==='b');
+ if(!bao)throw Error('HOLD_MONEY_SUMMARY_BAO_MISSING');
+ const baoTotal=BigInt(bao.total);
+ const otherTotal=result.sections.filter(group=>group.kind!=='b').reduce((sum,group)=>sum+BigInt(group.total),0n);
+ if(baoTotal<0n||otherTotal<0n||baoTotal+otherTotal!==BigInt(result.total))throw Error('HOLD_MONEY_SUMMARY_MISMATCH');
+ $('baoTotal').textContent=formatVi(baoTotal.toString());
+ $('otherTotal').textContent=formatVi(otherTotal.toString());
+ $('baoLabel').textContent=customer.value==='quyt'&&tick.checked?'BAO/LÔ ĐÃ NHÂN ×'+rate.value:'BAO/LÔ KHÔNG NHÂN';
+}
+function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='BAO/LÔ SAU HỆ SỐ (NẾU BẬT)';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
  try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
-  current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
+  showTwoTotals(res);current={...res,raw:raw.value,customer:customer.value,market:market.value,tick:tick.checked,rate:rate.value};out.value=res.pretty;copy.disabled=false;select.disabled=false;
   let visibleGroups=0;
   for(const frame of frames){
    const section=res.sections.find(g=>g.kind===frame.kind);
@@ -316,7 +326,7 @@ function redraw(){current=null;out.value='';copy.disabled=true;select.disabled=t
   }
   $('groupedResultsCard').hidden=visibleGroups===0;
   $('combinedResultsCard').hidden=!res.pretty;
-  $('before').textContent=formatVi(res.original);$('after').textContent=formatVi(res.total);
+  
   for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
   message('ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'Chỉ BAO/LÔ được nhân ×'+rate.value+'.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Đã làm tròn từng số/cặp xuống nếu lẻ <0.5n, lên nếu ≥0.5n; tổng xuất bằng tổng các khoản đã làm tròn. Tin sẵn để Copy.',false);
  }catch(e){const reason=String(e.message||e);if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu các số đó thật sự là tiền theo đơn vị n, bấm Xác nhận. Không tự thêm n.',true)}else if(reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: Có 2 tin cùng nội dung. Nếu khách thật sự đặt hai lượt riêng, bấm Xác nhận để cộng đủ. Nếu chỉ dán lặp, sửa ô nguồn.',true)}else message('HOLD: '+reason+'. Chưa có tin nào được xuất.',true)}
