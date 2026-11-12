@@ -36,20 +36,20 @@ try{
  assert('MB means region, not HN alias', 
    [...$('market').options].some(x=>x.value==='mb'&&x.textContent.trim()==='MB')&&
    ![...$('market').options].some(x=>x.value==='mb'&&x.textContent.includes('/ HN')));
- set('raw','60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n');
+ set('raw','60 b 100 dd 100 dau 100 duoi 100\\n33 61 dx 5n 526 b10n');
  checkbox(true);
  assert('two independent input source lines produce two money frames, 428n multiplied and 15n raw',
   money('baoTotal')===428n&&money('otherTotal')===15n&&
-  $('scaledTicket').value==='60 b107n.\n60 dd107n.\n60 dau107n.\n60 dui107n.'&&
+  $('scaledTicket').value==='60 b107n.\\n60 dd107n.\\n60 dau107n.\\n60 dui107n.'&&
   $('unscaledTicket').value.includes('526 b10n.')&&
   $('unscaledTicket').value.includes('33 61 dx5n.')&&
-  $('unscaledTicket').value.split('\n').length===2&&closed());
+  $('unscaledTicket').value.split('\\n').length===2&&closed());
  assert('DX5n and Bao52610n remain unmultiplied; Copy stays gated while Quýt factor active',
   $('unscaledItems').textContent.includes('DX · 33-61 · 5n (không nhân)')&&
   $('unscaledItems').textContent.includes('BAO/LÔ · 526 · 10n (không nhân)')&&
   $('copyScaled').disabled&&$('copyUnscaled').disabled&&
   $('status').textContent.includes('HOLD_QUYT_V2_MONEY_CONTRACT'));
- set('raw','60 b 100 dd 100 dau 100 duoi 100\n33 61 dx 5n 526 b10n\n33 dx5n');
+ set('raw','60 b 100 dd 100 dau 100 duoi 100\\n33 61 dx 5n 526 b10n\\n33 dx5n');
  assert('malformed DX on line 3 clears both frames and all ticket text (no partial financial output)',
   $('baoTotal').textContent==='—'&&$('otherTotal').textContent==='—'&&
   !$('scaledTicket').value&&!$('unscaledTicket').value&&
