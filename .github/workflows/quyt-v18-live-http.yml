@@ -1,0 +1,16 @@
+name: KTS Quyt v18 public HTTPS read-only proof ($0)
+on:
+  pull_request:
+    paths:
+      - 'tests/quyt-v18-live-http.cjs'
+      - '.github/workflows/quyt-v18-live-http.yml'
+permissions:
+  contents: read
+jobs:
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Exact HTTP 200 + Git content hashes for 2-box official and preview
+        run: node tests/quyt-v18-live-http.cjs
