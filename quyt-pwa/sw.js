@@ -1,7 +1,7 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames';
-const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./station_calendar.generated.js'];
+const CACHE='kts-quyt-standalone-pwa-20261112-v21-local-source-cut';
+const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./station_calendar.generated.js','./quyt-cut-audit.js','./quyt-local-cut-ui.js'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
 });

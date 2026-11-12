@@ -88,7 +88,7 @@ test('unsupported XC and market still HOLD, and source is never mutated',()=>{
 });
 test('v19 service worker retains v4 money contract and adds group frames',()=>{
  const sw=fs.readFileSync(path.join(root,'sw.js'),'utf8');
- assert.match(sw,/kts-quyt-standalone-pwa-20261112-v20-mb-dx-pair-two-frames/u);
+ assert.match(sw,/kts-quyt-standalone-pwa-20261112-v21-local-source-cut/u);
  assert.match(html,/Sau nhân, chưa tròn/u);
  assert.match(html,/Xuất, đã tròn/u);
  assert.match(html,/id="baoTotal"/u);assert.match(html,/id="otherTotal"/u);
