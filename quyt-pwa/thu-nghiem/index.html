@@ -48,6 +48,14 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 @media(max-width:600px){.bet-section-grid{grid-template-columns:1fr;gap:9px}.bet-section textarea{min-height:90px}}
 
 @media(max-width:600px){.wrap{padding:8px 8px 28px}.card{padding:11px}.field{flex-basis:135px}h1{font-size:20px}.totals{grid-template-columns:1fr;gap:9px}.total{padding:9px}.total strong{font-size:17px}#raw{min-height:240px}#result{min-height:270px}}
+
+.cut-audit-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}
+.cut-audit-grid>div{padding:9px;background:#edf3f6;border-radius:8px}
+.cut-audit-grid b{display:block;font-size:18px;margin-top:5px}
+.cut-row{border:1px solid #cad9e5;border-radius:8px;padding:9px;margin:7px 0;background:#f7fafc}
+.cut-row p{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.5 ui-monospace,monospace}
+.cut-row button{padding:8px 11px;min-height:38px}.cut-row.cut-done{background:#edf9ef;color:#285b32}
+@media(max-width:600px){.cut-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.cut-row button{width:100%}}
 </style>
 <meta name="quyt-release-candidate" content="one-screen-20261112-review-only">
 </head>
@@ -94,6 +102,21 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
  <p id="factorReceipt" class="warn tiny" aria-live="polite">Chưa có kết quả để đối soát.</p>
  <p id="roundingAudit" class="warn tiny" aria-live="polite"></p>
  <label class="check" id="moneyAcknowledgment" hidden style="display:flex;align-items:flex-start;gap:10px;margin:10px 0;padding:10px;background:#fff3d1;border:1px solid #d7b879;border-radius:8px"><input id="ackMoney" type="checkbox" disabled aria-label="Đã kiểm tra số tiền và chọn đúng khách miền ngày đài" style="margin-top:4px"><span>Tôi đã kiểm tra khách, miền, ngày, từng đài và tiền xuất; xác nhận quy tắc nhân/làm tròn đã được phía nhận chấp thuận. <b>KHÔNG nhân hệ số lần nữa.</b> Chỉ mở Copy sau khi đối chiếu.</span></label>
+</div>
+
+<div class="card" id="sourceCutCard" hidden>
+ <h2 style="font-size:19px;margin:0 0 8px">CẮT & đối chiếu tin gốc theo thời gian thực</h2>
+ <p class="tiny muted">Chọn CẮT TIN trên từng dòng nguyên văn hoặc CẮT CƯỢC trong dòng đó. Tin gốc gồm tên khách, ngày giờ không thay đổi. Hai khung tính lại ngay từ cược còn lại. KHÔNG Copy hoặc gửi tự động.</p>
+ <div class="cut-audit-grid" aria-label="Đối soát tiền sau Cắt">
+  <div>Tiền trước CẮT<b id="cutBefore">—</b></div><div>Tiền đã CẮT (chênh tiền xuất)<b id="cutRemoved">—</b></div><div>Tiền sau CẮT<b id="cutAfter">—</b></div>
+  <div>Tiền gốc ban đầu<b id="cutOriginalBefore">—</b></div><div>Tiền gốc đã CẮT<b id="cutOriginalRemoved">—</b></div><div>Tiền gốc còn lại<b id="cutOriginalAfter">—</b></div>
+ </div>
+ <p id="cutConservation" class="tiny" aria-live="polite">Chưa đối chiếu.</p>
+ <p id="cutStatus" class="tiny" role="status">Chưa cắt.</p>
+ <div class="actions"><button id="undoQuytCut" type="button" class="secondary" disabled>HOÀN TÁC CẮT</button><button id="startNewQuytBatch" type="button" hidden style="background:#a4541a">XÁC NHẬN LƯỢT MỚI — BỎ SỔ CẮT CŨ</button></div>
+ <details open><summary>Tin gốc nguyên văn — CẮT cả dòng tin</summary><div id="cutSourceList"></div></details>
+ <details><summary>Từng khoản cược — CẮT một khoản</summary><div id="cutBetList"></div></details>
+ <details><summary>Những cược đã CẮT</summary><pre id="cutRemovedList" style="white-space:pre-wrap;overflow-wrap:anywhere"></pre></details>
 </div>
 <div class="card" id="groupedResultsCard" hidden inert aria-hidden="true">
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
@@ -350,7 +373,7 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
   const multiplier=opts.tick?decimal(String(opts.rate??'1.067')):D;
   if(multiplier<=0n||multiplier>3000n)fail('Hệ số phải > 0 và ≤ 3');
   if(opts.tick&&opts.customer!=='quyt')fail('Hệ số Quýt không được áp dụng cho khách khác');
-  const rows=new Map();let seq=0,placement=0,displayHN=false,sourceStake=0n;
+  const rows=new Map(),sourceEntries=[];const excluded=new Set(opts.excludeBetIds||[]);let seq=0,placement=0,displayHN=false,sourceStake=0n;
   for(let j=0;j<lines.length;j++){
    const scoped=opts.market==='mb'?{station:'',text:messages[j].text}:
     stationScope(messages[j].text,opts.market,opts.businessDate,active,physicalLines[j]-1);
@@ -359,17 +382,24 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
    const parsed=parseMessage(scoped.text,physicalLines[j]-1);displayHN ||= parsed.hasHN;
    if(opts.market!=='mb'&&parsed.bets.some(b=>b.kind==='da'||b.kind==='dx'))
     fail('MN/MT ĐÁ/DX liên đài chưa có oracle cho PWA gộp; HOLD',`tin ${physicalLines[j]}`);
-   for(const bet of parsed.bets){
+   for(let betIndex=0;betIndex<parsed.bets.length;betIndex++){
+    const bet=parsed.bets[betIndex],id=physicalLines[j]+':'+betIndex,stations=(scoped.stations||['']).slice();
+    // One ID per source wager atom; 2d/3d allocates across stations, not IDs.
+    // Original Telegram line is immutable and always available for audit.
+    sourceEntries.push({id,line:physicalLines[j],text:raw.split(/\r?\n/u)[physicalLines[j]-1],
+      kind:bet.kind,number:bet.number,stake:fmt(bet.money,D),stations});
     sourceStake+=bet.money;
-    for(const station of (scoped.stations||[''])){
+    if(excluded.has(id))continue;
+    for(const station of stations){
      const key=opts.market+'|'+(opts.businessDate||'')+'|'+station+'|'+bet.kind+'|'+bet.number;
      let r=rows.get(key);
-     if(!r){r={kind:bet.kind,number:bet.number,station,amount:0n,seq:seq++,peak:0n,peakOrder:0};rows.set(key,r)}
+     if(!r){r={kind:bet.kind,number:bet.number,station,amount:0n,seq:seq++,peak:0n,peakOrder:0,sourceIds:[]};rows.set(key,r)}
      if(bet.money>r.peak){r.peak=bet.money;r.peakOrder=placement}
-     placement++;r.amount+=bet.money;
+     placement++;r.amount+=bet.money;r.sourceIds.push(id);
     }
    }
   }
+  if([...excluded].some(id=>!sourceEntries.some(e=>e.id===id)))fail('HOLD_CUT_UNKNOWN_SOURCE');
   const sorted=[...rows.values()].sort((a,b)=>rank[a.kind]-rank[b.kind]||
    (a.station===b.station?0:((active?.findIndex(x=>x[0]===a.station)??0)-(active?.findIndex(x=>x[0]===b.station)??0)))||
    (['da','dx'].includes(a.kind)?a.seq-b.seq:(a.amount===b.amount?a.peakOrder-b.peakOrder:(a.amount>b.amount?-1:1))));
@@ -418,12 +448,14 @@ if(['dd','dau','dui'].includes(selector)&&nums.some(number=>number.length!==2))
    fail('HOLD: tổng từng khung khác tổng đã gộp');
   return {pretty,sections,sourceTotal:fmt(sourceStake,D),original:fmt(original,D),total:fmt(adjusted,M),
    ceilReference:fmt(ceilReference,M),roundingDiffRows,
-   rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M),factorApplied:r.factorApplied})),
-   sourceCount:lines.length,businessDate:opts.businessDate||'',rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
+   rows:sorted.map(r=>({kind:r.kind,number:r.number,station:r.station,raw:fmt(r.amount,D),beforeRounding:fmt(r.exact,M),adjusted:fmt(r.rounded,M),factorApplied:r.factorApplied,sourceIds:r.sourceIds.slice()})),
+   sourceEntries,sourceCount:lines.length,businessDate:opts.businessDate||'',rounding:'HALF_UP_PER_NUMBER_AFTER_MULTIPLY'};
  }
  return Object.freeze({merge,fmt,decimal,missingDaN,schedule});
 })();
 </script>
+<script src="./quyt-source-cut-ledger.js"></script>
+<script src="./quyt-live-cut-ui.js"></script>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id);const raw=$('raw'),out=$('result'),rate=$('rate'),tick=$('tick'),customer=$('customer'),market=$('market'),businessDate=$('businessDate'),regionScope=$('regionScope'),scheduleLabel=$('stationSchedule'),status=$('status'),copy=$('copy'),select=$('select'),ack=$('ackMoney'),confirmBtn=$('confirmDuplicates'),daBtn=$('confirmMissingDaN'),daAudit=$('missingUnitAudit'),daAuditBody=$('missingUnitAuditBody');
@@ -472,10 +504,13 @@ try{
  if(state&&['quyt','hien','khac'].includes(state.customer)&&['mb','mn','mt'].includes(state.market)&&typeof state.raw==='string'&&state.raw.length<60000){
   customer.value=state.customer;market.value=state.market;raw.value=state.raw;
   if(active&&typeof state.businessDate==='string')businessDate.value=state.businessDate;
+   if(active&&typeof state.tick==='boolean')tick.checked=state.tick;
+   if(active&&state.duplicateConfirmed===true)confirmedRaw=raw.value;
+   if(active&&state.daConfirmed===true)confirmedDaScope=JSON.stringify([raw.value,customer.value,market.value,businessDate.value]);
  }
 }catch(_){/* read-only compatible draft; no source mutation */}
 rate.value=rates[customer.value];
-function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value}))}catch(_){}try{localStorage.setItem(ratesKey,JSON.stringify(rates))}catch(_){}}
+function persist(){try{sessionStorage.setItem(storageKey,JSON.stringify({raw:raw.value,customer:customer.value,market:market.value,businessDate:businessDate.value,tick:tick.checked,duplicateConfirmed:confirmedRaw===raw.value,daConfirmed:confirmedDaScope===daScope()}))}catch(_){}try{localStorage.setItem(ratesKey,JSON.stringify(rates))}catch(_){}}
 function formatVi(x){const [whole,fraction]=String(x).split('.');return whole.replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+(fraction?','+fraction:'')+'n'}
 function message(text,isHold){status.textContent=text;status.classList.toggle('hold',Boolean(isHold))}
 function daScope(){return JSON.stringify([raw.value,customer.value,market.value,businessDate.value])}
@@ -528,11 +563,11 @@ function showTwoTotals(result){
  $('scaledTicket').value=scaledTicketLines.join('\n');
  $('unscaledTicket').value=unscaledTicketLines.join('\n');
 }
-function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();ack.checked=false;ack.disabled=true;$('moneyAcknowledgment').hidden=true;$('scaledTicket').value='';$('unscaledTicket').value='';$('copyScaled').disabled=true;$('copyUnscaled').disabled=true;$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='ĐÃ NHÂN HỆ SỐ QUÝT';$('otherLabel').textContent='KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN';$('scaledItems').textContent='';$('unscaledItems').textContent='';$('factorReceipt').textContent='Chưa có kết quả để đối soát.';$('roundingAudit').textContent='';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
+function redraw(){renderSchedule();QuytLiveCutUI.reset();current=null;out.value='';copy.disabled=true;select.disabled=true;resetFrames();ack.checked=false;ack.disabled=true;$('moneyAcknowledgment').hidden=true;$('scaledTicket').value='';$('unscaledTicket').value='';$('copyScaled').disabled=true;$('copyUnscaled').disabled=true;$('baoTotal').textContent='—';$('otherTotal').textContent='—';$('baoLabel').textContent='ĐÃ NHÂN HỆ SỐ QUÝT';$('otherLabel').textContent='KHÔNG NHÂN HỆ SỐ — GIỮ NGUYÊN';$('scaledItems').textContent='';$('unscaledItems').textContent='';$('factorReceipt').textContent='Chưa có kết quả để đối soát.';$('roundingAudit').textContent='';$('details').replaceChildren();confirmBtn.style.display='none';daBtn.style.display='none';daAudit.style.display='none';daAuditBody.textContent='';
  const selected=customer.value==='quyt';tick.disabled=!selected;$('toggleWrap').classList.toggle('off',!selected);if(!selected)tick.checked=false;
  persist();
  if(!raw.value.trim()){message('Dán tin vào ô trên để bắt đầu.',true);return}
- try{const res=OfflineKTS.merge(raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,businessDate:businessDate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
+ try{const res=QuytLiveCutUI.review(OfflineKTS,raw.value,{market:market.value,customer:customer.value,tick:tick.checked,rate:rate.value,businessDate:businessDate.value,duplicateConfirmed:confirmedRaw===raw.value,confirmMissingDaN:confirmedDaScope===daScope()});
   // No public mobile-source result may be copied for a market whose
   // private receiver money contract has not been independently approved.
   // Keep only the two review totals; no ticket, group text or Copy/ACK.
@@ -575,7 +610,7 @@ function redraw(){renderSchedule();current=null;out.value='';copy.disabled=true;
   syncCopyGate();
   for(const row of res.rows){const tr=document.createElement('tr');for(const cell of [row.kind.toUpperCase(),(row.station?row.station+' ':'')+row.number.replace('-','–'),row.raw,row.beforeRounding,row.adjusted]){const td=document.createElement('td');td.textContent=cell;tr.append(td)}$('details').append(tr)}
   message('XEM TRƯỚC (CHƯA COPY): cần đánh dấu xác nhận đối soát để mở Copy. ĐÃ GỘP '+res.sourceCount+' tin — '+res.rows.length+' số/cặp riêng biệt. '+(tick.checked?'Chỉ số cược 2 chữ số BAO/LÔ, DD, ĐẦU, ĐUÔI nhân ×'+rate.value+'; 3 chữ số, DX và ĐÁ giữ gốc.':'Tiền nguyên gốc; không nhân hệ số.')+(confirmedDaScope===daScope()&&OfflineKTS.missingDaN(raw.value).length?' Đã thêm n sau xác nhận cho '+OfflineKTS.missingDaN(raw.value).length+' chỗ thiếu đơn vị (chỉ bản tính, nguồn gốc không đổi).':'')+' Đã làm tròn từng số/cặp xuống nếu lẻ <0.5n, lên nếu ≥0.5n; tổng xuất bằng tổng các khoản đã làm tròn. Tin sẵn để Copy.',false);
- }catch(e){const reason=String(e.message||e);if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu các số đó thật sự là tiền theo đơn vị n, bấm Xác nhận. Không tự thêm n.',true)}else if(reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: Có 2 tin cùng nội dung. Nếu khách thật sự đặt hai lượt riêng, bấm Xác nhận để cộng đủ. Nếu chỉ dán lặp, sửa ô nguồn.',true)}else message('HOLD: '+reason+'. Chưa có tin nào được xuất.',true)}
+ }catch(e){const reason=String(e.message||e);if(reason.includes('HOLD_CUT_'))QuytLiveCutUI.problem(reason);if(reason.startsWith('THIEU_N_CAN_XAC_NHAN')){daBtn.style.display='inline-block';const fixes=OfflineKTS.missingDaN(raw.value);daAuditBody.textContent=fixes.map((x,i)=>'['+(i+1)+'] Dòng '+(raw.value.slice(0,x.start).split('\n').length)+', ký tự '+(x.start+1)+': '+x.exact+' → '+x.assumed).join('\n');daAudit.style.display='block';message('HOLD: '+reason+'. Nếu các số đó thật sự là tiền theo đơn vị n, bấm Xác nhận. Không tự thêm n.',true)}else if(reason==='TIN_TRÙNG_CHƯA_XÁC_NHẬN'){confirmBtn.style.display='inline-block';message('HOLD: Có 2 tin cùng nội dung. Nếu khách thật sự đặt hai lượt riêng, bấm Xác nhận để cộng đủ. Nếu chỉ dán lặp, sửa ô nguồn.',true)}else message('HOLD: '+reason+'. Chưa có tin nào được xuất.',true)}
 }
 $('checkMerge').addEventListener('click',()=>{redraw();if(!raw.value.trim())raw.focus()});
 raw.addEventListener('input',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});market.addEventListener('change',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});businessDate.addEventListener('change',()=>{confirmedRaw=null;confirmedDaScope=null;redraw()});
@@ -649,7 +684,7 @@ copy.addEventListener('click',async()=>{
   message(ok?'ĐÃ COPY văn bản.':'Trình duyệt chưa cho phép Copy tự động. Nội dung đã được chọn; nhấn Ctrl+C hoặc Sao chép.',!ok);
  }
 });
-redraw();
+QuytLiveCutUI.init(redraw);redraw();
 })();
 // HTTPS PWA registration: one scope and byte-identical station authority.
 if('serviceWorker' in navigator && location.protocol==='https:'){
