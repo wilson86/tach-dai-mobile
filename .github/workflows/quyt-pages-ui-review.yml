@@ -8,6 +8,7 @@ on:
       - 'tests/quyt-pwa-grouped-frames.test.js'
       - 'tests/quyt-pwa-main-visibility-headless.cjs'
       - 'tests/quyt-regional-handoff.test.cjs'
+      - 'tests/quyt-official-pages-probe.cjs'
       - 'tests/quyt-pwa-sw-route-boundary.test.cjs'
       - '.github/workflows/quyt-pages-ui-review.yml'
 permissions:
@@ -25,3 +26,6 @@ jobs:
         run: |
           command -v google-chrome || command -v chromium
           node tests/quyt-pwa-main-visibility-headless.cjs
+      - name: Official HTTPS Pages read-only LIVE observation (non-gating until owner release)
+        continue-on-error: true
+        run: node tests/quyt-official-pages-probe.cjs
