@@ -47,3 +47,30 @@ test('MN cross-station DA stays HOLD; do not infer money for other bet types',()
  assert.throws(()=>app.merge('tg kg 11 22 da10n',MN),/ĐÁ\/DX liên đài chưa có oracle/u);
  assert.throws(()=>app.merge('tg kg 11 22 xc10n',MN),/XC chưa có quy tắc/u);
 });
+
+test('distinct physical sources retain source lines and aggregate per station once',()=>{
+ const result=app.merge('tg kg 11 b10n\n\ntg kg 11 b20n',{...MN,tick:false});
+ assert.equal(result.sourceTotal,'30');
+ assert.equal(result.original,'60');
+ assert.equal(result.total,'60');
+ assert.equal(result.pretty,'tg 11 b30n.\nkg 11 b30n.');
+ assert.equal(JSON.stringify(result.sourceEntries.map(entry=>[entry.id,entry.line,entry.stations])),
+  JSON.stringify([['1:0',1,['tg','kg']],['3:0',3,['tg','kg']]]));
+ assert.equal(JSON.stringify(result.rows.map(row=>row.sourceIds)),
+  JSON.stringify([['1:0','3:0'],['1:0','3:0']]));
+});
+test('Cut of one MN source atom removes both station exposures but preserves audit provenance',()=>{
+ const raw='tg kg 11 b10n\n\ntg kg 11 b20n';
+ const result=app.merge(raw,{...MN,tick:false,excludeBetIds:['1:0']});
+ assert.equal(result.sourceTotal,'30');
+ assert.equal(result.original,'40');
+ assert.equal(result.total,'40');
+ assert.equal(result.pretty,'tg 11 b20n.\nkg 11 b20n.');
+ assert.equal(result.sourceEntries.length,2);
+ assert.ok(result.rows.every(row=>row.sourceIds.join(',')==='3:0'));
+ assert.throws(()=>app.merge(raw,{...MN,tick:false,excludeBetIds:['2:0']}),/HOLD_CUT_UNKNOWN_SOURCE/u);
+});
+test('MN/MT region bleed after divider and blank line fails atomically at physical line',()=>{
+ const raw='---\ntg kg 11 b10n\n\nmt kh 12 b10n';
+ assert.throws(()=>app.merge(raw,{...MN,tick:false}),/Miền trong tin khác miền đang chọn — tin 4/u);
+});
