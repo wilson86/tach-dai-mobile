@@ -20,7 +20,7 @@ test('Review service worker cannot evict live PWA production cache',()=>{
  assert.doesNotMatch(preview,/k\.startsWith\('kts-quyt-standalone-pwa-'\)/u);
  assert.match(preview,/HOLD_OFFLINE_ROUTE_UNAVAILABLE/u);
  assert.match(preview,/\.\/quyt-cut-ledger\.js/u);
- assert.match(live,/kts-quyt-standalone-pwa-20261115-v29-explicit-stations-review/u);
+ assert.match(live,/kts-quyt-standalone-pwa-20261115-v30-mnmt-cut-receiver-hold/u);
 });
 test('Preview PWA install scope is itself, not main',()=>{
  const manifest=JSON.parse(read('quyt-cut-review/manifest.webmanifest'));

@@ -8,6 +8,11 @@ const QuytLiveCutUI=(()=>{
  const $=id=>document.getElementById(id);
  const vi=n=>String(n).replace(/\B(?=(\d{3})+(?!\d))/gu,'.')+'n';
  let rerender=null,base=null,view=null,currentOptions=null,currentScope=null,available=null,cutInProgress=false;
+ function cutMarketApproved(){
+  // MN/MT Quyt is REVIEW ONLY until the receiver money/topology oracle passes.
+  // Keep historical MB Cut behavior unchanged in this scoped patch.
+  return Boolean(currentOptions&&currentOptions.market==='mb');
+ }
  function scope(raw,o){return JSON.stringify([raw,o.customer,o.market,o.businessDate,o.tick,o.rate,o.duplicateConfirmed,o.confirmMissingDaN])}
  function actualScope(){
   const o=currentOptions;if(!o)return '';
@@ -109,7 +114,7 @@ const QuytLiveCutUI=(()=>{
    $(group+'CutBefore').textContent=vi(start);
    $(group+'CutRemoved').textContent=vi(taken);
    $(group+'CutAfter').textContent=vi(end);
-   $('cutSelected'+name).disabled=!eligible[group].length;
+   $('cutSelected'+name).disabled=!cutMarketApproved()||!eligible[group].length;
   }
   return eligible;
  }
@@ -145,6 +150,7 @@ const QuytLiveCutUI=(()=>{
   const originalView=view,scoped=currentScope,field=group==='scaled'?'cutSavedScaled':'cutSavedUnscaled';
   try{
    if(!['scaled','unscaled'].includes(group))throw Error('HOLD_CUT_COPY_INVALID_BUCKET');
+   if(!cutMarketApproved())throw Error('HOLD_CUT_MNMT_RECEIVER_UNAPPROVED');
    if(!originalView||!base||!scoped||scoped!==actualScope())throw Error('HOLD_CUT_COPY_STALE_SOURCE');
    const r=load(),archive=r.archives[group];
    if(r.scope!==scoped||!archive.text||!archive.ids.length||
@@ -225,6 +231,7 @@ const QuytLiveCutUI=(()=>{
   const field=group==='scaled'?'scaledTicket':'unscaledTicket';
   let ids,text,originalView,scoped,initialKeys,clipboardWritten=false;
   try{
+   if(!cutMarketApproved())throw Error('HOLD_CUT_MNMT_RECEIVER_UNAPPROVED');
    if(!base||!view||!available||!Array.isArray(available[group])||
       !currentScope||currentScope!==actualScope())throw Error('HOLD_CUT_STALE_SOURCE');
    ids=available[group].slice();
@@ -257,8 +264,8 @@ const QuytLiveCutUI=(()=>{
   }finally{
    cutInProgress=false;
    if(view===originalView&&available&&currentScope===scoped&&actualScope()===scoped){
-    $('cutSelectedScaled').disabled=!available.scaled.length;
-    $('cutSelectedUnscaled').disabled=!available.unscaled.length;
+    $('cutSelectedScaled').disabled=!cutMarketApproved()||!available.scaled.length;
+    $('cutSelectedUnscaled').disabled=!cutMarketApproved()||!available.unscaled.length;
     try{$('undoQuytCut').disabled=!load().undo.length}catch(_){$('undoQuytCut').disabled=true}
    }
   }

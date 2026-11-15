@@ -91,7 +91,7 @@ test('exactly two result buckets have only full-box Cut and Undo; no duplicated 
  assert.match(html,/CHƯA NGHIỆM THU ROUTER/u);
  assert.match(copyModule,/KTS_QUYT_MAIN_V4_SOURCE_CUT_V1/u);
  assert.match(html,/<script src="\.\/quyt-source-cut-ledger\.js"><\/script>/u);
- assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111305"><\/script>/u);
+ assert.match(html,/<script src="\.\/quyt-live-cut-ui\.js\?v=2026111518"><\/script>/u);
  assert.match(html,/HOLD_PWA_ASSET_VERSION_MISMATCH/u);
  assert.match(html,/QuytLiveCutUI\.review\(OfflineKTS,raw\.value/u);
  assert.match(html,/QuytLiveCutUI\.reset\(\)/u);
@@ -99,7 +99,7 @@ test('exactly two result buckets have only full-box Cut and Undo; no duplicated 
  assert.match(html,/copyScaled'\)\.disabled=true/u);
  assert.doesNotMatch(html,/Telegram\.send|sendBeacon|XMLHttpRequest/u);
  const sw=read('quyt-pwa/sw.js');
- for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111305'])assert.ok(sw.includes("'"+asset+"'"));
+ for(const asset of ['./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111518'])assert.ok(sw.includes("'"+asset+"'"));
  assert.equal(read('quyt-pwa/thu-nghiem/index.html'),html);
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-live-cut-ui.js'),read('quyt-pwa/quyt-live-cut-ui.js'));
  assert.equal(read('quyt-pwa/thu-nghiem/quyt-source-cut-ledger.js'),ledgerSource);
@@ -111,4 +111,64 @@ test('unchecked Quýt factor retains full original amount and no adjusted-bucket
  assert.equal(plain.rows.reduce((sum,row)=>sum+BigInt(row.adjusted),0n),415n);
  const whole=ledger.calculate(plain,text,{...opts,tick:false},plain.sourceEntries.map(x=>x.id));
  assert.equal(whole.before,'415');assert.equal(whole.cutOutput,'415');assert.equal(whole.after,'0');
+});
+
+
+function cutReceiverHarness(raw,options){
+ const nodes=new Map(),storage=new Map(),clipboard=[];
+ const el=id=>{
+  if(!nodes.has(id))nodes.set(id,{
+   value:'',textContent:'',disabled:false,checked:false,hidden:false,
+   parentElement:{hidden:false},handlers:{},
+   addEventListener(name,fn){this.handlers[name]=fn},
+   focus(){},select(){},blur(){}
+  });
+  return nodes.get(id);
+ };
+ const globals={
+  document:{getElementById:el,execCommand:()=>false,activeElement:null},
+  navigator:{clipboard:{async writeText(value){clipboard.push(value)}}},
+  sessionStorage:{getItem:k=>storage.get(k)??null,setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)},
+  confirm:()=>false
+ };
+ const app=vm.runInNewContext(calendar+'\n'+engineSource[0]+'\n'+ledgerSource+'\n'+
+  read('quyt-pwa/quyt-live-cut-ui.js')+'\n({OfflineKTS,QuytLiveCutUI})',globals);
+ for(const [key,value]of Object.entries({raw,market:options.market,customer:options.customer,
+  rate:options.rate,businessDate:options.businessDate}))el(key).value=value;
+ el('tick').checked=options.tick;
+ app.QuytLiveCutUI.init(()=>{});
+ const result=app.QuytLiveCutUI.review(app.OfflineKTS,raw,options);
+ for(const bucket of ['scaled','unscaled']){
+  el(bucket+'Ticket').value=result.rows.filter(row=>Boolean(row.factorApplied)===(bucket==='scaled'))
+   .map(row=>(row.station?row.station+' ':'')+row.number.replace('-',' ')+
+    ' '+row.kind+row.adjusted+'n.').join('\n');
+ }
+ return {el,storage,clipboard,result};
+}
+test('MN/MT review Cut cannot copy or mutate source ledger, even via synthetic disabled-button click',async()=>{
+ for(const [raw,market]of [['tg kg 11 b10n','mn'],['kh kt 11 b10n','mt']]){
+  const o={market,businessDate:'2026-11-15',customer:'quyt',tick:false,
+   rate:'1.067',duplicateConfirmed:false,confirmMissingDaN:false};
+  const h=cutReceiverHarness(raw,o);
+  assert.ok(h.result.total!=='0');
+  assert.equal(h.el('cutSelectedUnscaled').disabled,true);
+  assert.equal(h.el('cutSelectedScaled').disabled,true);
+  h.el('cutSelectedUnscaled').handlers.click();
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.deepEqual(h.clipboard,[]);
+  assert.equal(h.storage.size,0);
+  assert.match(h.el('cutStatus').textContent,/HOLD_CUT_MNMT_RECEIVER_UNAPPROVED/u);
+ }
+});
+test('existing original MB no-factor Cut still copies once and commits source ID',async()=>{
+ const o={market:'mb',businessDate:'',customer:'quyt',tick:false,
+  rate:'1.067',duplicateConfirmed:false,confirmMissingDaN:false};
+ const h=cutReceiverHarness('11 b10n',o);
+ assert.equal(h.el('cutSelectedUnscaled').disabled,false);
+ h.el('cutSelectedUnscaled').handlers.click();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(h.clipboard,['11 b10n.']);
+ const saved=JSON.parse(h.storage.get('KTS_QUYT_MAIN_V4_SOURCE_CUT_V1'));
+ assert.deepEqual(saved.keys,['1:0']);
+ assert.equal(h.result.total,'10');
 });
