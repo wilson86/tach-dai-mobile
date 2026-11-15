@@ -138,7 +138,7 @@ footer{font-size:12px;color:#526172;padding:2px 8px}.warn{color:#8d341b;font-wei
 
 <div class="card" id="groupedResultsCard" hidden inert aria-hidden="true">
  <h2 style="font-size:19px;margin:0 0 8px">Tin gộp theo từng khung</h2>
- <p class="muted tiny">MB không cần HN/đài; MN/MT bắt buộc chọn ngày và đài hợp lệ. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. MB DX cặp đúng hai số giữ nguyên tiền; MN/MT DX, XC và tin mơ hồ vẫn HOLD. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
+ <p class="muted tiny">MB không cần HN/đài; MN/MT bắt buộc chọn ngày và đài hợp lệ. Hỗ trợ tên/mã đài hoặc 2d/3d/2đ/3đ cho cược B/LÔ, DD, ĐẦU, ĐUÔI; từng đài giữ đủ tiền, không chia. MB DX cặp đúng hai số giữ nguyên tiền; MN/MT nhận nhiều mã đài ghi rõ (vd: tg kg) cho B/LÔ, DD, ĐẦU, ĐUÔI; DX liên đài, XC và tin mơ hồ vẫn HOLD. Mỗi loại cược có một khung và một nút Copy riêng. Chỉ những khung có cược hợp lệ mới Copy được. XC chưa có quy tắc tính được duyệt: nếu nguồn có XC, toàn bộ kết quả HOLD, không bỏ sót cược.</p>
  <div id="betSections" class="bet-section-grid" aria-label="Nhóm cược đã gộp">
   <section class="bet-section" data-bet-kind="b">
    <header><h3>B / BAO-LÔ</h3><strong class="section-total" aria-label="Tổng tiền nhóm">—</strong></header>
@@ -253,13 +253,25 @@ const quytFactorEligible=row=>quytScaledKinds.has(row.kind)&&/^\d{2}$/u.test(row
    return {stations:active.slice(0,n).map(x=>x[0]),text};
   }
   const aliases=active.flatMap(([code,name])=>[[code,code],[name,code]]).sort((a,b)=>b[0].length-a[0].length);
-  const lower=line.toLocaleLowerCase('vi-VN');
-  for(const [alias,code] of aliases){
-   if(lower.startsWith(alias.toLocaleLowerCase('vi-VN'))&&/^[\s.,:]/u.test(line.slice(alias.length))){
-    const text=line.slice(alias.length).replace(/^[\s.,:]+/u,'');
-    if(!text)fail('Đài không có cược',`tin ${index+1}`);
-    return {stations:[code],text};
-   }
+  // Explicit adjacent stations bind to the selected draw date. For ordinary
+  // B/DD/DAU/DUI each station gets the full stake; cross-station DA/DX HOLD.
+  let remaining=line;
+  const stations=[];
+  while(remaining){
+   const lower=remaining.toLocaleLowerCase('vi-VN');
+   const matched=aliases.find(([alias])=>
+    lower.startsWith(alias.toLocaleLowerCase('vi-VN'))&&
+    /^[\s.,:]/u.test(remaining.slice(alias.length)));
+   if(!matched)break;
+   const [alias,code]=matched;
+   if(stations.includes(code))fail('HOLD: lặp đài trong cùng một tin',`tin ${index+1}`);
+   if(stations.length>=3)fail('HOLD: nhiều hơn 3 đài trong cùng một tin cần đối chiếu',`tin ${index+1}`);
+   stations.push(code);
+   remaining=remaining.slice(alias.length).replace(/^[\s.,:]+/u,'');
+  }
+  if(stations.length){
+   if(!remaining)fail('Đài không có cược',`tin ${index+1}`);
+   return {stations,text:remaining};
   }
   fail('HOLD: phải ghi tên/mã đài hoặc 2d/3d hợp lệ của đúng miền, đúng ngày',`tin ${index+1}`);
  }

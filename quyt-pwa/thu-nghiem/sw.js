@@ -1,6 +1,6 @@
 /* KTS standalone Quyt, isolated folder only; NO backend access. */
 'use strict';
-const CACHE='kts-quyt-preview-20261113-v12-clean-cut-ui';
+const CACHE='kts-quyt-preview-20261115-v13-explicit-stations-review';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg','./station_calendar.generated.js','./quyt-source-cut-ledger.js','./quyt-live-cut-ui.js','./quyt-live-cut-ui.js?v=2026111305'];
 self.addEventListener('install',event=>{
  event.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting()));
