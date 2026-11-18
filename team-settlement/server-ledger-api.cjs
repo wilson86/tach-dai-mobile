@@ -140,7 +140,12 @@ function createServerLedgerApi({
     const checked = C.requireScope(scope);
     if (checked.workspace_id !== trustedActor.workspace_id)
       throw new Error('TEAM_WORKSPACE_DENIED');
-    const result = await repository.getScope(trustedActor, checked);
+    const rawScope = await repository.getScope(trustedActor, checked);
+    // Detach before validating: the repository may retain a mutable reference
+    // and mutate it while a verified session transaction awaits COMMIT.
+    let result;
+    try { result = structuredClone(rawScope); }
+    catch (_) { throw new Error('TEAM_SCOPE_RESPONSE_UNVERIFIED'); }
     // An injected repository or stale cache must not leak another financial
     // scope even if the HTTP handler and the browser validate independently.
     if (!result || typeof result !== 'object' || Array.isArray(result) ||
